@@ -10,8 +10,8 @@ import {
   getPhysicalBook, getBookCaptures, updateReadingPosition,
   addBookCapture, generateCaptureId, updatePhysicalBook, getBookStoreVersion,
 } from '../data/book-store';
-import { ocrPage, uploadBookVoiceNote } from '../lib/book-api';
-import type { PhysicalBook, BookCapture } from '../data/types';
+import { ocrPage, uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
+import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
 import DoubleRule from '../components/DoubleRule';
 
@@ -86,6 +86,10 @@ export default function BookDetailScreen() {
   const [showTextInput, setShowTextInput] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [chapterDropdownOpen, setChapterDropdownOpen] = useState(false);
+  const [research, setResearch] = useState<BookResearch | null>(null);
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [storySoFar, setStorySoFar] = useState<StorySoFarBriefing | null>(null);
+  const [showStorySoFar, setShowStorySoFar] = useState(false);
 
   useFocusEffect(useCallback(() => { setRefreshKey(k => k + 1); }, []));
 
@@ -95,6 +99,52 @@ export default function BookDetailScreen() {
 
   const [pageInput, setPageInput] = useState(book?.current_page?.toString() || '');
   const [selectedChapter, setSelectedChapter] = useState(book?.current_chapter || '');
+
+  // Fetch research data when book is loaded
+  useFocusEffect(useCallback(() => {
+    if (!book) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await getBookResearch(book.id);
+        if (!cancelled) {
+          setResearch(res);
+          if (!res) {
+            setResearchLoading(true);
+            logEvent('book_research_started', { book_id: book.id, title: book.title });
+            await researchBook(book.id, book.title, book.author, book.chapters, book.topics, book.isbn);
+            setResearchLoading(false);
+          }
+        }
+      } catch { /* ignore */ }
+
+      // Check if we should show Story So Far (last interaction > 48 hours)
+      const hoursSinceLastInteraction = (Date.now() - book.last_interaction_at) / 3600000;
+      if (hoursSinceLastInteraction >= 48 && !cancelled) {
+        try {
+          const briefing = await getStorySoFar(
+            book.id, book.title, book.author,
+            book.current_chapter || undefined,
+            book.current_page || undefined,
+            book.page_count || undefined,
+            captures.map(c => ({
+              text: c.text, ocr_text: c.ocr_text, transcript: c.transcript,
+              chapter: c.chapter, page_number: c.page_number,
+              extracted_ideas: c.extracted_ideas,
+            })),
+          );
+          if (!cancelled) {
+            setStorySoFar(briefing);
+            setShowStorySoFar(true);
+            logEvent('story_so_far_shown', { book_id: book.id, days_since_last: Math.round(hoursSinceLastInteraction / 24) });
+          }
+        } catch { /* ignore */ }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [book?.id]));
 
   if (!book) {
     return (
@@ -273,6 +323,56 @@ export default function BookDetailScreen() {
         )}
       </View>
 
+      {/* Research: Thesis & chapter insights */}
+      {research?.thesis && (
+        <View style={styles.researchSection}>
+          <Text style={styles.sectionLabel}>{'\u2726'} About this book</Text>
+          <Text style={styles.thesisText}>{research.thesis}</Text>
+          {research.reception ? <Text style={styles.receptionText}>{research.reception}</Text> : null}
+        </View>
+      )}
+      {researchLoading && (
+        <View style={styles.researchSection}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator size="small" color={colors.rubric} />
+            <Text style={styles.researchLoadingText}>Researching this book...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Research: Article connections */}
+      {research?.article_connections && research.article_connections.length > 0 && (
+        <View style={styles.researchSection}>
+          <Text style={styles.sectionLabel}>{'\u2726'} Connections to your reading</Text>
+          {research.article_connections.slice(0, 5).map((conn: BookArticleConnection, i: number) => (
+            <View key={i} style={styles.connectionCard}>
+              <View style={styles.connectionHeader}>
+                <View style={[styles.connectionBadge, conn.connection_type === 'contradicts' ? styles.badgeContradicts : conn.connection_type === 'extends' ? styles.badgeExtends : styles.badgeComplements]} />
+                <Text style={styles.connectionType}>{conn.connection_type}</Text>
+              </View>
+              <Text style={styles.connectionTitle}>{conn.article_title}</Text>
+              <Text style={styles.connectionReason}>{conn.reason}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Research: Suggested reading */}
+      {research?.suggested_reading && research.suggested_reading.length > 0 && (
+        <View style={styles.researchSection}>
+          <Text style={styles.sectionLabel}>{'\u2726'} Suggested reading</Text>
+          {research.suggested_reading.slice(0, 5).map((s: SuggestedReading, i: number) => (
+            <Pressable key={i} style={styles.suggestedCard} onPress={() => {
+              logEvent('suggested_reading_tapped', { book_id: book.id, title: s.title, url: s.url });
+            }}>
+              <Text style={styles.suggestedTitle}>{s.title}</Text>
+              {s.author ? <Text style={styles.suggestedAuthor}>{s.author}</Text> : null}
+              <Text style={styles.suggestedReason}>{s.reason}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {/* Capture timeline */}
       <View style={styles.timelineSection}>
         <Text style={styles.sectionLabel}>{'\u2726'} Notes & captures</Text>
@@ -285,6 +385,31 @@ export default function BookDetailScreen() {
           </>
         )}
       </View>
+
+      {/* Story So Far overlay */}
+      {showStorySoFar && storySoFar && (
+        <View style={styles.storySoFarOverlay}>
+          <View style={styles.storySoFarCard}>
+            <Text style={styles.storySoFarTitle}>Welcome back to {book.title}</Text>
+            <Text style={styles.storySoFarMeta}>Last read: {formatTimeAgo(book.last_interaction_at)}</Text>
+            <View style={styles.storySoFarDivider} />
+            <Text style={styles.storySoFarSummary}>{storySoFar.argument_summary}</Text>
+            {storySoFar.highlights?.map((h, i) => (
+              <View key={i} style={styles.storySoFarHighlight}>
+                <Text style={styles.storySoFarHighlightText}>{h.text}</Text>
+                <Text style={styles.storySoFarHighlightWhy}>{h.why_it_matters}</Text>
+              </View>
+            ))}
+            {storySoFar.preview ? <Text style={styles.storySoFarPreview}>Coming up: {storySoFar.preview}</Text> : null}
+            <Pressable style={styles.storySoFarDismiss} onPress={() => {
+              setShowStorySoFar(false);
+              logEvent('story_so_far_resume_tapped', { book_id: book.id });
+            }}>
+              <Text style={styles.storySoFarDismissText}>Resume reading {'\u2192'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -335,4 +460,37 @@ const styles = StyleSheet.create({
   timelineSection: { paddingHorizontal: layout.screenPadding, paddingTop: 18 },
   captureCount: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginBottom: 4 },
   emptyCaptures: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, paddingVertical: 20, textAlign: 'center', ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  // Research sections
+  researchSection: { paddingHorizontal: layout.screenPadding, paddingTop: 18, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  researchLoadingText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  thesisText: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody, marginBottom: 8 },
+  receptionText: { fontFamily: fonts.readingItalic, fontSize: 13, lineHeight: 19, color: colors.textSecondary, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  // Connections
+  connectionCard: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  connectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  connectionBadge: { width: 8, height: 8, borderRadius: 4 },
+  badgeExtends: { backgroundColor: colors.claimNew },
+  badgeContradicts: { backgroundColor: colors.rubric },
+  badgeComplements: { backgroundColor: colors.textMuted },
+  connectionType: { fontFamily: fonts.uiMedium, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textMuted, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  connectionTitle: { fontFamily: fonts.body, fontSize: 14, color: colors.ink, marginBottom: 2 },
+  connectionReason: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 19, color: colors.textSecondary },
+  // Suggested reading
+  suggestedCard: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  suggestedTitle: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric, marginBottom: 2 },
+  suggestedAuthor: { fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, marginBottom: 4, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  suggestedReason: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 19, color: colors.textSecondary },
+  // Story So Far
+  storySoFarOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(42,36,32,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, zIndex: 100 },
+  storySoFarCard: { backgroundColor: colors.parchment, borderRadius: 8, padding: 24, maxWidth: 500, width: '100%', ...(Platform.OS === 'web' ? { maxHeight: '80vh' as any, overflow: 'auto' as any } : {}) },
+  storySoFarTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  storySoFarMeta: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginBottom: 12 },
+  storySoFarDivider: { height: 2, backgroundColor: colors.rubric, marginBottom: 2, width: 40 },
+  storySoFarSummary: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody, marginTop: 12, marginBottom: 16 },
+  storySoFarHighlight: { borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 12, marginBottom: 12 },
+  storySoFarHighlightText: { fontFamily: fonts.reading, fontSize: 14, lineHeight: 20, color: colors.textBody, marginBottom: 4 },
+  storySoFarHighlightWhy: { fontFamily: fonts.readingItalic, fontSize: 12, lineHeight: 18, color: colors.textSecondary, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  storySoFarPreview: { fontFamily: fonts.readingItalic, fontSize: 13, lineHeight: 19, color: colors.textMuted, marginBottom: 16, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  storySoFarDismiss: { backgroundColor: colors.ink, paddingVertical: 12, borderRadius: 4, alignItems: 'center' },
+  storySoFarDismissText: { fontFamily: fonts.body, fontSize: 14, color: colors.parchment },
 });

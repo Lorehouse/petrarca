@@ -23,6 +23,7 @@ Master index of all research documents. **Always update this file when adding ne
 ## Domain Research
 | Document | Description | Status |
 |----------|-------------|--------|
+| [andy-matuschak-research.md](andy-matuschak-research.md) | **Deep research**: Andy Matuschak's work on reading, memory, knowledge resurfacing — Mnemonic Medium, Quantum Country results, Timeful Texts, Orbit, author-vs-reader prompts, comprehension-before-memory finding, "How Might We Learn?" AI framework, collaboration with Nielsen, criticisms, relevance to Petrarca | Done |
 | [prior-art.md](prior-art.md) | Existing tools, libraries, open source projects | Done |
 | [knowledge-modeling.md](knowledge-modeling.md) | **Comprehensive research**: tools, algorithms, approaches for personal knowledge modeling, novelty detection, claim extraction, topic hierarchies, curiosity-driven recommendation | Done |
 | [hci-reading-systems.md](hci-reading-systems.md) | **HCI literature survey**: CHI/CSCW/UIST research on augmented reading tools, sensemaking, cross-document synthesis, implicit feedback, incremental reading, topic granularity | Done |
@@ -40,6 +41,22 @@ Master index of all research documents. **Always update this file when adding ne
 | [interaction-signals.md](interaction-signals.md) | Mobile interaction design for reading feedback | TODO |
 | [voice-processing.md](voice-processing.md) | Soniox API integration, multilingual STT, Expo patterns | Done |
 | [open-algorithms.md](open-algorithms.md) | Transparent, user-configurable ranking | TODO |
+| [hci-book-reading-annotation.md](hci-book-reading-annotation.md) | **HCI research survey for book companion**: CHI/UIST 2022-2025 augmented reading tools (constrained highlighting, Scim, CiteSee, ReaderQuizzer, Priming at Scale), annotation/marginalia research (physical vs digital, expert practices), sensemaking frameworks (Pirolli & Card, Russell learning loops, Fuse, Threddy), context restoration/reading resumption (spatial memory, reviews/previews, EyeBookmark), voice annotation (self-explanation effect g=0.55, production effect, generation effect), cross-document synthesis (Passages, syntopical reading, Orbit). 8 concrete experimental directions for book companion. | Done |
+
+## Knowledge Retention
+| Document | Description | Status |
+|----------|-------------|--------|
+| [beyond-flashcards-knowledge-retention.md](beyond-flashcards-knowledge-retention.md) | **Deep research**: Why SRS fails for conceptual knowledge, gist vs verbatim memory decay, elaborative retrieval, connection-based resurfacing, spreading activation, analogical reminding. 7 experimental designs for Petrarca: concept encounters, evolving summaries, argument challenges, reading echoes, knowledge half-life dashboard, prompted self-explanation, concept constellation. Prioritized implementation plan. | Done |
+| [mnemonic-medium-physical-books.md](mnemonic-medium-physical-books.md) | **Deep research**: Andy Matuschak's mnemonic medium / timeful text vision applied to physical books. Covers: Matuschak's research arc 2019–2025 (Quantum Country results, comprehension-not-memory pivot, highlight-driven prototype, Great Books problem, BookBridge, Latticework), Nielsen's contributions, desirable difficulties research (generation effect, testing effect, elaborative interrogation), LLM prompt generation limitations, existing physical-to-digital workflows (Readwise, Screvi, Dendro). 7 concrete experimental directions for Petrarca's book companion: resonance resurfacing, comprehension audit, chapter digest, cross-book threads, wizard-of-oz highlighter, incremental rethinking, conversational review. | Done |
+
+## Physical Book Companion
+| Document | Description | Status |
+|----------|-------------|--------|
+| [book-companion-experiments.md](book-companion-experiments.md) | **MASTER EXPERIMENT PLAN**: 8 prioritized experiments synthesized from 6 research agents. Reading Echoes (books enriching articles), Smart Page Photos (vision-enhanced capture), Voice Self-Explanation, Constrained Capture, Resonance Resurfacing, Cross-Source Synthesis, Context Restoration, Chapter Digests. Anti-patterns, build order, research principles. | Active |
+| [book-companion-experiment-protocols.md](book-companion-experiment-protocols.md) | **DETAILED PROTOCOLS**: Full specifications for all 8 experiments — hypothesis, algorithm (with code), UI descriptions, user journeys, data requirements, metrics to log, dependency graph, minimum data for testing. Grounded in existing infrastructure (BookCapture, call_vision, Gemini embeddings, cosine thresholds). | Active |
+| [book-companion-implementation-plan.md](book-companion-implementation-plan.md) | **BUILD PLAN**: Combined implementation for Sprint A — Book Research Agent (passive book knowledge via Gemini+Search), cross-source embedding pipeline, Story So Far briefing, chapter insights, suggested reading + auto-ingestion, enhanced page photos. Testing strategy (4 tiers). All deferred ideas listed. | Active |
+| [physical-book-digital-bridge-research.md](physical-book-digital-bridge-research.md) | **Comprehensive landscape scan**: Products (Readwise, Highlighted, Screvi, Basmo, BookPace, Mark), OCR vs vision models, voice-first interaction, progress tracking, "book club of one" concept, NFC/AR/QR bridges, e-ink devices, community pain points, market gaps, Petrarca opportunities | Done |
+| [ai-book-captures-research.md](ai-book-captures-research.md) | **AI-augmented book reading (2024-2026)**: Landscape survey (NotebookLM, Kindle Ask This Book, Readwise Ghostreader, Kairos, Emdash, Chapters, reader3), vision model capabilities for page photos, voice-to-knowledge pipelines, elaborative interrogation research, synthesis from captures, 8 prioritized experiments for Petrarca's physical book companion | Done |
 
 ## Book Reader (Mode B)
 | Document | Description | Status |

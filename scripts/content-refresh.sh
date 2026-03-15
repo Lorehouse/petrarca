@@ -100,6 +100,11 @@ log "Step 3e: Generating claim embeddings..."
 python3 "$SCRIPT_DIR/build_claim_embeddings.py" \
     || log "Step 3e FAILED: build_claim_embeddings.py"
 
+# Step 3f: Generate book claim embeddings + cross-match with articles
+log "Step 3f: Generating book claim embeddings..."
+python3 "$SCRIPT_DIR/build_book_claim_embeddings.py" --cross-match \
+    || log "Step 3f SKIPPED: no book claims (or build_book_claim_embeddings.py failed)"
+
 # Step 4: Build knowledge index (claim similarities, novelty matrix, delta reports)
 log "Step 4: Building knowledge index..."
 python3 "$SCRIPT_DIR/build_knowledge_index.py" \

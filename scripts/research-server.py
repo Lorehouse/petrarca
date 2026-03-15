@@ -43,6 +43,7 @@ CHAT_DIR = Path(os.environ.get('CHAT_DIR', '/opt/petrarca/data/chats'))
 NOTES_DIR = Path(os.environ.get('NOTES_DIR', '/opt/petrarca/data/notes'))
 AUDIO_DIR = Path(os.environ.get('AUDIO_DIR', '/opt/petrarca/data/audio'))
 BOOK_UPLOADS_DIR = Path(os.environ.get('BOOK_UPLOADS_DIR', '/opt/petrarca/data/book-uploads'))
+PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
 LOG_DIR = Path(os.environ.get('LOG_DIR', '/opt/petrarca/data/logs'))
 ARTICLES_PATH = Path(os.environ.get('ARTICLES_PATH', '/opt/petrarca/data/articles.json'))
 SCRAPE_REPORTS_PATH = Path(os.environ.get('SCRAPE_REPORTS_PATH', '/opt/petrarca/data/scrape_reports.json'))
@@ -1507,13 +1508,17 @@ OCR this book page and extract:
 2. The page number (from header/footer if visible)
 3. 1-3 core ideas or claims from this page
 4. Relevant topic tags
+5. The single most important sentence on this page (key passage)
+6. A thought-provoking "why" question about the content
 
 Return a JSON object:
 {{
   "text": "full OCR text of the page",
   "detected_page_number": page_number_or_null,
   "extracted_ideas": ["idea 1", "idea 2"],
-  "topics": ["topic1", "topic2"]
+  "topics": ["topic1", "topic2"],
+  "key_passage": "the single most important sentence on this page",
+  "elaborative_question": "a why/how question about the content that would deepen understanding"
 }}
 Return ONLY valid JSON.""",
         mime_type=mime_type,
@@ -1535,6 +1540,8 @@ Return ONLY valid JSON.""",
             'detected_page_number': parsed.get('detected_page_number'),
             'extracted_ideas': parsed.get('extracted_ideas', []),
             'topics': parsed.get('topics', []),
+            'key_passage': parsed.get('key_passage'),
+            'elaborative_question': parsed.get('elaborative_question'),
         }
     except json.JSONDecodeError:
         return {'text': result, 'extracted_ideas': [], 'topics': []}
@@ -2225,6 +2232,179 @@ Return ONLY valid JSON.""",
 
         self._send_json_response(202, {'id': note_id, 'status': 'processing'})
 
+    def _handle_book_research(self):
+        """Trigger background research for a physical book."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing request body'})
+            return
+
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        book_id = body.get('book_id', '')
+        title = body.get('title', '')
+        author = body.get('author', '')
+        if not title:
+            self._send_json_response(400, {'error': 'Missing title'})
+            return
+
+        isbn = body.get('isbn')
+        chapters = body.get('chapters', [])
+        topics = body.get('topics', [])
+
+        print(f'[book/research] Starting research for "{title}" by {author}', flush=True)
+
+        def _do_research():
+            try:
+                from book_research_agent import research_book
+                research_book(book_id, title, author, isbn, chapters, topics)
+            except Exception as e:
+                print(f'[book/research] Error: {e}', flush=True)
+
+        thread = threading.Thread(target=_do_research, daemon=True)
+        thread.start()
+
+        self._send_json_response(202, {'status': 'researching', 'book_id': book_id})
+
+    def _handle_book_chapter_insights(self):
+        """Get research and connections for a specific chapter."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing request body'})
+            return
+
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        book_id = body.get('book_id', '')
+        chapter_number = body.get('chapter_number', 1)
+        chapter_title = body.get('chapter_title', '')
+        captures = body.get('captures', [])
+
+        print(f'[book/chapter-insights] Ch {chapter_number} of {book_id}', flush=True)
+
+        try:
+            from book_research_agent import get_chapter_insights
+            result = get_chapter_insights(book_id, chapter_number, chapter_title, captures)
+            self._send_json_response(200, result)
+        except Exception as e:
+            print(f'[book/chapter-insights] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_book_story_so_far(self):
+        """Generate a 'Story So Far' briefing for returning to a book."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing request body'})
+            return
+
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        book_id = body.get('book_id', '')
+        title = body.get('title', '')
+        author = body.get('author', '')
+        current_chapter = body.get('current_chapter')
+        current_page = body.get('current_page')
+        page_count = body.get('page_count')
+        captures = body.get('captures', [])
+
+        print(f'[book/story-so-far] Generating briefing for "{title}"', flush=True)
+
+        try:
+            from book_research_agent import generate_story_so_far
+            result = generate_story_so_far(
+                book_id, title, author,
+                current_chapter, current_page, page_count,
+                captures,
+            )
+            self._send_json_response(200, result)
+        except Exception as e:
+            print(f'[book/story-so-far] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_book_research_get(self):
+        """GET /book/research/{book_id} — retrieve cached research."""
+        book_id = self.path.split('/')[-1]
+        from book_research_agent import load_book_research
+        research = load_book_research(book_id)
+        if research:
+            self._send_json_response(200, research)
+        else:
+            self._send_json_response(404, {'error': 'No research found for this book'})
+
+    def _handle_book_sync_save(self):
+        """POST /book/sync — save books + captures to server (client → server)."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing request body'})
+            return
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        books = body.get('books', [])
+        captures = body.get('captures', [])
+
+        # Load existing server data and merge (client wins for same ID)
+        existing = {'books': [], 'captures': []}
+        if PHYSICAL_BOOKS_PATH.exists():
+            try:
+                existing = json.loads(PHYSICAL_BOOKS_PATH.read_text())
+            except json.JSONDecodeError:
+                pass
+
+        # Merge books: client version wins for same ID
+        existing_book_ids = {b['id']: i for i, b in enumerate(existing.get('books', []))}
+        merged_books = list(existing.get('books', []))
+        for book in books:
+            if book['id'] in existing_book_ids:
+                merged_books[existing_book_ids[book['id']]] = book
+            else:
+                merged_books.append(book)
+
+        # Merge captures: client version wins for same ID
+        existing_cap_ids = {c['id']: i for i, c in enumerate(existing.get('captures', []))}
+        merged_captures = list(existing.get('captures', []))
+        for cap in captures:
+            if cap['id'] in existing_cap_ids:
+                merged_captures[existing_cap_ids[cap['id']]] = cap
+            else:
+                merged_captures.append(cap)
+
+        result = {'books': merged_books, 'captures': merged_captures}
+        PHYSICAL_BOOKS_PATH.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+
+        print(f'[book/sync] Saved {len(merged_books)} books, {len(merged_captures)} captures', flush=True)
+        self._send_json_response(200, {
+            'status': 'ok',
+            'books_count': len(merged_books),
+            'captures_count': len(merged_captures),
+        })
+
+    def _handle_book_sync_load(self):
+        """GET /book/sync — load books + captures from server (server → client)."""
+        if PHYSICAL_BOOKS_PATH.exists():
+            try:
+                data = json.loads(PHYSICAL_BOOKS_PATH.read_text())
+                self._send_json_response(200, data)
+            except json.JSONDecodeError:
+                self._send_json_response(200, {'books': [], 'captures': []})
+        else:
+            self._send_json_response(200, {'books': [], 'captures': []})
+
     def _handle_ingest_book(self):
         if INGEST_TOKEN:
             token = self.headers.get('X-Petrarca-Token', '')
@@ -2326,6 +2506,14 @@ Return ONLY valid JSON.""",
             return self._handle_book_ocr_page()
         if self.path == '/book/voice-note':
             return self._handle_book_voice_note()
+        if self.path == '/book/research':
+            return self._handle_book_research()
+        if self.path == '/book/chapter-insights':
+            return self._handle_book_chapter_insights()
+        if self.path == '/book/story-so-far':
+            return self._handle_book_story_so_far()
+        if self.path == '/book/sync':
+            return self._handle_book_sync_save()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()
@@ -2787,6 +2975,11 @@ Return ONLY valid JSON.""",
         self._send_json_response(200, {'events': timeline})
 
     def do_GET(self):
+        if self.path.startswith('/book/research/'):
+            return self._handle_book_research_get()
+        if self.path == '/book/sync':
+            return self._handle_book_sync_load()
+
         if self.path.startswith('/activity/feed'):
             return self._handle_activity_feed()
 

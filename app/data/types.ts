@@ -434,7 +434,67 @@ export interface BookCapture {
   // Extracted knowledge
   extracted_ideas?: string[];
   topics?: string[];
+  // Enhanced OCR fields
+  key_passage?: string;
+  elaborative_question?: string;
   // Server sync
   server_id?: string;
   upload_status: 'pending' | 'uploaded' | 'failed';
+}
+
+// --- Book Research types (from server research agent) ---
+
+export interface BookResearch {
+  book_id: string;
+  title: string;
+  author: string;
+  thesis: string;
+  debates: string[];
+  key_terms: Array<{ term: string; definition: string }>;
+  reception: string;
+  chapter_research: Record<string, ChapterResearch>;
+  article_connections: BookArticleConnection[];
+  suggested_reading: SuggestedReading[];
+  topics: string[];
+  researched_at: string;
+}
+
+export interface ChapterResearch {
+  summary: string;
+  claims: string[];
+  key_terms: string[];
+}
+
+export interface BookArticleConnection {
+  article_id: string;
+  article_title: string;
+  connection_type: 'extends' | 'contradicts' | 'complements';
+  reason: string;
+  chapter_number?: number;
+  similarity?: number;
+}
+
+export interface SuggestedReading {
+  title: string;
+  author?: string;
+  url: string;
+  reason: string;
+}
+
+export interface StorySoFarBriefing {
+  argument_summary: string;
+  highlights: Array<{ text: string; why_it_matters: string }>;
+  preview: string;
+  articles_since: number;
+  suggested_reading: SuggestedReading[];
+}
+
+export interface ChapterInsights {
+  chapter_number: number;
+  chapter_title: string;
+  summary: string;
+  claims: string[];
+  key_terms: string[];
+  connections: BookArticleConnection[];
+  captures_count: number;
 }

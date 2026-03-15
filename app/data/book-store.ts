@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PhysicalBook, BookCapture } from './types';
 import { logEvent } from './logger';
+import { syncBooksToServer, loadBooksFromServer } from '../lib/book-api';
 
 const BOOKS_KEY = '@petrarca/physical_books';
 const CAPTURES_KEY = '@petrarca/book_captures';
@@ -22,12 +23,41 @@ let bookStoreVersion = 0;
 
 export async function initBookStore(): Promise<void> {
   try {
+    // Load local first (fast)
     const [booksRaw, capturesRaw] = await Promise.all([
       AsyncStorage.getItem(BOOKS_KEY),
       AsyncStorage.getItem(CAPTURES_KEY),
     ]);
     if (booksRaw) books = JSON.parse(booksRaw);
     if (capturesRaw) captures = JSON.parse(capturesRaw);
+
+    // Then merge with server data (authoritative)
+    try {
+      const serverData = await loadBooksFromServer();
+      if (serverData.books.length > 0 || serverData.captures.length > 0) {
+        // Merge: server data wins for same ID, local-only items are kept
+        const serverBookIds = new Set(serverData.books.map((b: PhysicalBook) => b.id));
+        const serverCapIds = new Set(serverData.captures.map((c: BookCapture) => c.id));
+
+        // Keep local-only books (not on server yet), add all server books
+        const localOnlyBooks = books.filter(b => !serverBookIds.has(b.id));
+        books = [...serverData.books, ...localOnlyBooks];
+
+        const localOnlyCaptures = captures.filter(c => !serverCapIds.has(c.id));
+        captures = [...serverData.captures, ...localOnlyCaptures];
+
+        // Save merged result locally
+        await Promise.all([saveBooks(), saveCaptures()]);
+
+        // If we had local-only items, push them to server too
+        if (localOnlyBooks.length > 0 || localOnlyCaptures.length > 0) {
+          syncBooksToServer(books, captures);
+        }
+      }
+    } catch {
+      // Server unavailable — local data is fine
+    }
+
     logEvent('book_store_loaded', {
       books: books.length,
       captures: captures.length,
@@ -57,6 +87,7 @@ export async function addPhysicalBook(book: PhysicalBook): Promise<void> {
   books.push(book);
   bookStoreVersion++;
   await saveBooks();
+  syncToServer();
   logEvent('book_added', { book_id: book.id, title: book.title });
 }
 
@@ -69,6 +100,7 @@ export async function updatePhysicalBook(
   books[idx] = { ...books[idx], ...updates, last_interaction_at: Date.now() };
   bookStoreVersion++;
   await saveBooks();
+  syncToServer();
 }
 
 export async function updateReadingPosition(
@@ -93,6 +125,7 @@ export async function deletePhysicalBook(id: string): Promise<void> {
   captures = captures.filter(c => c.book_id !== id);
   bookStoreVersion++;
   await Promise.all([saveBooks(), saveCaptures()]);
+  syncToServer();
   logEvent('book_deleted', { book_id: id });
 }
 
@@ -119,6 +152,7 @@ export async function addBookCapture(capture: BookCapture): Promise<void> {
   }
   bookStoreVersion++;
   await Promise.all([saveCaptures(), saveBooks()]);
+  syncToServer();
   logEvent('book_capture_added', {
     book_id: capture.book_id,
     type: capture.type,
@@ -135,6 +169,7 @@ export async function updateBookCapture(
   captures[idx] = { ...captures[idx], ...updates };
   bookStoreVersion++;
   await saveCaptures();
+  syncToServer();
 }
 
 // --- Pending uploads (offline retry queue) ---
@@ -199,4 +234,9 @@ async function saveCaptures(): Promise<void> {
   } catch (e) {
     logEvent('warning', { message: '[book-store] failed to save captures', error: String(e) });
   }
+}
+
+/** Push current state to server. Called after every mutation for cross-device sync. */
+async function syncToServer(): Promise<void> {
+  syncBooksToServer(books, captures);
 }
