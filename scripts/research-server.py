@@ -1926,6 +1926,33 @@ class ResearchHandler(BaseHTTPRequestHandler):
             'article_id': article_id,
         })
 
+    def _handle_media_sync(self):
+        """POST /media/sync — sync media consumption records (podcasts, TV, etc.)."""
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
+        try:
+            media_log = json.loads(media_log_path.read_text()) if media_log_path.exists() else {'items': []}
+        except json.JSONDecodeError:
+            media_log = {'items': []}
+
+        existing_ids = {item['id'] for item in media_log['items']}
+        new_items = body.get('items', [])
+        added = 0
+
+        for item in new_items:
+            if item.get('id') and item['id'] not in existing_ids:
+                media_log['items'].append(item)
+                existing_ids.add(item['id'])
+                added += 1
+
+        media_log_path.write_text(json.dumps(media_log, indent=2, ensure_ascii=False))
+
+        print(f'[media/sync] Added {added} items ({body.get("source", "unknown")}), total: {len(media_log["items"])}', flush=True)
+        self._send_json_response(200, {'status': 'ok', 'added': added, 'total': len(media_log['items'])})
+
     def _handle_ingest_youtube(self):
         """POST /ingest-youtube — save YouTube video, fetch transcript, process as article."""
         body = self._read_json_body()
@@ -3283,6 +3310,8 @@ JSON array only:"""
             return self._handle_ingest()
         if self.path == '/ingest-youtube':
             return self._handle_ingest_youtube()
+        if self.path == '/media/sync':
+            return self._handle_media_sync()
         if self.path == '/ingest-email':
             return self._handle_ingest_email()
         if self.path == '/ingest-book':
@@ -3796,6 +3825,14 @@ JSON array only:"""
             return self._handle_book_research_get()
         if self.path == '/book/sync':
             return self._handle_book_sync_load()
+        if self.path == '/media/log':
+            media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
+            try:
+                data = json.loads(media_log_path.read_text()) if media_log_path.exists() else {'items': []}
+            except json.JSONDecodeError:
+                data = {'items': []}
+            self._send_json_response(200, data)
+            return
         if self.path == '/book/resurfacing/status':
             return self._handle_resurfacing_status()
         if self.path.startswith('/kindle/library'):
