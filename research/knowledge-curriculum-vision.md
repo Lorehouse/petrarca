@@ -175,6 +175,93 @@ Could potentially infer a default from: capture density, reading time, highlight
 
 ---
 
+## The Michel Thomas Principle: "I'll Manage Your Memory"
+
+**Critical UX insight**: The fear of being overwhelmed, the fear of forgetting, has been *stopping Stian from reading interesting nonfiction*. Michel Thomas' language teaching method explicitly tells students: "Don't try to remember. I'll manage your memory for you." That freedom from anxiety actually improves learning.
+
+**For Petrarca**: The system should embody this principle. The message to the user is: "Read whatever interests you. Don't worry about forgetting. I'm tracking everything, making connections, and I'll resurface what matters when it matters." The knowledge map isn't a homework assignment — it's liberation from the anxiety of forgetting.
+
+This connects to the Alif experience: when you forget a word in Alif, adding mnemonics, etymology, usage details, more context helps you remember better. The system adapts *its* approach when you struggle, rather than demanding you work harder. The same principle should apply to historical/cultural knowledge.
+
+---
+
+## The Civilization Game Map Metaphor
+
+**Two primary dimensions: Space and Time.**
+
+Imagine a Civilization-style fog-of-war map of human history. You start in darkness. When you anchor on a point — say, Charlemagne — you light up that region. Then you can explore outward:
+
+**Simultaneously (space axis)**: What's happening at the same time in Muslim Spain, Constantinople, Baghdad?
+
+**Backwards (time axis)**: What enabled the Carolingians? What happened with the Roman Empire that made the Pope so weak he had to beg Charlemagne for support?
+
+**Forwards (time axis)**: Viking Age, High Middle Ages, the emergence of France and Germany.
+
+**Even a high-level view would be enormously valuable**: "In the 1300s, roughly this was happening; in the 1400s, roughly this." Not details — just the landscape.
+
+### Multiple Lenses (depth dimensions)
+
+Within any space-time region, you can look through many lenses:
+- **Macrohistoric theories**: Pirenne's thesis that Islamic expansion stopped Mediterranean trade, causing the Carolingian ascendancy
+- **Fractal depth**: health systems, education, scholasticism, the Church
+- **Thematic threads across time**: trace music, painting, the Church, women's rights, or language through centuries
+- **Political/military events**: wars, rulers, alliances
+- **Economic structures**: trade routes, currency, agriculture
+- **Intellectual history**: ideas, philosophies, scientific developments
+
+Each lens reveals a different map of the same territory.
+
+### Dependency Graph (Math Academy Model)
+
+Some knowledge has genuine prerequisites:
+- To assess Pirenne's thesis, you first need: Charlemagne, Muslim expansion in the 700s, Mediterranean trade patterns, Frankish economic structure
+- Most *facts* in history can be studied independently
+- But *theories and analytical models* require factual prerequisites — you need the facts before you can evaluate the explanation
+
+This suggests a layered approach:
+1. **Facts/events layer**: Can be learned in any order
+2. **Connections/theories layer**: Requires specific facts as prerequisites
+3. **Analytical/evaluative layer**: Requires understanding of multiple theories
+
+### Cultural Literacy and "What Should an Educated Person Know?" (E.D. Hirsch)
+
+A different approach to the depth calibration problem: instead of asking "what does a university course cover?", ask "what would an educated person expect you to know?"
+
+- Say "Pericles" or "Alcibiades" → should immediately evoke their life story
+- Say "the king of Sparta during the Persian Wars" → should evoke Leonidas, but random other Spartan kings don't matter as much
+- This changes across eras and cultures: what a Victorian English gentleman "should know" differs from today
+- But it's a useful proxy for calibrating depth
+
+### Network Centrality: Hub Nodes in the Knowledge Graph
+
+Some figures, events, and concepts are **hub nodes** with enormous connectivity:
+- **Alexander the Great, Charlemagne, Peter the Great** — learning about them efficiently teaches you about many adjacent topics
+- **Wars where civilizations collide** — the Persian Wars, the Crusades, the Mongol conquests
+- **Great thinkers** — Aristotle, Augustine, Montesquieu
+
+Two reasons to learn about a hub node:
+1. **Efficiency**: It connects to so many things that learning it opens up adjacent knowledge
+2. **Reference frequency**: Other texts *assume* you know it. If you're reading Wilamowitz on Greek history or Brandes on European cultural movements, what references do they assume their readers know?
+
+The "reference knowledge" angle is especially important for someone who reads old academic texts and primary sources: the authors assume a shared cultural vocabulary. Mapping what that vocabulary is (for a given era of scholarship) would be extremely valuable.
+
+### Implications for Curriculum Design
+
+These perspectives suggest the curriculum should support multiple views:
+1. **Chronological/geographic**: The Civilization map (space × time)
+2. **Thematic**: Tracing threads (democracy, trade, art) across time
+3. **Dependency-based**: What do you need to know before you can understand X?
+4. **Centrality-based**: Which nodes are most connected / most frequently referenced?
+5. **Cultural literacy**: What "should" an educated person know about this domain?
+
+The current curriculum structure (hierarchical, max 4 levels) is a good start but may need to be augmented with:
+- Cross-links between nodes in different branches (not just prerequisites)
+- A "centrality score" or "cultural weight" per node
+- Space-time coordinates for each node (century, region)
+- Thematic tags allowing slice-by-theme views
+
+---
+
 ## Technical Considerations
 
 ### Curriculum Data Model (Sketch)
