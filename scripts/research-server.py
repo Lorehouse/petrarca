@@ -2755,7 +2755,7 @@ Return JSON array only, no markdown fences:"""
             self._send_json_response(400, {'error': 'No books to resolve'})
             return
 
-        from gemini_llm import call_with_search
+        from gemini_llm import call_llm
 
         resolved = {}
         # Process in batches of 30
@@ -2778,7 +2778,7 @@ If unsure, set title to null.
 JSON array only:"""
 
             try:
-                result = call_with_search(prompt)
+                result = call_llm(prompt)
                 result_text = result.strip()
                 if result_text.startswith('```'):
                     result_text = result_text.split('\n', 1)[1].rsplit('```', 1)[0].strip()
