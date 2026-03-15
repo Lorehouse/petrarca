@@ -23,8 +23,9 @@ DATA_DIR = SCRIPT_DIR / "data"
 
 BOOK_EMBEDDINGS_PATH = DATA_DIR / "book_claim_embeddings.npz"
 BOOK_CLAIMS_INDEX_PATH = DATA_DIR / "book_claims_index.json"
-ARTICLE_EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
-ARTICLE_CLAIMS_INDEX_PATH = DATA_DIR / "claims_index.json"
+SERVED_DATA_DIR = Path(os.environ.get('PETRARCA_DATA_DIR', '/opt/petrarca/data'))
+ARTICLE_EMBEDDINGS_PATH = SERVED_DATA_DIR / "claim_embeddings.npz"
+ARTICLE_CLAIMS_INDEX_PATH = SERVED_DATA_DIR / "claims_index.json"
 CROSS_MATCHES_PATH = DATA_DIR / "book_article_connections.json"
 
 EMBEDDING_MODEL = "models/gemini-embedding-001"
