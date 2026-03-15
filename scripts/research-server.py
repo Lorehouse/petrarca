@@ -53,6 +53,11 @@ KINDLE_SYNC_LOG_PATH = Path(os.environ.get('KINDLE_SYNC_LOG_PATH', '/opt/petrarc
 FEEDBACK_DIR = Path(os.environ.get('FEEDBACK_DIR', '/opt/petrarca/data/feedback'))
 
 from server_log import log_server_event
+from curriculum import (
+    generate_curriculum, load_curriculum, list_curricula,
+    load_knowledge_states, update_knowledge, get_coverage_report,
+    map_book_to_curriculum, start_elicitation, continue_elicitation,
+)
 
 SONIOX_API_KEY = os.environ.get('SONIOX_API_KEY', '557c7c5a86a2f5b8fa734ddbbe179f0f21fd342c762768c9af4f4ffff8c58e1f')
 SONIOX_BASE_URL = 'https://api.soniox.com/v1'
@@ -3293,6 +3298,90 @@ JSON array only:"""
         except Exception as e:
             self._send_json_response(500, {'error': f'Failed to save cookies: {e}'})
 
+    # ── Curriculum endpoints ────────────────────────────────
+
+    def _handle_curriculum_generate(self):
+        """POST /curriculum/generate — Generate a curriculum for a domain."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        domain = body.get('domain')
+        if not domain:
+            self._send_json_response(400, {'error': 'Missing domain field'})
+            return
+        depth = body.get('depth', 'introductory')
+        print(f"[curriculum] Generating curriculum for: {domain} ({depth})", flush=True)
+        result = generate_curriculum(domain, depth)
+        if result:
+            self._send_json_response(200, result)
+        else:
+            self._send_json_response(500, {'error': 'Failed to generate curriculum'})
+
+    def _handle_curriculum_map_book(self):
+        """POST /curriculum/map-book — Map a book against a curriculum."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id')
+        domain_id = body.get('domain_id')
+        if not book_id or not domain_id:
+            self._send_json_response(400, {'error': 'Missing book_id or domain_id'})
+            return
+        mappings = map_book_to_curriculum(book_id, domain_id)
+        if mappings is not None:
+            self._send_json_response(200, {'mappings': mappings, 'count': len(mappings)})
+        else:
+            self._send_json_response(500, {'error': 'Failed to map book'})
+
+    def _handle_elicit_start(self):
+        """POST /curriculum/elicit/start — Start a 20Q elicitation session."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        domain_id = body.get('domain_id')
+        if not domain_id:
+            self._send_json_response(400, {'error': 'Missing domain_id'})
+            return
+        result = start_elicitation(domain_id)
+        if result:
+            self._send_json_response(200, result)
+        else:
+            self._send_json_response(404, {'error': 'Curriculum not found'})
+
+    def _handle_elicit_respond(self):
+        """POST /curriculum/elicit/respond — Respond to a 20Q question."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        session_id = body.get('session_id')
+        if not session_id:
+            self._send_json_response(400, {'error': 'Missing session_id'})
+            return
+        result = continue_elicitation(session_id, body)
+        if result:
+            self._send_json_response(200, result)
+        else:
+            self._send_json_response(404, {'error': 'Session not found'})
+
+    def _handle_knowledge_update(self):
+        """POST /curriculum/knowledge/update — Manually update a knowledge state."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        domain_id = body.get('domain_id')
+        node_id = body.get('node_id')
+        if not domain_id or not node_id:
+            self._send_json_response(400, {'error': 'Missing domain_id or node_id'})
+            return
+        state = update_knowledge(
+            domain_id, node_id,
+            knowledge=body.get('knowledge'),
+            interest=body.get('interest'),
+            confidence=body.get('confidence'),
+            source=body.get('source'),
+        )
+        self._send_json_response(200, {'state': state})
+
     def do_POST(self):
         if self.path == '/chat':
             return self._handle_chat()
@@ -3356,6 +3445,18 @@ JSON array only:"""
             return self._handle_kindle_classify()
         if self.path == '/kindle/resolve-titles':
             return self._handle_kindle_resolve_titles()
+
+        # Curriculum endpoints
+        if self.path == '/curriculum/generate':
+            return self._handle_curriculum_generate()
+        if self.path == '/curriculum/map-book':
+            return self._handle_curriculum_map_book()
+        if self.path == '/curriculum/elicit/start':
+            return self._handle_elicit_start()
+        if self.path == '/curriculum/elicit/respond':
+            return self._handle_elicit_respond()
+        if self.path == '/curriculum/knowledge/update':
+            return self._handle_knowledge_update()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()
@@ -3835,6 +3936,30 @@ JSON array only:"""
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):
             return self._handle_kindle_highlights_get()
+
+        # Curriculum GET endpoints
+        if self.path == '/curriculum/list':
+            return self._send_json_response(200, {'curricula': list_curricula()})
+        if self.path.startswith('/curriculum/') and '/coverage' in self.path:
+            domain_id = self.path.split('/curriculum/')[1].split('/coverage')[0]
+            report = get_coverage_report(domain_id)
+            if report:
+                return self._send_json_response(200, report)
+            return self._send_json_response(404, {'error': 'Curriculum not found'})
+        if self.path.startswith('/curriculum/') and not self.path.startswith('/curriculum/elicit') and not self.path.startswith('/curriculum/knowledge') and not self.path.startswith('/curriculum/map') and not self.path.startswith('/curriculum/list'):
+            domain_id = self.path.split('/curriculum/')[1].split('?')[0]
+            curriculum = load_curriculum(domain_id)
+            if curriculum:
+                states = load_knowledge_states(domain_id)
+                # Annotate nodes with knowledge states
+                for node in curriculum.get('nodes', []):
+                    state = states.get(node['id'], {})
+                    node['knowledge'] = state.get('knowledge', 'unknown')
+                    node['interest'] = state.get('interest', 'none')
+                    node['confidence'] = state.get('confidence', 0.0)
+                    node['sources'] = state.get('sources', [])
+                return self._send_json_response(200, curriculum)
+            return self._send_json_response(404, {'error': 'Curriculum not found'})
 
         if self.path.startswith('/activity/feed'):
             return self._handle_activity_feed()

@@ -438,6 +438,23 @@ export default function BookDetailScreen() {
               </Pressable>
             ))}
           </View>
+          <View style={styles.significanceRow}>
+            {(['skimmed', 'read', 'essential'] as const).map(s => (
+              <Pressable
+                key={s}
+                style={[styles.significancePill, (book.significance || 'read') === s && styles.significancePillActive]}
+                onPress={async () => {
+                  await updatePhysicalBook(book.id, { significance: s });
+                  logEvent('book_significance_changed', { book_id: book.id, significance: s });
+                  setRefreshKey(k => k + 1);
+                }}
+              >
+                <Text style={[styles.significancePillText, (book.significance || 'read') === s && styles.significancePillTextActive]}>
+                  {s === 'skimmed' ? 'Skimmed' : s === 'read' ? 'Read' : 'Essential'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </View>
       <DoubleRule />
@@ -641,6 +658,11 @@ const styles = StyleSheet.create({
   statusPillActive: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.06)' },
   statusPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 },
   statusPillTextActive: { color: colors.rubric },
+  significanceRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
+  significancePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.rule },
+  significancePillActive: { borderColor: colors.ink, backgroundColor: 'rgba(42,36,32,0.06)' },
+  significancePillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 },
+  significancePillTextActive: { color: colors.ink },
   positionSection: { paddingHorizontal: layout.screenPadding, paddingTop: 18, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   sectionLabel: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.rubric, marginBottom: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   positionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },

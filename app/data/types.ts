@@ -400,6 +400,7 @@ export interface PhysicalBook {
   current_chapter?: string;           // chapter title
   current_page?: number;
   reading_status: 'reading' | 'finished' | 'paused' | 'want_to_read' | 'archived';
+  significance?: 'skimmed' | 'read' | 'essential';  // how formative this book is
   added_at: number;
   last_interaction_at: number;        // for sorting by recency
   metadata_source?: 'photo' | 'manual' | 'search' | 'kindle';
