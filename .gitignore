@@ -56,3 +56,4 @@ stderr.tmp
 # Pipeline test sessions (generated output, not fixtures)
 scripts/pipeline-tests/sessions/
 .env
+kindle-email-attachments/
