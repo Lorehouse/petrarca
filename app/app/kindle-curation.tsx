@@ -1,17 +1,20 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform,
-  ActivityIndicator,
+  ActivityIndicator, Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { logEvent } from '../data/logger';
 import { RESEARCH_BASE } from '../lib/chat-api';
+import { includeKindleBook } from '../lib/book-api';
+import { addPhysicalBook } from '../data/book-store';
 import { colors, fonts, layout } from '../design/tokens';
 import DoubleRule from '../components/DoubleRule';
 
 interface KindleBook {
   asin?: string;
   title: string;
+  title_display?: string;
   author: string;
   cover_url?: string;
   progress?: { text?: string; percent?: number };
@@ -34,11 +37,22 @@ export default function KindleCurationScreen() {
   const [sort, setSort] = useState<SortMode>('recent');
   const [filter, setFilter] = useState<FilterMode>('unreviewed');
   const [classifying, setClassifying] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  const showToast = (message: string) => {
+    setToast(message);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(2000),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+  };
 
   const fetchLibrary = useCallback(async () => {
     try {
       setLoading(true);
-      const resp = await fetch(`${RESEARCH_BASE}/kindle/library`);
+      const resp = await fetch(`${RESEARCH_BASE}/kindle/library?exclude_processed=true`);
       if (resp.ok) {
         const data = await resp.json();
         setBooksMap(data.books || {});
@@ -48,6 +62,8 @@ export default function KindleCurationScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { fetchLibrary(); }, [fetchLibrary]));
+
+  const displayTitle = (book: KindleBook) => book.title_display || book.title;
 
   const books = useMemo(() => {
     let list = Object.entries(booksMap).map(([key, book]) => ({
@@ -62,8 +78,8 @@ export default function KindleCurationScreen() {
     else if (filter === 'read') list = list.filter(b => b.status === 'read');
     else if (filter === 'skipped') list = list.filter(b => b.status === 'skipped');
 
-    // Sort
-    if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
+    // Sort — use displayTitle for title sort
+    if (sort === 'title') list.sort((a, b) => displayTitle(a).localeCompare(displayTitle(b)));
     else if (sort === 'progress') list.sort((a, b) => b.progressNum - a.progressNum);
     else if (sort === 'recent') list.sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
     else if (sort === 'category') list.sort((a, b) => (a.category || 'zzz').localeCompare(b.category || 'zzz'));
@@ -98,6 +114,29 @@ export default function KindleCurationScreen() {
     }
   };
 
+  const handleInclude = async (key: string) => {
+    setProcessing(prev => new Set(prev).add(key));
+    try {
+      const result = await includeKindleBook(key);
+      if (result.book && !result.already_existed) {
+        await addPhysicalBook(result.book);
+      }
+      // Remove from local list
+      setBooksMap(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      const title = displayTitle(booksMap[key]) || result.book?.title || 'Book';
+      showToast(`Added "${title}" to Library`);
+      logEvent('kindle_include', { key, title });
+    } catch (e) {
+      showToast('Failed to include book');
+    } finally {
+      setProcessing(prev => { const n = new Set(prev); n.delete(key); return n; });
+    }
+  };
+
   const classifyAll = async () => {
     setClassifying(true);
     try {
@@ -107,21 +146,9 @@ export default function KindleCurationScreen() {
         body: JSON.stringify({}),
       });
       logEvent('kindle_classify_triggered');
-      // Refresh after a delay (classification takes time)
       setTimeout(fetchLibrary, 15000);
     } catch { /* ignore */ }
     finally { setClassifying(false); }
-  };
-
-  const processReadBooks = async () => {
-    try {
-      await fetch(`${RESEARCH_BASE}/book/process-kindle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ max: 50 }),
-      });
-      logEvent('kindle_process_triggered');
-    } catch { /* ignore */ }
   };
 
   return (
@@ -131,7 +158,7 @@ export default function KindleCurationScreen() {
       </Pressable>
 
       <View style={styles.header}>
-        <Text style={styles.title}>Kindle Library</Text>
+        <Text style={styles.title}>Import from Kindle</Text>
         <Text style={styles.subtitle}>
           {counts.total} books · {counts.unreviewed} to review · {counts.read} read · {counts.nonFiction} non-fiction
         </Text>
@@ -143,9 +170,6 @@ export default function KindleCurationScreen() {
         <Pressable style={styles.actionButton} onPress={classifyAll} disabled={classifying}>
           {classifying ? <ActivityIndicator size="small" color={colors.rubric} /> :
             <Text style={styles.actionText}>Auto-classify</Text>}
-        </Pressable>
-        <Pressable style={styles.actionButton} onPress={processReadBooks}>
-          <Text style={styles.actionText}>Process read books</Text>
         </Pressable>
       </View>
 
@@ -186,11 +210,11 @@ export default function KindleCurationScreen() {
             <Image source={{ uri: book.cover_url }} style={styles.bookCover} />
           ) : (
             <View style={[styles.bookCover, styles.bookCoverPlaceholder]}>
-              <Text style={styles.bookCoverLetter}>{book.title[0]}</Text>
+              <Text style={styles.bookCoverLetter}>{displayTitle(book)[0]}</Text>
             </View>
           )}
           <View style={styles.bookInfo}>
-            <Text style={styles.bookTitle} numberOfLines={2}>{book.title}</Text>
+            <Text style={styles.bookTitle} numberOfLines={2}>{displayTitle(book)}</Text>
             <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text>
             <View style={styles.bookMeta}>
               {book.category && <Text style={styles.categoryBadge}>{book.category}</Text>}
@@ -202,25 +226,14 @@ export default function KindleCurationScreen() {
                   book.status === 'reading' && styles.statusReading,
                 ]}>{book.status}</Text>
               )}
-              {book.added_to_petrarca && <Text style={styles.processedBadge}>processed</Text>}
             </View>
           </View>
           <View style={styles.bookActions}>
             {processing.has(book.key) ? (
               <ActivityIndicator size="small" color={colors.rubric} />
-            ) : book.added_to_petrarca ? (
-              <Text style={styles.processedLabel}>{'\u2713'} Done</Text>
             ) : book.status === 'read' ? (
               <>
-                <Pressable style={styles.actionPill} onPress={() => {
-                  curate(book.key, { status: 'read', added_to_petrarca: true });
-                  // Trigger research for this book
-                  fetch(`${RESEARCH_BASE}/book/process-kindle`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ max: 1 }),
-                  }).catch(() => {});
-                }}>
+                <Pressable style={styles.actionPill} onPress={() => handleInclude(book.key)}>
                   <Text style={styles.actionPillText}>{'\u2726'} Include</Text>
                 </Pressable>
                 <Pressable style={styles.skipPill} onPress={() => curate(book.key, { status: 'skipped' })}>
@@ -253,6 +266,13 @@ export default function KindleCurationScreen() {
              'No books found.'}
           </Text>
         </View>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Animated.View style={[styles.toast, { opacity: toastOpacity }]}>
+          <Text style={styles.toastText}>{toast}</Text>
+        </Animated.View>
       )}
     </ScrollView>
   );
@@ -292,13 +312,18 @@ const styles = StyleSheet.create({
   statusRead: { backgroundColor: 'rgba(42,122,74,0.1)', color: colors.claimNew },
   statusSkipped: { backgroundColor: 'rgba(176,168,152,0.15)', color: colors.textMuted },
   statusReading: { backgroundColor: 'rgba(139,37,0,0.08)', color: colors.rubric },
-  processedBadge: { fontFamily: fonts.ui, fontSize: 9, color: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.1)', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3 },
   bookActions: { gap: 4, alignItems: 'flex-end' },
   actionPill: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.claimNew },
   actionPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.claimNew },
   skipPill: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.rule },
   skipPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted },
-  processedLabel: { fontFamily: fonts.ui, fontSize: 10, color: colors.claimNew },
   empty: { paddingVertical: 40, alignItems: 'center' },
   emptyText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  toast: {
+    position: 'absolute', bottom: 80, left: 20, right: 20,
+    backgroundColor: colors.ink, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16,
+    alignItems: 'center',
+    ...(Platform.OS === 'web' ? { maxWidth: 400, alignSelf: 'center' as const, left: '50%' as any, transform: [{ translateX: '-50%' as any }] } : {}),
+  },
+  toastText: { fontFamily: fonts.ui, fontSize: 13, color: colors.parchment },
 });

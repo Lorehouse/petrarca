@@ -402,7 +402,8 @@ export interface PhysicalBook {
   reading_status: 'reading' | 'finished' | 'paused' | 'want_to_read' | 'archived';
   added_at: number;
   last_interaction_at: number;        // for sorting by recency
-  metadata_source?: 'photo' | 'manual' | 'search';
+  metadata_source?: 'photo' | 'manual' | 'search' | 'kindle';
+  processing_status?: 'identifying' | 'ready';
 }
 
 export interface PhysicalBookChapter {

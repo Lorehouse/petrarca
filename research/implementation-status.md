@@ -458,6 +458,26 @@ App (Expo SDK 54):
 45. ~~**Feed ingest metadata**~~ — DONE: Latest lens shows relative ingest time ("2h ago", "yesterday") + source label (Twitter, Readwise). Uses `ingested_at` ISO timestamp (new field) with fallback to `date`.
 46. ~~**`ingested_at` timestamp**~~ — DONE: Both `import_url.py` and `build_articles.py` now write `ingested_at: datetime.now(UTC).isoformat()` on all new articles. Existing articles fall back to `date` (day-level precision only).
 
+### Completed (Session 25: Unified Book Library + Kindle Include Fix + Instant Add Book)
+
+56. ~~**Kindle Include button fix**~~ — DONE: Old flow called `POST /book/process-kindle` with `{ max: 1 }` which processed the first alphabetically matching book, not the clicked one. New `POST /kindle/include` endpoint takes `{ "key": "<asin>" }`, creates unified PhysicalBook immediately, converts highlights to captures, marks `added_to_petrarca: true`, starts research in background thread.
+57. ~~**Server-side Kindle filtering**~~ — DONE: `GET /kindle/library?exclude_processed=true` filters already-included books server-side, reducing payload from 2,776 to just unprocessed books. Also returns `title_display` for resolved sideloaded titles.
+58. ~~**Kindle curation screen renamed**~~ — DONE: "Kindle Library" → "Import from Kindle". Uses display titles, shows toast on include, removes book from list on success.
+59. ~~**Unified Library**~~ — DONE: Library subtitle changed from "Physical books" to "Books & reading notes". `metadata_source` type includes `'kindle'`. Kindle-included books appear in Library alongside physical books.
+60. ~~**Instant add-book from photo**~~ — DONE: Old flow blocked user 5-10s on "Identifying..." spinner with 3-step wizard (capture → identifying → confirm). New flow: photo → placeholder book created immediately (`processing_status: 'identifying'`) → navigate back to Library in ~100ms. Identification runs in background, updates book when done. Library shows spinner for identifying books.
+61. ~~**Reactive book store**~~ — DONE: `onBookStoreChange()` listener system + `useBookStoreVersion()` React hook added to `book-store.ts`. All mutations call `notifyListeners()`. Library and book-detail screens auto-re-render when background processing updates a book.
+62. ~~**Book detail voice recording**~~ — DONE: Voice capture with expo-av recording, stable local file copy, background upload with retry queue via AsyncStorage. Shows transcription status (processing/failed with retry button).
+
+**Files changed**:
+- `scripts/research-server.py` — new `POST /kindle/include` endpoint, `GET /kindle/library` supports `?exclude_processed=true` + `title_display`
+- `app/app/kindle-curation.tsx` — calls `/kindle/include` per-book, filtered fetch, toast feedback, display titles
+- `app/app/add-book.tsx` — instant return: placeholder → background identify → update
+- `app/data/book-store.ts` — `onBookStoreChange()` listeners, `useBookStoreVersion()` hook, `notifyListeners()` on all mutations
+- `app/data/types.ts` — `metadata_source: 'kindle'`, `processing_status: 'identifying' | 'ready'`
+- `app/app/(tabs)/library.tsx` — reactive hook, spinner for identifying books, updated subtitle
+- `app/app/book-detail.tsx` — reactive hook, voice recording with retry queue
+- `app/lib/book-api.ts` — `includeKindleBook(key)` function
+
 ### Completed (Session 10)
 37. ~~**Clipper auto-save countdown**~~ — DONE: Chrome clipper popup auto-saves after 10 seconds (fire-and-forget via Cmd+Shift+S). Signature double rule acts as countdown timer (rubric drains to gray). Typing in note field pauses countdown. Visible Cancel button + Esc. Gold completion flash (#c9a84c) on save. requestAnimationFrame for smooth 60fps timer.
 38. ~~**Tweet URL ingestion via twikit**~~ — DONE: `/ingest` endpoint detects twitter.com/x.com URLs and routes through twikit instead of generic URL import. Fetches full tweet metadata, reconstructs threads (same-author reply chains), extracts + resolves t.co links. If tweet has URLs → ingests linked article with tweet context. If no URLs → uses tweet/thread text as article content. Falls back to normal import if twikit fails.

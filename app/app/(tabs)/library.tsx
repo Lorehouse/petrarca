@@ -1,10 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { logEvent } from '../../data/logger';
-import { getPhysicalBooks, getBookCaptures, getBookStoreVersion } from '../../data/book-store';
+import { getPhysicalBooks, getBookCaptures } from '../../data/book-store';
+import { useBookStoreVersion } from '../../data/use-book-store';
 import type { PhysicalBook } from '../../data/types';
 import { colors, fonts, type, layout } from '../../design/tokens';
 import DoubleRule from '../../components/DoubleRule';
@@ -36,7 +38,9 @@ const progressStyles = StyleSheet.create({
 
 function BookRow({ book, captureCount, onPress }: { book: PhysicalBook; captureCount: number; onPress: () => void }) {
   const [hovered, setHovered] = useState(false);
-  const statusLabel = book.reading_status === 'finished' ? 'Finished'
+  const isIdentifying = book.processing_status === 'identifying';
+  const statusLabel = isIdentifying ? 'Identifying...'
+    : book.reading_status === 'finished' ? 'Finished'
     : book.reading_status === 'want_to_read' ? 'Want to read'
     : book.reading_status === 'paused' ? 'Paused'
     : book.current_chapter || 'Reading';
@@ -79,9 +83,15 @@ function BookRow({ book, captureCount, onPress }: { book: PhysicalBook; captureC
         )}
       </View>
       <View style={bookStyles.sidebar}>
-        <Text style={bookStyles.sideNumber}>{captureCount}</Text>
-        <Text style={bookStyles.sideLabel}>notes</Text>
-        <Text style={bookStyles.timeAgo}>{formatTimeAgo(book.last_interaction_at)}</Text>
+        {isIdentifying ? (
+          <ActivityIndicator size="small" color={colors.rubric} />
+        ) : (
+          <>
+            <Text style={bookStyles.sideNumber}>{captureCount}</Text>
+            <Text style={bookStyles.sideLabel}>notes</Text>
+            <Text style={bookStyles.timeAgo}>{formatTimeAgo(book.last_interaction_at)}</Text>
+          </>
+        )}
       </View>
     </Pressable>
   );
@@ -120,7 +130,7 @@ export default function LibraryScreen() {
     setRefreshKey(k => k + 1);
   }, []));
 
-  const storeVersion = getBookStoreVersion();
+  const storeVersion = useBookStoreVersion();
   const allBooks = useMemo(() => getPhysicalBooks(), [refreshKey, storeVersion]);
 
   const books = useMemo(() => {
@@ -147,7 +157,7 @@ export default function LibraryScreen() {
         <View style={styles.titleRow}>
           <View>
             <Text style={styles.screenTitle}>Library</Text>
-            <Text style={styles.screenSubtitle}>Physical books & reading notes</Text>
+            <Text style={styles.screenSubtitle}>Books & reading notes</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <Pressable style={styles.revisitButton} onPress={() => {

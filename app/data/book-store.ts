@@ -19,6 +19,22 @@ let books: PhysicalBook[] = [];
 let captures: BookCapture[] = [];
 let bookStoreVersion = 0;
 
+// --- Change listeners (for background updates) ---
+
+type BookStoreListener = () => void;
+const listeners: Set<BookStoreListener> = new Set();
+
+export function onBookStoreChange(fn: BookStoreListener): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
+function notifyListeners() {
+  for (const fn of listeners) {
+    try { fn(); } catch { /* ignore */ }
+  }
+}
+
 // --- Initialization ---
 
 export async function initBookStore(): Promise<void> {
@@ -86,6 +102,7 @@ export function getBookStoreVersion(): number {
 export async function addPhysicalBook(book: PhysicalBook): Promise<void> {
   books.push(book);
   bookStoreVersion++;
+  notifyListeners();
   await saveBooks();
   syncToServer();
   logEvent('book_added', { book_id: book.id, title: book.title });
@@ -99,6 +116,7 @@ export async function updatePhysicalBook(
   if (idx === -1) return;
   books[idx] = { ...books[idx], ...updates, last_interaction_at: Date.now() };
   bookStoreVersion++;
+  notifyListeners();
   await saveBooks();
   syncToServer();
 }
@@ -124,6 +142,7 @@ export async function deletePhysicalBook(id: string): Promise<void> {
   books = books.filter(b => b.id !== id);
   captures = captures.filter(c => c.book_id !== id);
   bookStoreVersion++;
+  notifyListeners();
   await Promise.all([saveBooks(), saveCaptures()]);
   syncToServer();
   logEvent('book_deleted', { book_id: id });
@@ -151,6 +170,7 @@ export async function addBookCapture(capture: BookCapture): Promise<void> {
     books[bookIdx].last_interaction_at = Date.now();
   }
   bookStoreVersion++;
+  notifyListeners();
   await Promise.all([saveCaptures(), saveBooks()]);
   syncToServer();
   logEvent('book_capture_added', {
@@ -168,6 +188,7 @@ export async function updateBookCapture(
   if (idx === -1) return;
   captures[idx] = { ...captures[idx], ...updates };
   bookStoreVersion++;
+  notifyListeners();
   await saveCaptures();
   syncToServer();
 }

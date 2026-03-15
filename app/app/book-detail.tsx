@@ -12,8 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logEvent } from '../data/logger';
 import {
   getPhysicalBook, getBookCaptures, updateReadingPosition,
-  addBookCapture, generateCaptureId, updatePhysicalBook, updateBookCapture, useBookStoreVersion,
+  addBookCapture, generateCaptureId, updatePhysicalBook, updateBookCapture,
 } from '../data/book-store';
+import { useBookStoreVersion } from '../data/use-book-store';
 import { ocrPage, uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';

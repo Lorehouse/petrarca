@@ -337,3 +337,20 @@ export async function processKindleBooks(max: number = 10): Promise<void> {
     body: JSON.stringify({ max }),
   });
 }
+
+export async function includeKindleBook(key: string): Promise<{
+  book: PhysicalBook;
+  captures: BookCapture[];
+  already_existed: boolean;
+}> {
+  const resp = await fetch(`${RESEARCH_BASE}/kindle/include`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Kindle include failed (${resp.status}): ${text}`);
+  }
+  return resp.json();
+}
