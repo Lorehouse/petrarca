@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Petrarca Clipper",
-  "version": "2.0",
+  "version": "2.1",
   "description": "Save articles and highlights to Petrarca — your Renaissance reading companion",
   "permissions": ["activeTab", "storage", "cookies"],
-  "host_permissions": ["*://*.x.com/*", "*://*.twitter.com/*"],
+  "host_permissions": [
+    "*://*.x.com/*",
+    "*://*.twitter.com/*",
+    "*://*.amazon.com/*",
+    "*://*.amazon.co.uk/*",
+    "*://*.amazon.de/*",
+    "*://*.amazon.fr/*",
+    "*://*.amazon.it/*",
+    "*://*.amazon.es/*",
+    "*://*.amazon.co.jp/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -35,6 +45,26 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://read.amazon.com/*"],
+      "js": ["kindle-content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://read.amazon.com/notebook*"],
+      "js": ["kindle-notebook.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.amazon.com/hz/mycd/*",
+        "*://*.amazon.com/mn/dcw/*",
+        "*://*.amazon.co.uk/hz/mycd/*",
+        "*://*.amazon.de/hz/mycd/*"
+      ],
+      "js": ["kindle-manage.js"],
       "run_at": "document_idle"
     }
   ]

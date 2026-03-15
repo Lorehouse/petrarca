@@ -47,6 +47,9 @@ PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/
 LOG_DIR = Path(os.environ.get('LOG_DIR', '/opt/petrarca/data/logs'))
 ARTICLES_PATH = Path(os.environ.get('ARTICLES_PATH', '/opt/petrarca/data/articles.json'))
 SCRAPE_REPORTS_PATH = Path(os.environ.get('SCRAPE_REPORTS_PATH', '/opt/petrarca/data/scrape_reports.json'))
+KINDLE_DATA_PATH = Path(os.environ.get('KINDLE_DATA_PATH', '/opt/petrarca/data/kindle_library.json'))
+KINDLE_HIGHLIGHTS_PATH = Path(os.environ.get('KINDLE_HIGHLIGHTS_PATH', '/opt/petrarca/data/kindle_highlights.json'))
+KINDLE_SYNC_LOG_PATH = Path(os.environ.get('KINDLE_SYNC_LOG_PATH', '/opt/petrarca/data/kindle_sync_log.jsonl'))
 FEEDBACK_DIR = Path(os.environ.get('FEEDBACK_DIR', '/opt/petrarca/data/feedback'))
 
 from server_log import log_server_event
@@ -2343,6 +2346,468 @@ Return ONLY valid JSON.""",
         else:
             self._send_json_response(404, {'error': 'No research found for this book'})
 
+    # -----------------------------------------------------------------------
+    # Kindle library sync
+    # -----------------------------------------------------------------------
+
+    def _handle_kindle_sync(self):
+        """POST /kindle/sync — receive Kindle library/notebook data from Chrome extension.
+
+        Data model (kindle_library.json):
+        {
+            "books": {
+                "<asin>": {
+                    "asin": "B00...",
+                    "title": "...",
+                    "author": "...",
+                    "cover_url": "...",
+                    "progress": { "text": "42%", "position": ..., "location": ... },
+                    "first_seen": "2026-03-15T...",
+                    "last_seen": "2026-03-15T...",
+                    "status": "unreviewed",  # unreviewed | reading | read | skipped
+                    "category": null,        # non-fiction | classical-literature | literary-fiction | genre-fiction | language-learning | reference
+                    "added_to_petrarca": false
+                }
+            },
+            "sync_count": 42,
+            "last_sync": "2026-03-15T..."
+        }
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        data_type = body.get('data_type', 'library')
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Log every sync event
+        log_entry = json.dumps({
+            'ts': now,
+            'data_type': data_type,
+            'source': body.get('source', 'unknown'),
+            'url': body.get('url', ''),
+            'book_count': len(body.get('books', [])),
+        })
+        with open(KINDLE_SYNC_LOG_PATH, 'a') as f:
+            f.write(log_entry + '\n')
+
+        if data_type == 'notebook':
+            return self._handle_kindle_notebook_sync(body, now)
+
+        # Library sync — merge books into existing data
+        existing = {'books': {}, 'sync_count': 0, 'last_sync': None}
+        if KINDLE_DATA_PATH.exists():
+            try:
+                existing = json.loads(KINDLE_DATA_PATH.read_text())
+            except json.JSONDecodeError:
+                pass
+
+        books_dict = existing.get('books', {})
+        new_count = 0
+        updated_count = 0
+
+        incoming_books = body.get('books', [])
+        for book in incoming_books:
+            asin = book.get('asin', '')
+            title = book.get('title', '')
+            book_id = book.get('book_id', '')
+            if not asin and not title and not book_id:
+                continue
+
+            # Use ASIN as key, then book_id, then title
+            key = asin if asin else (book_id if book_id else f'title:{title[:80]}')
+
+            if key in books_dict:
+                # Update existing — keep our curation fields, update progress
+                entry = books_dict[key]
+                entry['last_seen'] = now
+                # Update progress from Chrome extension (text-based)
+                if book.get('progress_text'):
+                    entry.setdefault('progress', {})
+                    entry['progress']['text'] = book['progress_text']
+                    entry['progress']['updated'] = now
+                # Update progress from Mac app (numeric)
+                if book.get('progress_pct') is not None:
+                    entry.setdefault('progress', {})
+                    entry['progress']['pct'] = book['progress_pct']
+                    entry['progress']['current_position'] = book.get('current_position', 0)
+                    entry['progress']['max_position'] = book.get('max_position', 0)
+                    entry['progress']['updated'] = now
+                if book.get('cover_url') and not entry.get('cover_url'):
+                    entry['cover_url'] = book['cover_url']
+                if book.get('author') and not entry.get('author'):
+                    entry['author'] = book['author']
+                if book.get('last_read'):
+                    entry['last_read'] = book['last_read']
+                if book.get('status') and book['status'] != 'unread':
+                    entry['status'] = book['status']
+                if book.get('finished_date') and not entry.get('finished_date'):
+                    entry['finished_date'] = book['finished_date']
+                if book.get('purchase_date') and not entry.get('purchase_date'):
+                    entry['purchase_date'] = book['purchase_date']
+                if book.get('publisher') and not entry.get('publisher'):
+                    entry['publisher'] = book['publisher']
+                updated_count += 1
+            else:
+                # New book
+                progress = {}
+                if book.get('progress_text'):
+                    progress['text'] = book['progress_text']
+                if book.get('progress_pct') is not None:
+                    progress['pct'] = book['progress_pct']
+                    progress['current_position'] = book.get('current_position', 0)
+                    progress['max_position'] = book.get('max_position', 0)
+                progress['updated'] = now
+
+                books_dict[key] = {
+                    'asin': asin,
+                    'book_id': book_id,
+                    'title': title,
+                    'author': book.get('author', ''),
+                    'cover_url': book.get('cover_url', ''),
+                    'progress': progress,
+                    'first_seen': now,
+                    'last_seen': now,
+                    'status': book.get('status', 'unreviewed'),
+                    'finished_date': book.get('finished_date'),
+                    'last_read': book.get('last_read'),
+                    'purchase_date': book.get('purchase_date', ''),
+                    'language': book.get('language', ''),
+                    'publisher': book.get('publisher', ''),
+                    'is_sideloaded': book.get('is_sideloaded', False),
+                    'category': None,
+                    'added_to_petrarca': False,
+                    'epub_path': None,
+                }
+                new_count += 1
+
+        result = {
+            'books': books_dict,
+            'sync_count': existing.get('sync_count', 0) + 1,
+            'last_sync': now,
+        }
+        KINDLE_DATA_PATH.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+
+        print(f'[kindle/sync] Library: {new_count} new, {updated_count} updated, {len(books_dict)} total', flush=True)
+        self._send_json_response(200, {
+            'status': 'ok',
+            'new_books': new_count,
+            'updated_books': updated_count,
+            'total_books': len(books_dict),
+        })
+
+    def _handle_kindle_notebook_sync(self, body, now):
+        """Handle notebook (highlights/notes) data."""
+        existing = {'books': {}, 'last_sync': None}
+        if KINDLE_HIGHLIGHTS_PATH.exists():
+            try:
+                existing = json.loads(KINDLE_HIGHLIGHTS_PATH.read_text())
+            except json.JSONDecodeError:
+                pass
+
+        books_dict = existing.get('books', {})
+        total_highlights = 0
+        total_notes = 0
+
+        for book in body.get('books', []):
+            asin = book.get('asin', '')
+            title = book.get('title', '')
+            key = asin if asin else f'title:{title[:80]}'
+
+            if not key:
+                continue
+
+            highlights = book.get('highlights', [])
+            notes = book.get('notes', [])
+            total_highlights += len(highlights)
+            total_notes += len(notes)
+
+            if key in books_dict:
+                entry = books_dict[key]
+                # Merge highlights (deduplicate by text)
+                existing_texts = {h['text'] for h in entry.get('highlights', [])}
+                for h in highlights:
+                    if h.get('text') and h['text'] not in existing_texts:
+                        entry.setdefault('highlights', []).append({**h, 'synced_at': now})
+                        existing_texts.add(h['text'])
+                # Merge notes
+                existing_note_texts = {n['text'] for n in entry.get('notes', [])}
+                for n in notes:
+                    if n.get('text') and n['text'] not in existing_note_texts:
+                        entry.setdefault('notes', []).append({**n, 'synced_at': now})
+                        existing_note_texts.add(n['text'])
+                entry['last_sync'] = now
+            else:
+                books_dict[key] = {
+                    'asin': asin,
+                    'title': title,
+                    'author': book.get('author', ''),
+                    'cover_url': book.get('cover_url', ''),
+                    'highlights': [{**h, 'synced_at': now} for h in highlights],
+                    'notes': [{**n, 'synced_at': now} for n in notes],
+                    'first_sync': now,
+                    'last_sync': now,
+                }
+
+        result = {
+            'books': books_dict,
+            'last_sync': now,
+        }
+        KINDLE_HIGHLIGHTS_PATH.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+
+        print(f'[kindle/sync] Notebook: {total_highlights} highlights, {total_notes} notes across {len(body.get("books", []))} books', flush=True)
+        self._send_json_response(200, {
+            'status': 'ok',
+            'highlights': total_highlights,
+            'notes': total_notes,
+        })
+
+    def _handle_kindle_library_get(self):
+        """GET /kindle/library — return full Kindle library with curation status."""
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(200, {'books': {}, 'sync_count': 0})
+            return
+        try:
+            data = json.loads(KINDLE_DATA_PATH.read_text())
+            self._send_json_response(200, data)
+        except json.JSONDecodeError:
+            self._send_json_response(200, {'books': {}, 'sync_count': 0})
+
+    def _handle_kindle_highlights_get(self):
+        """GET /kindle/highlights or /kindle/highlights?asin=X — return highlights."""
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        asin_filter = params.get('asin', [None])[0]
+
+        if not KINDLE_HIGHLIGHTS_PATH.exists():
+            self._send_json_response(200, {'books': {}})
+            return
+        try:
+            data = json.loads(KINDLE_HIGHLIGHTS_PATH.read_text())
+            if asin_filter:
+                book = data.get('books', {}).get(asin_filter, {})
+                self._send_json_response(200, {'book': book})
+            else:
+                self._send_json_response(200, data)
+        except json.JSONDecodeError:
+            self._send_json_response(200, {'books': {}})
+
+    def _handle_kindle_curate(self):
+        """POST /kindle/curate — update curation fields for Kindle books.
+
+        Body: { "updates": [ { "key": "<asin or title:...>", "status": "read", "category": "non-fiction", "added_to_petrarca": true } ] }
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(404, {'error': 'No Kindle library data yet'})
+            return
+
+        try:
+            data = json.loads(KINDLE_DATA_PATH.read_text())
+        except json.JSONDecodeError:
+            self._send_json_response(500, {'error': 'Corrupt Kindle data'})
+            return
+
+        books_dict = data.get('books', {})
+        updates = body.get('updates', [])
+        updated = 0
+
+        for update in updates:
+            key = update.get('key', '')
+            if key not in books_dict:
+                continue
+
+            entry = books_dict[key]
+            if 'status' in update:
+                entry['status'] = update['status']
+            if 'category' in update:
+                entry['category'] = update['category']
+            if 'added_to_petrarca' in update:
+                entry['added_to_petrarca'] = update['added_to_petrarca']
+            if 'epub_path' in update:
+                entry['epub_path'] = update['epub_path']
+            if 'title_resolved' in update:
+                entry['title_resolved'] = update['title_resolved']
+            if 'finished_date' in update:
+                entry['finished_date'] = update['finished_date']
+            updated += 1
+
+        data['books'] = books_dict
+        KINDLE_DATA_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+        print(f'[kindle/curate] Updated {updated} books', flush=True)
+        self._send_json_response(200, {'status': 'ok', 'updated': updated})
+
+    def _handle_kindle_classify(self):
+        """POST /kindle/classify — use LLM to classify unreviewed books by category.
+
+        Sends book titles/authors to Gemini and classifies each as:
+        non-fiction, historical-novel, novel, or other.
+        Then auto-updates the category field in kindle_library.json.
+        """
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(404, {'error': 'No Kindle library data yet'})
+            return
+
+        try:
+            data = json.loads(KINDLE_DATA_PATH.read_text())
+        except json.JSONDecodeError:
+            self._send_json_response(500, {'error': 'Corrupt Kindle data'})
+            return
+
+        books_dict = data.get('books', {})
+
+        # Find books that haven't been classified yet
+        unclassified = []
+        for key, book in books_dict.items():
+            if book.get('category') is None:
+                unclassified.append({
+                    'key': key,
+                    'title': book.get('title', ''),
+                    'author': book.get('author', ''),
+                })
+
+        if not unclassified:
+            self._send_json_response(200, {'status': 'ok', 'message': 'All books already classified', 'classified': 0})
+            return
+
+        # Classify in batches of 50
+        from gemini_llm import call_llm
+        classified_count = 0
+
+        for i in range(0, len(unclassified), 50):
+            batch = unclassified[i:i+50]
+            book_list = '\n'.join(
+                f'{j+1}. "{b["title"]}" by {b["author"] or "unknown"}'
+                for j, b in enumerate(batch)
+            )
+
+            prompt = f"""Classify each of these books into exactly one category. Return ONLY a JSON array of objects with "index" (1-based) and "category" fields.
+
+Categories (classify each book into EXACTLY ONE):
+- "non-fiction" — history, science, philosophy, biography, essays, politics, technical, academic, etc.
+- "classical-literature" — ancient/medieval/early-modern literature: Greek, Latin, Shakespeare, Dante, Cervantes, Goethe, etc. Also poetry collections from any era.
+- "literary-fiction" — modern literary fiction, historical novels, and serious/ambitious fiction: Fowles, Eco, Marquez, Ibsen, Camus, etc.
+- "genre-fiction" — crime, thriller, spy, romance, military fiction, sci-fi, fantasy — popular/commercial fiction
+- "language-learning" — language textbooks, readers, bilingual editions, grammars, dictionaries
+- "reference" — dictionaries, encyclopedias, collected works, anthologies, textbooks
+
+Books:
+{book_list}
+
+Return JSON array only, no markdown fences:"""
+
+            try:
+                result = call_llm(prompt)
+                # Parse the JSON response
+                result_text = result.strip()
+                if result_text.startswith('```'):
+                    result_text = result_text.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+                classifications = json.loads(result_text)
+
+                for item in classifications:
+                    idx = item.get('index', 0) - 1
+                    category = item.get('category', '')
+                    if 0 <= idx < len(batch) and category in ('non-fiction', 'classical-literature', 'literary-fiction', 'genre-fiction', 'language-learning', 'reference'):
+                        key = batch[idx]['key']
+                        books_dict[key]['category'] = category
+                        classified_count += 1
+
+            except (json.JSONDecodeError, Exception) as e:
+                print(f'[kindle/classify] Batch {i//50} error: {e}', flush=True)
+                continue
+
+        data['books'] = books_dict
+        KINDLE_DATA_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+        # Summary
+        categories = {}
+        for book in books_dict.values():
+            cat = book.get('category', 'unclassified')
+            categories[cat] = categories.get(cat, 0) + 1
+
+        print(f'[kindle/classify] Classified {classified_count} books: {categories}', flush=True)
+        self._send_json_response(200, {
+            'status': 'ok',
+            'classified': classified_count,
+            'categories': categories,
+        })
+
+    def _handle_kindle_resolve_titles(self):
+        """POST /kindle/resolve-titles — use LLM to identify real titles from filenames.
+
+        Body: { "books": [ { "key": "...", "filename": "pg37452-images-3", "author": "Elizabeth Barrett Browning" } ] }
+        Resolves filenames to real book titles using Gemini with search grounding.
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(404, {'error': 'No Kindle library data yet'})
+            return
+
+        books_to_resolve = body.get('books', [])
+        if not books_to_resolve:
+            self._send_json_response(400, {'error': 'No books to resolve'})
+            return
+
+        from gemini_llm import call_with_search
+
+        resolved = {}
+        # Process in batches of 30
+        for i in range(0, len(books_to_resolve), 30):
+            batch = books_to_resolve[i:i+30]
+            book_list = '\n'.join(
+                f'{j+1}. Filename: "{b["filename"]}" | Author: "{b.get("author", "unknown")}"'
+                for j, b in enumerate(batch)
+            )
+
+            prompt = f"""Identify the real book title for each of these ebook files.
+Clues: "pg*-images-3" = Project Gutenberg file. Use the author to find the specific work.
+Other filenames may be abbreviations or slugs of the title.
+
+Return ONLY a JSON array with "index" (1-based) and "title" (the canonical book title).
+If unsure, set title to null.
+
+{book_list}
+
+JSON array only:"""
+
+            try:
+                result = call_with_search(prompt)
+                result_text = result.strip()
+                if result_text.startswith('```'):
+                    result_text = result_text.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+                titles = json.loads(result_text)
+
+                for item in titles:
+                    idx = item.get('index', 0) - 1
+                    title = item.get('title')
+                    if 0 <= idx < len(batch) and title:
+                        key = batch[idx].get('key', '')
+                        resolved[key] = title
+            except Exception as e:
+                print(f'[kindle/resolve-titles] Batch {i//30} error: {e}', flush=True)
+
+        # Update kindle_library.json with resolved titles
+        if resolved:
+            try:
+                data = json.loads(KINDLE_DATA_PATH.read_text())
+                books_dict = data.get('books', {})
+                for key, title in resolved.items():
+                    if key in books_dict:
+                        books_dict[key]['title_resolved'] = title
+                KINDLE_DATA_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            except Exception:
+                pass
+
+        print(f'[kindle/resolve-titles] Resolved {len(resolved)} of {len(books_to_resolve)} titles', flush=True)
+        self._send_json_response(200, {'status': 'ok', 'resolved': resolved})
+
     def _handle_book_sync_save(self):
         """POST /book/sync — save books + captures to server (client → server)."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -2514,6 +2979,14 @@ Return ONLY valid JSON.""",
             return self._handle_book_story_so_far()
         if self.path == '/book/sync':
             return self._handle_book_sync_save()
+        if self.path == '/kindle/sync':
+            return self._handle_kindle_sync()
+        if self.path == '/kindle/curate':
+            return self._handle_kindle_curate()
+        if self.path == '/kindle/classify':
+            return self._handle_kindle_classify()
+        if self.path == '/kindle/resolve-titles':
+            return self._handle_kindle_resolve_titles()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()
@@ -2979,6 +3452,10 @@ Return ONLY valid JSON.""",
             return self._handle_book_research_get()
         if self.path == '/book/sync':
             return self._handle_book_sync_load()
+        if self.path == '/kindle/library':
+            return self._handle_kindle_library_get()
+        if self.path.startswith('/kindle/highlights'):
+            return self._handle_kindle_highlights_get()
 
         if self.path.startswith('/activity/feed'):
             return self._handle_activity_feed()

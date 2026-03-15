@@ -1,8 +1,9 @@
 // Petrarca Clipper — Background Service Worker
-// Handles badge state, message routing, and Twitter cookie sync.
+// Handles badge state, message routing, Twitter cookie sync, and Kindle data sync.
 
 const SERVER_DEFAULT = "http://alifstian.duckdns.org:8090";
 const COOKIE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const KINDLE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 // Listen for messages from popup or content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -51,6 +52,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "clearBadge") {
     chrome.action.setBadgeText({ text: "" });
     sendResponse({ ok: true });
+  }
+
+  // Kindle library data from content script (read.amazon.com)
+  if (message.type === "kindleLibraryData") {
+    handleKindleSync("library", message.payload)
+      .then((result) => sendResponse(result))
+      .catch((err) => {
+        console.log(`[petrarca-kindle] Library sync failed: ${err.message}`);
+        sendResponse({ ok: false, error: err.message });
+      });
+    return true;
+  }
+
+  // Kindle notebook data from content script (read.amazon.com/notebook)
+  if (message.type === "kindleNotebookData") {
+    handleKindleSync("notebook", message.payload)
+      .then((result) => sendResponse(result))
+      .catch((err) => {
+        console.log(`[petrarca-kindle] Notebook sync failed: ${err.message}`);
+        sendResponse({ ok: false, error: err.message });
+      });
+    return true;
   }
 });
 
@@ -214,9 +237,75 @@ async function maybeSyncTwitterCookies(tabUrl) {
   }
 }
 
-// Trigger on tab updates (navigating to X/Twitter)
+// Trigger on tab updates (navigating to X/Twitter or Amazon Kindle)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && tab.url) {
     maybeSyncTwitterCookies(tab.url);
+    maybeTriggerKindleExtraction(tabId, tab.url);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Kindle data sync
+// ---------------------------------------------------------------------------
+
+async function handleKindleSync(dataType, payload) {
+  // Throttle: don't sync more than once every 4 hours
+  const storageKey = `petrarca_last_kindle_${dataType}_sync`;
+  const stored = await chrome.storage.local.get(storageKey);
+  const now = Date.now();
+
+  if (stored[storageKey] && now - stored[storageKey] < KINDLE_SYNC_INTERVAL_MS) {
+    console.log(`[petrarca-kindle] ${dataType} sync throttled (last: ${new Date(stored[storageKey]).toISOString()})`);
+    return { ok: true, throttled: true };
+  }
+
+  const settings = await loadSettings();
+  const serverUrl = (settings.serverUrl || SERVER_DEFAULT).replace(/\/+$/, "");
+  const authToken = settings.authToken || "";
+
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers["X-Petrarca-Token"] = authToken;
+  }
+
+  const response = await fetch(`${serverUrl}/kindle/sync`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      data_type: dataType,
+      ...payload,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  await chrome.storage.local.set({ [storageKey]: now });
+  console.log(`[petrarca-kindle] ${dataType} data synced to server`);
+  return { ok: true };
+}
+
+async function maybeTriggerKindleExtraction(tabId, tabUrl) {
+  if (!tabUrl || !tabUrl.includes("read.amazon.com")) {
+    return;
+  }
+
+  // Throttle
+  const { petrarca_last_kindle_library_sync } = await chrome.storage.local.get(
+    "petrarca_last_kindle_library_sync"
+  );
+  const now = Date.now();
+  if (
+    petrarca_last_kindle_library_sync &&
+    now - petrarca_last_kindle_library_sync < KINDLE_SYNC_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  // The content script auto-extracts on library pages, but we can also
+  // trigger extraction explicitly for other Kindle pages
+  console.log(`[petrarca-kindle] Kindle page detected: ${tabUrl}`);
+}
