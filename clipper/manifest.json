@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Petrarca Clipper",
-  "version": "2.1",
+  "version": "2.2",
   "description": "Save articles and highlights to Petrarca — your Renaissance reading companion",
   "permissions": ["activeTab", "storage", "cookies", "alarms"],
   "host_permissions": [
@@ -65,6 +65,11 @@
         "*://*.amazon.de/hz/mycd/*"
       ],
       "js": ["kindle-manage.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["youtube-content.js"],
       "run_at": "document_idle"
     }
   ]

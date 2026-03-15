@@ -81,6 +81,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // YouTube video save
+  if (message.type === "saveYouTubeVideo") {
+    handleYouTubeSave(message.payload)
+      .then((result) => sendResponse(result))
+      .catch((err) => {
+        console.log(`[petrarca-youtube] Save failed: ${err.message}`);
+        sendResponse({ ok: false, error: err.message });
+      });
+    return true;
+  }
+
   // Trigger background highlight sync
   if (message.type === "kindleSyncHighlights") {
     syncHighlightsInBackground()
@@ -310,6 +321,36 @@ async function handleKindleSync(dataType, payload) {
   await chrome.storage.local.set({ [storageKey]: now });
   console.log(`[petrarca-kindle] ${dataType} data synced to server`);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// YouTube video save
+// ---------------------------------------------------------------------------
+
+async function handleYouTubeSave(payload) {
+  const settings = await loadSettings();
+  const serverUrl = (settings.serverUrl || SERVER_DEFAULT).replace(/\/+$/, "");
+  const authToken = settings.authToken || "";
+
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers["X-Petrarca-Token"] = authToken;
+  }
+
+  const response = await fetch(`${serverUrl}/ingest-youtube`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  const result = await response.json();
+  console.log(`[petrarca-youtube] Saved: ${payload.title}`);
+  return { ok: true, ...result };
 }
 
 async function maybeTriggerKindleExtraction(tabId, tabUrl) {

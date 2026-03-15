@@ -667,6 +667,60 @@ async def _check_twikit_cookies() -> dict:
 # Standard URL ingestion
 # ---------------------------------------------------------------------------
 
+def _process_youtube_video(video_id, title, channel, url, description, chapters):
+    """Background: fetch YouTube transcript, build article content, process through pipeline."""
+    try:
+        transcript_text = ''
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            ytt = YouTubeTranscriptApi()
+            transcript_data = ytt.fetch(video_id)
+            transcript_text = ' '.join(snippet.text for snippet in transcript_data)
+            print(f'[youtube] Transcript: {len(transcript_text)} chars for {video_id}', flush=True)
+        except Exception as e:
+            print(f'[youtube] Transcript fetch failed for {video_id}: {e}', flush=True)
+            transcript_text = description
+
+        if not transcript_text:
+            print(f'[youtube] No content for {video_id}', flush=True)
+            return
+
+        content = f'# {title}\n\n**Channel**: {channel}\n\n'
+        if chapters:
+            content += '**Chapters**:\n'
+            for ch in chapters:
+                content += f'- {ch.get("time", "")} {ch.get("title", "")}\n'
+            content += '\n'
+        content += '## Transcript\n\n' + transcript_text
+
+        # Process through standard article pipeline
+        from build_articles import process_single_article
+        process_single_article(
+            url=url,
+            title=f'{title} — {channel} (YouTube)',
+            content=content,
+            source='youtube',
+        )
+        print(f'[youtube] Processed: "{title}" ({len(transcript_text)} chars)', flush=True)
+
+        # Update media log status
+        media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
+        try:
+            media_log = json.loads(media_log_path.read_text())
+            for item in media_log['items']:
+                if item['id'] == f'yt_{video_id}':
+                    item['transcript_status'] = 'available'
+                    item['claims_extracted'] = True
+                    break
+            media_log_path.write_text(json.dumps(media_log, indent=2, ensure_ascii=False))
+        except Exception:
+            pass
+    except Exception as e:
+        print(f'[youtube] Error processing {video_id}: {e}', flush=True)
+        import traceback
+        traceback.print_exc()
+
+
 def run_ingest(url: str, title: str, content: str, selected_text: str, comment: str, source: str, ingest_id: str | None = None):
     """Import a URL via import_url.py, optionally with pre-extracted content."""
     if not ingest_id:
@@ -1872,6 +1926,52 @@ class ResearchHandler(BaseHTTPRequestHandler):
             'article_id': article_id,
         })
 
+    def _handle_ingest_youtube(self):
+        """POST /ingest-youtube — save YouTube video, fetch transcript, process as article."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        video_id = body.get('video_id', '')
+        if not video_id:
+            self._send_json_response(400, {'error': 'Missing video_id'})
+            return
+        title = body.get('title', '')
+        channel = body.get('channel', '')
+        url = body.get('url', f'https://www.youtube.com/watch?v={video_id}')
+        duration = body.get('duration', 0)
+        description = body.get('description', '')
+        keywords = body.get('keywords', [])
+        chapters = body.get('chapters', [])
+
+        # Save to media log
+        media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
+        try:
+            media_log = json.loads(media_log_path.read_text()) if media_log_path.exists() else {'items': []}
+        except json.JSONDecodeError:
+            media_log = {'items': []}
+        existing_ids = {item['id'] for item in media_log['items']}
+        article_id = f'yt_{video_id}'
+        if article_id not in existing_ids:
+            media_log['items'].append({
+                'id': article_id, 'type': 'youtube', 'title': title,
+                'source': channel, 'url': url,
+                'date_consumed': datetime.now(timezone.utc).isoformat(),
+                'duration': duration, 'description': description[:500],
+                'keywords': keywords, 'chapters': chapters,
+                'transcript_status': 'pending', 'claims_extracted': False,
+            })
+            media_log_path.write_text(json.dumps(media_log, indent=2, ensure_ascii=False))
+
+        thread = threading.Thread(
+            target=_process_youtube_video,
+            args=(video_id, title, channel, url, description, chapters),
+            daemon=True,
+        )
+        thread.start()
+        print(f'[ingest-youtube] Queued: "{title}" by {channel} ({video_id})', flush=True)
+        log_server_event('ingest_youtube', video_id=video_id, title=title[:100], channel=channel)
+        self._send_json_response(202, {'status': 'queued', 'video_id': video_id})
+
     def _handle_ingest_note(self):
         """Add a note/comment to an already-ingested article (sidecar file)."""
         if INGEST_TOKEN:
@@ -2563,15 +2663,35 @@ Return ONLY valid JSON.""",
         })
 
     def _handle_kindle_library_get(self):
-        """GET /kindle/library — return full Kindle library with curation status."""
+        """GET /kindle/library — return Kindle library with curation status.
+
+        Query params:
+            exclude_processed=true — omit books with added_to_petrarca=true (server-side filter)
+        """
         if not KINDLE_DATA_PATH.exists():
             self._send_json_response(200, {'books': {}, 'sync_count': 0})
             return
         try:
             data = json.loads(KINDLE_DATA_PATH.read_text())
-            self._send_json_response(200, data)
         except json.JSONDecodeError:
             self._send_json_response(200, {'books': {}, 'sync_count': 0})
+            return
+
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        exclude_processed = params.get('exclude_processed', [''])[0] == 'true'
+
+        books = data.get('books', {})
+        if exclude_processed:
+            books = {k: v for k, v in books.items() if not v.get('added_to_petrarca')}
+
+        # Use title_resolved as display title where available
+        for book in books.values():
+            resolved = book.get('title_resolved')
+            if resolved and resolved != book.get('title'):
+                book['title_display'] = resolved
+
+        self._send_json_response(200, {'books': books, 'sync_count': data.get('sync_count', 0)})
 
     def _handle_kindle_highlights_get(self):
         """GET /kindle/highlights or /kindle/highlights?asin=X — return highlights."""
@@ -2640,6 +2760,108 @@ Return ONLY valid JSON.""",
 
         print(f'[kindle/curate] Updated {updated} books', flush=True)
         self._send_json_response(200, {'status': 'ok', 'updated': updated})
+
+    def _handle_kindle_include(self):
+        """POST /kindle/include — include a specific Kindle book in the Library.
+
+        Body: { "key": "<asin or book_id>" }
+
+        Creates a unified PhysicalBook record immediately, converts highlights
+        to captures, marks added_to_petrarca in kindle_library.json, and starts
+        book research in a background thread.
+
+        Returns the unified book record so client can add it instantly.
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        key = body.get('key', '').strip()
+        if not key:
+            self._send_json_response(400, {'error': 'Missing required field: key'})
+            return
+
+        # Load Kindle library
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(404, {'error': 'No Kindle library data'})
+            return
+
+        try:
+            kindle_data = json.loads(KINDLE_DATA_PATH.read_text())
+        except json.JSONDecodeError:
+            self._send_json_response(500, {'error': 'Corrupt Kindle data'})
+            return
+
+        kindle_book = kindle_data.get('books', {}).get(key)
+        if not kindle_book:
+            self._send_json_response(404, {'error': f'Book key not found: {key}'})
+            return
+
+        # Import processing functions from process_kindle_books
+        from process_kindle_books import (
+            kindle_to_unified_book, highlights_to_captures,
+            load_kindle_highlights, load_physical_books, save_physical_books,
+            is_already_unified,
+        )
+
+        physical_data = load_physical_books()
+
+        if is_already_unified(key, physical_data):
+            # Already included — find and return the existing record
+            for b in physical_data.get('books', []):
+                if b.get('kindle_asin') == key or b.get('kindle_book_id') == key or b.get('id') == f'kindle_{key}':
+                    self._send_json_response(200, {'book': b, 'captures': [], 'already_existed': True})
+                    return
+            self._send_json_response(200, {'book': None, 'already_existed': True})
+            return
+
+        # Create unified record
+        unified = kindle_to_unified_book(key, kindle_book)
+        physical_data['books'].append(unified)
+
+        # Convert highlights
+        highlights_data = load_kindle_highlights()
+        captures = highlights_to_captures(key, unified['id'], highlights_data)
+        if captures:
+            physical_data['captures'].extend(captures)
+
+        # Save immediately so the book appears in Library
+        save_physical_books(physical_data)
+
+        # Mark as added in kindle_library.json
+        kindle_data['books'][key]['added_to_petrarca'] = True
+        kindle_data['books'][key]['status'] = 'read'
+        KINDLE_DATA_PATH.write_text(json.dumps(kindle_data, indent=2, ensure_ascii=False))
+
+        title = unified['title']
+        print(f'[kindle/include] Included: {title} ({len(captures)} highlights)', flush=True)
+
+        # Start research in background
+        def _research():
+            try:
+                from process_kindle_books import research_book_if_needed
+                topics = unified.get('topics', [])
+                if not topics:
+                    cat = kindle_book.get('category', '')
+                    if cat:
+                        topics = [cat]
+                research_book_if_needed(
+                    unified['id'], title, unified['author'],
+                    unified.get('chapters', []), topics,
+                )
+                print(f'[kindle/include] Research done: {title}', flush=True)
+            except Exception as e:
+                print(f'[kindle/include] Research error for {title}: {e}', flush=True)
+                import traceback; traceback.print_exc()
+
+        thread = threading.Thread(target=_research, daemon=True)
+        thread.start()
+
+        self._send_json_response(200, {
+            'book': unified,
+            'captures': captures,
+            'already_existed': False,
+        })
 
     def _handle_kindle_classify(self):
         """POST /kindle/classify — use LLM to classify unreviewed books by category.
@@ -3059,6 +3281,8 @@ JSON array only:"""
             return self._handle_generate_questions()
         if self.path == '/ingest':
             return self._handle_ingest()
+        if self.path == '/ingest-youtube':
+            return self._handle_ingest_youtube()
         if self.path == '/ingest-email':
             return self._handle_ingest_email()
         if self.path == '/ingest-book':
@@ -3101,6 +3325,8 @@ JSON array only:"""
             return self._handle_kindle_sync()
         if self.path == '/kindle/curate':
             return self._handle_kindle_curate()
+        if self.path == '/kindle/include':
+            return self._handle_kindle_include()
         if self.path == '/kindle/classify':
             return self._handle_kindle_classify()
         if self.path == '/kindle/resolve-titles':
@@ -3572,7 +3798,7 @@ JSON array only:"""
             return self._handle_book_sync_load()
         if self.path == '/book/resurfacing/status':
             return self._handle_resurfacing_status()
-        if self.path == '/kindle/library':
+        if self.path.startswith('/kindle/library'):
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):
             return self._handle_kindle_highlights_get()
