@@ -287,3 +287,53 @@ export async function loadBooksFromServer(): Promise<{
   if (!resp.ok) return { books: [], captures: [] };
   return resp.json();
 }
+
+// --- Resurfacing API ---
+
+import type { ResurfacingSession } from '../data/types';
+
+export async function generateResurfacingSession(
+  includeDialogues: boolean = true,
+): Promise<ResurfacingSession> {
+  const resp = await fetch(`${RESEARCH_BASE}/book/resurfacing/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ include_dialogues: includeDialogues }),
+  });
+  if (!resp.ok) throw new Error(`Resurfacing generate failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function respondToResurfacing(
+  captureId: string,
+  responseText: string,
+  responseType: 'text' | 'voice' = 'text',
+): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/book/resurfacing/respond`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capture_id: captureId, response_text: responseText, response_type: responseType }),
+  });
+}
+
+export async function skipResurfacing(captureId: string): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/book/resurfacing/skip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capture_id: captureId }),
+  });
+}
+
+export async function getResurfacingStatus(): Promise<Record<string, unknown>> {
+  const resp = await fetch(`${RESEARCH_BASE}/book/resurfacing/status`);
+  if (!resp.ok) return {};
+  return resp.json();
+}
+
+export async function processKindleBooks(max: number = 10): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/book/process-kindle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ max }),
+  });
+}

@@ -65,6 +65,7 @@ export default function RootLayout() {
         <Stack.Screen name="trails" />
         <Stack.Screen name="book-detail" />
         <Stack.Screen name="add-book" />
+        <Stack.Screen name="resurfacing" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <FeedbackCapture />

@@ -2870,6 +2870,99 @@ JSON array only:"""
         else:
             self._send_json_response(200, {'books': [], 'captures': []})
 
+    def _handle_resurfacing_generate(self):
+        """POST /book/resurfacing/generate — generate a resurfacing session."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = {}
+        if content_length:
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except (json.JSONDecodeError, ValueError):
+                pass
+        include_dialogues = body.get('include_dialogues', True)
+        try:
+            from resurfacing_engine import generate_session
+            session = generate_session(include_dialogues=include_dialogues)
+            self._send_json_response(200, session)
+        except Exception as e:
+            print(f'[resurfacing/generate] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_resurfacing_respond(self):
+        """POST /book/resurfacing/respond — record response to a resurfacing prompt."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing body'})
+            return
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        capture_id = body.get('capture_id', '')
+        response_text = body.get('response_text', '')
+        response_type = body.get('response_type', 'text')
+        if not capture_id or not response_text:
+            self._send_json_response(400, {'error': 'Missing capture_id or response_text'})
+            return
+
+        from resurfacing_engine import record_response
+        record_response(capture_id, response_text, response_type)
+        self._send_json_response(200, {'status': 'ok'})
+
+    def _handle_resurfacing_skip(self):
+        """POST /book/resurfacing/skip — record skip for a resurfacing prompt."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if not content_length:
+            self._send_json_response(400, {'error': 'Missing body'})
+            return
+        try:
+            body = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, ValueError):
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        capture_id = body.get('capture_id', '')
+        if not capture_id:
+            self._send_json_response(400, {'error': 'Missing capture_id'})
+            return
+
+        from resurfacing_engine import record_skip
+        record_skip(capture_id)
+        self._send_json_response(200, {'status': 'ok'})
+
+    def _handle_resurfacing_status(self):
+        """GET /book/resurfacing/status — get resurfacing stats."""
+        from resurfacing_engine import get_status
+        self._send_json_response(200, get_status())
+
+    def _handle_process_kindle(self):
+        """POST /book/process-kindle — trigger Kindle book processing."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = {}
+        if content_length:
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        max_books = body.get('max', 10)
+        print(f'[process-kindle] Processing up to {max_books} books', flush=True)
+
+        def _process():
+            try:
+                from process_kindle_books import process_all
+                process_all(do_research=True, max_books=max_books)
+            except Exception as e:
+                print(f'[process-kindle] Error: {e}', flush=True)
+                import traceback; traceback.print_exc()
+
+        thread = threading.Thread(target=_process, daemon=True)
+        thread.start()
+        self._send_json_response(202, {'status': 'processing', 'max_books': max_books})
+
     def _handle_ingest_book(self):
         if INGEST_TOKEN:
             token = self.headers.get('X-Petrarca-Token', '')
@@ -2979,6 +3072,14 @@ JSON array only:"""
             return self._handle_book_story_so_far()
         if self.path == '/book/sync':
             return self._handle_book_sync_save()
+        if self.path == '/book/resurfacing/generate':
+            return self._handle_resurfacing_generate()
+        if self.path == '/book/resurfacing/respond':
+            return self._handle_resurfacing_respond()
+        if self.path == '/book/resurfacing/skip':
+            return self._handle_resurfacing_skip()
+        if self.path == '/book/process-kindle':
+            return self._handle_process_kindle()
         if self.path == '/kindle/sync':
             return self._handle_kindle_sync()
         if self.path == '/kindle/curate':
@@ -3452,6 +3553,8 @@ JSON array only:"""
             return self._handle_book_research_get()
         if self.path == '/book/sync':
             return self._handle_book_sync_load()
+        if self.path == '/book/resurfacing/status':
+            return self._handle_resurfacing_status()
         if self.path == '/kindle/library':
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):

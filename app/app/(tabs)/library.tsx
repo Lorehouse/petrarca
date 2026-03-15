@@ -149,12 +149,20 @@ export default function LibraryScreen() {
             <Text style={styles.screenTitle}>Library</Text>
             <Text style={styles.screenSubtitle}>Physical books & reading notes</Text>
           </View>
-          <Pressable style={styles.addButton} onPress={() => {
-            logEvent('library_add_book_tap');
-            router.push('/add-book' as any);
-          }}>
-            <Text style={styles.addButtonText}>+ Add Book</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable style={styles.revisitButton} onPress={() => {
+              logEvent('library_revisit_tap');
+              router.push('/resurfacing' as any);
+            }}>
+              <Text style={styles.revisitButtonText}>{'\u2726'} Revisit</Text>
+            </Pressable>
+            <Pressable style={styles.addButton} onPress={() => {
+              logEvent('library_add_book_tap');
+              router.push('/add-book' as any);
+            }}>
+              <Text style={styles.addButtonText}>+ Add</Text>
+            </Pressable>
+          </View>
         </View>
         <DoubleRule />
         <View style={styles.filterRow}>
@@ -199,6 +207,8 @@ const styles = StyleSheet.create({
   screenSubtitle: { ...type.screenSubtitle, color: colors.textSecondary, marginTop: 2, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   addButton: { borderWidth: 1, borderColor: colors.rubric, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 2, marginTop: 4 },
   addButtonText: { fontFamily: fonts.body, fontSize: 13, color: colors.rubric },
+  revisitButton: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: colors.rubric },
+  revisitButtonText: { fontFamily: fonts.body, fontSize: 13, color: colors.rubric },
   filterRow: { flexDirection: 'row', paddingHorizontal: layout.screenPadding, paddingTop: 14, paddingBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   filterTab: { paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   filterText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted },

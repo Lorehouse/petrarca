@@ -498,3 +498,34 @@ export interface ChapterInsights {
   connections: BookArticleConnection[];
   captures_count: number;
 }
+
+// --- Resurfacing types ---
+
+export interface ResurfacingItem {
+  type: 'resonance' | 'dialogue';
+  prompt_type?: string;
+  prompt_text?: string;
+  // Resonance fields
+  capture_id?: string;
+  book_id?: string;
+  book_title?: string;
+  book_author?: string;
+  book_cover_url?: string;
+  chapter?: string;
+  highlight_text?: string;
+  full_text?: string;
+  months_since_capture?: number;
+  resurface_count?: number;
+  // Dialogue fields
+  claim_a?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
+  claim_b?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
+  tension_prompt?: string;
+}
+
+export interface ResurfacingSession {
+  id: string;
+  items: ResurfacingItem[];
+  generated_at: string;
+  resonance_count: number;
+  dialogue_count: number;
+}
