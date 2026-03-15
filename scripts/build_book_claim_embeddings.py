@@ -129,22 +129,20 @@ def main():
     # Check for incremental mode
     existing_claims = []
     existing_embeddings = None
+    claims_to_embed = []
+
     if not args.force and BOOK_EMBEDDINGS_PATH.exists() and BOOK_CLAIMS_INDEX_PATH.exists():
         log("Loading existing embeddings for incremental update...")
         existing_embeddings = np.load(BOOK_EMBEDDINGS_PATH)['embeddings']
         existing_claims = json.loads(BOOK_CLAIMS_INDEX_PATH.read_text())
         existing_ids = {c['id'] for c in existing_claims}
-        new_claims = [c for c in claims if c['id'] not in existing_ids]
-        log(f"  {len(existing_claims)} existing, {len(new_claims)} new")
+        claims_to_embed = [c for c in claims if c['id'] not in existing_ids]
+        log(f"  {len(existing_claims)} existing, {len(claims_to_embed)} new")
 
-        if not new_claims:
+        if not claims_to_embed:
             log("No new claims to embed.")
-            if args.cross_match:
-                log("Running cross-match with existing embeddings...")
-            else:
+            if not args.cross_match:
                 return
-        else:
-            claims_to_embed = new_claims
     else:
         claims_to_embed = claims
         log(f"  Embedding all {len(claims_to_embed)} claims (force={args.force})")
