@@ -1,19 +1,77 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, TextInput,
   Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
+import { documentDirectory, makeDirectoryAsync, copyAsync, getInfoAsync } from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logEvent } from '../data/logger';
 import {
   getPhysicalBook, getBookCaptures, updateReadingPosition,
-  addBookCapture, generateCaptureId, updatePhysicalBook, getBookStoreVersion,
+  addBookCapture, generateCaptureId, updatePhysicalBook, updateBookCapture, useBookStoreVersion,
 } from '../data/book-store';
 import { ocrPage, uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
 import DoubleRule from '../components/DoubleRule';
+
+const PENDING_BOOK_VOICE_KEY = '@petrarca/pending_book_voice_notes';
+
+interface PendingBookVoice {
+  localPath: string;
+  captureId: string;
+  bookId: string;
+  bookTitle: string;
+  chapter?: string;
+  pageNumber?: number;
+}
+
+async function savePendingVoice(note: PendingBookVoice): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_VOICE_KEY);
+  const pending: PendingBookVoice[] = raw ? JSON.parse(raw) : [];
+  pending.push(note);
+  await AsyncStorage.setItem(PENDING_BOOK_VOICE_KEY, JSON.stringify(pending));
+}
+
+async function removePendingVoice(captureId: string): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_VOICE_KEY);
+  if (!raw) return;
+  const pending: PendingBookVoice[] = JSON.parse(raw);
+  await AsyncStorage.setItem(PENDING_BOOK_VOICE_KEY, JSON.stringify(pending.filter(n => n.captureId !== captureId)));
+}
+
+async function retryPendingVoiceNotes(): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_VOICE_KEY);
+  if (!raw) return;
+  const pending: PendingBookVoice[] = JSON.parse(raw);
+  for (const note of pending) {
+    try {
+      if (Platform.OS !== 'web' && documentDirectory) {
+        const info = await getInfoAsync(note.localPath);
+        if (!info.exists) {
+          await removePendingVoice(note.captureId);
+          continue;
+        }
+      }
+      const result = await uploadBookVoiceNote(note.localPath, note.bookId, note.bookTitle, note.chapter, note.pageNumber);
+      await updateBookCapture(note.captureId, {
+        transcript: result.transcript,
+        extracted_ideas: result.extracted_ideas,
+        topics: result.topics,
+        transcription_status: 'completed',
+        upload_status: 'uploaded',
+      });
+      await removePendingVoice(note.captureId);
+      logEvent('book_voice_retry_success', { capture_id: note.captureId });
+    } catch {
+      // Will retry next time the screen is focused
+    }
+  }
+}
 
 function formatTimeAgo(timestamp: number): string {
   const hours = Math.floor((Date.now() - timestamp) / 3600000);
@@ -53,6 +111,17 @@ function CaptureCard({ capture }: { capture: BookCapture }) {
       {capture.transcript && (
         <Text style={captureStyles.transcript} numberOfLines={3}>{capture.transcript}</Text>
       )}
+      {capture.type === 'voice_note' && capture.transcription_status === 'processing' && (
+        <Text style={captureStyles.transcript}>Transcribing…</Text>
+      )}
+      {capture.type === 'voice_note' && capture.transcription_status === 'failed' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[captureStyles.transcript, { color: colors.rubric }]}>Transcription failed</Text>
+          <Pressable onPress={() => retryPendingVoiceNotes()}>
+            <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.rubric, textDecorationLine: 'underline' }}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
       {capture.text && <Text style={captureStyles.noteText}>{capture.text}</Text>}
       {capture.ocr_text && !capture.extracted_ideas?.length && (
         <Text style={captureStyles.transcript} numberOfLines={3}>{capture.ocr_text}</Text>
@@ -85,15 +154,23 @@ export default function BookDetailScreen() {
   const [textNoteInput, setTextNoteInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceDuration, setVoiceDuration] = useState(0);
+  const [voiceUploading, setVoiceUploading] = useState(false);
+  const recRef = useRef<Audio.Recording | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [chapterDropdownOpen, setChapterDropdownOpen] = useState(false);
   const [research, setResearch] = useState<BookResearch | null>(null);
   const [researchLoading, setResearchLoading] = useState(false);
   const [storySoFar, setStorySoFar] = useState<StorySoFarBriefing | null>(null);
   const [showStorySoFar, setShowStorySoFar] = useState(false);
 
-  useFocusEffect(useCallback(() => { setRefreshKey(k => k + 1); }, []));
+  useFocusEffect(useCallback(() => {
+    setRefreshKey(k => k + 1);
+    retryPendingVoiceNotes().then(() => setRefreshKey(k => k + 1));
+  }, []));
 
-  const storeVersion = getBookStoreVersion();
+  const storeVersion = useBookStoreVersion();
   const book = useMemo(() => id ? getPhysicalBook(id) : undefined, [id, refreshKey, storeVersion]);
   const captures = useMemo(() => id ? getBookCaptures(id) : [], [id, refreshKey, storeVersion]);
 
@@ -195,7 +272,6 @@ export default function BookDetailScreen() {
 
     try {
       const ocrResult = await ocrPage(photoUri, book.id, book.title, book.current_page || undefined, book.current_chapter || undefined);
-      const { updateBookCapture } = require('../data/book-store');
       await updateBookCapture(captureId, {
         ocr_text: ocrResult.text,
         extracted_ideas: ocrResult.extracted_ideas,
@@ -205,7 +281,6 @@ export default function BookDetailScreen() {
         page_number: ocrResult.detected_page_number || book.current_page || undefined,
       });
     } catch (e: any) {
-      const { updateBookCapture } = require('../data/book-store');
       await updateBookCapture(captureId, { ocr_status: 'failed', upload_status: 'failed' });
     }
     setProcessing(false);
@@ -224,6 +299,93 @@ export default function BookDetailScreen() {
     setShowTextInput(false);
     setRefreshKey(k => k + 1);
   };
+
+  const handleVoiceStart = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) { Alert.alert('Permission needed', 'Microphone access is required for voice notes.'); return; }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      recRef.current = rec;
+      setVoiceRecording(true);
+      setVoiceDuration(0);
+      timerRef.current = setInterval(() => setVoiceDuration(d => d + 1), 1000);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      logEvent('book_capture_voice_start', { book_id: book.id });
+    } catch (e) {
+      Alert.alert('Recording failed', String(e));
+    }
+  };
+
+  const handleVoiceStop = async () => {
+    if (!recRef.current) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    try {
+      await recRef.current.stopAndUnloadAsync();
+      const uri = recRef.current.getURI();
+      recRef.current = null;
+      setVoiceRecording(false);
+      if (!uri) { Alert.alert('Error', 'No audio file produced'); return; }
+
+      // Copy to stable local path so the temp recording isn't lost
+      let localPath = uri;
+      if (Platform.OS !== 'web' && documentDirectory) {
+        const filename = `voice_${book.id}_${Date.now()}.m4a`;
+        localPath = `${documentDirectory}book-voice-notes/${filename}`;
+        await makeDirectoryAsync(`${documentDirectory}book-voice-notes/`, { intermediates: true });
+        await copyAsync({ from: uri, to: localPath });
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setVoiceUploading(true);
+
+      const captureId = generateCaptureId();
+      const chapter = book.current_chapter || undefined;
+      const pageNumber = book.current_page || undefined;
+      await addBookCapture({
+        id: captureId, book_id: book.id, type: 'voice_note', created_at: Date.now(),
+        audio_uri: localPath, transcription_status: 'processing', upload_status: 'pending',
+        page_number: pageNumber, chapter,
+      });
+      setRefreshKey(k => k + 1);
+      logEvent('book_capture_voice_saved', { book_id: book.id, duration_seconds: voiceDuration });
+
+      try {
+        const result = await uploadBookVoiceNote(localPath, book.id, book.title, chapter, pageNumber);
+        await updateBookCapture(captureId, {
+          transcript: result.transcript,
+          extracted_ideas: result.extracted_ideas,
+          topics: result.topics,
+          transcription_status: 'completed',
+          upload_status: 'uploaded',
+        });
+        logEvent('book_capture_voice_transcribed', { book_id: book.id, ideas: result.extracted_ideas?.length || 0 });
+      } catch (e: any) {
+        await updateBookCapture(captureId, { transcription_status: 'failed', upload_status: 'failed' });
+        await savePendingVoice({ localPath, captureId, bookId: book.id, bookTitle: book.title, chapter, pageNumber });
+        logEvent('book_capture_voice_failed', { book_id: book.id, error: String(e) });
+      }
+      setVoiceUploading(false);
+      setRefreshKey(k => k + 1);
+    } catch (e) {
+      setVoiceRecording(false);
+      setVoiceUploading(false);
+      Alert.alert('Recording error', String(e));
+    }
+  };
+
+  const handleVoiceCancel = async () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (recRef.current) {
+      try { await recRef.current.stopAndUnloadAsync(); } catch {}
+      recRef.current = null;
+    }
+    setVoiceRecording(false);
+    setVoiceDuration(0);
+    logEvent('book_capture_voice_cancelled', { book_id: book.id });
+  };
+
+  const fmtDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -317,21 +479,40 @@ export default function BookDetailScreen() {
       {/* Capture bar */}
       <View style={styles.captureSection}>
         <Text style={styles.sectionLabel}>{'\u2726'} Capture</Text>
-        {processing && <ActivityIndicator size="small" color={colors.rubric} style={{ marginBottom: 8 }} />}
-        <View style={styles.captureBar}>
-          <Pressable style={styles.captureButton} onPress={() => { logEvent('book_capture_voice_tap', { book_id: book.id }); Alert.alert('Voice notes', 'Voice capture coming soon — use text notes for now.'); }}>
-            <Text style={styles.captureIcon}>🎙</Text>
-            <Text style={styles.captureLabel}>Voice</Text>
-          </Pressable>
-          <Pressable style={styles.captureButton} onPress={handlePhotoCapture}>
-            <Text style={styles.captureIcon}>📷</Text>
-            <Text style={styles.captureLabel}>Photo</Text>
-          </Pressable>
-          <Pressable style={styles.captureButton} onPress={() => setShowTextInput(!showTextInput)}>
-            <Text style={styles.captureIcon}>✎</Text>
-            <Text style={styles.captureLabel}>Text</Text>
-          </Pressable>
-        </View>
+        {(processing || voiceUploading) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <ActivityIndicator size="small" color={colors.rubric} />
+            <Text style={styles.processingText}>{voiceUploading ? 'Transcribing voice note…' : 'Processing…'}</Text>
+          </View>
+        )}
+        {voiceRecording ? (
+          <View style={styles.voiceBar}>
+            <View style={styles.voicePulseDot} />
+            <Text style={styles.voiceTimer}>{fmtDuration(voiceDuration)}</Text>
+            <View style={{ flex: 1 }} />
+            <Pressable style={styles.voiceCancelBtn} onPress={handleVoiceCancel}>
+              <Text style={styles.voiceCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable style={styles.voiceSendBtn} onPress={handleVoiceStop}>
+              <Text style={styles.voiceSendText}>Done</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.captureBar}>
+            <Pressable style={styles.captureButton} onPress={handleVoiceStart}>
+              <Text style={styles.captureIcon}>🎙</Text>
+              <Text style={styles.captureLabel}>Voice</Text>
+            </Pressable>
+            <Pressable style={styles.captureButton} onPress={handlePhotoCapture}>
+              <Text style={styles.captureIcon}>📷</Text>
+              <Text style={styles.captureLabel}>Photo</Text>
+            </Pressable>
+            <Pressable style={styles.captureButton} onPress={() => setShowTextInput(!showTextInput)}>
+              <Text style={styles.captureIcon}>✎</Text>
+              <Text style={styles.captureLabel}>Text</Text>
+            </Pressable>
+          </View>
+        )}
         {showTextInput && (
           <View style={styles.textNoteArea}>
             <TextInput style={styles.textNoteInput} value={textNoteInput} onChangeText={setTextNoteInput}
@@ -479,6 +660,14 @@ const styles = StyleSheet.create({
   captureButton: { flex: 1, alignItems: 'center', paddingVertical: 16, backgroundColor: colors.parchmentDark, borderRadius: 4, borderWidth: 1, borderColor: colors.rule, gap: 4 },
   captureIcon: { fontSize: 22 },
   captureLabel: { fontFamily: fonts.uiMedium, fontSize: 11, color: colors.ink, letterSpacing: 0.3, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  processingText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  voiceBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: colors.parchmentDark, borderRadius: 4, borderWidth: 1, borderColor: colors.rubric },
+  voicePulseDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.rubric },
+  voiceTimer: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
+  voiceCancelBtn: { paddingHorizontal: 14, paddingVertical: 8 },
+  voiceCancelText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textMuted },
+  voiceSendBtn: { backgroundColor: colors.rubric, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 },
+  voiceSendText: { fontFamily: fonts.uiMedium, fontSize: 13, color: colors.parchment, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   textNoteArea: { marginTop: 12, gap: 8 },
   textNoteInput: { borderWidth: 1, borderColor: colors.rule, borderRadius: 3, paddingVertical: 10, paddingHorizontal: 12, fontFamily: fonts.reading, fontSize: 14, color: colors.textBody, minHeight: 80, textAlignVertical: 'top' },
   saveNoteButton: { backgroundColor: colors.ink, paddingVertical: 10, borderRadius: 3, alignItems: 'center' },

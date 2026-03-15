@@ -2308,14 +2308,14 @@ class ResearchHandler(BaseHTTPRequestHandler):
 
         print(f'[book/voice-note] Received note {note_id} for {book_title}', flush=True)
 
-        def _process_book_note():
-            from gemini_llm import call_llm
-            result = {'id': note_id, 'transcript': '', 'extracted_ideas': [], 'topics': []}
-            try:
-                transcript = transcribe_on_server(audio_path)
-                result['transcript'] = transcript
+        from gemini_llm import call_llm
+        result = {'id': note_id, 'transcript': '', 'extracted_ideas': [], 'topics': []}
+        try:
+            transcript = transcribe_on_server(audio_path)
+            result['transcript'] = transcript
 
-                # Extract ideas from transcript
+            # Extract ideas from transcript
+            if transcript.strip():
                 extraction = call_llm(
                     f"""Extract key ideas from this voice note about the book "{book_title}".
 {f'Chapter: {chapter}' if chapter else ''}
@@ -2340,27 +2340,23 @@ Return ONLY valid JSON.""",
                     except json.JSONDecodeError:
                         pass
 
-                print(f'[book/voice-note] {note_id} processed: {len(result["extracted_ideas"])} ideas', flush=True)
-            except Exception as e:
-                print(f'[book/voice-note] {note_id} error: {e}', flush=True)
+            print(f'[book/voice-note] {note_id} processed: {len(result["extracted_ideas"])} ideas', flush=True)
+        except Exception as e:
+            print(f'[book/voice-note] {note_id} error: {e}', flush=True)
 
-            # Save note result
-            note_path = NOTES_DIR / f'{note_id}.json'
-            note_path.write_text(json.dumps({
-                **result,
-                'book_id': book_id,
-                'book_title': book_title,
-                'chapter': chapter,
-                'page_number': page_number,
-                'audio_path': str(audio_path),
-                'created_at': int(time.time() * 1000),
-            }, indent=2))
+        # Save note result
+        note_path = NOTES_DIR / f'{note_id}.json'
+        note_path.write_text(json.dumps({
+            **result,
+            'book_id': book_id,
+            'book_title': book_title,
+            'chapter': chapter,
+            'page_number': page_number,
+            'audio_path': str(audio_path),
+            'created_at': int(time.time() * 1000),
+        }, indent=2))
 
-        # Process in background
-        thread = threading.Thread(target=_process_book_note, daemon=True)
-        thread.start()
-
-        self._send_json_response(202, {'id': note_id, 'status': 'processing'})
+        self._send_json_response(200, result)
 
     def _handle_book_research(self):
         """Trigger background research for a physical book."""
