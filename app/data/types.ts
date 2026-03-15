@@ -399,7 +399,7 @@ export interface PhysicalBook {
   chapters: PhysicalBookChapter[];
   current_chapter?: string;           // chapter title
   current_page?: number;
-  reading_status: 'reading' | 'finished' | 'paused' | 'want_to_read';
+  reading_status: 'reading' | 'finished' | 'paused' | 'want_to_read' | 'archived';
   added_at: number;
   last_interaction_at: number;        // for sorting by recency
   metadata_source?: 'photo' | 'manual' | 'search';

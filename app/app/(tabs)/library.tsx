@@ -126,9 +126,9 @@ export default function LibraryScreen() {
   const books = useMemo(() => {
     let filtered = allBooks;
     if (filter === 'active') {
-      filtered = filtered.filter(b => b.reading_status !== 'finished');
+      filtered = filtered.filter(b => b.reading_status !== 'finished' && b.reading_status !== 'archived');
     } else if (filter === 'archived') {
-      filtered = filtered.filter(b => b.reading_status === 'finished');
+      filtered = filtered.filter(b => b.reading_status === 'finished' || b.reading_status === 'archived');
     }
     return filtered;
   }, [allBooks, filter]);

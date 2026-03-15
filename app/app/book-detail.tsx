@@ -254,6 +254,27 @@ export default function BookDetailScreen() {
               <Text style={styles.progressText}>{progress}% complete</Text>
             </View>
           )}
+          <View style={styles.statusRow}>
+            {(['reading', 'paused', 'finished', 'archived'] as const).map(s => (
+              <Pressable
+                key={s}
+                style={[styles.statusPill, book.reading_status === s && styles.statusPillActive]}
+                onPress={async () => {
+                  await updatePhysicalBook(book.id, { reading_status: s });
+                  logEvent('book_status_changed', { book_id: book.id, status: s });
+                  if (s === 'archived') {
+                    router.back();
+                    return;
+                  }
+                  setRefreshKey(k => k + 1);
+                }}
+              >
+                <Text style={[styles.statusPillText, book.reading_status === s && styles.statusPillTextActive]}>
+                  {s === 'reading' ? 'Reading' : s === 'paused' ? 'Paused' : s === 'finished' ? 'Finished' : 'Archive'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </View>
       <DoubleRule />
@@ -433,6 +454,11 @@ const styles = StyleSheet.create({
   progressTrack: { height: 3, backgroundColor: colors.rule, borderRadius: 1.5, overflow: 'hidden', marginBottom: 4 },
   progressFill: { height: '100%', backgroundColor: colors.rubric, borderRadius: 1.5 },
   progressText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted },
+  statusRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.rule },
+  statusPillActive: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.06)' },
+  statusPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 },
+  statusPillTextActive: { color: colors.rubric },
   positionSection: { paddingHorizontal: layout.screenPadding, paddingTop: 18, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   sectionLabel: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.rubric, marginBottom: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   positionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
