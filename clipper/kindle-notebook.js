@@ -1,359 +1,259 @@
-// Petrarca Clipper — Kindle Notebook Content Script
-// Extracts highlights and notes from read.amazon.com/notebook
+// Petrarca Clipper — Kindle Notebook Highlight Scraper
+// Extracts highlights/notes from read.amazon.com/notebook
+//
+// Confirmed selectors (March 2026):
+//   Sidebar books: .kp-notebook-library-each-book (DIV with ID = ASIN)
+//   Annotated dates: INPUT#kp-notebook-annotated-date-{ASIN}
+//   Highlights: .kp-notebook-highlight (with -pink, -blue, -orange, -yellow variants)
+//   Notes: .kp-notebook-note
+//   Metadata: .kp-notebook-metadata (contains "Location XXX" etc.)
+//   Annotation container: .kp-notebook-annotation-container
+//   Currently selected book ASIN: INPUT#kp-notebook-asin
 
 (function () {
   "use strict";
 
-  const LOG_PREFIX = "🔷 [petrarca-kindle-notebook]";
-  const EXTRACTION_DELAY_MS = 3000;
+  const LOG = "[petrarca-kindle-notebook]";
+  function log(...args) { console.warn(LOG, ...args); }
 
-  function log(...args) {
-    console.warn(LOG_PREFIX, ...args);
-  }
+  // --- Get all books in the sidebar with their annotated dates ----------------
 
-  function logGroup(label) {
-    console.warn(`${LOG_PREFIX} ▸▸▸ ${label} ▸▸▸`);
-  }
-
-  function logGroupEnd() {
-    console.warn(`${LOG_PREFIX} ◂◂◂`);
-  }
-
-  console.error("🔷🔷🔷 PETRARCA KINDLE NOTEBOOK SCRIPT LOADED 🔷🔷🔷", window.location.href);
-
-  // --- Page diagnostics -------------------------------------------------------
-
-  function dumpPageDiagnostics() {
-    logGroup("NOTEBOOK PAGE DIAGNOSTICS");
-    log("URL:", window.location.href);
-    log("Title:", document.title);
-    log("Body text length:", document.body?.innerText?.length);
-
-    // All unique classes
-    const allClasses = new Set();
-    document.querySelectorAll("[class]").forEach((el) => {
-      el.classList.forEach((c) => allClasses.add(c));
-    });
-    const classArr = Array.from(allClasses);
-
-    // Filter for notebook/highlight/book related
-    const relevant = classArr.filter((c) =>
-      /notebook|highlight|note|book|annotation|clip|mark|library|kp-/i.test(c)
-    );
-    log("Relevant classes:", relevant);
-    log("All classes (first 100):", classArr.slice(0, 100));
-
-    // All IDs
-    const allIds = Array.from(document.querySelectorAll("[id]")).map(
-      (el) => `${el.tagName}#${el.id}`
-    );
-    const relevantIds = allIds.filter((id) =>
-      /highlight|note|book|annotation|library|notebook/i.test(id)
-    );
-    log("Relevant IDs:", relevantIds);
-
-    // Top-level structure
-    log("--- Body structure ---");
-    if (document.body) {
-      Array.from(document.body.children)
-        .slice(0, 20)
-        .forEach((child, i) => {
-          log(
-            `  [${i}]`,
-            child.tagName,
-            child.id ? `#${child.id}` : "",
-            child.className
-              ? `.${Array.from(child.classList).join(".")}`
-              : "",
-            `(${child.children?.length} children, ${child.innerText?.length || 0} chars)`
-          );
-        });
-    }
-
-    logGroupEnd();
-  }
-
-  // --- Extraction with logging ------------------------------------------------
-
-  function extractNotebookData() {
-    logGroup("NOTEBOOK EXTRACTION");
-
-    // Try many different selector patterns
-    const bookSelectors = [
-      ".kp-notebook-library-each-book",
-      "[class*='notebook-library-each-book']",
-      "[class*='kp-notebook']",
-      "[class*='notebookLibrary']",
-      ".a-section[data-asin]",
-      "[class*='BookAnnotation']",
-      "[class*='book-annotation']",
-      "[class*='annotationSection']",
-      ".a-section .a-spacing-base",
-      "div[id*='annotation']",
-      "div[id*='highlight']",
-      "div[id*='book']",
-    ];
-
-    for (const selector of bookSelectors) {
-      const els = document.querySelectorAll(selector);
-      if (els.length > 0) {
-        log(`Selector "${selector}": ${els.length} matches`);
-        Array.from(els)
-          .slice(0, 2)
-          .forEach((el, i) => {
-            log(
-              `  [${i}]`,
-              el.tagName,
-              el.id ? `#${el.id}` : "",
-              el.className
-                ? `.${String(el.className).substring(0, 100)}`
-                : "",
-              el.innerText?.substring(0, 200)
-            );
-          });
-      }
-    }
-
-    // Highlight selectors
-    const highlightSelectors = [
-      "[id^='highlight-']",
-      ".kp-notebook-highlight",
-      "[class*='highlight']",
-      "[class*='Highlight']",
-      "span.a-text-bold",
-      ".a-text-quote",
-      "blockquote",
-    ];
-
-    for (const selector of highlightSelectors) {
-      const els = document.querySelectorAll(selector);
-      if (els.length > 0) {
-        log(`Highlight selector "${selector}": ${els.length} matches`);
-        Array.from(els)
-          .slice(0, 2)
-          .forEach((el, i) => {
-            log(`  [${i}]`, el.innerText?.substring(0, 150));
-          });
-      }
-    }
-
-    // Note selectors
-    const noteSelectors = [
-      "[id^='note-']",
-      ".kp-notebook-note",
-      "[class*='note']",
-      "[class*='Note']",
-    ];
-
-    for (const selector of noteSelectors) {
-      const els = document.querySelectorAll(selector);
-      if (els.length > 0) {
-        log(`Note selector "${selector}": ${els.length} matches`);
-      }
-    }
-
-    // Dump visible text for analysis
-    const bodyText = document.body?.innerText || "";
-    log("Page text (first 3000 chars):", bodyText.substring(0, 3000));
-
-    // Also check for the sidebar book list
-    const sidebarSelectors = [
-      ".kp-notebook-library-each-book",
-      "[class*='sidebar'] a",
-      "[class*='Sidebar'] a",
-      "nav a",
-      ".a-column a[href*='#']",
-    ];
-    for (const selector of sidebarSelectors) {
-      const els = document.querySelectorAll(selector);
-      if (els.length > 0) {
-        log(`Sidebar selector "${selector}": ${els.length} matches`);
-        Array.from(els)
-          .slice(0, 5)
-          .forEach((el, i) => {
-            log(`  [${i}]`, el.innerText?.substring(0, 80), el.href?.substring(0, 80));
-          });
-      }
-    }
-
-    logGroupEnd();
-
-    // Try actual extraction with all working selectors
-    return tryExtractBooks();
-  }
-
-  function tryExtractBooks() {
+  function getSidebarBooks() {
     const books = [];
+    const bookEls = document.querySelectorAll(".kp-notebook-library-each-book");
 
-    // Cast a wide net for book sections
-    const bookElements = document.querySelectorAll(
-      ".kp-notebook-library-each-book, " +
-        "[class*='notebook-library-each-book'], " +
-        "[class*='kp-notebook'] > div, " +
-        ".a-section[data-asin], " +
-        "[data-asin]"
-    );
+    bookEls.forEach((el) => {
+      const asin = el.id;
+      if (!asin || asin.startsWith("kp-")) return;
 
-    log(`tryExtractBooks: found ${bookElements.length} candidate elements`);
-
-    bookElements.forEach((bookEl) => {
-      const titleEl = bookEl.querySelector("h2, h3, h4, [class*='title'], [class*='Title']");
-      const authorEl = bookEl.querySelector("[class*='author'], [class*='Author'], p:nth-child(2)");
+      const titleEl = el.querySelector("h2.kp-notebook-searchable, h2");
+      const authorEl = el.querySelector("p.kp-notebook-searchable, p");
       const title = titleEl ? titleEl.textContent.trim() : "";
-      const author = authorEl ? authorEl.textContent.trim() : "";
-      let asin = bookEl.getAttribute("data-asin") || "";
+      const author = authorEl ? authorEl.textContent.replace(/^By:\s*/i, "").trim() : "";
 
-      // Extract highlights with rich metadata
-      const highlights = [];
-      let currentChapter = "";
+      // Annotated date from hidden input
+      const dateInput = document.querySelector(`#kp-notebook-annotated-date-${asin}`);
+      const annotatedDate = dateInput ? dateInput.value : "";
 
-      // Walk through all child elements to track chapter context
-      const allChildren = bookEl.querySelectorAll("*");
-      allChildren.forEach((el) => {
-        // Chapter/section headers — these appear before their highlights
-        if (
-          el.matches(
-            "[class*='chapter'], [class*='section-heading'], " +
-              "[class*='Chapter'], h3, h4, [class*='sectionHeading']"
-          )
-        ) {
-          const chText = el.textContent.trim();
-          if (chText && chText.length < 200 && chText.length > 2) {
-            currentChapter = chText;
-          }
-        }
-
-        // Highlight elements
-        if (
-          el.matches(
-            "[id^='highlight-'], .kp-notebook-highlight, " +
-              "#highlight, [class*='highlightText']"
-          )
-        ) {
-          const text = el.textContent?.trim();
-          if (!text || text.length < 5) return;
-
-          // Location/page metadata — usually a nearby sibling or parent's child
-          const container =
-            el.closest(".a-row, [class*='row'], [class*='annotation']") ||
-            el.parentElement;
-          const metaEl = container?.querySelector(
-            ".kp-notebook-metadata, [class*='metadata'], " +
-              ".a-color-secondary, [class*='location']"
-          );
-          const metaText = metaEl ? metaEl.textContent.trim() : "";
-
-          // Parse location number from "Location 1234" or "Page 56"
-          const locMatch = metaText.match(/Location\s+([\d,]+)/i);
-          const pageMatch = metaText.match(/Page\s+(\d+)/i);
-          const location = locMatch
-            ? parseInt(locMatch[1].replace(/,/g, ""), 10)
-            : null;
-          const page = pageMatch ? parseInt(pageMatch[1], 10) : null;
-
-          // Highlight color
-          const colorEl = container?.querySelector(
-            "[class*='color'], [class*='Color'], " +
-              "[style*='border-color'], [style*='background']"
-          );
-          let color = "";
-          if (colorEl) {
-            const style = colorEl.getAttribute("style") || "";
-            const cls = colorEl.className || "";
-            if (/yellow/i.test(style + cls)) color = "yellow";
-            else if (/blue/i.test(style + cls)) color = "blue";
-            else if (/pink|red/i.test(style + cls)) color = "pink";
-            else if (/orange/i.test(style + cls)) color = "orange";
-          }
-
-          // Timestamp — sometimes shown as "Added on Month Day, Year"
-          const dateMatch = metaText.match(
-            /(?:Added on\s+)?(\w+ \d+,?\s*\d{4})/i
-          );
-          const timestamp = dateMatch ? dateMatch[1] : "";
-
-          // Associated note — usually right after the highlight
-          let note = "";
-          const noteEl = container?.querySelector(
-            "[id^='note-'], .kp-notebook-note, [class*='noteText'], #note"
-          );
-          if (noteEl) {
-            const noteText = noteEl.textContent.trim();
-            if (noteText && noteText !== "Add a note") {
-              note = noteText;
-            }
-          }
-
-          highlights.push({
-            text: text.substring(0, 2000),
-            location,
-            page,
-            chapter: currentChapter || null,
-            color: color || null,
-            note: note || null,
-            timestamp: timestamp || null,
-          });
-        }
-      });
-
-      if (title || highlights.length > 0) {
-        books.push({
-          asin,
-          title,
-          author,
-          highlights,
-          highlight_count: highlights.length,
-        });
-      }
+      books.push({ asin, title, author, annotated_date: annotatedDate });
     });
 
-    log(`tryExtractBooks: extracted ${books.length} books`);
     return books;
   }
 
-  // --- Send data to background ------------------------------------------------
+  // --- Extract highlights for the currently displayed book --------------------
 
-  function sendData(books) {
-    log(`Sending ${books.length} books to background`);
-    chrome.runtime.sendMessage({
-      type: "kindleNotebookData",
-      payload: {
-        source: "notebook",
-        books: books,
-        extracted_at: new Date().toISOString(),
-        url: window.location.href,
-      },
+  function extractCurrentBookHighlights() {
+    const asinInput = document.querySelector("#kp-notebook-asin");
+    const asin = asinInput ? asinInput.value : "";
+
+    const highlights = [];
+    const hlEls = document.querySelectorAll(".kp-notebook-highlight");
+
+    hlEls.forEach((hl) => {
+      const text = hl.querySelector("#highlight")?.textContent?.trim() ||
+                   hl.textContent?.trim() || "";
+      if (!text || text.length < 3) return;
+
+      // Color from class name
+      let color = "yellow"; // default
+      if (hl.classList.contains("kp-notebook-highlight-pink")) color = "pink";
+      else if (hl.classList.contains("kp-notebook-highlight-blue")) color = "blue";
+      else if (hl.classList.contains("kp-notebook-highlight-orange")) color = "orange";
+
+      // Location from nearest metadata
+      const container = hl.closest(".a-spacing-base") || hl.parentElement;
+      const metaEl = container?.querySelector(".kp-notebook-metadata") ||
+                     container?.previousElementSibling?.querySelector(".kp-notebook-metadata");
+      const metaText = metaEl ? metaEl.textContent : "";
+
+      const locMatch = metaText.match(/Location\s+([\d,]+)/i);
+      const pageMatch = metaText.match(/Page\s+(\d+)/i);
+      const location = locMatch ? parseInt(locMatch[1].replace(/,/g, ""), 10) : null;
+      const page = pageMatch ? parseInt(pageMatch[1], 10) : null;
+
+      // Chapter — look for section headers above this highlight
+      // (Amazon doesn't show chapter info inline, so this may be null)
+      const chapter = null;
+
+      // Timestamp from metadata
+      const dateMatch = metaText.match(
+        /(\w+day,\s+\w+\s+\d+,\s+\d{4})/i
+      );
+      const timestamp = dateMatch ? dateMatch[1] : null;
+
+      highlights.push({ text, location, page, chapter, color, note: null, timestamp });
     });
+
+    // Extract notes
+    const noteEls = document.querySelectorAll(".kp-notebook-note");
+    noteEls.forEach((noteEl) => {
+      const noteText = noteEl.querySelector("#note")?.textContent?.trim() ||
+                       noteEl.textContent?.trim() || "";
+      if (!noteText || noteText === "Add a note") return;
+
+      // Try to associate with the nearest highlight
+      const container = noteEl.closest(".a-spacing-base") || noteEl.parentElement;
+      const nearbyHl = container?.querySelector(".kp-notebook-highlight");
+      if (nearbyHl) {
+        // Find the matching highlight and add the note
+        const hlText = nearbyHl.textContent?.trim();
+        const match = highlights.find((h) => h.text === hlText);
+        if (match) {
+          match.note = noteText;
+          return;
+        }
+      }
+      // Standalone note
+      highlights.push({
+        text: noteText, location: null, page: null,
+        chapter: null, color: null, note: noteText, timestamp: null,
+      });
+    });
+
+    return { asin, highlights };
+  }
+
+  // --- Incremental scraping: click through unseen books -----------------------
+
+  async function scrapeAllHighlights() {
+    const sidebarBooks = getSidebarBooks();
+    log(`Found ${sidebarBooks.length} books in sidebar`);
+
+    // Load previously scraped dates from chrome.storage
+    const stored = await chrome.storage.local.get("petrarca_notebook_scraped");
+    const scraped = stored.petrarca_notebook_scraped || {};
+
+    // Find books that need scraping (new or updated)
+    const toScrape = sidebarBooks.filter((b) => {
+      const lastScraped = scraped[b.asin];
+      if (!lastScraped) return true;
+      // If annotated date changed since last scrape, re-scrape
+      return b.annotated_date && b.annotated_date !== lastScraped.annotated_date;
+    });
+
+    log(`Need to scrape: ${toScrape.length} (${sidebarBooks.length - toScrape.length} already up-to-date)`);
+
+    if (toScrape.length === 0) {
+      log("All books already scraped, nothing to do");
+      return;
+    }
+
+    const allResults = [];
+
+    for (const book of toScrape) {
+      // Click the book in the sidebar
+      const bookEl = document.getElementById(book.asin);
+      if (!bookEl) continue;
+
+      log(`Clicking ${book.title.substring(0, 40)}... (${book.asin})`);
+      bookEl.click();
+
+      // Wait for highlights to load
+      await sleep(2000);
+
+      // Extract highlights
+      const result = extractCurrentBookHighlights();
+      if (result.highlights.length > 0) {
+        allResults.push({
+          asin: book.asin,
+          title: book.title,
+          author: book.author,
+          highlights: result.highlights,
+          highlight_count: result.highlights.length,
+        });
+        log(`  → ${result.highlights.length} highlights`);
+      }
+
+      // Mark as scraped
+      scraped[book.asin] = {
+        annotated_date: book.annotated_date,
+        scraped_at: new Date().toISOString(),
+        highlight_count: result.highlights.length,
+      };
+    }
+
+    // Save scrape state
+    await chrome.storage.local.set({ petrarca_notebook_scraped: scraped });
+
+    // Send to background for server sync
+    if (allResults.length > 0) {
+      log(`Sending ${allResults.length} books with highlights to server`);
+      chrome.runtime.sendMessage({
+        type: "kindleNotebookData",
+        payload: {
+          source: "notebook",
+          books: allResults,
+          extracted_at: new Date().toISOString(),
+          url: window.location.href,
+        },
+      });
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // --- Message handler --------------------------------------------------------
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request.type === "extractKindleNotebook") {
-      log("Manual extraction triggered");
-      dumpPageDiagnostics();
-      const books = extractNotebookData();
-      sendData(books);
-      sendResponse({ ok: true, count: books.length });
+      scrapeAllHighlights().then(() => {
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+    // Quick sidebar-only extraction (no clicking)
+    if (request.type === "getKindleNotebookBooks") {
+      const books = getSidebarBooks();
+      sendResponse({ ok: true, books });
     }
     return true;
   });
 
-  // --- Auto-run ---------------------------------------------------------------
+  // --- Auto-run: extract sidebar + current book on page load ------------------
 
-  log("Notebook content script loaded on:", window.location.href);
+  log("Loaded on:", window.location.href);
 
   setTimeout(() => {
-    log("=== Starting notebook extraction ===");
-    dumpPageDiagnostics();
-    const books = extractNotebookData();
-    sendData(books);
-  }, EXTRACTION_DELAY_MS);
+    const sidebarBooks = getSidebarBooks();
+    const currentHighlights = extractCurrentBookHighlights();
+    log(`Sidebar: ${sidebarBooks.length} books. Current book: ${currentHighlights.asin} with ${currentHighlights.highlights.length} highlights`);
 
-  // Re-run after more time
-  setTimeout(() => {
-    log("=== Delayed notebook re-extraction (12s) ===");
-    const books = extractNotebookData();
-    if (books.length > 0) sendData(books);
-  }, 12000);
+    // Send sidebar books list (for book metadata)
+    if (sidebarBooks.length > 0) {
+      chrome.runtime.sendMessage({
+        type: "kindleNotebookData",
+        payload: {
+          source: "notebook-sidebar",
+          books: sidebarBooks.map((b) => ({
+            asin: b.asin, title: b.title, author: b.author,
+            highlights: [], highlight_count: 0,
+          })),
+          extracted_at: new Date().toISOString(),
+          url: window.location.href,
+        },
+      });
+    }
+
+    // Send current book highlights
+    if (currentHighlights.highlights.length > 0) {
+      chrome.runtime.sendMessage({
+        type: "kindleNotebookData",
+        payload: {
+          source: "notebook",
+          books: [{
+            asin: currentHighlights.asin,
+            title: "",
+            author: "",
+            highlights: currentHighlights.highlights,
+            highlight_count: currentHighlights.highlights.length,
+          }],
+          extracted_at: new Date().toISOString(),
+          url: window.location.href,
+        },
+      });
+    }
+  }, 4000);
 })();

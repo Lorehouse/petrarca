@@ -65,6 +65,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Trigger background highlight sync
+  if (message.type === "kindleSyncHighlights") {
+    syncHighlightsInBackground()
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
   // Kindle notebook data from content script (read.amazon.com/notebook)
   if (message.type === "kindleNotebookData") {
     handleKindleSync("notebook", message.payload)
@@ -292,20 +300,42 @@ async function maybeTriggerKindleExtraction(tabId, tabUrl) {
   if (!tabUrl || !tabUrl.includes("read.amazon.com")) {
     return;
   }
+  console.log(`[petrarca-kindle] Kindle page detected: ${tabUrl}`);
+}
 
-  // Throttle
-  const { petrarca_last_kindle_library_sync } = await chrome.storage.local.get(
-    "petrarca_last_kindle_library_sync"
-  );
-  const now = Date.now();
-  if (
-    petrarca_last_kindle_library_sync &&
-    now - petrarca_last_kindle_library_sync < KINDLE_SYNC_INTERVAL_MS
-  ) {
-    return;
+// Background highlight sync: opens notebook in a tab, scrapes, closes
+async function syncHighlightsInBackground() {
+  console.log("[petrarca-kindle] Starting background highlight sync...");
+
+  const tab = await chrome.tabs.create({
+    url: "https://read.amazon.com/notebook",
+    active: false, // open in background
+  });
+
+  // Wait for page to load
+  await new Promise((resolve) => {
+    function listener(tabId, info) {
+      if (tabId === tab.id && info.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+
+  // Wait extra for sidebar to populate
+  await new Promise((r) => setTimeout(r, 6000));
+
+  // Tell content script to scrape all highlights incrementally
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "extractKindleNotebook" });
+    // Give it time to click through books
+    await new Promise((r) => setTimeout(r, 30000));
+  } catch (e) {
+    console.log(`[petrarca-kindle] Highlight sync error: ${e.message}`);
   }
 
-  // The content script auto-extracts on library pages, but we can also
-  // trigger extraction explicitly for other Kindle pages
-  console.log(`[petrarca-kindle] Kindle page detected: ${tabUrl}`);
+  // Close the tab
+  try { await chrome.tabs.remove(tab.id); } catch (e) {}
+  console.log("[petrarca-kindle] Background highlight sync complete");
 }
