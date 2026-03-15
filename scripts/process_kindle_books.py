@@ -27,7 +27,8 @@ BOOK_RESEARCH_DIR = DATA_DIR / "book_research"
 
 BOOK_RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
 
-RELEVANT_CATEGORIES = {'non-fiction', 'historical-novel'}
+# Categories to include for knowledge experiments (from session 23 classification)
+RELEVANT_CATEGORIES = {'non-fiction', 'classical-literature', 'literary-fiction', 'language-learning'}
 
 
 def log(msg: str):
@@ -59,10 +60,12 @@ def save_physical_books(data: dict):
     PHYSICAL_BOOKS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def is_already_unified(asin: str, physical_data: dict) -> bool:
-    """Check if a Kindle book is already in the unified book system."""
+def is_already_unified(key: str, physical_data: dict) -> bool:
+    """Check if a Kindle book (by ASIN or book_id key) is already unified."""
     return any(
-        b.get('kindle_asin') == asin or b.get('id') == f'kindle_{asin}'
+        b.get('kindle_asin') == key
+        or b.get('kindle_book_id') == key
+        or b.get('id') == f'kindle_{key}'
         for b in physical_data.get('books', [])
     )
 
@@ -71,49 +74,64 @@ def is_already_researched(book_id: str) -> bool:
     return (BOOK_RESEARCH_DIR / f'{book_id}.json').exists()
 
 
-def kindle_to_unified_book(asin: str, kindle_book: dict) -> dict:
-    """Convert a Kindle book record to a unified PhysicalBook record."""
-    progress_text = kindle_book.get('progress', {}).get('text', '')
-    progress_pct = kindle_book.get('progress', {}).get('percent')
+def kindle_to_unified_book(key: str, kindle_book: dict) -> dict:
+    """Convert a Kindle book record to a unified PhysicalBook record.
 
-    # Parse progress percentage
-    if progress_pct is None and progress_text:
-        try:
-            progress_pct = int(progress_text.replace('%', '').strip())
-        except (ValueError, AttributeError):
-            pass
+    Key can be an ASIN (purchased) or book_id (sideloaded).
+    Uses title_resolved for sideloaded books with filename-based titles.
+    """
+    progress = kindle_book.get('progress', {})
+    progress_pct = progress.get('pct') or progress.get('percent')
 
-    # Determine reading status
+    # Parse progress from text if needed
+    if progress_pct is None:
+        progress_text = progress.get('text', '')
+        if progress_text:
+            try:
+                progress_pct = int(str(progress_text).replace('%', '').strip())
+            except (ValueError, AttributeError):
+                pass
+
+    # Determine reading status from Kindle status
     status = kindle_book.get('status', 'unreviewed')
     if status == 'read' or (progress_pct and progress_pct >= 95):
         reading_status = 'finished'
-    elif status == 'reading' or (progress_pct and progress_pct > 0):
+    elif status == 'reading' or (progress_pct and progress_pct > 0 and progress_pct < 95):
         reading_status = 'reading'
     elif status == 'skipped':
         reading_status = 'archived'
     else:
         reading_status = 'want_to_read'
 
+    # Use resolved title for sideloaded books
+    title = kindle_book.get('title_resolved') or kindle_book.get('title', '')
+    asin = kindle_book.get('asin', '')
+    book_id_raw = kindle_book.get('book_id', '')
+
     return {
-        'id': f'kindle_{asin}',
+        'id': f'kindle_{asin or book_id_raw or key}',
         'kindle_asin': asin,
-        'title': kindle_book.get('title', ''),
+        'kindle_book_id': book_id_raw,
+        'title': title,
         'author': kindle_book.get('author', ''),
         'cover_url': kindle_book.get('cover_url'),
         'isbn': kindle_book.get('isbn'),
+        'publisher': kindle_book.get('publisher'),
         'page_count': kindle_book.get('page_count'),
-        'language': 'en',
+        'language': kindle_book.get('language', 'en'),
         'topics': kindle_book.get('topics', []),
         'chapters': kindle_book.get('chapters', []),
         'current_page': None,
         'current_chapter': None,
         'reading_status': reading_status,
-        'added_at': _parse_timestamp(kindle_book.get('first_seen', '')),
-        'last_interaction_at': _parse_timestamp(kindle_book.get('last_seen', '')),
+        'added_at': _parse_timestamp(kindle_book.get('first_seen') or kindle_book.get('purchase_date', '')),
+        'last_interaction_at': _parse_timestamp(kindle_book.get('last_seen') or kindle_book.get('last_read', '')),
         'metadata_source': 'kindle',
         'category': kindle_book.get('category'),
         'progress_percent': progress_pct,
         'finished_date': kindle_book.get('finished_date'),
+        'is_sideloaded': kindle_book.get('is_sideloaded', False),
+        'epub_path': kindle_book.get('epub_path'),
     }
 
 
@@ -129,9 +147,13 @@ def _parse_timestamp(ts_str: str) -> int:
         return int(time.time() * 1000)
 
 
-def highlights_to_captures(asin: str, book_id: str, highlights_data: dict) -> list[dict]:
-    """Convert Kindle highlights for a book into BookCapture records."""
-    book_highlights = highlights_data.get('books', {}).get(asin, {})
+def highlights_to_captures(key: str, book_id: str, highlights_data: dict) -> list[dict]:
+    """Convert Kindle highlights for a book into BookCapture records.
+
+    Highlights are keyed by ASIN or book_id in kindle_highlights.json.
+    """
+    # Try both key formats
+    book_highlights = highlights_data.get('books', {}).get(key, {})
     highlight_list = book_highlights.get('highlights', [])
 
     captures = []
@@ -141,10 +163,10 @@ def highlights_to_captures(asin: str, book_id: str, highlights_data: dict) -> li
             continue
 
         capture = {
-            'id': f'kh_{asin}_{i}',
+            'id': f'kh_{key}_{i}',
             'book_id': book_id,
             'type': 'kindle_highlight',
-            'created_at': _parse_timestamp(hl.get('timestamp', '')),
+            'created_at': _parse_timestamp(hl.get('timestamp') or hl.get('synced_at', '')),
             'text': text,
             'page_number': hl.get('page'),
             'chapter': hl.get('chapter'),
@@ -171,25 +193,27 @@ def research_book_if_needed(book_id: str, title: str, author: str,
     return research_book(book_id, title, author, None, chapters, topics)
 
 
-def process_single_book(asin: str, kindle_book: dict, highlights_data: dict,
+def process_single_book(key: str, kindle_book: dict, highlights_data: dict,
                          physical_data: dict, do_research: bool = True) -> bool:
     """Process one Kindle book: unify, convert highlights, research.
-    Returns True if book was processed (new), False if already existed."""
 
-    book_id = f'kindle_{asin}'
-    title = kindle_book.get('title', 'Unknown')
+    Key is the dict key from kindle_library.json (ASIN or book_id).
+    Returns True if book was processed (new), False if already existed.
+    """
+    title = kindle_book.get('title_resolved') or kindle_book.get('title', 'Unknown')
 
     # Skip if already unified
-    if is_already_unified(asin, physical_data):
+    if is_already_unified(key, physical_data):
         log(f"  Skip (already unified): {title}")
         return False
 
     # Create unified book record
-    unified = kindle_to_unified_book(asin, kindle_book)
+    unified = kindle_to_unified_book(key, kindle_book)
+    book_id = unified['id']
     physical_data['books'].append(unified)
 
     # Convert highlights to captures
-    captures = highlights_to_captures(asin, book_id, highlights_data)
+    captures = highlights_to_captures(key, book_id, highlights_data)
     if captures:
         physical_data['captures'].extend(captures)
         log(f"  {len(captures)} highlights → captures")
@@ -217,24 +241,25 @@ def process_all(do_research: bool = True, max_books: int | None = None):
 
     books = kindle_data.get('books', {})
     relevant = {
-        asin: book for asin, book in books.items()
+        key: book for key, book in books.items()
         if book.get('category') in RELEVANT_CATEGORIES
-        and not is_already_unified(asin, physical_data)
+        and book.get('status') == 'read'
+        and not is_already_unified(key, physical_data)
     }
 
-    log(f"Kindle library: {len(books)} total, {len(relevant)} relevant unprocessed")
+    log(f"Kindle library: {len(books)} total, {len(relevant)} relevant+read unprocessed")
 
     if not relevant:
         log("Nothing to process.")
         return
 
     processed = 0
-    for asin, book in sorted(relevant.items(), key=lambda x: x[1].get('title', '')):
+    for key, book in sorted(relevant.items(), key=lambda x: (x[1].get('title_resolved') or x[1].get('title', ''))):
         if max_books and processed >= max_books:
             log(f"Reached max_books limit ({max_books})")
             break
 
-        success = process_single_book(asin, book, highlights_data, physical_data, do_research)
+        success = process_single_book(key, book, highlights_data, physical_data, do_research)
         if success:
             processed += 1
             # Save after each book in case of interruption
@@ -285,26 +310,29 @@ def show_stats():
 
 
 def list_unprocessed():
-    """List Kindle books that haven't been processed yet."""
+    """List Kindle books that are read + relevant category but not yet processed."""
     kindle_data = load_kindle_library()
     physical_data = load_physical_books()
 
     books = kindle_data.get('books', {})
-    for asin, book in sorted(books.items(), key=lambda x: x[1].get('title', '')):
+    for key, book in sorted(books.items(), key=lambda x: (x[1].get('title_resolved') or x[1].get('title', ''))):
         if book.get('category') not in RELEVANT_CATEGORIES:
             continue
-        if is_already_unified(asin, physical_data):
+        if book.get('status') != 'read':
             continue
-        status = book.get('status', '?')
-        progress = book.get('progress', {}).get('text', '?')
-        print(f"  {asin}: {book.get('title', '?')[:60]} [{status}, {progress}]")
+        if is_already_unified(key, physical_data):
+            continue
+        title = book.get('title_resolved') or book.get('title', '?')
+        cat = book.get('category', '?')
+        pct = book.get('progress', {}).get('pct', '?')
+        print(f"  {key[:15]:15s} {title[:55]:55s} [{cat}, {pct}%]")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Process Kindle books into unified book system")
     parser.add_argument("--research-only", action="store_true",
                         help="Research but don't run embeddings")
-    parser.add_argument("--asin", type=str, help="Process specific book by ASIN")
+    parser.add_argument("--key", type=str, help="Process specific book by key (ASIN or book_id)")
     parser.add_argument("--list", action="store_true", help="List unprocessed books")
     parser.add_argument("--stats", action="store_true", help="Show processing stats")
     parser.add_argument("--max", type=int, help="Max books to process")
@@ -320,15 +348,15 @@ def main():
         list_unprocessed()
         return
 
-    if args.asin:
+    if args.key:
         kindle_data = load_kindle_library()
         highlights_data = load_kindle_highlights()
         physical_data = load_physical_books()
-        book = kindle_data.get('books', {}).get(args.asin)
+        book = kindle_data.get('books', {}).get(args.key)
         if not book:
-            print(f"ASIN {args.asin} not found in Kindle library")
+            print(f"Key {args.key} not found in Kindle library")
             sys.exit(1)
-        process_single_book(args.asin, book, highlights_data, physical_data,
+        process_single_book(args.key, book, highlights_data, physical_data,
                             do_research=not args.no_research)
         save_physical_books(physical_data)
         return

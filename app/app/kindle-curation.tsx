@@ -58,7 +58,7 @@ export default function KindleCurationScreen() {
 
     // Filter
     if (filter === 'unreviewed') list = list.filter(b => b.status === 'unreviewed');
-    else if (filter === 'non-fiction') list = list.filter(b => b.category === 'non-fiction' || b.category === 'historical-novel');
+    else if (filter === 'non-fiction') list = list.filter(b => ['non-fiction', 'classical-literature', 'literary-fiction', 'language-learning'].includes(b.category || ''));
     else if (filter === 'read') list = list.filter(b => b.status === 'read');
     else if (filter === 'skipped') list = list.filter(b => b.status === 'skipped');
 
@@ -75,7 +75,7 @@ export default function KindleCurationScreen() {
     total: Object.keys(booksMap).length,
     unreviewed: Object.values(booksMap).filter(b => b.status === 'unreviewed').length,
     read: Object.values(booksMap).filter(b => b.status === 'read').length,
-    nonFiction: Object.values(booksMap).filter(b => b.category === 'non-fiction' || b.category === 'historical-novel').length,
+    nonFiction: Object.values(booksMap).filter(b => ['non-fiction', 'classical-literature', 'literary-fiction', 'language-learning'].includes(b.category || '')).length,
     skipped: Object.values(booksMap).filter(b => b.status === 'skipped').length,
   }), [booksMap]);
 
