@@ -2798,12 +2798,29 @@ JSON array only:"""
             try:
                 data = json.loads(KINDLE_DATA_PATH.read_text())
                 books_dict = data.get('books', {})
+                matched = 0
                 for key, title in resolved.items():
+                    # Try direct key match first
                     if key in books_dict:
                         books_dict[key]['title_resolved'] = title
+                        matched += 1
+                    else:
+                        # Key might be full book_id (A:XXX-0) but server key is inner part (XXX)
+                        inner = key.removeprefix('A:').removesuffix('-0')
+                        if inner in books_dict:
+                            books_dict[inner]['title_resolved'] = title
+                            matched += 1
+                        else:
+                            # Search by book_id field
+                            for sk, sv in books_dict.items():
+                                if sv.get('book_id') == key:
+                                    sv['title_resolved'] = title
+                                    matched += 1
+                                    break
+                print(f'[kindle/resolve-titles] Wrote {matched} resolved titles to kindle_library.json', flush=True)
                 KINDLE_DATA_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-            except Exception:
-                pass
+            except Exception as e:
+                print(f'[kindle/resolve-titles] Write error: {e}', flush=True)
 
         print(f'[kindle/resolve-titles] Resolved {len(resolved)} of {len(books_to_resolve)} titles', flush=True)
         self._send_json_response(200, {'status': 'ok', 'resolved': resolved})
