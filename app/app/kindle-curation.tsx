@@ -208,23 +208,37 @@ export default function KindleCurationScreen() {
           <View style={styles.bookActions}>
             {processing.has(book.key) ? (
               <ActivityIndicator size="small" color={colors.rubric} />
+            ) : book.added_to_petrarca ? (
+              <Text style={styles.processedLabel}>{'\u2713'} Done</Text>
+            ) : book.status === 'read' ? (
+              <>
+                <Pressable style={styles.actionPill} onPress={() => {
+                  curate(book.key, { status: 'read', added_to_petrarca: true });
+                  // Trigger research for this book
+                  fetch(`${RESEARCH_BASE}/book/process-kindle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ max: 1 }),
+                  }).catch(() => {});
+                }}>
+                  <Text style={styles.actionPillText}>{'\u2726'} Include</Text>
+                </Pressable>
+                <Pressable style={styles.skipPill} onPress={() => curate(book.key, { status: 'skipped' })}>
+                  <Text style={styles.skipPillText}>Skip</Text>
+                </Pressable>
+              </>
+            ) : book.status === 'skipped' ? (
+              <Pressable style={styles.actionPill} onPress={() => curate(book.key, { status: 'unreviewed' })}>
+                <Text style={styles.actionPillText}>Undo</Text>
+              </Pressable>
             ) : (
               <>
-                {book.status !== 'read' && (
-                  <Pressable style={styles.actionPill} onPress={() => curate(book.key, { status: 'read' })}>
-                    <Text style={styles.actionPillText}>Read</Text>
-                  </Pressable>
-                )}
-                {book.status !== 'skipped' && (
-                  <Pressable style={styles.skipPill} onPress={() => curate(book.key, { status: 'skipped' })}>
-                    <Text style={styles.skipPillText}>Skip</Text>
-                  </Pressable>
-                )}
-                {book.status === 'skipped' && (
-                  <Pressable style={styles.actionPill} onPress={() => curate(book.key, { status: 'unreviewed' })}>
-                    <Text style={styles.actionPillText}>Undo</Text>
-                  </Pressable>
-                )}
+                <Pressable style={styles.actionPill} onPress={() => curate(book.key, { status: 'read' })}>
+                  <Text style={styles.actionPillText}>{'\u2713'} Read</Text>
+                </Pressable>
+                <Pressable style={styles.skipPill} onPress={() => curate(book.key, { status: 'skipped' })}>
+                  <Text style={styles.skipPillText}>Skip</Text>
+                </Pressable>
               </>
             )}
           </View>
@@ -284,6 +298,7 @@ const styles = StyleSheet.create({
   actionPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.claimNew },
   skipPill: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.rule },
   skipPillText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted },
+  processedLabel: { fontFamily: fonts.ui, fontSize: 10, color: colors.claimNew },
   empty: { paddingVertical: 40, alignItems: 'center' },
   emptyText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });
