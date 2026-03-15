@@ -149,18 +149,24 @@ export default function LibraryScreen() {
             <Text style={styles.screenTitle}>Library</Text>
             <Text style={styles.screenSubtitle}>Physical books & reading notes</Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
             <Pressable style={styles.revisitButton} onPress={() => {
               logEvent('library_revisit_tap');
               router.push('/resurfacing' as any);
             }}>
               <Text style={styles.revisitButtonText}>{'\u2726'} Revisit</Text>
             </Pressable>
+            <Pressable style={styles.revisitButton} onPress={() => {
+              logEvent('library_kindle_tap');
+              router.push('/kindle-curation' as any);
+            }}>
+              <Text style={styles.revisitButtonText}>Kindle</Text>
+            </Pressable>
             <Pressable style={styles.addButton} onPress={() => {
               logEvent('library_add_book_tap');
               router.push('/add-book' as any);
             }}>
-              <Text style={styles.addButtonText}>+ Add</Text>
+              <Text style={styles.addButtonText}>+</Text>
             </Pressable>
           </View>
         </View>
