@@ -77,7 +77,7 @@ GUIDELINES:
 Output as a JSON array of node objects. No markdown, just the JSON array."""
 
 
-def generate_curriculum(domain: str, depth: str = "introductory") -> dict | None:
+def generate_curriculum(domain: str, depth: str = "introductory", model: str = "gemini-2.5-flash") -> dict | None:
     """Generate a curriculum for a domain. Returns the full curriculum dict or None."""
 
     prompt = CURRICULUM_GENERATION_PROMPT.format(domain=domain)
@@ -87,7 +87,7 @@ def generate_curriculum(domain: str, depth: str = "introductory") -> dict | None
     elif depth == "advanced":
         prompt += "\n\nThis is an ADVANCED level curriculum. Aim for 250-300+ nodes with specialist detail."
 
-    raw = call_llm(prompt, model="gemini-2.5-flash", max_tokens=16384,
+    raw = call_llm(prompt, model=model, max_tokens=32768,
                    response_mime_type="application/json")
     if not raw:
         return None
