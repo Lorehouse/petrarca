@@ -19,6 +19,7 @@ import { ocrPage, uploadBookVoiceNote, researchBook, getBookResearch, getStorySo
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
 import DoubleRule from '../components/DoubleRule';
+import BookCurriculumContext from '../components/BookCurriculumContext';
 
 const PENDING_BOOK_VOICE_KEY = '@petrarca/pending_book_voice_notes';
 
@@ -592,6 +593,13 @@ export default function BookDetailScreen() {
           ))}
         </View>
       )}
+
+      {/* Curriculum context */}
+      <BookCurriculumContext
+        bookId={book.id}
+        bookTitle={book.title}
+        currentChapter={book.current_chapter || undefined}
+      />
 
       {/* Capture timeline */}
       <View style={styles.timelineSection}>

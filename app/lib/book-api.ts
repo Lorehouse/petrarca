@@ -249,6 +249,47 @@ export async function getStorySoFar(
   return resp.json();
 }
 
+// --- Curriculum context for books ---
+
+export interface BookCurriculumMapping {
+  node_id: string;
+  node_title: string;
+  coverage: 'surface' | 'moderate' | 'deep';
+  evidence: string;
+  knowledge: 'unknown' | 'mentioned' | 'engaged' | 'anchored';
+  interest: string;
+  confidence: number;
+  description: string;
+}
+
+export interface CrossBookConnection {
+  node_id: string;
+  node_title: string;
+  other_book_id: string;
+  other_book_title: string;
+  other_coverage: string;
+}
+
+export interface BookCurriculumDomain {
+  domain_id: string;
+  domain_title: string;
+  node_count: number;
+  mappings: BookCurriculumMapping[];
+  cross_book_connections: CrossBookConnection[];
+}
+
+export interface BookCurriculumContext {
+  domains: BookCurriculumDomain[];
+}
+
+export async function getBookCurriculumContext(
+  bookId: string,
+): Promise<BookCurriculumContext> {
+  const resp = await fetch(`${RESEARCH_BASE}/curriculum/book-context/${bookId}`);
+  if (!resp.ok) return { domains: [] };
+  return resp.json();
+}
+
 // --- Book Sync API (server-authoritative persistence) ---
 
 import type { PhysicalBook, BookCapture } from '../data/types';

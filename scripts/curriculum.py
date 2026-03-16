@@ -493,6 +493,81 @@ def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
     return mappings
 
 
+def get_book_curriculum_context(book_id: str) -> dict:
+    """Get all curriculum context for a book: mappings, knowledge states, cross-book connections.
+
+    Returns a dict ready to send to the client with everything needed to render
+    curriculum-aware book features.
+    """
+    # Find all mapping files for this book
+    domains = []
+    for path in DATA_DIR.glob(f"mappings_*_{book_id}.json"):
+        with open(path) as f:
+            mappings = json.load(f)
+        # Extract domain_id from filename: mappings_{domain_id}_{book_id}.json
+        stem = path.stem  # mappings_domain_id_book_id
+        domain_id = stem.replace("mappings_", "").replace(f"_{book_id}", "")
+        curriculum = load_curriculum(domain_id)
+        if not curriculum:
+            continue
+        states = load_knowledge_states(domain_id)
+
+        # Annotate mappings with knowledge state and node description
+        node_map = {n["id"]: n for n in curriculum["nodes"]}
+        annotated = []
+        for m in mappings:
+            node = node_map.get(m["node_id"], {})
+            state = states.get(m["node_id"], {})
+            annotated.append({
+                "node_id": m["node_id"],
+                "node_title": m["node_title"],
+                "coverage": m["coverage"],
+                "evidence": m.get("evidence", ""),
+                "knowledge": state.get("knowledge", "unknown"),
+                "interest": state.get("interest", "none"),
+                "confidence": state.get("confidence", 0.0),
+                "description": node.get("description", ""),
+            })
+
+        # Find other books mapping to the same domain
+        cross_books = []
+        for other_path in DATA_DIR.glob(f"mappings_{domain_id}_*.json"):
+            other_book_id = other_path.stem.replace(f"mappings_{domain_id}_", "")
+            if other_book_id == book_id:
+                continue
+            with open(other_path) as f:
+                other_mappings = json.load(f)
+            # Find overlapping nodes
+            my_node_ids = {m["node_id"] for m in mappings}
+            for om in other_mappings:
+                if om["node_id"] in my_node_ids:
+                    cross_books.append({
+                        "node_id": om["node_id"],
+                        "node_title": om["node_title"],
+                        "other_book_id": other_book_id,
+                        "other_coverage": om["coverage"],
+                    })
+
+        # Resolve other book titles
+        books_data = {}
+        if PHYSICAL_BOOKS_PATH.exists():
+            with open(PHYSICAL_BOOKS_PATH) as f:
+                books_data = json.load(f)
+        book_titles = {b["id"]: b.get("title", "Unknown") for b in books_data.get("books", [])}
+        for cb in cross_books:
+            cb["other_book_title"] = book_titles.get(cb["other_book_id"], cb["other_book_id"])
+
+        domains.append({
+            "domain_id": domain_id,
+            "domain_title": curriculum.get("title", domain_id),
+            "node_count": len(curriculum["nodes"]),
+            "mappings": annotated,
+            "cross_book_connections": cross_books,
+        })
+
+    return {"domains": domains}
+
+
 # ─────────────────────────────────────────────
 # Gap analysis
 # ─────────────────────────────────────────────

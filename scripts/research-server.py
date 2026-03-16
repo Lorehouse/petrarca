@@ -57,7 +57,7 @@ from curriculum import (
     generate_curriculum, load_curriculum, list_curricula,
     load_knowledge_states, update_knowledge, get_coverage_report,
     map_book_to_curriculum, start_elicitation, continue_elicitation,
-    import_assessment_answers,
+    import_assessment_answers, get_book_curriculum_context,
 )
 
 SONIOX_API_KEY = os.environ.get('SONIOX_API_KEY', '557c7c5a86a2f5b8fa734ddbbe179f0f21fd342c762768c9af4f4ffff8c58e1f')
@@ -3957,6 +3957,10 @@ JSON array only:"""
         # Curriculum GET endpoints
         if self.path == '/curriculum/list':
             return self._send_json_response(200, {'curricula': list_curricula()})
+        if self.path.startswith('/curriculum/book-context/'):
+            book_id = self.path.split('/curriculum/book-context/')[1].split('?')[0]
+            context = get_book_curriculum_context(book_id)
+            return self._send_json_response(200, context)
         if self.path.startswith('/curriculum/') and '/coverage' in self.path:
             domain_id = self.path.split('/curriculum/')[1].split('/coverage')[0]
             report = get_coverage_report(domain_id)
