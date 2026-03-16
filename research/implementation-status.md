@@ -1,6 +1,62 @@
 # Knowledge System Implementation Status
 
-**Date**: March 12, 2026 (last updated — session 19: "Restrained Folio" synthesis reader redesign + prompt overhaul + feed filtering)
+**Date**: March 16, 2026 (last updated — session 23: Kindle integration, YouTube/podcast media capture, book companion system)
+
+## Sessions 20–23 Summary (March 13–16, 2026)
+
+### Session 20: Multi-Stage Synthesis Pipeline
+- New `synthesis_pipeline.py` — multi-stage approach (local only, not yet deployed to server)
+
+### Session 21: Physical Book Companion
+- Library tab replaces Queue in 2-tab layout (Feed | Library)
+- Book tracking: `add-book.tsx`, `book-detail.tsx`, `library.tsx`
+- Server: `call_vision()`, book identification, cover lookup (Open Library/Google Books), TOC extraction
+- Data: `book-store.ts`, `book-api.ts`, `physical_books.json` on server
+
+### Session 22: Book Research Agent + Cross-Source Matching
+- `book_research_agent.py` — Gemini+Search → thesis, chapter claims, key terms, article connections
+- `build_book_claim_embeddings.py` — book claims embedded in same space as article claims
+- 6 research documents on reading/annotation/knowledge retention
+- 8 experiment protocols for book companion features
+- Server: `/book/research`, `/book/chapter-insights`, `/book/story-so-far`
+
+### Session 23: Kindle Integration + Media Capture (THIS SESSION)
+
+#### Kindle Library (major feature)
+- **Primary source**: Kindle Mac app SQLite (`BookData.sqlite`) — 2,778 books
+  - NSKeyedArchiver plist decoding for author metadata (97% coverage)
+  - Progress tracking via `ZRAWCURRENTPOSITION/ZRAWMAXPOSITION`
+  - Sideloaded (PDOC) vs purchased (EBOK) detection
+- **`kindle_sync.py`** — reads local DB, syncs to server. Modes: `--dump`, `--reading`, `--read`, `--resolve-titles`
+- **Chrome extension** — 3 Kindle content scripts:
+  - `kindle-content.js` — Cloud Reader ASINs from cover image IDs
+  - `kindle-notebook.js` — incremental highlight scraping (tracks annotated dates)
+  - `kindle-manage.js` — auto-paginates through 883 purchased books
+- **Classification** — all 2,776 books classified via Gemini into 6 categories:
+  - non-fiction (1,156), genre-fiction (1,097), literary-fiction (254), reference (130), language-learning (74), classical-literature (65)
+- **Title resolution** — 349 sideloaded filenames resolved via LLM
+- **Gmail attachment downloader** — `gmail_kindle_attachments.py`, 436 book files from `brightkindle@kindle.com`
+- **EPUB finder** — `upload_epubs.py`, 190 local EPUBs (539MB)
+- **Automation** — launchd plist (4h DB sync), chrome.alarms (12h highlight sync)
+- **Server endpoints**: `/kindle/sync`, `/kindle/library`, `/kindle/highlights`, `/kindle/curate`, `/kindle/classify`, `/kindle/resolve-titles`, `/kindle/include`
+
+#### YouTube Integration (deployed)
+- `youtube-content.js` — "✦ Petrarca" button on YouTube watch pages
+- Server: `/ingest-youtube` — fetches transcript via `youtube-transcript-api`, processes through article pipeline
+- No API key needed, handles SPA navigation
+
+#### Podcast Integration (built, needs auth)
+- `podcast_sync.py` — Overcast export via `overcast-to-sqlite`
+- Unified media log: `POST /media/sync`, `GET /media/log` → `media_log.json`
+
+#### Server Data Files Added
+- `/opt/petrarca/data/kindle_library.json` — 2,776 books with categories, progress, titles
+- `/opt/petrarca/data/kindle_highlights.json` — highlights from notebook
+- `/opt/petrarca/data/media_log.json` — YouTube, podcasts, TV consumption log
+
+---
+
+## Pre-Session-20 Status (original document below)
 **Status**: Full corpus deployed with knowledge system, reader interactions, voice notes, AI chat, research agents, entity deep-dive, follow-up research, voice note browser + action extraction, activity log tab, scroll-aware encounter tracking, curated novelty card, hierarchical topic feedback, cross-article connections, LLM-verified topic normalization, automatic defragmentation, **unified single-screen feed with lens tabs**, **dynamic reranking**, **✦ drawer navigation**, **clipper auto-save countdown**, **tweet URL ingestion via twikit**, **auto-sync Twitter cookies**, **clipper immediate save via background worker**, **reader disregard + report bad scrape**, **feed ingest metadata**, **floating feedback capture with screenshots + server upload**, **expanded follow-up questions**, **queue auto-advance**, **hybrid topic signals**, **desktop web: 2-column feed grid**, **desktop web: 3-column reader with margin annotations**, **keyboard navigation with multi-key sequences**, **hover actions (archive + dismiss)**, **XML-first article extraction (paragraph merging fix)**, **mobile feed overlap fix**, **reader arrow-key scroll fix**, **LLM judge for ambiguous claims (G2)**, **web layouts for all secondary screens (Topics/Queue/Trails/Landscape/Voice Notes)**, **DoubleRule on all screens**, **drawer quick actions fixed**, **reader date format fix**, **user guide updated + linked from drawer**, **keyboard shortcuts on Queue + Topics screens**, **swipe hint tooltip (mobile)**, **"All topics" pill in feed**, **AnimatedHighlightWrap (reader paragraph highlights)**, **knowledge bar staggered animation**, **DoubleRule in reader**, **reader error boundary**, **cross-article synthesis pipeline (graph clustering → LLM synthesis → claim-level FSRS propagation)**, **26 syntheses with unique labels**, **synthesis reader 3-column web layout + keyboard shortcuts**, **junk article cleanup + pipeline guards**, **Gemini tool calling for structured output**, **"Restrained Folio" synthesis reader redesign (2-col CSS grid, inline chat, article popovers)**, **synthesis prompt overhaul (humanist scholar voice, article reference links, progressive disclosure)**, **feed filtering by synthesis coverage (≥80% excluded, ≥50% demoted)**
 **Latest commits**: Session 19 — "Restrained Folio" synthesis reader redesign: complete rewrite of synthesis-reader.tsx (2-column CSS grid with 190px sidebar, Cormorant Garamond + Crimson Pro two-weight typography, local folio color palette, IntersectionObserver TOC tracking, TensionBlock/ExcerptBlock/DetailSection sub-components). New synthesis prompt in generate_syntheses.py (humanist scholar voice, Article Reference Key for `[Title](article:ID)` links, descriptive headings, inline tension blockquotes, progressive disclosure markers, structured tension objects). New components: SynthesisChat.tsx (inline chat modal), ArticlePopover.tsx (web hover popovers for article links). Feed filtering wired: ≥80% synthesis coverage → excluded from feed, ≥50% → score demotion.
 
