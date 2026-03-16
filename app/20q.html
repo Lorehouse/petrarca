@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Knowledge Map: Ancient Greece</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Crimson Pro', serif;
+    background: #f7f4ec;
+    color: #2a2420;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .header {
+    text-align: center;
+    padding: 32px 16px 16px;
+    max-width: 680px;
+    width: 100%;
+  }
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 28px;
+    color: #2a2420;
+    margin-bottom: 4px;
+  }
+  .header .sub {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: #6a6458;
+  }
+  .double-rule {
+    max-width: 680px; width: 100%;
+    border-top: 2px solid #8b2500;
+    padding-top: 5px;
+    border-bottom: 1px solid #8b2500;
+    height: 0;
+    margin-bottom: 24px;
+  }
+  .progress-bar {
+    max-width: 680px; width: 100%;
+    padding: 0 16px;
+    margin-bottom: 20px;
+  }
+  .progress-track {
+    height: 4px; background: #e4dfd4; border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: #8b2500; border-radius: 2px; transition: width 0.3s;
+  }
+  .progress-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #b0a898; margin-top: 4px;
+    display: flex; justify-content: space-between;
+  }
+
+  .card-container {
+    max-width: 680px; width: 100%; padding: 0 16px;
+    flex: 1;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-radius: 6px;
+    padding: 28px 24px;
+    margin-bottom: 16px;
+    animation: slideUp 0.25s ease-out;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .card .q-num {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #b0a898;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .card .q-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600; font-size: 22px;
+    color: #2a2420; margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .card .q-desc {
+    font-size: 16px; line-height: 1.5;
+    color: #333; margin-bottom: 20px;
+  }
+  .card .q-desc.hidden { display: none; }
+  .card .flip-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; color: #8b2500;
+    background: none; border: none; cursor: pointer;
+    margin-bottom: 16px; text-decoration: underline;
+  }
+
+  .familiarity-row {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .fam-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; padding: 8px 14px;
+    border: 1px solid #e4dfd4; border-radius: 20px;
+    background: #f7f4ec; color: #6a6458;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .fam-btn:hover { border-color: #8b2500; color: #8b2500; }
+  .fam-btn.selected { border-color: #8b2500; background: rgba(139,37,0,0.08); color: #8b2500; }
+
+  .interest-row {
+    display: flex; gap: 6px; margin-bottom: 8px;
+  }
+  .int-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; padding: 6px 12px;
+    border: 1px solid #e4dfd4; border-radius: 16px;
+    background: #f7f4ec; color: #b0a898;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .int-btn:hover { border-color: #2a2420; color: #2a2420; }
+  .int-btn.selected { border-color: #2a2420; background: rgba(42,36,32,0.06); color: #2a2420; }
+
+  .results {
+    max-width: 680px; width: 100%; padding: 16px;
+  }
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600; font-size: 24px;
+    margin-bottom: 16px;
+  }
+  .result-section { margin-bottom: 20px; }
+  .result-section h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 13px; letter-spacing: 1px;
+    text-transform: uppercase; color: #8b2500;
+    margin-bottom: 8px;
+  }
+  .result-node {
+    font-size: 15px; padding: 4px 0;
+    border-bottom: 1px solid #f0ece2;
+    display: flex; justify-content: space-between;
+  }
+  .result-node .rn-title { flex: 1; }
+  .result-node .rn-interest {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #8b2500;
+  }
+  .copy-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; padding: 10px 24px;
+    background: #2a2420; color: #f7f4ec;
+    border: none; border-radius: 4px;
+    cursor: pointer; margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>✦ Knowledge Map</h1>
+  <div class="sub">Ancient Greece (800–300 BC)</div>
+</div>
+<div class="double-rule"></div>
+<div class="progress-bar">
+  <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="progress-text"><span id="progressLabel">0 / 0</span><span id="uncertainLabel"></span></div>
+</div>
+<div class="card-container" id="cardContainer"></div>
+<div class="results" id="results" style="display:none"></div>
+
+<script>
+const NODES = [{"id": "ag_archaic_foundations", "title": "The Archaic Period and Rise of the Polis (800-500 BC)", "desc": "The formative period when Greek civilization took shape: the transition from the Dark Ages to organized city-states, the development of alphabetic writing, colonization across the Mediterranean, and the first experiments with different forms of government.", "level": 1, "parent": null, "prereqs": [], "obscurity": 2}, {"id": "ag_dark_ages_transition", "title": "The Greek Dark Ages and Homeric World", "desc": "The period c. 1100-800 BC after the collapse of Mycenaean palace civilization. Knowing this means understanding that the 'Classical Greece' we think of emerged from centuries of depopulation and oral tradition, and that Homer's epics preserve a composite memory of this lost world.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": [], "obscurity": 3}, {"id": "ag_homer", "title": "Homer: Iliad and Odyssey", "desc": "The foundational texts of Greek literature, probably composed c. 750-700 BC from oral tradition. Not just stories but the shared cultural reference point for all Greeks \u2014 the 'Bible' of the Greek world, defining heroic values (kleos, arete, xenia) and providing the mythological framework that pervaded all subsequent art, drama, and philosophy.", "level": 3, "parent": "ag_dark_ages_transition", "prereqs": [], "obscurity": 1}, {"id": "ag_polis_concept", "title": "The Polis: Concept and Varieties", "desc": "The city-state as the fundamental unit of Greek political life \u2014 not just a city but a community of citizens with shared laws, cults, and identity. There was no 'Greece' as a unified state, but hundreds of independent poleis with radically different constitutions (monarchy, oligarchy, tyranny, democracy). Greek identity was defined by language, religion, and culture rather than political unity.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": ["ag_dark_ages_transition"], "obscurity": 2}, {"id": "ag_colonization", "title": "Greek Colonization (750-550 BC)", "desc": "The massive expansion of Greek settlements across the Mediterranean and Black Sea \u2014 from Marseilles to Crimea, from Libya to Sicily. Why Greeks left (land pressure, trade, political exile), how colonies related to their mother cities, and how this created a shared Greek cultural zone far beyond the Aegean. Syracuse, the largest and richest Greek city, was a colony.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": ["ag_polis_concept"], "obscurity": 3}, {"id": "ag_sicily_magna_graecia", "title": "Sicily and Magna Graecia (Greek Italy)", "desc": "The western Greek world \u2014 Syracuse, Agrigento, Tarentum, Naples. Not marginal outposts but some of the wealthiest and most powerful Greek cities, often larger than Athens. Their rivalry with Carthage and interaction with native Italic peoples shaped the entire western Mediterranean. Syracuse alone defeated Athens' greatest military expedition.", "level": 3, "parent": "ag_colonization", "prereqs": ["ag_colonization"], "obscurity": 3}, {"id": "ag_tyranny", "title": "Archaic Tyranny", "desc": "The phenomenon of strongmen who seized power in many Greek cities during the 7th-6th centuries. 'Tyrant' originally had no negative connotation; many were popular reformers who broke aristocratic monopolies. Pisistratus in Athens promoted arts and stabilized the city. Tyranny was often a transitional stage between aristocracy and broader political participation.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": ["ag_polis_concept"], "obscurity": 3}, {"id": "ag_solon", "title": "Solon's Reforms", "desc": "The Athenian lawgiver (c. 594 BC) who cancelled debts, freed debt-slaves, and reorganized society by wealth classes rather than birth. Solon didn't create democracy but made it possible by breaking the old aristocratic stranglehold. The pivot point between aristocratic Athens and democratic Athens.", "level": 3, "parent": "ag_tyranny", "prereqs": ["ag_polis_concept"], "obscurity": 3}, {"id": "ag_lyric_poetry", "title": "Archaic Poetry: Hesiod, Sappho, Pindar", "desc": "The rich poetic tradition beyond Homer. Hesiod's Works and Days gives us peasant life and cosmology; Sappho's lyrics are the most intimate personal expression in ancient literature; Pindar's victory odes celebrate athletic and aristocratic ideals. Greek literature was far more diverse than just epic and drama.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": ["ag_homer"], "obscurity": 3}, {"id": "ag_greek_religion", "title": "Greek Religion: Gods, Cults, and Festivals", "desc": "Greek religion was not a matter of belief or doctrine but of ritual practice \u2014 sacrifice, festivals, oracles, mystery cults. The Olympian gods were shared but worshipped differently in each city. Religion permeated every aspect of life (wars began with sacrifices, assemblies opened with prayers), and major festivals like the Olympics, Eleusinian Mysteries, and Delphic oracle were among the few things uniting all Greeks.", "level": 2, "parent": "ag_archaic_foundations", "prereqs": ["ag_homer"], "obscurity": 2}, {"id": "ag_delphi", "title": "Delphi and the Oracles", "desc": "The Oracle at Delphi was the closest thing to a pan-Hellenic institution \u2014 consulted before wars, colonizations, and major decisions. The Pythia's ambiguous pronouncements shaped history (famously telling Croesus he would 'destroy a great empire' \u2014 his own). Also a treasury of Greek art and a venue for displaying interstate power.", "level": 3, "parent": "ag_greek_religion", "prereqs": ["ag_greek_religion"], "obscurity": 2}, {"id": "ag_persian_wars", "title": "The Persian Wars (499-479 BC)", "desc": "The defining conflict of the 5th century \u2014 the vast Achaemenid Persian Empire's two attempts to conquer mainland Greece, and the improbable Greek victories. The foundational narrative of Greek identity: a small, divided collection of city-states defeating the world's largest empire through courage, naval innovation, and (occasionally) cooperation.", "level": 1, "parent": null, "prereqs": ["ag_archaic_foundations"], "obscurity": 1}, {"id": "ag_achaemenid_empire", "title": "The Achaemenid Persian Empire", "desc": "The largest empire the world had yet seen, stretching from Egypt to India under Cyrus, Darius, and Xerxes. Persia was not a 'barbarian' horde but a sophisticated multicultural empire with advanced administration (satrapies, Royal Road, Persepolis). The Greeks were a minor frontier problem for Persia, not the other way around.", "level": 2, "parent": "ag_persian_wars", "prereqs": [], "obscurity": 3}, {"id": "ag_ionian_revolt", "title": "The Ionian Revolt (499-494 BC)", "desc": "The trigger for the Persian Wars: Greek cities on the Anatolian coast, subjects of Persia, revolted with limited support from Athens and Eretria. The revolt failed, but Athens' involvement gave Darius a pretext for invasion. Why Persia attacked Greece and how the conflict originated in the complex relationship between Greek cities and Persian imperial power.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_achaemenid_empire", "ag_polis_concept"], "obscurity": 3}, {"id": "ag_marathon", "title": "The Battle of Marathon (490 BC)", "desc": "Darius sent a punitive expedition that landed at Marathon in Attica. The Athenians, nearly alone (with Plataea), charged the Persian line and won a stunning victory. The battle that made Athens believe in itself \u2014 the generation that fought at Marathon became legendary.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_ionian_revolt"], "obscurity": 1}, {"id": "ag_themistocles", "title": "Themistocles and the Athenian Navy", "desc": "The visionary Athenian leader who convinced Athens to invest its silver mine windfall in building 200 triremes \u2014 transforming Athens from a land power into a naval power. This single decision shaped the next century: it enabled victory at Salamis, made the Athenian Empire possible, and empowered the lower classes (who rowed the ships) to demand political equality.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_marathon"], "obscurity": 2}, {"id": "ag_thermopylae_salamis", "title": "Thermopylae, Salamis, and Plataea (480-479 BC)", "desc": "The second Persian invasion: Xerxes brought an enormous army. Leonidas and 300 Spartans died at Thermopylae buying time; Themistocles lured the Persian fleet into the narrows at Salamis and destroyed it; the combined Greek army defeated the remaining Persians at Plataea. These three battles ended the Persian threat permanently.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_themistocles"], "obscurity": 1}, {"id": "ag_salamis_carthage_simultaneous", "title": "480 BC: Salamis and Himera \u2014 Two Fronts", "desc": "A remarkable simultaneity: while Greeks defeated Persia at Salamis in September 480 BC, Greeks in Sicily defeated a massive Carthaginian invasion at Himera. Some historians believe Persia and Carthage coordinated a two-front attack on the Greek world. The Greek world survived existential threats on both fronts simultaneously.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_thermopylae_salamis", "ag_sicily_magna_graecia"], "obscurity": 4}, {"id": "ag_herodotus", "title": "Herodotus: The Father of History", "desc": "Our primary source for the Persian Wars \u2014 the first writer to systematically investigate and narrate past events based on evidence and testimony rather than myth. Part history, part ethnography, part travel writing. Endlessly curious about foreign cultures (Egyptian, Persian, Scythian) and trying to explain why things happened, not just what happened.", "level": 2, "parent": "ag_persian_wars", "prereqs": ["ag_thermopylae_salamis"], "obscurity": 2}, {"id": "ag_athenian_democracy", "title": "Athenian Democracy and the Golden Age (480-430 BC)", "desc": "The extraordinary half-century after the Persian Wars when Athens became the most powerful, wealthiest, and culturally productive city in the Greek world. The period of the Parthenon, of Sophocles and Euripides, of Socrates beginning to philosophize \u2014 all made possible by victory over Persia and the radical experiment of direct democracy.", "level": 1, "parent": null, "prereqs": ["ag_persian_wars"], "obscurity": 1}, {"id": "ag_cleisthenes", "title": "Cleisthenes and the Democratic Revolution", "desc": "The reforms of 508/7 BC that created Athenian democracy: reorganizing the citizen body into ten new tribes cutting across old kinship loyalties, creating the Council of 500 chosen by lot, establishing the principle that all citizens could participate directly in government.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_solon"], "obscurity": 3}, {"id": "ag_how_democracy_worked", "title": "How Athenian Democracy Actually Worked", "desc": "The Assembly of all male citizens met ~40 times a year on the Pnyx hill voting on everything. The Council of 500, chosen by lot, set the agenda. Most officials chosen by lot, not election (elections were considered aristocratic). Courts had juries of hundreds. Radically direct: no representatives, no professional politicians, no permanent bureaucracy.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_cleisthenes"], "obscurity": 2}, {"id": "ag_limits_democracy", "title": "Who Was Excluded: Women, Slaves, Metics", "desc": "Athenian democracy was radical equality among a minority. Citizens (adult males with Athenian parents) were perhaps 30,000 out of 250,000-300,000 total. Women had no political rights. Slaves (perhaps 80,000-100,000) did much of the labor. Resident foreigners (metics) could live and work but not vote or own land.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_how_democracy_worked"], "obscurity": 2}, {"id": "ag_pericles", "title": "Pericles and the Age of Pericles", "desc": "The dominant Athenian statesman c. 461-429 BC. Promoted radical democracy, built the Parthenon with imperial tribute money (controversially), encouraged the arts, and led Athens into the Peloponnesian War. His Funeral Oration (via Thucydides) is the most famous articulation of democratic ideals in antiquity.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_how_democracy_worked"], "obscurity": 1}, {"id": "ag_delian_league", "title": "The Delian League and Athenian Empire", "desc": "After the Persian Wars, Athens organized an alliance to continue fighting Persia. It transformed from a voluntary alliance into an Athenian empire: tribute moved to Athens, member states couldn't leave, and Athens used the money for the Parthenon. The transition from liberator to imperial power is one of the great ironies of ancient history.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_thermopylae_salamis", "ag_pericles"], "obscurity": 2}, {"id": "ag_parthenon", "title": "The Parthenon and Athenian Cultural Production", "desc": "The Parthenon (447-432 BC) \u2014 supreme expression of Athenian confidence and skill, but built with tribute money from subject allies. Beyond architecture: extraordinary sculpture (Phidias), painting (lost to us), and the flourishing of drama, philosophy, and rhetoric. Athens attracted talent from across the Greek world.", "level": 2, "parent": "ag_athenian_democracy", "prereqs": ["ag_delian_league"], "obscurity": 1}, {"id": "ag_sparta", "title": "Sparta: The Alternative Greek Model", "desc": "Everything Athens was not: militaristic, conservative, closed to outsiders, governed by a mixed constitution (two kings, council of elders, elected ephors, assembly). The Athens-Sparta polarity defined Greek political thought for centuries and still shapes how we think about freedom vs. order, individualism vs. discipline.", "level": 1, "parent": null, "prereqs": ["ag_polis_concept"], "obscurity": 2}, {"id": "ag_spartan_system", "title": "The Spartan Social System: Homoioi, Helots, Perioikoi", "desc": "Spartan citizens ('Equals') were a tiny military elite ruling over helots (state-owned serfs, mostly conquered Messenians) and perioikoi (free non-citizens). The constant fear of helot revolt drove Spartan militarism \u2014 they needed a standing army at home. The key to understanding Sparta: not warrior idealism but controlling a subject population that outnumbered them 7:1.", "level": 2, "parent": "ag_sparta", "prereqs": [], "obscurity": 3}, {"id": "ag_agoge", "title": "The Agoge: Spartan Education and Military Training", "desc": "Boys taken from families at age 7, raised in communal barracks with harsh discipline, trained for war until 30. Citizens ate at common messes for life. Produced superb soldiers but a rigid, conservative society unable to adapt. The 'Spartan myth' of invincible warriors was partly self-promotion.", "level": 3, "parent": "ag_spartan_system", "prereqs": ["ag_spartan_system"], "obscurity": 2}, {"id": "ag_peloponnesian_war", "title": "The Peloponnesian War (431-404 BC)", "desc": "The great civil war of the Greek world: Athens and its empire versus Sparta and its allies. 27 years, devastated Greece, ended Athenian power. Subject of Thucydides' masterwork. How the Greek world tore itself apart at the height of its cultural achievement.", "level": 1, "parent": null, "prereqs": ["ag_athenian_democracy", "ag_sparta"], "obscurity": 1}, {"id": "ag_thucydides", "title": "Thucydides and the Analysis of Power", "desc": "The definitive account of the Peloponnesian War \u2014 and the invention of political realism. How fear, honor, and interest drive states; how democratic Athens made catastrophic decisions; how war degrades morality (Mytilenean debate, Melian dialogue). To political history what Homer is to literature.", "level": 2, "parent": "ag_peloponnesian_war", "prereqs": ["ag_herodotus"], "obscurity": 2}, {"id": "ag_pel_war_causes", "title": "Causes of the Peloponnesian War", "desc": "Thucydides distinguished the 'truest cause' (Spartan fear of growing Athenian power) from immediate pretexts. The fundamental dynamic: a rising power threatening an established one \u2014 the 'Thucydides Trap.' This structural analysis of great-power conflict remains one of the most influential ideas in international relations.", "level": 2, "parent": "ag_peloponnesian_war", "prereqs": ["ag_delian_league", "ag_thucydides"], "obscurity": 2}, {"id": "ag_plague_athens", "title": "The Plague of Athens (430 BC)", "desc": "A devastating epidemic that killed perhaps a quarter of Athens' population, including Pericles. Thucydides, who survived it, left one of the most vivid descriptions of epidemic disease in all literature. Shattered Athenian morale and social norms.", "level": 2, "parent": "ag_peloponnesian_war", "prereqs": ["ag_pericles"], "obscurity": 3}, {"id": "ag_sicilian_expedition", "title": "The Sicilian Expedition (415-413 BC)", "desc": "Athens' greatest disaster: a massive naval expedition to conquer Syracuse, urged by Alcibiades. Total catastrophe \u2014 the entire fleet and army destroyed, thousands killed or enslaved in the stone quarries. The turning point of the war and a case study in imperial overreach and the dangers of democratic decision-making driven by charismatic demagogues.", "level": 2, "parent": "ag_peloponnesian_war", "prereqs": ["ag_sicily_magna_graecia", "ag_delian_league"], "obscurity": 2}, {"id": "ag_alcibiades", "title": "Alcibiades: Brilliance and Betrayal", "desc": "Raised by Pericles, student of Socrates, champion of the Sicilian expedition \u2014 then defected to Sparta, then Persia, then back to Athens. Embodies the tensions of Athenian democracy: individual ambition vs. collective welfare, personal charisma vs. institutional checks.", "level": 3, "parent": "ag_sicilian_expedition", "prereqs": ["ag_sicilian_expedition"], "obscurity": 3}, {"id": "ag_fall_of_athens", "title": "The Fall of Athens (404 BC)", "desc": "After the Sicilian disaster, Athens fought on for nine years but was starved into surrender when Sparta (with Persian gold) destroyed the fleet at Aegospotami. Sparta imposed the Thirty Tyrants. Democracy was restored, but Athens never recovered its imperial power.", "level": 2, "parent": "ag_peloponnesian_war", "prereqs": ["ag_sicilian_expedition"], "obscurity": 2}, {"id": "ag_greek_drama", "title": "Greek Drama: Tragedy and Comedy", "desc": "Not entertainment but civic ritual \u2014 performed at religious festivals, funded by wealthy citizens, attended by the entire city. Tragedies explored the deepest questions through myth; comedies savagely satirized living politicians. Inseparable from democratic life and religious practice.", "level": 1, "parent": null, "prereqs": ["ag_athenian_democracy", "ag_greek_religion"], "obscurity": 2}, {"id": "ag_tragedy", "title": "The Three Tragedians: Aeschylus, Sophocles, Euripides", "desc": "Aeschylus (fought at Marathon) dramatized cosmic justice; Sophocles portrayed heroic individuals confronting fate; Euripides questioned everything. Their evolution tracks Athens from confident piety to radical questioning. Only 33 of their hundreds of plays survive.", "level": 2, "parent": "ag_greek_drama", "prereqs": [], "obscurity": 2}, {"id": "ag_oresteia", "title": "The Oresteia and the Foundations of Justice", "desc": "Aeschylus' trilogy (458 BC) \u2014 the only complete surviving trilogy \u2014 dramatizes the transition from blood vengeance to civic justice. A mythological charter for the rule of law, performed as Athens expanded its democracy.", "level": 3, "parent": "ag_tragedy", "prereqs": ["ag_tragedy"], "obscurity": 3}, {"id": "ag_aristophanes", "title": "Aristophanes and Old Comedy", "desc": "Savage, obscene, politically fearless. Mocked Socrates (Clouds), demagogue Cleon (Knights), and war itself (Lysistrata). That Athens allowed this at public festivals says something profound about democratic confidence.", "level": 2, "parent": "ag_greek_drama", "prereqs": ["ag_how_democracy_worked"], "obscurity": 2}, {"id": "ag_philosophy", "title": "Greek Philosophy: The Birth of Rational Inquiry", "desc": "The attempt to explain the world through reason rather than myth \u2014 one of the most consequential intellectual developments in human history. From the Ionians through Socrates, Plato, and Aristotle, the Greeks invented logic, ethics, political theory, metaphysics, epistemology, and natural science.", "level": 1, "parent": null, "prereqs": ["ag_archaic_foundations"], "obscurity": 1}, {"id": "ag_presocratics", "title": "The Pre-Socratics: First Philosophers", "desc": "The Ionian thinkers (Thales, Anaximander, Heraclitus, Parmenides, Democritus) who first asked 'what is the world made of?' and tried to answer without invoking gods. What matters is the revolutionary move: assuming the world has rational, discoverable principles.", "level": 2, "parent": "ag_philosophy", "prereqs": [], "obscurity": 3}, {"id": "ag_sophists", "title": "The Sophists: Rhetoric and Relativism", "desc": "Professional teachers of rhetoric and argument \u2014 for a fee. Protagoras ('Man is the measure of all things') raised disturbing questions: Is morality natural or conventional? Can you argue any side? Enormous influence in democratic Athens where persuasive speaking was power.", "level": 2, "parent": "ag_philosophy", "prereqs": ["ag_how_democracy_worked"], "obscurity": 3}, {"id": "ag_socrates", "title": "Socrates", "desc": "The most famous philosopher who wrote nothing. Known through Plato, Xenophon, and Aristophanes. Questioned everyone's assumptions, claimed to know nothing, executed in 399 BC for 'corrupting the youth.' His trial and death are the founding drama of Western philosophy.", "level": 2, "parent": "ag_philosophy", "prereqs": ["ag_sophists"], "obscurity": 1}, {"id": "ag_plato", "title": "Plato and the Academy", "desc": "Socrates' greatest student, founder of the Academy, author of the dialogues that defined Western philosophy. Theory of Forms, the Republic, the cave allegory. Whitehead said all Western philosophy is 'footnotes to Plato.'", "level": 2, "parent": "ag_philosophy", "prereqs": ["ag_socrates"], "obscurity": 1}, {"id": "ag_aristotle", "title": "Aristotle and the Lyceum", "desc": "Plato's greatest student, tutor of Alexander, founder of the Lyceum. Empirical and encyclopedic where Plato was visionary: wrote on physics, biology, logic, ethics, politics, poetics, rhetoric. Dominated intellectual life for 2,000 years. Created formal logic, zoology, and literary criticism.", "level": 2, "parent": "ag_philosophy", "prereqs": ["ag_plato"], "obscurity": 1}, {"id": "ag_warfare", "title": "Greek Warfare: Hoplites, Triremes, and Strategy", "desc": "The hoplite phalanx dominated land warfare; the trireme dominated at sea. Hoplites were citizen-soldiers who bought their own equipment (linking military service to property and political rights); rowers were often the poorest citizens. Understanding warfare means understanding Greek society.", "level": 1, "parent": null, "prereqs": ["ag_polis_concept"], "obscurity": 2}, {"id": "ag_hoplite_phalanx", "title": "The Hoplite Phalanx", "desc": "Heavy infantry in tight formation, shields overlapping. Each citizen-soldier provided his own armor, so only those with property could serve. The phalanx required collective discipline rather than Homeric individual heroism.", "level": 2, "parent": "ag_warfare", "prereqs": [], "obscurity": 2}, {"id": "ag_trireme", "title": "The Trireme and Naval Warfare", "desc": "The warship that gave Athens its empire: fast, with a bronze ram, rowed by 170 citizens (not slaves). Athens' naval power had profound democratic implications: the thetes (poorest citizens) rowed the fleet and used their military importance to demand full political rights.", "level": 2, "parent": "ag_warfare", "prereqs": ["ag_themistocles"], "obscurity": 3}, {"id": "ag_art_architecture", "title": "Greek Art and Architecture", "desc": "From geometric abstraction to Classical idealized naturalism to Hellenistic expressiveness. The three architectural orders (Doric, Ionic, Corinthian), the evolution of sculpture, and the lost tradition of painting \u2014 reflecting evolving ideas about the human body, divine perfection, and the purpose of art.", "level": 1, "parent": null, "prereqs": ["ag_archaic_foundations"], "obscurity": 2}, {"id": "ag_sculpture", "title": "Greek Sculpture: From Kouroi to Classical Idealism", "desc": "The evolution from stiff archaic kouroi to revolutionary Classical naturalism (contrapposto, anatomy, the Parthenon marbles) \u2014 one of the great stories in art history. Created an ideal of human beauty that still shapes Western aesthetics.", "level": 2, "parent": "ag_art_architecture", "prereqs": [], "obscurity": 2}, {"id": "ag_architectural_orders", "title": "The Doric, Ionic, and Corinthian Orders", "desc": "The three orders of Greek temple architecture defined by column style and proportions. Doric (the Parthenon), Ionic (scroll capitals), Corinthian (leaf capitals). Every classical building with columns today descends from these models.", "level": 2, "parent": "ag_art_architecture", "prereqs": [], "obscurity": 2}, {"id": "ag_social_economy", "title": "Greek Social Life and Economy", "desc": "Agriculture, trade, coinage, slavery, the symposium, athletics, gender roles. Understanding the social fabric contextualizes the political and intellectual achievements.", "level": 1, "parent": null, "prereqs": ["ag_polis_concept"], "obscurity": 3}, {"id": "ag_slavery", "title": "Slavery in the Greek World", "desc": "Universal and largely unquestioned. Slaves worked in homes, farms, mines (Laurium was hellish), workshops. Aristotle argued some people were 'natural slaves.' Impossible to understand Greek leisure for philosophy and politics without acknowledging who did the work.", "level": 2, "parent": "ag_social_economy", "prereqs": [], "obscurity": 2}, {"id": "ag_women", "title": "Women in Greek Society", "desc": "Athenian women legally subordinate: married young, confined to the household, couldn't own property. Spartan women had more freedom (owned property, exercised publicly). Yet women appear as powerful figures in drama (Antigone, Medea, Lysistrata) and religion. The gap between literary representation and legal reality is a great puzzle.", "level": 2, "parent": "ag_social_economy", "prereqs": [], "obscurity": 2}, {"id": "ag_symposium", "title": "The Symposium: Wine, Song, and Intellectual Culture", "desc": "The central social institution of elite Greek men: reclining, drinking, debating ideas. Plato's Symposium is set at one. Much of Greek poetry, philosophy, and political culture was shaped by this setting \u2014 exclusive, aristocratic, and deeply connected to Greek intellectual identity.", "level": 2, "parent": "ag_social_economy", "prereqs": [], "obscurity": 3}, {"id": "ag_athletics", "title": "Athletics, the Body, and the Olympic Games", "desc": "Athletic competition central to Greek identity. The Olympics (from 776 BC), Pythian, Nemean, and Isthmian games were panhellenic events where all Greeks competed. Athletes were nude. The ideal of the trained body connected athletics to warfare, art, medicine, and philosophy. The sacred truce let warring cities interact peacefully.", "level": 2, "parent": "ag_social_economy", "prereqs": ["ag_greek_religion"], "obscurity": 2}, {"id": "ag_fourth_century", "title": "The Fourth Century and the Rise of Macedon (404-336 BC)", "desc": "After the Peloponnesian War: Spartan hegemony (failed), Theban hegemony (brief), endless inter-city warfare, and the gradual rise of Macedon under Philip II \u2014 ending city-state independence at Chaeronea (338 BC). Often called 'decline' but also the period of Plato, Aristotle, and Demosthenes.", "level": 1, "parent": null, "prereqs": ["ag_peloponnesian_war"], "obscurity": 2}, {"id": "ag_theban_hegemony", "title": "Thebes and Epaminondas", "desc": "After Sparta's hegemony collapsed, Thebes briefly dominated Greece (371-362 BC). Epaminondas' tactical innovations (oblique order at Leuctra) destroyed Spartan invincibility; his liberation of Messenia ended Spartan power permanently by freeing the helots. Theban dominance died with Epaminondas at Mantinea.", "level": 2, "parent": "ag_fourth_century", "prereqs": ["ag_spartan_system"], "obscurity": 4}, {"id": "ag_philip_ii", "title": "Philip II of Macedon", "desc": "Transformed Macedon from a peripheral kingdom into the dominant power in Greece. Professionalized the army (sarissa pikes), used diplomacy and bribery, defeated combined Greek forces at Chaeronea (338 BC). Demosthenes' Philippics urged resistance. Assassinated 336 BC, leaving Alexander an unbeatable army.", "level": 2, "parent": "ag_fourth_century", "prereqs": [], "obscurity": 2}, {"id": "ag_demosthenes", "title": "Demosthenes and the Defense of Greek Freedom", "desc": "Athens' greatest orator and Philip's most determined opponent. His Philippics and On the Crown are models of persuasive rhetoric. Represents the last great moment of Athenian democratic politics \u2014 passionate, eloquent, ultimately futile against Macedon's military superiority.", "level": 2, "parent": "ag_fourth_century", "prereqs": ["ag_philip_ii", "ag_how_democracy_worked"], "obscurity": 3}, {"id": "ag_alexander", "title": "Alexander the Great (336-323 BC)", "desc": "Philip's son conquered the entire Persian Empire in a decade \u2014 from Egypt to Afghanistan \u2014 creating the largest empire yet and spreading Greek culture across the Near East. Ended the world of independent city-states and created the 'Hellenistic' world of large kingdoms, cultural fusion, and new cities.", "level": 1, "parent": null, "prereqs": ["ag_fourth_century", "ag_achaemenid_empire"], "obscurity": 1}, {"id": "ag_alexander_conquests", "title": "Alexander's Campaigns: From Granicus to India", "desc": "The major battles (Granicus, Issus, Gaugamela), sieges (Tyre, Gaza), journey to Egypt (declared son of Ammon), burning of Persepolis, march into Central Asia and India. His troops mutinied at the Hyphasis river, refusing to march further east.", "level": 2, "parent": "ag_alexander", "prereqs": [], "obscurity": 2}, {"id": "ag_hellenistic_world", "title": "The Hellenistic World After Alexander", "desc": "Alexander died at 32 in Babylon (323 BC). Generals divided the empire: Ptolemaic Egypt, Seleucid Asia, Antigonid Macedon. Characterized by Greek cultural dominance across the Near East, massive new cities (Alexandria became the intellectual capital), new philosophies (Stoicism, Epicureanism), and spectacular science (Euclid, Archimedes, Eratosthenes).", "level": 2, "parent": "ag_alexander", "prereqs": ["ag_alexander_conquests"], "obscurity": 2}, {"id": "ag_hellenism_legacy", "title": "Greek Language and Cultural Legacy", "desc": "Hellenism as a living cultural force: Koine Greek became the lingua franca; the New Testament was written in Greek; Greek philosophy shaped Roman, Jewish, Christian, and Islamic thought; Greek art defined Western aesthetics. Understanding how 'the Greeks' have been claimed and contested is part of understanding Greece itself.", "level": 1, "parent": null, "prereqs": ["ag_alexander"], "obscurity": 2}, {"id": "ag_koine_greek", "title": "Koine Greek: The Common Language", "desc": "After Alexander, dialects merged into Koine \u2014 the language of commerce, administration, and culture across the eastern Mediterranean. The New Testament, the Septuagint, and early Christian theology were written in Koine. Explains how Greek culture persisted long after Greek political power ended.", "level": 2, "parent": "ag_hellenism_legacy", "prereqs": [], "obscurity": 3}, {"id": "ag_reception_hellenism", "title": "The Contest Over Hellenism: Who Needs Greek?", "desc": "From Rome to the Renaissance to today, different cultures have claimed and contested Greek heritage. Romans adopted Greek culture; Christianity absorbed and rejected Greek philosophy; the Renaissance 'rediscovered' Greece; 19th-century Europeans used 'ancient Greece' to justify democracy, colonialism, and racial theory. 'Ancient Greece' is always partly a mirror for later societies.", "level": 2, "parent": "ag_hellenism_legacy", "prereqs": [], "obscurity": 3}];
+
+// Sort by information gain heuristic: prefer obscurity ~2-3 (most uncertain),
+// level 1-2 first (broad before deep), then deeper nodes
+const sorted = [...NODES].sort((a, b) => {
+  // Prioritize broader nodes first
+  if (a.level !== b.level) return a.level - b.level;
+  // Then prefer moderate obscurity (most uncertain)
+  const aUncert = Math.abs(a.obscurity - 2.5);
+  const bUncert = Math.abs(b.obscurity - 2.5);
+  return aUncert - bUncert;
+});
+
+let queue = [...sorted];
+let answered = {};
+let current = 0;
+
+function skipChildren(nodeId, familiarity) {
+  // If user doesn't know a parent, skip its children
+  if (familiarity === 'unknown' || familiarity === 'heard_of') {
+    queue = queue.filter(n => {
+      if (n.parent === nodeId) return false;
+      if (n.prereqs && n.prereqs.includes(nodeId)) return false;
+      return true;
+    });
+  }
+}
+
+function renderCard() {
+  if (current >= queue.length) { showResults(); return; }
+  const node = queue[current];
+  const total = NODES.length;
+  const done = Object.keys(answered).length;
+
+  document.getElementById('progressFill').style.width = `${100*done/total}%`;
+  document.getElementById('progressLabel').textContent = `${done} / ${total} assessed`;
+  document.getElementById('uncertainLabel').textContent = `${queue.length - current} remaining`;
+
+  const c = document.getElementById('cardContainer');
+  c.innerHTML = `
+    <div class="card">
+      <div class="q-num">Question ${done + 1}</div>
+      <div class="q-title">${node.title}</div>
+      <button class="flip-btn" onclick="document.querySelector('.q-desc').classList.toggle('hidden')">Show description ↓</button>
+      <div class="q-desc hidden">${node.desc}</div>
+      <div class="familiarity-row">
+        <button class="fam-btn" data-val="unknown">Never heard of it</button>
+        <button class="fam-btn" data-val="heard_of">Heard the name</button>
+        <button class="fam-btn" data-val="know_basics">Know the basics</button>
+        <button class="fam-btn" data-val="could_explain">Could explain it</button>
+        <button class="fam-btn" data-val="know_deeply">Know it in depth</button>
+      </div>
+      <div class="interest-row">
+        <button class="int-btn" data-val="none">Not interested</button>
+        <button class="int-btn" data-val="curious">Curious</button>
+        <button class="int-btn selected" data-val="core">Deeply interesting</button>
+      </div>
+    </div>
+  `;
+
+  // Wire up buttons
+  let selectedFam = null;
+  let selectedInt = 'core'; // default
+  c.querySelectorAll('.fam-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      c.querySelectorAll('.fam-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedFam = btn.dataset.val;
+      // Auto-advance after a short delay
+      setTimeout(() => {
+        answered[node.id] = { familiarity: selectedFam, interest: selectedInt, title: node.title };
+        skipChildren(node.id, selectedFam);
+        current++;
+        renderCard();
+      }, 200);
+    });
+  });
+  c.querySelectorAll('.int-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      c.querySelectorAll('.int-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add(  'selected');
+      selectedInt = btn.dataset.val;
+    });
+  });
+}
+
+function showResults() {
+  document.getElementById('cardContainer').style.display = 'none';
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressLabel').textContent = 'Complete!';
+  document.getElementById('uncertainLabel').textContent = '';
+
+  const groups = {
+    'know_deeply': { label: '✦ Know In Depth', items: [] },
+    'could_explain': { label: '✦ Could Explain', items: [] },
+    'know_basics': { label: '✦ Know The Basics', items: [] },
+    'heard_of': { label: '✦ Heard The Name', items: [] },
+    'unknown': { label: '✦ Never Heard Of It', items: [] },
+  };
+
+  for (const [id, data] of Object.entries(answered)) {
+    groups[data.familiarity].items.push(data);
+  }
+
+  let html = '<h2>Your Knowledge Map</h2>';
+  for (const [key, group] of Object.entries(groups)) {
+    if (group.items.length === 0) continue;
+    html += `<div class="result-section"><h3>${group.label} (${group.items.length})</h3>`;
+    for (const item of group.items) {
+      const intLabel = item.interest === 'core' ? '★' : item.interest === 'curious' ? '○' : '';
+      html += `<div class="result-node"><span class="rn-title">${item.title}</span><span class="rn-interest">${intLabel}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  // Add copy button for JSON export
+  html += `<button class="copy-btn" onclick="copyResults()">Copy results as JSON</button>`;
+
+  const r = document.getElementById('results');
+  r.innerHTML = html;
+  r.style.display = 'block';
+}
+
+function copyResults() {
+  const json = JSON.stringify(answered, null, 2);
+  navigator.clipboard.writeText(json).then(() => {
+    document.querySelector('.copy-btn').textContent = 'Copied!';
+  });
+}
+
+// Keyboard shortcuts: 1-5 for familiarity
+document.addEventListener('keydown', (e) => {
+  if (e.key >= '1' && e.key <= '5') {
+    const vals = ['unknown', 'heard_of', 'know_basics', 'could_explain', 'know_deeply'];
+    const btn = document.querySelector(`.fam-btn[data-val="${vals[parseInt(e.key)-1]}"]`);
+    if (btn) btn.click();
+  }
+});
+
+renderCard();
+</script>
+</body>
+</html>

@@ -564,13 +564,15 @@ def start_elicitation(domain_id: str) -> dict | None:
         "nodes_assessed": [],
     }
 
-    # Save session
+    # Generate first question (modifies session in-place: adds history, increments counter)
+    result = _generate_next_question(session, curriculum)
+
+    # Save session AFTER question generation so state is persisted
     session_path = DATA_DIR / f"{session['id']}.json"
     with open(session_path, 'w') as f:
         json.dump(session, f, indent=2)
 
-    # Generate first question
-    return _generate_next_question(session, curriculum)
+    return result
 
 
 def continue_elicitation(session_id: str, response: dict) -> dict | None:
