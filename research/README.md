@@ -49,6 +49,8 @@ Master index of all research documents. **Always update this file when adding ne
 |----------|-------------|--------|
 | [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md) | **VISION DOC**: Curriculum-based knowledge mapping — all ideas from brainstorming session. Bottom-up curriculum generation, books as knowledge signals, knowledge+interest two dimensions, 20Q card-flip UI, Alif parallels (collateral credit), layering principle (ZPD), book significance rating, Otak connection, open questions on structure/depth/growth. | Active |
 | [knowledge-curriculum-implementation-plan.md](knowledge-curriculum-implementation-plan.md) | **IMPLEMENTATION PLAN**: First experiments and build plan for curriculum-based knowledge mapping system | Active |
+| [knowledge-elicitation-iteration-notes.md](knowledge-elicitation-iteration-notes.md) | **ITERATION NOTES**: Insights from first real 20Q session — learning while testing, graduated depth probing, latent vs active knowledge, voice dump prompts, 5 iteration variants (A-E) | Active |
+| [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md) | **LEARNING SCIENCE RESEARCH**: 8-area deep dive — testing effect (Roediger/Karpicke), CMU Knowledge Components (KLI framework), L@S 2024 papers, backward design (UbD/Bloom's), graduated depth (ZPD/CAT/MIRT), self-assessment in humanities (Seixas' historical thinking, Dunning-Kruger, CBM), open curricula (AP/IB frameworks, CASE standards), innovative question formats (VSAQs, comparative judgment, timelines). 8 prioritized recommendations for iterating on 20Q format. | Done |
 
 ## Knowledge Retention
 | Document | Description | Status |

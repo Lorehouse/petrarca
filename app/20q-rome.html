@@ -158,6 +158,22 @@
     border: none; border-radius: 4px;
     cursor: pointer; margin-top: 12px;
   }
+  .back-btn {
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    color: #8b2500; background: none; border: 1px solid #e4dfd4;
+    border-radius: 16px; padding: 4px 12px; cursor: pointer;
+  }
+  .back-btn:hover { border-color: #8b2500; }
+  .key-hint {
+    font-family: 'DM Sans', sans-serif; font-size: 10px;
+    color: #b0a898; border: 1px solid #e4dfd4; border-radius: 3px;
+    padding: 1px 4px; margin-right: 4px; display: inline-block;
+    min-width: 16px; text-align: center;
+  }
+  .key-legend {
+    font-family: 'DM Sans', sans-serif; font-size: 11px;
+    color: #b0a898; margin-top: 12px; text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -190,10 +206,10 @@ const sorted = [...NODES].sort((a, b) => {
 
 let queue = [...sorted];
 let answered = {};
+let history = []; // for back button
 let current = 0;
 
 function skipChildren(nodeId, familiarity) {
-  // If user doesn't know a parent, skip its children
   if (familiarity === 'unknown' || familiarity === 'heard_of') {
     queue = queue.filter(n => {
       if (n.parent === nodeId) return false;
@@ -201,6 +217,27 @@ function skipChildren(nodeId, familiarity) {
       return true;
     });
   }
+}
+
+function goBack() {
+  if (history.length === 0) return;
+  const prev = history.pop();
+  delete answered[prev.nodeId];
+  current = prev.index;
+  // Restore skipped children by rebuilding queue
+  queue = [...sorted].filter(n => {
+    // Keep nodes that haven't been answered (except ones skipped by earlier answers)
+    for (const [id, ans] of Object.entries(answered)) {
+      if ((ans.familiarity === 'unknown' || ans.familiarity === 'heard_of')) {
+        if (n.parent === id || (n.prereqs && n.prereqs.includes(id))) return false;
+      }
+    }
+    return true;
+  });
+  // Find the right position in the rebuilt queue
+  current = queue.findIndex(n => n.id === prev.nodeId);
+  if (current === -1) current = 0;
+  renderCard();
 }
 
 function renderCard() {
@@ -216,36 +253,41 @@ function renderCard() {
   const c = document.getElementById('cardContainer');
   c.innerHTML = `
     <div class="card">
-      <div class="q-num">Question ${done + 1}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="q-num">Question ${done + 1}</div>
+        ${history.length > 0 ? '<button class="back-btn" onclick="goBack()">← Back</button>' : ''}
+      </div>
       <div class="q-title">${node.title}</div>
       <button class="flip-btn" onclick="document.querySelector('.q-desc').classList.toggle('hidden')">Show description ↓</button>
       <div class="q-desc hidden">${node.desc}</div>
       <div class="familiarity-row">
-        <button class="fam-btn" data-val="unknown">Never heard of it</button>
-        <button class="fam-btn" data-val="heard_of">Heard the name</button>
-        <button class="fam-btn" data-val="know_basics">Know the basics</button>
-        <button class="fam-btn" data-val="could_explain">Could explain it</button>
-        <button class="fam-btn" data-val="know_deeply">Know it in depth</button>
+        <button class="fam-btn" data-val="unknown"><span class="key-hint">1</span> Never heard of it</button>
+        <button class="fam-btn" data-val="heard_of"><span class="key-hint">2</span> Heard the name</button>
+        <button class="fam-btn" data-val="know_basics"><span class="key-hint">3</span> Know the basics</button>
+        <button class="fam-btn" data-val="could_explain"><span class="key-hint">4</span> Could explain it</button>
+        <button class="fam-btn" data-val="know_deeply"><span class="key-hint">5</span> Know it in depth</button>
       </div>
       <div class="interest-row">
-        <button class="int-btn" data-val="none">Not interested</button>
-        <button class="int-btn" data-val="curious">Curious</button>
-        <button class="int-btn selected" data-val="core">Deeply interesting</button>
+        <button class="int-btn" data-val="none"><span class="key-hint">Q</span> Not interested</button>
+        <button class="int-btn" data-val="curious"><span class="key-hint">W</span> Curious</button>
+        <button class="int-btn" data-val="core"><span class="key-hint">E</span> Deeply interesting</button>
       </div>
+      <div class="key-legend">Keys: 1-5 familiarity · Q/W/E interest · Backspace go back · D show description</div>
     </div>
   `;
 
   // Wire up buttons
   let selectedFam = null;
-  let selectedInt = 'core'; // default
+  let selectedInt = null; // no default
   c.querySelectorAll('.fam-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       c.querySelectorAll('.fam-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedFam = btn.dataset.val;
-      // Auto-advance after a short delay
+      // Auto-advance after short delay
       setTimeout(() => {
-        answered[node.id] = { familiarity: selectedFam, interest: selectedInt, title: node.title };
+        history.push({ nodeId: node.id, index: current });
+        answered[node.id] = { familiarity: selectedFam, interest: selectedInt || 'none', title: node.title };
         skipChildren(node.id, selectedFam);
         current++;
         renderCard();
@@ -255,7 +297,7 @@ function renderCard() {
   c.querySelectorAll('.int-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       c.querySelectorAll('.int-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add(  'selected');
+      btn.classList.add('selected');
       selectedInt = btn.dataset.val;
     });
   });
@@ -305,12 +347,36 @@ function copyResults() {
   });
 }
 
-// Keyboard shortcuts: 1-5 for familiarity
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+  // 1-5: familiarity
   if (e.key >= '1' && e.key <= '5') {
     const vals = ['unknown', 'heard_of', 'know_basics', 'could_explain', 'know_deeply'];
     const btn = document.querySelector(`.fam-btn[data-val="${vals[parseInt(e.key)-1]}"]`);
     if (btn) btn.click();
+  }
+  // Q/W/E: interest
+  if (e.key === 'q' || e.key === 'Q') {
+    const btn = document.querySelector('.int-btn[data-val="none"]');
+    if (btn) btn.click();
+  }
+  if (e.key === 'w' || e.key === 'W') {
+    const btn = document.querySelector('.int-btn[data-val="curious"]');
+    if (btn) btn.click();
+  }
+  if (e.key === 'e' || e.key === 'E') {
+    const btn = document.querySelector('.int-btn[data-val="core"]');
+    if (btn) btn.click();
+  }
+  // Backspace: go back
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    goBack();
+  }
+  // D: toggle description
+  if (e.key === 'd' || e.key === 'D') {
+    const desc = document.querySelector('.q-desc');
+    if (desc) desc.classList.toggle('hidden');
   }
 });
 
