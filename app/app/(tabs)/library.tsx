@@ -10,6 +10,7 @@ import { useBookStoreVersion } from '../../data/use-book-store';
 import type { PhysicalBook } from '../../data/types';
 import { colors, fonts, type, layout } from '../../design/tokens';
 import DoubleRule from '../../components/DoubleRule';
+import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 
 function formatTimeAgo(timestamp: number): string {
   const hours = Math.floor((Date.now() - timestamp) / 3600000);
@@ -124,6 +125,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterMode>('active');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Re-read books when screen is focused
   useFocusEffect(useCallback(() => {
@@ -178,6 +180,12 @@ export default function LibraryScreen() {
             }}>
               <Text style={styles.addButtonText}>+</Text>
             </Pressable>
+            <Pressable style={styles.drawerButton} onPress={() => {
+              logEvent('drawer_open', { source: 'library' });
+              setDrawerOpen(true);
+            }}>
+              <Text style={styles.drawerButtonText}>{'\u2726'}</Text>
+            </Pressable>
           </View>
         </View>
         <DoubleRule />
@@ -210,6 +218,7 @@ export default function LibraryScreen() {
             onPress={() => { logEvent('library_book_tap', { book_id: book.id }); router.push({ pathname: '/book-detail', params: { id: book.id } } as any); }} />
         ))
       )}
+      <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </ScrollView>
   );
 }
@@ -225,6 +234,8 @@ const styles = StyleSheet.create({
   addButtonText: { fontFamily: fonts.body, fontSize: 13, color: colors.rubric },
   revisitButton: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: colors.rubric },
   revisitButtonText: { fontFamily: fonts.body, fontSize: 13, color: colors.rubric },
+  drawerButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 4, borderWidth: 1, borderColor: colors.rule },
+  drawerButtonText: { fontFamily: fonts.display, fontSize: 16, color: colors.rubric },
   filterRow: { flexDirection: 'row', paddingHorizontal: layout.screenPadding, paddingTop: 14, paddingBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   filterTab: { paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   filterText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted },
