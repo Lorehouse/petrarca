@@ -57,6 +57,7 @@ from curriculum import (
     generate_curriculum, load_curriculum, list_curricula,
     load_knowledge_states, update_knowledge, get_coverage_report,
     map_book_to_curriculum, start_elicitation, continue_elicitation,
+    import_assessment_answers,
 )
 
 SONIOX_API_KEY = os.environ.get('SONIOX_API_KEY', '557c7c5a86a2f5b8fa734ddbbe179f0f21fd342c762768c9af4f4ffff8c58e1f')
@@ -3363,6 +3364,20 @@ JSON array only:"""
         else:
             self._send_json_response(404, {'error': 'Session not found'})
 
+    def _handle_knowledge_import_assessment(self):
+        """POST /curriculum/knowledge/import-assessment — Batch import from HTML assessment UI."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        domain_id = body.get('domain_id')
+        answers = body.get('answers')
+        if not domain_id or not answers:
+            self._send_json_response(400, {'error': 'Missing domain_id or answers'})
+            return
+        result = import_assessment_answers(domain_id, answers)
+        print(f"[curriculum] Imported {result['imported']} answers for {domain_id}: {result['by_level']}", flush=True)
+        self._send_json_response(200, result)
+
     def _handle_knowledge_update(self):
         """POST /curriculum/knowledge/update — Manually update a knowledge state."""
         body = self._read_json_body()
@@ -3457,6 +3472,8 @@ JSON array only:"""
             return self._handle_elicit_respond()
         if self.path == '/curriculum/knowledge/update':
             return self._handle_knowledge_update()
+        if self.path == '/curriculum/knowledge/import-assessment':
+            return self._handle_knowledge_import_assessment()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()

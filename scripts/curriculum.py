@@ -245,6 +245,111 @@ def update_knowledge(domain_id: str, node_id: str,
     return state
 
 
+# Mapping from self-report familiarity levels to knowledge states.
+# v1 (5-level): unknown, heard_of, know_basics, could_explain, know_deeply
+# v2 (3-level): new_to_me, knew_some, knew_all
+FAMILIARITY_TO_KNOWLEDGE = {
+    # v1 format
+    "unknown": ("unknown", 0.0),
+    "heard_of": ("mentioned", 0.4),
+    "know_basics": ("engaged", 0.6),
+    "could_explain": ("anchored", 0.8),
+    "know_deeply": ("anchored", 0.95),
+    # v2 format
+    "new_to_me": ("unknown", 0.0),
+    "knew_some": ("engaged", 0.6),
+    "knew_all": ("anchored", 0.9),
+}
+
+INTEREST_TO_CANONICAL = {
+    # v1
+    "core": "core",
+    "curious": "curious",
+    "none": "none",
+    # v2
+    "interested": "curious",
+    "star": "core",
+    "skip": "none",
+}
+
+
+def import_self_report(domain_id: str, self_report_path: str | Path) -> dict:
+    """Import a self-report JSON file into canonical knowledge states.
+
+    Returns summary: {imported, skipped, total, by_level}.
+    """
+    with open(self_report_path) as f:
+        report = json.load(f)
+
+    answers = report.get("answers", {})
+    states = load_knowledge_states(domain_id)
+    now = datetime.now().isoformat()
+    imported = 0
+    by_level = {}
+
+    for node_id, answer in answers.items():
+        fam = answer.get("familiarity", "unknown")
+        interest_raw = answer.get("interest", "none")
+
+        knowledge, confidence = FAMILIARITY_TO_KNOWLEDGE.get(fam, ("unknown", 0.0))
+        interest = INTEREST_TO_CANONICAL.get(interest_raw, "curious")
+
+        states[node_id] = {
+            "knowledge": knowledge,
+            "interest": interest,
+            "confidence": confidence,
+            "sources": ["self_report"],
+            "last_assessed": now,
+        }
+        imported += 1
+        by_level[knowledge] = by_level.get(knowledge, 0) + 1
+
+    save_knowledge_states(domain_id, states)
+    return {
+        "imported": imported,
+        "total": len(answers),
+        "by_level": by_level,
+        "domain_id": domain_id,
+    }
+
+
+def import_assessment_answers(domain_id: str, answers: dict) -> dict:
+    """Import assessment answers dict (from HTML UI) directly into knowledge states.
+
+    answers: {node_id: {familiarity, interest, ...}}
+    Returns summary.
+    """
+    states = load_knowledge_states(domain_id)
+    now = datetime.now().isoformat()
+    imported = 0
+    by_level = {}
+
+    for node_id, answer in answers.items():
+        fam = answer.get("familiarity", "unknown")
+        interest_raw = answer.get("interest", "none")
+
+        knowledge, confidence = FAMILIARITY_TO_KNOWLEDGE.get(fam, ("unknown", 0.0))
+        interest = INTEREST_TO_CANONICAL.get(interest_raw, "curious")
+
+        states[node_id] = {
+            "knowledge": knowledge,
+            "interest": interest,
+            "confidence": confidence,
+            "sources": ["self_report"],
+            "last_assessed": now,
+        }
+        imported += 1
+        by_level[knowledge] = by_level.get(knowledge, 0) + 1
+
+    save_knowledge_states(domain_id, states)
+    return {
+        "imported": imported,
+        "total": len(answers),
+        "by_level": by_level,
+        "domain_id": domain_id,
+    }
+
+
 # ─────────────────────────────────────────────
 # Book-to-curriculum mapping
 # ─────────────────────────────────────────────

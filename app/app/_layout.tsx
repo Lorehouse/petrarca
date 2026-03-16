@@ -67,6 +67,7 @@ export default function RootLayout() {
         <Stack.Screen name="add-book" />
         <Stack.Screen name="resurfacing" />
         <Stack.Screen name="kindle-curation" />
+        <Stack.Screen name="knowledge-map" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <FeedbackCapture />
