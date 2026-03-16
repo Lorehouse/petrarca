@@ -105,14 +105,13 @@ async function retryPendingPhotos(): Promise<void> {
   const raw = await AsyncStorage.getItem(PENDING_BOOK_PHOTO_KEY);
   if (!raw) return;
   const pending: PendingBookPhoto[] = JSON.parse(raw);
-  // Process sequentially to avoid overwhelming the server
-  for (const photo of pending) {
+  await Promise.all(pending.map(async (photo) => {
     try {
       if (Platform.OS !== 'web' && documentDirectory) {
         const info = await getInfoAsync(photo.photoUri);
         if (!info.exists) {
           await removePendingPhoto(photo.captureId);
-          continue;
+          return;
         }
       }
       const result = await ocrPage(photo.photoUri, photo.bookId, photo.bookTitle, photo.pageNumber, photo.chapter);
@@ -129,7 +128,7 @@ async function retryPendingPhotos(): Promise<void> {
     } catch {
       // Will retry next time the screen is focused
     }
-  }
+  }));
 }
 
 function formatTimeAgo(timestamp: number): string {
