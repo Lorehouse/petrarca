@@ -262,6 +262,76 @@ The current curriculum structure (hierarchical, max 4 levels) is a good start bu
 
 ---
 
+## Encoding vs Remembering: Books as the Learning Tool
+
+A critical distinction from Alif and SRS research: **spaced repetition is not good for initial learning.** Encoding — getting something into long-term memory in the first place — requires a different process. In Alif, this is the "encounter" phase with hooks, etymology, and rapid repetition before SRS begins.
+
+For history and culture, **each book IS the encoding process**: narrative, anecdotes, structuring, the author's voice, the way arguments build. After finishing a book (or even 3 chapters of the Sicily book), you *feel* like you learned something. That feeling is real — encoding happened through deep engagement with the material.
+
+The system's job is not to teach. It's to **maintain and integrate** that encoded knowledge:
+- Connect it to other books and articles
+- Surface it when relevant new content appears
+- Prevent the vivid mental model from fading into vagueness
+- Help prepare for the *next* encoding session (pre-reading guides)
+
+### Imperfect Acquisition
+
+First-read acquisition is always partial. "Who Needs Greek?" was profound and inspirational, but there was so much new information that much was missed. This means:
+- Significance rating alone doesn't capture readiness for revisiting
+- A book marked "Essential" that was also overwhelming should be flagged as "want to revisit"
+- Re-reading with better context (from subsequent reading) would yield much more
+- The knowledge map could show: "You read this book but your coverage of its topics suggests you'd get much more from a re-read now"
+
+### Knowledge Decay (Not SRS)
+
+Knowledge does decay, but not like forgetting a flashcard answer. It's more like: the vivid mental model fades, connections become vaguer, the sense of understanding becomes less crisp.
+
+**Don't model this as FSRS.** Instead:
+- Model as gradual confidence decay on the knowledge map
+- Natural resurfacing through related reading is the best maintenance (the Alif principle: encountering a concept in a new context is better than isolated review)
+- The system can notice when confidence is decaying and proactively surface connections
+
+### The Physical-Digital Synergy
+
+Two directions of support between physical reading and the digital system:
+
+**Digital → Physical**: Pre-reading guides prepare you for a physical book. In Alif: pre-studying words during the week → reading fluently from a physical book by the fireplace on the weekend.
+
+**Physical → Digital**: Taking pictures of pages, voice notes, and scheduling reviews ensures that what you read in a physical book actually sticks. The physical reading experience is sacred — the digital system supports it, never replaces it.
+
+---
+
+## Voice Knowledge Dumps: A Third Elicitation Method
+
+Beyond 20 Questions (structured, boundary-finding) and book imports (passive, coverage-based), a third approach: **voice knowledge dumps**.
+
+Go for a walk, speak into the microphone, dump everything you know about a topic. Process this as rich input for the knowledge map.
+
+**Advantages over 20 Questions:**
+- Much richer signal for areas of deep knowledge
+- Captures connections and narrative structure, not just "I know / I don't know"
+- Natural and enjoyable (walking + talking)
+- Can reveal knowledge the user didn't realize they had
+
+**Can be prompted/scoped:**
+- "Tell me everything you know about Romanticism"
+- "Walk me through what you know about these specific people..."
+- "What do you know about this time period in this region?"
+- "What connections do you see between X and Y?"
+
+**Complements 20 Questions:**
+- 20Q is better for breadth and boundary detection
+- Voice dumps are better for depth and connection quality
+- Use 20Q first to map the terrain, then voice dumps to deepen specific areas
+
+**Processing pipeline:**
+- Voice → Soniox transcription → LLM extraction of claims/concepts/connections
+- Map extracted knowledge against curriculum nodes
+- Update confidence and state based on richness of what was said
+- Could even detect misconceptions or partial understanding
+
+---
+
 ## Technical Considerations
 
 ### Curriculum Data Model (Sketch)

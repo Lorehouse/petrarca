@@ -465,6 +465,34 @@ Phase 0 (foundation)     Phase 1 (curriculum)      Phase 2 (mapping)
 
 ---
 
+### E8: Voice Knowledge Dump (Phase 3 alternative)
+
+**Hypothesis**: A 5-10 minute voice dump ("tell me everything you know about X") provides richer knowledge mapping data than 20 Questions for areas of deep knowledge.
+
+**Method**: Pick a topic where Stian has strong knowledge (e.g., the Persian Wars). Do both a 20Q session and a voice dump. Compare: which gives a more accurate knowledge map? Which captures connections and nuance that the other misses?
+
+**Success criteria**: Voice dump identifies at least 3 knowledge claims/connections that 20Q missed, and updates the knowledge map to better match Stian's self-assessment.
+
+**Implementation**: Reuse existing voice capture → Soniox → LLM pipeline from book voice notes. New: LLM extraction prompt that maps transcript against curriculum nodes.
+
+### E9: Confidence Decay and Natural Resurfacing
+
+**Hypothesis**: Knowledge confidence should decay gradually over time (not FSRS-style but a slow fade), and encountering related content in new reading should reset the decay.
+
+**Method**: After initial mapping, apply gentle confidence decay (e.g., -0.01/month). Track whether reading new articles/books about related topics naturally refreshes confidence. Check after 3 months: does the decayed map still feel accurate?
+
+**Success criteria**: Decayed confidence matches Stian's self-assessment better than static confidence after 3+ months.
+
+### E10: Re-Read Recommendations
+
+**Hypothesis**: The system can identify books worth re-reading by comparing: (a) how much the book covers, (b) how much the user actually retained (from 20Q/voice), (c) how much their context has grown since first reading.
+
+**Method**: For "Who Needs Greek?" — the book covers "The Contest Over Hellenism" deeply, but if the user's confidence on that node is lower than expected for a deep-coverage essential book, suggest re-reading with new context.
+
+**Success criteria**: At least one re-read recommendation feels genuinely motivated ("yes, I'd get much more from it now").
+
+---
+
 ## What This Does NOT Cover (Explicitly Deferred)
 
 1. **Tech/tweets/current events**: Different problem, different solution. The curriculum approach is for deep/humanities knowledge only.
