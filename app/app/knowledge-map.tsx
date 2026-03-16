@@ -202,6 +202,17 @@ export default function KnowledgeMapScreen() {
                   </View>
                 ))}
               </View>
+              <Pressable
+                style={styles.scanButton}
+                onPress={() => {
+                  logEvent('curriculum_scan_tap', { domain_id: selected });
+                  router.push({ pathname: '/curriculum-scan', params: { domainId: selected! } } as any);
+                }}
+              >
+                <Text style={styles.scanButtonText}>
+                  {stats.unknown === stats.total ? '✦ Start breadth scan' : '✦ Rescan knowledge'}
+                </Text>
+              </Pressable>
             </View>
 
             {/* Tree view */}
@@ -384,6 +395,20 @@ const styles = StyleSheet.create({
   loadingInline: {
     paddingVertical: 40,
     alignItems: 'center',
+  },
+
+  scanButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.rubric,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  scanButtonText: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.rubric,
   },
 
   // Coverage
