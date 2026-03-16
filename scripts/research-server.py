@@ -25,6 +25,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import urlparse, urlencode, parse_qs, unquote
 
@@ -4074,8 +4075,12 @@ JSON array only:"""
         print(f'[http] {args[0]}')
 
 
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 if __name__ == '__main__':
-    server = HTTPServer(('0.0.0.0', PORT), ResearchHandler)
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), ResearchHandler)
     print(f'Research server listening on port {PORT}')
     print(f'Results directory: {RESULTS_DIR}')
     server.serve_forever()

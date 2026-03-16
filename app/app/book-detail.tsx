@@ -22,9 +22,19 @@ import DoubleRule from '../components/DoubleRule';
 import BookCurriculumContext from '../components/BookCurriculumContext';
 
 const PENDING_BOOK_VOICE_KEY = '@petrarca/pending_book_voice_notes';
+const PENDING_BOOK_PHOTO_KEY = '@petrarca/pending_book_photos';
 
 interface PendingBookVoice {
   localPath: string;
+  captureId: string;
+  bookId: string;
+  bookTitle: string;
+  chapter?: string;
+  pageNumber?: number;
+}
+
+interface PendingBookPhoto {
+  photoUri: string;
   captureId: string;
   bookId: string;
   bookTitle: string;
@@ -44,6 +54,22 @@ async function removePendingVoice(captureId: string): Promise<void> {
   if (!raw) return;
   const pending: PendingBookVoice[] = JSON.parse(raw);
   await AsyncStorage.setItem(PENDING_BOOK_VOICE_KEY, JSON.stringify(pending.filter(n => n.captureId !== captureId)));
+}
+
+async function savePendingPhoto(photo: PendingBookPhoto): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_PHOTO_KEY);
+  const pending: PendingBookPhoto[] = raw ? JSON.parse(raw) : [];
+  if (!pending.some(p => p.captureId === photo.captureId)) {
+    pending.push(photo);
+    await AsyncStorage.setItem(PENDING_BOOK_PHOTO_KEY, JSON.stringify(pending));
+  }
+}
+
+async function removePendingPhoto(captureId: string): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_PHOTO_KEY);
+  if (!raw) return;
+  const pending: PendingBookPhoto[] = JSON.parse(raw);
+  await AsyncStorage.setItem(PENDING_BOOK_PHOTO_KEY, JSON.stringify(pending.filter(p => p.captureId !== captureId)));
 }
 
 async function retryPendingVoiceNotes(): Promise<void> {
@@ -69,6 +95,37 @@ async function retryPendingVoiceNotes(): Promise<void> {
       });
       await removePendingVoice(note.captureId);
       logEvent('book_voice_retry_success', { capture_id: note.captureId });
+    } catch {
+      // Will retry next time the screen is focused
+    }
+  }
+}
+
+async function retryPendingPhotos(): Promise<void> {
+  const raw = await AsyncStorage.getItem(PENDING_BOOK_PHOTO_KEY);
+  if (!raw) return;
+  const pending: PendingBookPhoto[] = JSON.parse(raw);
+  // Process sequentially to avoid overwhelming the server
+  for (const photo of pending) {
+    try {
+      if (Platform.OS !== 'web' && documentDirectory) {
+        const info = await getInfoAsync(photo.photoUri);
+        if (!info.exists) {
+          await removePendingPhoto(photo.captureId);
+          continue;
+        }
+      }
+      const result = await ocrPage(photo.photoUri, photo.bookId, photo.bookTitle, photo.pageNumber, photo.chapter);
+      await updateBookCapture(photo.captureId, {
+        ocr_text: result.text,
+        extracted_ideas: result.extracted_ideas,
+        topics: result.topics,
+        ocr_status: 'completed',
+        upload_status: 'uploaded',
+        page_number: result.detected_page_number || photo.pageNumber,
+      });
+      await removePendingPhoto(photo.captureId);
+      logEvent('book_photo_retry_success', { capture_id: photo.captureId });
     } catch {
       // Will retry next time the screen is focused
     }
@@ -124,6 +181,14 @@ function CaptureCard({ capture }: { capture: BookCapture }) {
           </Pressable>
         </View>
       )}
+      {capture.type === 'page_photo' && capture.ocr_status === 'failed' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[captureStyles.transcript, { color: colors.rubric }]}>OCR failed</Text>
+          <Pressable onPress={() => retryPendingPhotos()}>
+            <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.rubric, textDecorationLine: 'underline' }}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
       {capture.text && <Text style={captureStyles.noteText}>{capture.text}</Text>}
       {capture.ocr_text && !capture.extracted_ideas?.length && (
         <Text style={captureStyles.transcript} numberOfLines={3}>{capture.ocr_text}</Text>
@@ -169,8 +234,24 @@ export default function BookDetailScreen() {
 
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
+    // Queue any existing failed photo captures that have local URIs (e.g. from before retry was added)
+    if (id) {
+      const caps = getBookCaptures(id);
+      const book = getPhysicalBook(id);
+      if (book) {
+        for (const cap of caps) {
+          if (cap.type === 'page_photo' && cap.ocr_status === 'failed' && cap.photo_uri) {
+            savePendingPhoto({
+              photoUri: cap.photo_uri, captureId: cap.id, bookId: book.id, bookTitle: book.title,
+              chapter: cap.chapter, pageNumber: cap.page_number,
+            });
+          }
+        }
+      }
+    }
     retryPendingVoiceNotes().then(() => setRefreshKey(k => k + 1));
-  }, []));
+    retryPendingPhotos().then(() => setRefreshKey(k => k + 1));
+  }, [id]));
 
   const storeVersion = useBookStoreVersion();
   const book = useMemo(() => id ? getPhysicalBook(id) : undefined, [id, refreshKey, storeVersion]);
@@ -284,6 +365,11 @@ export default function BookDetailScreen() {
       });
     } catch (e: any) {
       await updateBookCapture(captureId, { ocr_status: 'failed', upload_status: 'failed' });
+      await savePendingPhoto({
+        photoUri, captureId, bookId: book.id, bookTitle: book.title,
+        chapter: book.current_chapter || undefined, pageNumber: book.current_page || undefined,
+      });
+      logEvent('book_capture_photo_failed', { book_id: book.id, error: String(e) });
     }
     setProcessing(false);
     setRefreshKey(k => k + 1);
