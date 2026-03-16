@@ -1,6 +1,13 @@
 # Knowledge System Implementation Status
 
-**Date**: March 16, 2026 (last updated — session 23: Kindle integration, YouTube/podcast media capture, book companion system)
+**Date**: March 16, 2026 (last updated — session 28: capture reliability fixes)
+
+## Session 28: Capture Reliability Fixes (March 16, 2026)
+
+- **Server threading**: Switched from `HTTPServer` to `ThreadingHTTPServer` — each request now gets its own thread. Fixes `ConnectionResetError` when multiple OCR/sync requests queued during rapid photo captures.
+- **Photo retry queue**: Failed photo OCR captures now saved to AsyncStorage (`@petrarca/pending_book_photos`) and retried in parallel on screen focus. Mirrors existing voice note retry mechanism.
+- **Retroactive queueing**: On focus, book-detail scans existing captures for failed photos with local URIs and auto-queues them for retry.
+- **Data recovery**: Manually recovered 1 voice transcript + 1 photo OCR from server-side stored files where the server had completed processing but the client connection had dropped.
 
 ## Sessions 20–23 Summary (March 13–16, 2026)
 
@@ -80,6 +87,7 @@ Server Pipeline (cron every 4 hours):
   → generate_syntheses.py → structured synthesis per cluster (Gemini 3 Flash + tool calling)
   → All LLM calls via gemini_llm.py (google.genai SDK, call_llm/call_llm_tool)
   → All calls tracked by llm_audit.py → data/llm_audit.jsonl
+  → research-server.py: ThreadingHTTPServer (concurrent request handling)
 
 App (Expo SDK 54):
   content-sync.ts downloads knowledge_index.json + concept_clusters.json + syntheses.json
@@ -400,6 +408,11 @@ App (Expo SDK 54):
 6. ~~**Duplicate topic variants**~~ — **RESOLVED**: Added client-side topic normalization in `app/lib/display-utils.ts` (`normalizeTopic()` + `displayTopic()`). Used across feed filter chips, topic tags, and Topics tab grouping. Reduced 67→58 topic groups.
 7. ~~**google.generativeai deprecation warning**~~ — **RESOLVED**: Migrated all LLM calls to `google.genai` SDK via shared `gemini_llm.py` wrapper. litellm fully removed.
 11. ~~**Twitter cookies expire**~~ — **RESOLVED**: Chrome extension auto-syncs cookies to server on X.com visits (4h throttle). Also available via `POST /twitter/cookies` API and `GET /twitter/status` health check.
+
+### Server Issues
+
+15. ~~**Single-threaded server causes capture failures**~~ — **RESOLVED** (session 28): `HTTPServer` → `ThreadingHTTPServer`. Rapid photo captures no longer cause `ConnectionResetError` from queued requests blocking behind slow Gemini Vision calls.
+16. ~~**No retry for failed photo OCR**~~ — **RESOLVED** (session 28): Photo retry queue added (parallel to existing voice retry). Failed captures auto-retry on book-detail focus.
 
 ### Logic Issues
 
