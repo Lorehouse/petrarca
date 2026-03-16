@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Knowledge Map: Rome</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Crimson Pro', serif;
+    background: #f7f4ec;
+    color: #2a2420;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .header {
+    text-align: center;
+    padding: 32px 16px 16px;
+    max-width: 680px;
+    width: 100%;
+  }
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 28px;
+    color: #2a2420;
+    margin-bottom: 4px;
+  }
+  .header .sub {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: #6a6458;
+  }
+  .double-rule {
+    max-width: 680px; width: 100%;
+    border-top: 2px solid #8b2500;
+    padding-top: 5px;
+    border-bottom: 1px solid #8b2500;
+    height: 0;
+    margin-bottom: 24px;
+  }
+  .progress-bar {
+    max-width: 680px; width: 100%;
+    padding: 0 16px;
+    margin-bottom: 20px;
+  }
+  .progress-track {
+    height: 4px; background: #e4dfd4; border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: #8b2500; border-radius: 2px; transition: width 0.3s;
+  }
+  .progress-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #b0a898; margin-top: 4px;
+    display: flex; justify-content: space-between;
+  }
+
+  .card-container {
+    max-width: 680px; width: 100%; padding: 0 16px;
+    flex: 1;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-radius: 6px;
+    padding: 28px 24px;
+    margin-bottom: 16px;
+    animation: slideUp 0.25s ease-out;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .card .q-num {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #b0a898;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .card .q-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600; font-size: 22px;
+    color: #2a2420; margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .card .q-desc {
+    font-size: 16px; line-height: 1.5;
+    color: #333; margin-bottom: 20px;
+  }
+  .card .q-desc.hidden { display: none; }
+  .card .flip-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; color: #8b2500;
+    background: none; border: none; cursor: pointer;
+    margin-bottom: 16px; text-decoration: underline;
+  }
+
+  .familiarity-row {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .fam-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; padding: 8px 14px;
+    border: 1px solid #e4dfd4; border-radius: 20px;
+    background: #f7f4ec; color: #6a6458;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .fam-btn:hover { border-color: #8b2500; color: #8b2500; }
+  .fam-btn.selected { border-color: #8b2500; background: rgba(139,37,0,0.08); color: #8b2500; }
+
+  .interest-row {
+    display: flex; gap: 6px; margin-bottom: 8px;
+  }
+  .int-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; padding: 6px 12px;
+    border: 1px solid #e4dfd4; border-radius: 16px;
+    background: #f7f4ec; color: #b0a898;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .int-btn:hover { border-color: #2a2420; color: #2a2420; }
+  .int-btn.selected { border-color: #2a2420; background: rgba(42,36,32,0.06); color: #2a2420; }
+
+  .results {
+    max-width: 680px; width: 100%; padding: 16px;
+  }
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600; font-size: 24px;
+    margin-bottom: 16px;
+  }
+  .result-section { margin-bottom: 20px; }
+  .result-section h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 13px; letter-spacing: 1px;
+    text-transform: uppercase; color: #8b2500;
+    margin-bottom: 8px;
+  }
+  .result-node {
+    font-size: 15px; padding: 4px 0;
+    border-bottom: 1px solid #f0ece2;
+    display: flex; justify-content: space-between;
+  }
+  .result-node .rn-title { flex: 1; }
+  .result-node .rn-interest {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; color: #8b2500;
+  }
+  .copy-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; padding: 10px 24px;
+    background: #2a2420; color: #f7f4ec;
+    border: none; border-radius: 4px;
+    cursor: pointer; margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>✦ Knowledge Map</h1>
+  <div class="sub">Rome: Republic to Empire (753 BC – 476 AD)</div>
+</div>
+<div class="double-rule"></div>
+<div class="progress-bar">
+  <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="progress-text"><span id="progressLabel">0 / 0</span><span id="uncertainLabel"></span></div>
+</div>
+<div class="card-container" id="cardContainer"></div>
+<div class="results" id="results" style="display:none"></div>
+
+<script>
+const NODES = [{"id": "rm_foundations", "title": "Foundations: From Myth to Republic (753\u2013264 BC)", "desc": "How Rome went from a small settlement on the Tiber to the dominant power in Italy. The founding myths (Romulus and Remus, the rape of the Sabine women) aren't 'true' but they tell us what Romans wanted to believe about themselves: toughness, piety, willingness to absorb outsiders.", "level": 1, "parent": null, "prereqs": [], "obscurity": 2}, {"id": "rm_founding_myths", "title": "Romulus, Remus, and the Founding Myths", "desc": "The legendary founding of Rome in 753 BC: twin brothers raised by a she-wolf, Romulus killing Remus over the city walls, the rape of the Sabine women to populate the new city. These myths encode Roman values: the willingness to use violence for the state, the absorption of enemies (the Sabines became Roman), and the sacredness of boundaries.", "level": 2, "parent": "rm_foundations", "prereqs": [], "obscurity": 2}, {"id": "rm_etruscans", "title": "The Etruscans and Early Rome", "desc": "Rome's first centuries were under Etruscan cultural and political influence \u2014 the last three kings of Rome were Etruscan. The Etruscans gave Rome the toga, gladiatorial games, the fasces (bundle of rods symbolizing authority), temple architecture, and divination practices. Understanding Rome means understanding that it was never 'purely' Roman \u2014 it absorbed and adapted from the start.", "level": 2, "parent": "rm_foundations", "prereqs": [], "obscurity": 3}, {"id": "rm_expulsion_kings", "title": "The Expulsion of the Kings (509 BC)", "desc": "The founding moment of the Republic: the last Etruscan king, Tarquinius Superbus, was expelled after his son raped Lucretia. Whether historically accurate or not, this story became Rome's founding political myth \u2014 the hatred of kings (rex) was so deep that the word became taboo. Caesar was killed partly because people feared he wanted to be king.", "level": 2, "parent": "rm_foundations", "prereqs": ["rm_etruscans"], "obscurity": 3}, {"id": "rm_republican_constitution", "title": "The Republican Constitution", "desc": "Rome's unwritten constitution was a complex system of checks and balances: two consuls (so neither could become king), the Senate (advisory but immensely powerful through auctoritas), popular assemblies, tribunes of the plebs (who could veto anything), and a strict cursus honorum (career ladder of offices). Polybius admired it as a 'mixed constitution' combining monarchy, aristocracy, and democracy. Understanding this system is essential \u2014 the late Republic is the story of its breakdown.", "level": 2, "parent": "rm_foundations", "prereqs": ["rm_expulsion_kings"], "obscurity": 2}, {"id": "rm_senate", "title": "The Roman Senate", "desc": "Not a legislature in the modern sense \u2014 the Senate couldn't pass laws. But it controlled foreign policy, finance, and provincial assignments, and its 'advice' (senatus consultum) was almost always followed. Senators were ex-magistrates serving for life, creating an oligarchy of experienced men. The Senate's authority (auctoritas) rested on tradition and prestige, not legal power \u2014 which is why it could be challenged when someone had enough soldiers.", "level": 3, "parent": "rm_republican_constitution", "prereqs": ["rm_republican_constitution"], "obscurity": 2}, {"id": "rm_struggle_of_orders", "title": "The Struggle of the Orders (494\u2013287 BC)", "desc": "The long political conflict between patricians (old aristocratic families) and plebeians (everyone else) that gradually opened political power to non-patricians. Key achievements: the creation of tribunes of the plebs, the Twelve Tables (Rome's first written law code), and eventually the right of plebeians to hold all offices including consul. By the end, a new elite (the nobilitas) of both patrician and plebeian families dominated \u2014 but the principle that political power could be won, not just inherited, was established.", "level": 2, "parent": "rm_foundations", "prereqs": ["rm_republican_constitution"], "obscurity": 3}, {"id": "rm_conquest_italy", "title": "The Conquest of Italy", "desc": "By 264 BC Rome controlled the entire Italian peninsula through a combination of military force, road-building, and a genius for integrating conquered peoples. The key innovation: instead of ruling subjects, Rome created a system of alliances where Italian communities kept local self-government but provided soldiers for Roman wars. This gave Rome effectively unlimited manpower \u2014 the secret weapon that would defeat Hannibal and conquer the Mediterranean.", "level": 2, "parent": "rm_foundations", "prereqs": ["rm_struggle_of_orders"], "obscurity": 3}, {"id": "rm_mediterranean_expansion", "title": "Mediterranean Expansion (264\u2013133 BC)", "desc": "In barely a century, Rome went from an Italian power to master of the entire Mediterranean. The Punic Wars against Carthage, the conquest of Greece and the eastern kingdoms, and the destruction of Corinth and Carthage in 146 BC \u2014 all transformed Rome from a republic of farmer-soldiers into an empire ruled by an aristocracy increasingly corrupted by wealth and power.", "level": 1, "parent": null, "prereqs": ["rm_foundations"], "obscurity": 2}, {"id": "rm_punic_wars", "title": "The Punic Wars: Rome vs Carthage", "desc": "Three wars (264\u2013146 BC) against Carthage, the great Phoenician trading city in North Africa. The first won Sicily; the second nearly destroyed Rome (Hannibal); the third destroyed Carthage completely. These wars made Rome a Mediterranean power and embedded deep fears \u2014 'Hannibal at the gates' became a Roman proverb for existential threat, and Cato's 'Carthago delenda est' shows how trauma can become policy.", "level": 2, "parent": "rm_mediterranean_expansion", "prereqs": [], "obscurity": 1}, {"id": "rm_hannibal", "title": "Hannibal: Crossing the Alps and the Second Punic War", "desc": "The most dangerous enemy Rome ever faced. Hannibal marched an army (with elephants) from Spain across the Alps into Italy, then defeated Roman armies for 15 years on Roman soil \u2014 Trebia, Lake Trasimene, and the catastrophe at Cannae (216 BC, perhaps 50,000 Roman dead in a single day). Rome survived through sheer stubbornness, the loyalty of most Italian allies, and Scipio Africanus, who finally defeated Hannibal at Zama (202 BC). The Second Punic War is one of the greatest military narratives in history.", "level": 3, "parent": "rm_punic_wars", "prereqs": ["rm_punic_wars"], "obscurity": 1}, {"id": "rm_conquest_greece", "title": "Rome Conquers Greece and the East", "desc": "After defeating Carthage, Rome turned east. The Macedonian Wars, the defeat of the Seleucid king Antiochus III, and the destruction of Corinth (146 BC) brought the entire Greek world under Roman control. The Romans admired Greek culture deeply \u2014 educated Romans spoke Greek, studied Greek philosophy, and collected Greek art. Horace wrote: 'Captive Greece captured her fierce conqueror.' The tension between Greek culture and Roman identity would shape Roman civilization permanently.", "level": 2, "parent": "rm_mediterranean_expansion", "prereqs": ["rm_punic_wars"], "obscurity": 2}, {"id": "rm_consequences_expansion", "title": "Social Consequences of Empire", "desc": "Conquest transformed Roman society disastrously. Enormous wealth flowed to the elite; cheap slave labor from conquered territories displaced free Italian farmers; soldiers served longer and longer campaigns abroad while their families lost their land. The gap between rich and poor became a chasm. A new class of equites (businessmen) grew rich from tax collection and provincial trade. These structural problems would fuel the crisis of the late Republic.", "level": 2, "parent": "rm_mediterranean_expansion", "prereqs": ["rm_conquest_greece"], "obscurity": 3}, {"id": "rm_late_republic", "title": "The Crisis of the Late Republic (133\u201331 BC)", "desc": "The century of revolution: from the Gracchi's land reforms through civil wars, proscriptions, and the rise of military strongmen, ending with Octavian's victory at Actium. This is the period of the Harris Cicero trilogy \u2014 the slow, agonizing death of the Republic, driven by structural contradictions that no one could resolve. Every 'solution' (Sulla's dictatorship, the First Triumvirate, Caesar's crossing of the Rubicon) made the problem worse.", "level": 1, "parent": null, "prereqs": ["rm_mediterranean_expansion"], "obscurity": 1}, {"id": "rm_gracchi", "title": "The Gracchi Brothers: Reform and Murder (133\u2013121 BC)", "desc": "Tiberius and Gaius Gracchus, tribunes who tried to address Rome's land crisis by redistributing public land to the poor. Both were murdered by senators \u2014 the first political killings in Rome in centuries. The Gracchi mark the beginning of the end: after them, political disagreements could be settled by violence, not just votes. The fundamental question they raised \u2014 can a republic reform itself peacefully? \u2014 was never answered.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_consequences_expansion"], "obscurity": 2}, {"id": "rm_marius_sulla", "title": "Marius and Sulla: Armies Become Personal", "desc": "Gaius Marius reformed the army (opening recruitment to the landless poor) and won wars in Africa and against Germanic invaders. But his soldiers were now loyal to their general, not the state \u2014 because the general promised them land after service. Lucius Cornelius Sulla exploited this by marching his army on Rome itself (88 BC) \u2014 the first time a Roman general attacked his own city. Sulla's dictatorship (82\u201379 BC) and his proscriptions (death lists) showed that the constitution could be simply overridden by military force.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_gracchi"], "obscurity": 2}, {"id": "rm_optimates_populares", "title": "Optimates and Populares: The Political Factions", "desc": "Not parties in the modern sense, but two political strategies: optimates ('the best men') defended senatorial authority and traditional power structures; populares ('men of the people') bypassed the Senate by appealing directly to the popular assemblies. Caesar was a popularis; Cicero was an optimate (mostly). Understanding this distinction is essential for reading the late Republic \u2014 it's not left vs. right but 'work through the Senate' vs. 'work around it.'", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_senate", "rm_gracchi"], "obscurity": 3}, {"id": "rm_cicero", "title": "Cicero: Orator, Philosopher, Politician", "desc": "Marcus Tullius Cicero \u2014 the greatest Roman orator, a 'new man' (first in his family to reach the consulship), defender of the Republic against both populist strongmen and senatorial corruption. His speeches (Against Verres, Against Catiline, the Philippics against Antony) are masterpieces of persuasion. His philosophical works transmitted Greek philosophy to the Latin world. His letters give us the most intimate portrait of any ancient personality. He was murdered in the proscriptions of 43 BC \u2014 the Republic's most articulate defender silenced by its destroyers.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_optimates_populares"], "obscurity": 1}, {"id": "rm_catiline", "title": "The Catiline Conspiracy (63 BC)", "desc": "A failed coup by the impoverished aristocrat Lucius Sergius Catilina, exposed and crushed by Cicero as consul. Cicero's four speeches against Catiline ('How long, Catiline, will you abuse our patience?') are among the most famous in history. But Cicero's execution of the conspirators without trial haunted him \u2014 it was arguably illegal and his enemies used it against him for years. The conspiracy shows how desperate Rome's social crisis had become.", "level": 3, "parent": "rm_cicero", "prereqs": ["rm_cicero"], "obscurity": 2}, {"id": "rm_pompey", "title": "Pompey the Great", "desc": "Gnaeus Pompeius Magnus \u2014 Rome's greatest military commander before Caesar. Cleared the Mediterranean of pirates in three months, conquered the eastern Mediterranean, reorganized the entire Near East. But politically inept compared to Caesar: he wanted to be first among equals in the Senate, not a revolutionary. His alliance and then rivalry with Caesar drove the Republic to civil war.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_marius_sulla"], "obscurity": 2}, {"id": "rm_first_triumvirate", "title": "The First Triumvirate: Caesar, Pompey, Crassus", "desc": "An informal power-sharing deal (60 BC) between three men who together controlled Rome: Caesar (political genius), Pompey (military prestige), Crassus (richest man in Rome). Not an official institution \u2014 just three powerful men agreeing to help each other against the Senate. It worked until Crassus died at Carrhae (53 BC) fighting the Parthians, leaving Caesar and Pompey as rivals with no mediator.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_pompey", "rm_cicero"], "obscurity": 2}, {"id": "rm_caesar", "title": "Julius Caesar", "desc": "The man who ended the Republic. Brilliant general (conquered Gaul in 8 years), charismatic popularis politician, and the first Roman to cross the Rubicon with his army (49 BC), starting a civil war that he won. As dictator, he reformed the calendar, extended citizenship, and centralized power \u2014 but was assassinated on the Ides of March (44 BC) by senators who feared he would become king. His murder didn't save the Republic; it doomed it.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_first_triumvirate"], "obscurity": 1}, {"id": "rm_gallic_wars", "title": "The Gallic Wars and Caesar's Commentarii", "desc": "Caesar's conquest of Gaul (58\u201350 BC) \u2014 modern France, Belgium, parts of Germany and Britain. Killed perhaps a million people and enslaved another million. His own account (De Bello Gallico) is propaganda disguised as objective reporting, written in spare third-person prose that is still used to teach Latin. The conquest gave Caesar the army, wealth, and prestige to challenge the Senate \u2014 and destroyed the Celtic civilizations of western Europe.", "level": 3, "parent": "rm_caesar", "prereqs": ["rm_caesar"], "obscurity": 2}, {"id": "rm_rubicon", "title": "Crossing the Rubicon and Civil War (49\u201345 BC)", "desc": "'Alea iacta est' \u2014 the die is cast. When Caesar crossed the Rubicon river with his army in January 49 BC, he committed treason against the Republic. The ensuing civil war against Pompey and the Senate took him to Spain, Greece (Pharsalus), Egypt (Cleopatra), Africa, and Spain again. 'Crossing the Rubicon' remains the universal metaphor for an irrevocable decision.", "level": 3, "parent": "rm_caesar", "prereqs": ["rm_caesar"], "obscurity": 1}, {"id": "rm_ides_of_march", "title": "The Assassination of Caesar (44 BC)", "desc": "On March 15, 44 BC, a group of senators (led by Brutus and Cassius) stabbed Caesar to death in the Senate house. They believed they were saving the Republic. Instead, they triggered another round of civil wars. Shakespeare's 'Et tu, Brute?' is fiction, but the assassination is one of the most consequential acts of political violence in history. The conspirators had no plan for what came after \u2014 a fatal failure of political imagination.", "level": 3, "parent": "rm_caesar", "prereqs": ["rm_rubicon"], "obscurity": 1}, {"id": "rm_second_triumvirate", "title": "The Second Triumvirate and the End of the Republic", "desc": "After Caesar's murder: Octavian (Caesar's heir, age 18), Antony, and Lepidus formed an official triumvirate with legal power to 'restore the Republic' \u2014 by murdering their enemies. The proscriptions killed thousands including Cicero. Then they fought each other: Antony allied with Cleopatra in Egypt; Octavian defeated them at Actium (31 BC). By 27 BC, Octavian \u2014 now Augustus \u2014 was sole ruler. The Republic was dead.", "level": 2, "parent": "rm_late_republic", "prereqs": ["rm_ides_of_march"], "obscurity": 2}, {"id": "rm_roman_law", "title": "Roman Law: The Republic's Greatest Legacy", "desc": "Roman law is arguably Rome's most enduring contribution to civilization. The Twelve Tables (c. 450 BC), the development of legal reasoning by praetors and jurists, the concepts of natural law, contracts, property rights, legal persons, due process \u2014 all flow from Roman jurisprudence. Civil law systems in continental Europe, Latin America, and much of the world descend directly from Roman law. Understanding Roman law means understanding that Romans thought about fairness, rights, and obligations with a sophistication that often matches modern standards.", "level": 1, "parent": null, "prereqs": ["rm_foundations"], "obscurity": 2}, {"id": "rm_twelve_tables", "title": "The Twelve Tables", "desc": "Rome's first written law code (c. 451\u2013450 BC), demanded by the plebeians so that law couldn't be arbitrarily interpreted by patrician judges. Displayed publicly on bronze tablets in the Forum. The content is often harsh (debtors could be enslaved), but the principle \u2014 that law should be written, public, and apply to everyone \u2014 was revolutionary. Roman schoolboys memorized the Twelve Tables for centuries.", "level": 2, "parent": "rm_roman_law", "prereqs": [], "obscurity": 3}, {"id": "rm_augustus", "title": "Augustus and the Creation of the Principate (27 BC \u2013 14 AD)", "desc": "The most successful political transformation in history. Octavian became Augustus by pretending NOT to be a monarch \u2014 keeping all republican forms while concentrating real power. He never called himself king or emperor; he was princeps ('first citizen'). He rebuilt Rome in marble, established peace (Pax Romana), reformed the army, and created an administrative system that lasted centuries. His genius was making autocracy look like restored republicanism.", "level": 1, "parent": null, "prereqs": ["rm_late_republic"], "obscurity": 1}, {"id": "rm_principate_system", "title": "How the Principate Worked", "desc": "Augustus' system was deliberately ambiguous: the Senate still met, magistrates were still elected, but the emperor controlled the army, the treasury, and most provinces. Power was personal and dynastic but dressed in republican language. Each emperor inherited (or seized) a bundle of republican offices and powers. The fiction was transparent but useful \u2014 it allowed Rome's aristocracy to pretend they still mattered.", "level": 2, "parent": "rm_augustus", "prereqs": ["rm_augustus"], "obscurity": 3}, {"id": "rm_augustan_culture", "title": "The Augustan Golden Age: Virgil, Horace, Ovid, Livy", "desc": "Augustus sponsored (and controlled) a cultural renaissance. Virgil's Aeneid gave Rome a founding epic to rival Homer; Horace's Odes defined Latin lyric poetry; Ovid's Metamorphoses preserved Greek myth in Latin; Livy's monumental history told Rome's story from founding to Augustus. This was propaganda, but propaganda of the highest literary quality. The Augustan poets remain the foundation of Latin literature.", "level": 2, "parent": "rm_augustus", "prereqs": ["rm_augustus"], "obscurity": 2}, {"id": "rm_virgil_aeneid", "title": "Virgil and the Aeneid", "desc": "Rome's national epic, commissioned by Augustus. Aeneas, a Trojan prince, flees the fall of Troy, loves and abandons Dido in Carthage, descends to the underworld, and conquers Italy \u2014 founding the line that will produce Romulus and, eventually, Augustus. The Aeneid is simultaneously a celebration of Roman destiny and a meditation on the cost of empire \u2014 the suffering required to build civilization. It's also deeply in dialogue with Homer, claiming Rome as Greece's successor.", "level": 3, "parent": "rm_augustan_culture", "prereqs": ["rm_augustan_culture"], "obscurity": 1}, {"id": "rm_early_empire", "title": "The Early Empire: From Tiberius to the Antonines (14\u2013180 AD)", "desc": "The first two centuries of imperial rule: the mad emperors (Caligula, Nero), the efficient ones (Claudius, Vespasian, Trajan), and the philosopher-king (Marcus Aurelius). The Pax Romana brought unprecedented peace and prosperity to the Mediterranean world \u2014 trade, urbanization, roads, aqueducts, public baths. It's the period when 'Rome' meant not a city but a civilization spanning from Britain to Mesopotamia.", "level": 1, "parent": null, "prereqs": ["rm_augustus"], "obscurity": 1}, {"id": "rm_julio_claudians", "title": "The Julio-Claudian Dynasty: From Tiberius to Nero", "desc": "Augustus' successors by blood and adoption: Tiberius (competent but paranoid), Caligula (possibly insane, definitely murdered), Claudius (underestimated, actually effective, conquered Britain), Nero (artistic pretensions, persecuted Christians, fiddled while Rome burned \u2014 though that's probably myth). Tacitus' Annals portray this dynasty with devastating psychological insight, making these some of the most vivid personalities in ancient history.", "level": 2, "parent": "rm_early_empire", "prereqs": [], "obscurity": 2}, {"id": "rm_five_good_emperors", "title": "The Five Good Emperors and the Pax Romana (96\u2013180 AD)", "desc": "Nerva, Trajan, Hadrian, Antoninus Pius, Marcus Aurelius \u2014 selected by merit (adopted, not born to the throne), they presided over Rome's greatest extent and prosperity. Trajan conquered Dacia and Mesopotamia; Hadrian built the Wall and traveled the empire; Marcus Aurelius was a Stoic philosopher who wrote Meditations while fighting on the frontier. Edward Gibbon called this the period 'in the history of the world, during which the condition of the human race was most happy and prosperous.'", "level": 2, "parent": "rm_early_empire", "prereqs": [], "obscurity": 2}, {"id": "rm_marcus_aurelius", "title": "Marcus Aurelius and the Meditations", "desc": "The philosopher-emperor (161\u2013180 AD) who wrote private philosophical reflections (the Meditations) while campaigning against Germanic tribes on the Danube. The Meditations are Stoic philosophy applied to the burdens of power \u2014 duty, impermanence, self-discipline, acceptance of fate. They remain one of the most widely read works of ancient philosophy. His death marks the conventional end of Rome's golden age.", "level": 3, "parent": "rm_five_good_emperors", "prereqs": ["rm_five_good_emperors"], "obscurity": 2}, {"id": "rm_society", "title": "Roman Society and Daily Life", "desc": "What it was like to live in the Roman world: the social hierarchy (senators, equites, plebs, freedmen, slaves), the patron-client system that structured all relationships, the centrality of the family (patria potestas \u2014 the father's absolute authority), public entertainment (gladiators, chariot racing, theater), bathing culture, and the extraordinary infrastructure (roads, aqueducts, sewers) that made urban life possible.", "level": 1, "parent": null, "prereqs": ["rm_foundations"], "obscurity": 2}, {"id": "rm_slavery_rome", "title": "Slavery in Rome", "desc": "Rome was a slave society on a massive scale \u2014 perhaps 1-2 million slaves in Italy alone by the late Republic. Slaves were war captives, purchased, or born into slavery. They did everything: mining, farming, domestic service, teaching, medicine, accounting. Some were treated brutally (mines, galleys); others became trusted members of households and were freed. Spartacus' revolt (73\u201371 BC) terrified Rome but changed nothing structurally. Roman civilization was built on unfree labor.", "level": 2, "parent": "rm_society", "prereqs": [], "obscurity": 2}, {"id": "rm_gladiators", "title": "Gladiators, the Arena, and Roman Entertainment", "desc": "Gladiatorial combat was not mindless bloodlust but a complex institution: a display of Roman values (courage, skill, endurance), a political tool (emperors bought popularity by sponsoring games), and a controlled spectacle with rules, famous fighters, and audience participation (thumbs up or down). The Colosseum (Flavian Amphitheatre, 80 AD) held 50,000. The games are uncomfortable for modern audiences but essential for understanding Roman culture's relationship to violence, spectacle, and power.", "level": 2, "parent": "rm_society", "prereqs": [], "obscurity": 1}, {"id": "rm_patron_client", "title": "The Patron-Client System", "desc": "The glue of Roman society: every Roman of lower status had a patron (protector, benefactor), and every patron had clients (dependents who owed support). This extended from the poorest freedman greeting his patron at dawn to entire foreign nations becoming 'clients' of Rome. Political power was measured partly by the size of your clientela. Cicero's legal career was built on creating obligations \u2014 every client he defended owed him.", "level": 2, "parent": "rm_society", "prereqs": [], "obscurity": 3}, {"id": "rm_roads_infrastructure", "title": "Roads, Aqueducts, and Roman Engineering", "desc": "Roman engineering is staggering in scale: 80,000 km of paved roads (the Appian Way, begun 312 BC, still exists), aqueducts carrying water over dozens of kilometers (the Pont du Gard still stands), concrete construction (the Pantheon's unreinforced dome remained the world's largest for 1,300 years), and sewers (the Cloaca Maxima in Rome). These weren't just practical \u2014 they were demonstrations of Roman power and civilization.", "level": 2, "parent": "rm_society", "prereqs": [], "obscurity": 1}, {"id": "rm_philosophy_religion", "title": "Roman Philosophy and Religion", "desc": "Roman philosophy was largely Greek philosophy in Latin dress \u2014 but the translation mattered enormously. Stoicism became the philosophy of Roman public life; Epicureanism offered a private alternative. Roman religion was civic and practical: you performed rituals correctly to maintain the 'pax deorum' (peace of the gods). The arrival of Christianity transformed everything.", "level": 1, "parent": null, "prereqs": ["rm_conquest_greece"], "obscurity": 2}, {"id": "rm_stoicism", "title": "Stoicism: The Philosophy of Roman Public Life", "desc": "Greek in origin but Roman in its greatest practitioners: Seneca (Nero's tutor, forced to suicide), Epictetus (a former slave), and Marcus Aurelius (the emperor). Stoicism taught that virtue is the only good, that external circumstances are indifferent, and that you should focus on what you can control. It was perfectly suited to the uncertainties of Roman political life \u2014 where you might be consul one year and exiled or dead the next. Stoicism's modern revival shows its enduring relevance.", "level": 2, "parent": "rm_philosophy_religion", "prereqs": [], "obscurity": 2}, {"id": "rm_roman_religion", "title": "Traditional Roman Religion", "desc": "Roman religion was about practice, not belief: performing the correct rituals (augury, sacrifice, prayer formulas) to maintain divine favor for the state. There was no theology, no sacred scripture, no priestly class separate from politics (priests were senators). Romans were pragmatically tolerant of other religions \u2014 as long as you also respected Roman gods. This tolerance broke down only with religions that demanded exclusive worship (Judaism, Christianity).", "level": 2, "parent": "rm_philosophy_religion", "prereqs": [], "obscurity": 3}, {"id": "rm_christianity", "title": "Christianity and the Roman World", "desc": "Christianity began as a marginal Jewish sect in a distant province and became the state religion of the empire within three centuries. Key stages: persecution (sporadic, not constant \u2014 Nero, Diocletian), gradual spread through urban networks and social services, Constantine's conversion (312 AD), Theodosius making it the state religion (380 AD). Christianity absorbed Roman administrative structures (dioceses, bishops) and transformed Roman culture from within.", "level": 2, "parent": "rm_philosophy_religion", "prereqs": ["rm_roman_religion"], "obscurity": 1}, {"id": "rm_latin_literature", "title": "Latin Literature Beyond the Augustan Age", "desc": "Roman literary culture extends far beyond Virgil and Horace. The satirists (Juvenal, Martial), the novelists (Petronius' Satyricon, Apuleius' Golden Ass), the historians (Tacitus, Suetonius, Ammianus), the encyclopedists (Pliny the Elder), the letter-writers (Pliny the Younger) \u2014 together they give us an extraordinarily detailed picture of Roman life, thought, and self-image. Latin literature is the foundation of European literary culture.", "level": 1, "parent": null, "prereqs": ["rm_augustan_culture"], "obscurity": 2}, {"id": "rm_tacitus", "title": "Tacitus: The Historian of Imperial Power", "desc": "The greatest Roman historian. His Annals and Histories cover the Julio-Claudian and Flavian dynasties with devastating psychological insight and bitter irony. Tacitus shows how autocracy corrupts everyone \u2014 rulers and ruled alike \u2014 and how the Senate debased itself through servility. His Germania gives our most detailed ancient account of the Germanic peoples. His compressed, epigrammatic style is unmistakable: 'They make a desert and call it peace.'", "level": 2, "parent": "rm_latin_literature", "prereqs": [], "obscurity": 2}, {"id": "rm_crisis_third_century", "title": "The Crisis of the Third Century (235\u2013284 AD)", "desc": "Fifty years of chaos: 26 emperors in 50 years (most murdered), barbarian invasions on every frontier, plague, economic collapse, and the brief breakup of the empire into three parts. The crisis nearly destroyed Rome but instead triggered a radical transformation \u2014 from the Principate (disguised monarchy) to the Dominate (open autocracy) under Diocletian and Constantine.", "level": 1, "parent": null, "prereqs": ["rm_early_empire"], "obscurity": 3}, {"id": "rm_late_empire", "title": "The Late Roman Empire and the 'Fall' (284\u2013476 AD)", "desc": "The transformation of the Roman world: Diocletian's tetrarchy, Constantine's Christianity and new capital (Constantinople), the division into Eastern and Western empires, the 'barbarian' migrations, and the deposition of the last Western emperor in 476 AD. Whether Rome 'fell' or simply transformed is one of the great historiographical debates. The Eastern Empire (Byzantium) continued for another thousand years.", "level": 1, "parent": null, "prereqs": ["rm_crisis_third_century"], "obscurity": 2}, {"id": "rm_constantine", "title": "Constantine: Christianity and Constantinople", "desc": "Constantine (r. 306\u2013337 AD) changed everything: he converted to Christianity (or at least favored it), legalized it (Edict of Milan, 313), and built a new capital \u2014 Constantinople (modern Istanbul) \u2014 on the site of ancient Byzantium. This single reign split Roman history: before Constantine, Rome was pagan and centered on Italy; after, it was Christian and increasingly centered on the east. The Council of Nicaea (325) established the Nicene Creed under his patronage.", "level": 2, "parent": "rm_late_empire", "prereqs": ["rm_christianity"], "obscurity": 1}, {"id": "rm_fall_west", "title": "The 'Fall' of the Western Roman Empire (476 AD)", "desc": "In 476 AD, the Germanic chieftain Odoacer deposed the last Western emperor, Romulus Augustulus (ironically named after both the founder and the first emperor). But was this a 'fall'? The Eastern Empire thrived for centuries. Germanic kings ruled using Roman titles and laws. The Church preserved Roman administrative structures. Latin remained the language of learning. Gibbon saw moral decline; modern historians see transformation. The question 'why did Rome fall?' has generated more answers than any other historical question.", "level": 2, "parent": "rm_late_empire", "prereqs": ["rm_constantine"], "obscurity": 1}, {"id": "rm_pirenne_thesis", "title": "The Pirenne Thesis: Islam and the End of Antiquity", "desc": "Henri Pirenne argued that the real break with the ancient world came not with the Germanic invasions (5th century) but with Islamic expansion (7th-8th century), which cut off Mediterranean trade and forced Europe inward \u2014 creating the Carolingian, feudal, medieval world. The thesis is debated but enormously influential: it reframes the 'fall of Rome' as a gradual transformation that only became irreversible when the Mediterranean ceased to be a Roman lake.", "level": 2, "parent": "rm_late_empire", "prereqs": ["rm_fall_west"], "obscurity": 4}, {"id": "rm_legacy", "title": "The Roman Legacy", "desc": "Rome's influence on the modern world: law (civil law systems), language (Romance languages, Latin in science/medicine/law), architecture (arches, domes, concrete), political concepts (republic, senate, constitution, citizenship), Christianity (shaped by Roman organization), and the idea of 'empire' itself. Every subsequent Western empire \u2014 Carolingian, Holy Roman, British, American \u2014 has defined itself in relation to Rome.", "level": 1, "parent": null, "prereqs": ["rm_late_empire"], "obscurity": 1}, {"id": "rm_romance_languages", "title": "Latin and the Romance Languages", "desc": "Latin didn't die \u2014 it evolved. Spoken Latin gradually differentiated into Italian, French, Spanish, Portuguese, Romanian, and others. Church Latin remained a living intellectual language until the 18th century. Scientific nomenclature is still Latin. Understanding that French and Italian are literally Latin, spoken continuously for 2,000 years, makes the 'fall of Rome' look less like an ending and more like a transformation.", "level": 2, "parent": "rm_legacy", "prereqs": [], "obscurity": 2}, {"id": "rm_idea_of_rome", "title": "The Idea of Rome: How Later Civilizations Used It", "desc": "Charlemagne was crowned 'Emperor of the Romans' in 800; the Holy Roman Empire claimed Roman succession for 1,000 years; the US Senate, Capitol, and Republic are deliberately Roman; Mussolini invoked Roman glory; even the word 'emperor' comes from imperator. Rome is not just history \u2014 it's a template, a warning, and a mirror that every subsequent civilization has used to understand itself. The question 'are we Rome?' never goes away.", "level": 2, "parent": "rm_legacy", "prereqs": [], "obscurity": 2}];
+
+// Sort by information gain heuristic: prefer obscurity ~2-3 (most uncertain),
+// level 1-2 first (broad before deep), then deeper nodes
+const sorted = [...NODES].sort((a, b) => {
+  // Prioritize broader nodes first
+  if (a.level !== b.level) return a.level - b.level;
+  // Then prefer moderate obscurity (most uncertain)
+  const aUncert = Math.abs(a.obscurity - 2.5);
+  const bUncert = Math.abs(b.obscurity - 2.5);
+  return aUncert - bUncert;
+});
+
+let queue = [...sorted];
+let answered = {};
+let current = 0;
+
+function skipChildren(nodeId, familiarity) {
+  // If user doesn't know a parent, skip its children
+  if (familiarity === 'unknown' || familiarity === 'heard_of') {
+    queue = queue.filter(n => {
+      if (n.parent === nodeId) return false;
+      if (n.prereqs && n.prereqs.includes(nodeId)) return false;
+      return true;
+    });
+  }
+}
+
+function renderCard() {
+  if (current >= queue.length) { showResults(); return; }
+  const node = queue[current];
+  const total = NODES.length;
+  const done = Object.keys(answered).length;
+
+  document.getElementById('progressFill').style.width = `${100*done/total}%`;
+  document.getElementById('progressLabel').textContent = `${done} / ${total} assessed`;
+  document.getElementById('uncertainLabel').textContent = `${queue.length - current} remaining`;
+
+  const c = document.getElementById('cardContainer');
+  c.innerHTML = `
+    <div class="card">
+      <div class="q-num">Question ${done + 1}</div>
+      <div class="q-title">${node.title}</div>
+      <button class="flip-btn" onclick="document.querySelector('.q-desc').classList.toggle('hidden')">Show description ↓</button>
+      <div class="q-desc hidden">${node.desc}</div>
+      <div class="familiarity-row">
+        <button class="fam-btn" data-val="unknown">Never heard of it</button>
+        <button class="fam-btn" data-val="heard_of">Heard the name</button>
+        <button class="fam-btn" data-val="know_basics">Know the basics</button>
+        <button class="fam-btn" data-val="could_explain">Could explain it</button>
+        <button class="fam-btn" data-val="know_deeply">Know it in depth</button>
+      </div>
+      <div class="interest-row">
+        <button class="int-btn" data-val="none">Not interested</button>
+        <button class="int-btn" data-val="curious">Curious</button>
+        <button class="int-btn selected" data-val="core">Deeply interesting</button>
+      </div>
+    </div>
+  `;
+
+  // Wire up buttons
+  let selectedFam = null;
+  let selectedInt = 'core'; // default
+  c.querySelectorAll('.fam-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      c.querySelectorAll('.fam-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedFam = btn.dataset.val;
+      // Auto-advance after a short delay
+      setTimeout(() => {
+        answered[node.id] = { familiarity: selectedFam, interest: selectedInt, title: node.title };
+        skipChildren(node.id, selectedFam);
+        current++;
+        renderCard();
+      }, 200);
+    });
+  });
+  c.querySelectorAll('.int-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      c.querySelectorAll('.int-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add(  'selected');
+      selectedInt = btn.dataset.val;
+    });
+  });
+}
+
+function showResults() {
+  document.getElementById('cardContainer').style.display = 'none';
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressLabel').textContent = 'Complete!';
+  document.getElementById('uncertainLabel').textContent = '';
+
+  const groups = {
+    'know_deeply': { label: '✦ Know In Depth', items: [] },
+    'could_explain': { label: '✦ Could Explain', items: [] },
+    'know_basics': { label: '✦ Know The Basics', items: [] },
+    'heard_of': { label: '✦ Heard The Name', items: [] },
+    'unknown': { label: '✦ Never Heard Of It', items: [] },
+  };
+
+  for (const [id, data] of Object.entries(answered)) {
+    groups[data.familiarity].items.push(data);
+  }
+
+  let html = '<h2>Your Knowledge Map</h2>';
+  for (const [key, group] of Object.entries(groups)) {
+    if (group.items.length === 0) continue;
+    html += `<div class="result-section"><h3>${group.label} (${group.items.length})</h3>`;
+    for (const item of group.items) {
+      const intLabel = item.interest === 'core' ? '★' : item.interest === 'curious' ? '○' : '';
+      html += `<div class="result-node"><span class="rn-title">${item.title}</span><span class="rn-interest">${intLabel}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  // Add copy button for JSON export
+  html += `<button class="copy-btn" onclick="copyResults()">Copy results as JSON</button>`;
+
+  const r = document.getElementById('results');
+  r.innerHTML = html;
+  r.style.display = 'block';
+}
+
+function copyResults() {
+  const json = JSON.stringify(answered, null, 2);
+  navigator.clipboard.writeText(json).then(() => {
+    document.querySelector('.copy-btn').textContent = 'Copied!';
+  });
+}
+
+// Keyboard shortcuts: 1-5 for familiarity
+document.addEventListener('keydown', (e) => {
+  if (e.key >= '1' && e.key <= '5') {
+    const vals = ['unknown', 'heard_of', 'know_basics', 'could_explain', 'know_deeply'];
+    const btn = document.querySelector(`.fam-btn[data-val="${vals[parseInt(e.key)-1]}"]`);
+    if (btn) btn.click();
+  }
+});
+
+renderCard();
+</script>
+</body>
+</html>

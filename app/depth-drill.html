@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Depth Drill: Ancient Greece</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Crimson Pro', serif;
+    background: #f7f4ec; color: #2a2420;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .header { text-align: center; padding: 32px 16px 16px; max-width: 720px; width: 100%; }
+  .header h1 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 26px; margin-bottom: 4px; }
+  .header .sub { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #6a6458; }
+  .double-rule { max-width: 720px; width: 100%; border-top: 2px solid #8b2500; padding-top: 5px; border-bottom: 1px solid #8b2500; height: 0; margin-bottom: 24px; }
+
+  .container { max-width: 720px; width: 100%; padding: 0 16px 60px; }
+
+  .topic-card {
+    background: #fff; border: 1px solid #e4dfd4; border-radius: 6px;
+    padding: 20px 24px; margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .topic-card.complete { border-left: 3px solid #2a7a4a; }
+
+  .topic-title {
+    font-family: 'Cormorant Garamond', serif; font-weight: 600;
+    font-size: 20px; margin-bottom: 4px; line-height: 1.3;
+  }
+  .topic-initial {
+    font-family: 'DM Sans', sans-serif; font-size: 11px;
+    color: #b0a898; margin-bottom: 12px;
+  }
+  .topic-desc {
+    font-size: 15px; line-height: 1.5; color: #333; margin-bottom: 16px;
+  }
+
+  .outcome-list { list-style: none; }
+  .outcome-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid #f0ece2;
+    cursor: pointer; user-select: none;
+  }
+  .outcome-item:last-child { border-bottom: none; }
+  .outcome-item:hover { background: rgba(139,37,0,0.02); }
+
+  .outcome-check {
+    width: 20px; height: 20px; min-width: 20px;
+    border: 2px solid #e4dfd4; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px; transition: all 0.15s;
+    font-size: 14px; color: transparent;
+  }
+  .outcome-item.checked .outcome-check {
+    border-color: #2a7a4a; background: rgba(42,122,74,0.08); color: #2a7a4a;
+  }
+  .outcome-level {
+    font-family: 'DM Sans', sans-serif; font-size: 10px;
+    color: #b0a898; letter-spacing: 0.3px; min-width: 14px;
+    margin-top: 4px;
+  }
+  .outcome-text {
+    font-family: 'Crimson Pro', serif; font-size: 15px;
+    line-height: 1.4; color: #333; flex: 1;
+  }
+
+  .topic-summary {
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    color: #6a6458; margin-top: 10px; padding-top: 8px;
+    border-top: 1px solid #e4dfd4;
+  }
+  .topic-summary .depth-label {
+    font-weight: 500; color: #8b2500;
+  }
+
+  .results-section {
+    background: #fff; border: 1px solid #e4dfd4; border-radius: 6px;
+    padding: 24px; margin-top: 24px;
+  }
+  .results-section h2 {
+    font-family: 'Cormorant Garamond', serif; font-weight: 600;
+    font-size: 22px; margin-bottom: 16px;
+  }
+  .result-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid #f0ece2;
+    font-size: 15px;
+  }
+  .result-depth {
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    padding: 3px 10px; border-radius: 12px;
+  }
+  .depth-0 { background: #f0ece2; color: #b0a898; }
+  .depth-1 { background: #e8f0e8; color: #6a8a6a; }
+  .depth-2 { background: #d4e8d4; color: #4a7a4a; }
+  .depth-3 { background: #c0e0c0; color: #2a6a2a; }
+  .depth-4 { background: #a8d8a8; color: #1a5a1a; }
+  .depth-5 { background: #8bc88b; color: #0a4a0a; }
+
+  .copy-btn {
+    font-family: 'DM Sans', sans-serif; font-size: 13px;
+    padding: 10px 24px; background: #2a2420; color: #f7f4ec;
+    border: none; border-radius: 4px; cursor: pointer; margin-top: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>✦ Depth Drill</h1>
+  <div class="sub">Ancient Greece — How deep does your knowledge go?</div>
+</div>
+<div class="double-rule"></div>
+<div class="container" id="container"></div>
+
+<script>
+// Topics the user rated "know_basics" or higher, with graduated learning outcomes
+const TOPICS = [
+  {
+    id: "ag_homer",
+    title: "Homer: Iliad and Odyssey",
+    initial: "You said: Know deeply",
+    desc: "The foundational texts of Greek literature — the 'Bible' of the Greek world.",
+    outcomes: [
+      { level: 1, text: "Can place Homer roughly in time (8th-7th century BC) and explain that the epics are oral tradition, not a single author's work" },
+      { level: 1, text: "Know the basic plots of both Iliad (Achilles' wrath at Troy) and Odyssey (Odysseus' journey home)" },
+      { level: 2, text: "Can explain key Homeric values: kleos (glory), arete (excellence), xenia (guest-friendship), time (honor)" },
+      { level: 2, text: "Understand the 'Homeric Question' — debates about single vs multiple authorship, oral vs written composition" },
+      { level: 3, text: "Can discuss specific scenes in depth (e.g., Achilles and Priam, the Cyclops episode, Penelope's weaving)" },
+      { level: 3, text: "Can explain Homer's influence on later Greek culture: tragedy, philosophy, education, art" },
+      { level: 4, text: "Have read significant portions of either epic (in translation or original)" },
+      { level: 4, text: "Can discuss the relationship between Homeric society and historical Mycenaean/Dark Age Greece" },
+    ]
+  },
+  {
+    id: "ag_plato",
+    title: "Plato and the Academy",
+    initial: "You said: Know the basics",
+    desc: "Socrates' greatest student, founder of the Academy, author of the dialogues that defined Western philosophy.",
+    outcomes: [
+      { level: 1, text: "Can place Plato historically (Athens, 4th century BC, student of Socrates, teacher of Aristotle)" },
+      { level: 1, text: "Know he founded the Academy and wrote in dialogue form" },
+      { level: 2, text: "Can explain the Theory of Forms / Ideas in basic terms (reality vs. appearance, the Cave allegory)" },
+      { level: 2, text: "Can name several major works (Republic, Symposium, Apology, Phaedo, Timaeus)" },
+      { level: 3, text: "Can discuss the Republic's argument about justice and the ideal state (philosopher-kings, tripartite soul)" },
+      { level: 3, text: "Understand how Plato differs from Socrates — where does Socrates end and Plato begin?" },
+      { level: 4, text: "Have read at least one Platonic dialogue substantially" },
+      { level: 4, text: "Can discuss Plato's political philosophy in context (response to Athenian democracy, the trial of Socrates)" },
+      { level: 5, text: "Can discuss Neoplatonism and Plato's reception in later thought (Christianity, Renaissance, modern philosophy)" },
+    ]
+  },
+  {
+    id: "ag_alexander_conquests",
+    title: "Alexander's Campaigns",
+    initial: "You said: Know deeply",
+    desc: "From Granicus to India — the campaigns that created the largest empire the world had seen.",
+    outcomes: [
+      { level: 1, text: "Know the basic arc: inherited army from Philip, conquered Persia, reached India, died young in Babylon" },
+      { level: 1, text: "Can name at least 2-3 major battles (Granicus, Issus, Gaugamela)" },
+      { level: 2, text: "Can explain Alexander's strategic and tactical genius (oblique order, combined arms, speed)" },
+      { level: 2, text: "Know about the siege of Tyre, the visit to Egypt (Siwa oracle), and the burning of Persepolis" },
+      { level: 3, text: "Can discuss Alexander's 'policy of fusion' — Persian dress, proskynesis, mixed marriages" },
+      { level: 3, text: "Know about the mutiny at the Hyphasis and the march through Gedrosia" },
+      { level: 4, text: "Can discuss the source problems (Arrian vs Curtius vs Plutarch vs Diodorus)" },
+      { level: 4, text: "Can evaluate competing interpretations: visionary unifier vs megalomaniac conqueror" },
+    ]
+  },
+  {
+    id: "ag_thermopylae_salamis",
+    title: "Thermopylae, Salamis, and Plataea",
+    initial: "You said: Know the basics",
+    desc: "The three battles that ended the Persian threat to mainland Greece permanently.",
+    outcomes: [
+      { level: 1, text: "Know the basic sequence: Thermopylae (land defeat), Salamis (naval victory), Plataea (land victory)" },
+      { level: 1, text: "Know who Leonidas and Xerxes were" },
+      { level: 2, text: "Can explain why Thermopylae mattered strategically (buying time) even though it was a defeat" },
+      { level: 2, text: "Can explain Themistocles' strategy at Salamis (luring the Persian fleet into the narrows)" },
+      { level: 3, text: "Know about the Greek alliance dynamics (who participated, who medized, the role of the Delphic oracle)" },
+      { level: 3, text: "Can discuss the aftermath — how victory transformed Athens' self-image and power" },
+      { level: 4, text: "Can evaluate our sources (Herodotus' account, its biases, modern debates about numbers and strategy)" },
+    ]
+  },
+  {
+    id: "ag_athenian_democracy",
+    title: "Athenian Democracy and the Golden Age",
+    initial: "You said: Know the basics",
+    desc: "The extraordinary half-century when Athens was the most powerful and culturally productive city in Greece.",
+    outcomes: [
+      { level: 1, text: "Know that Athens had a direct democracy (citizens voted directly, not through representatives)" },
+      { level: 1, text: "Can name Pericles as the dominant leader of this period" },
+      { level: 2, text: "Can explain key institutions: Assembly (Ekklesia), Council of 500, selection by lot vs election" },
+      { level: 2, text: "Understand who was excluded (women, slaves, metics) and roughly how many citizens there were" },
+      { level: 3, text: "Can discuss the tension between democracy and empire (tribute money funding the Parthenon)" },
+      { level: 3, text: "Can explain ostracism and its political function" },
+      { level: 4, text: "Can discuss ancient critiques of democracy (Plato, Thucydides, the 'Old Oligarch')" },
+      { level: 4, text: "Can compare Athenian democracy to modern democratic systems and explain key differences" },
+    ]
+  },
+  {
+    id: "ag_greek_drama",
+    title: "Greek Drama: Tragedy and Comedy",
+    initial: "You said: Could explain",
+    desc: "Civic ritual performed at religious festivals — inseparable from democratic life.",
+    outcomes: [
+      { level: 1, text: "Know the three great tragedians (Aeschylus, Sophocles, Euripides) and Aristophanes for comedy" },
+      { level: 1, text: "Know that drama was performed at the festival of Dionysus, not commercial theater" },
+      { level: 2, text: "Can characterize each tragedian's style (Aeschylus = cosmic justice, Sophocles = heroic fate, Euripides = questioning)" },
+      { level: 2, text: "Can name specific plays and their themes (Oresteia, Antigone, Medea, Bacchae, Lysistrata)" },
+      { level: 3, text: "Can discuss the structure of Greek tragedy (chorus, episodes, stichomythia, deus ex machina)" },
+      { level: 3, text: "Understand the political dimension — how drama engaged with contemporary Athenian issues" },
+      { level: 4, text: "Have read at least 2-3 Greek plays (in translation)" },
+      { level: 4, text: "Can discuss Aristotle's Poetics and its theory of tragedy (catharsis, hamartia, peripeteia)" },
+    ]
+  },
+  {
+    id: "ag_sparta",
+    title: "Sparta: The Alternative Greek Model",
+    initial: "You said: Know the basics",
+    desc: "Everything Athens was not — militaristic, conservative, governed by a mixed constitution.",
+    outcomes: [
+      { level: 1, text: "Know Sparta was militaristic and Athens' main rival" },
+      { level: 1, text: "Know about the two kings and the agoge (military training from age 7)" },
+      { level: 2, text: "Can explain the helot system — why Spartan militarism was driven by controlling a subject population" },
+      { level: 2, text: "Know the key institutions: two kings, Gerousia (elders), Ephors, Apella (assembly)" },
+      { level: 3, text: "Can discuss the 'Spartan mirage' — how Sparta was idealized by other Greeks and later thinkers" },
+      { level: 3, text: "Know about Spartan women's relative freedom and its connection to the military system" },
+      { level: 4, text: "Can discuss Sparta's decline (shrinking citizen body, Battle of Leuctra, Epaminondas freeing Messenia)" },
+    ]
+  },
+  {
+    id: "ag_delian_league",
+    title: "The Delian League and Athenian Empire",
+    initial: "You said: Could explain",
+    desc: "How Athens transformed from liberator to imperial power — one of history's great ironies.",
+    outcomes: [
+      { level: 1, text: "Know the Delian League was formed after the Persian Wars as an alliance against Persia" },
+      { level: 1, text: "Know it gradually became an Athenian empire" },
+      { level: 2, text: "Can explain specific steps: treasury moved from Delos to Athens, allies forbidden to leave, tribute used for Parthenon" },
+      { level: 2, text: "Know that Athenian imperialism was a major cause of the Peloponnesian War" },
+      { level: 3, text: "Can discuss specific incidents (Naxos revolt, Thasos revolt, Melian dialogue) that illustrate imperial behavior" },
+      { level: 3, text: "Can explain how the empire supported democracy (naval power → thete empowerment → democratic radicalism)" },
+    ]
+  },
+  {
+    id: "ag_oresteia",
+    title: "The Oresteia",
+    initial: "You said: Know the basics",
+    desc: "Aeschylus' trilogy dramatizing the transition from blood vengeance to civic justice.",
+    outcomes: [
+      { level: 1, text: "Know it's a trilogy by Aeschylus — the only complete surviving trilogy" },
+      { level: 1, text: "Know the basic plot: Agamemnon murdered → Orestes avenges → trial resolves the cycle" },
+      { level: 2, text: "Can name the three plays (Agamemnon, Libation Bearers, Eumenides) and their key scenes" },
+      { level: 2, text: "Understand the Furies (Erinyes) and their transformation into the Eumenides (Kindly Ones)" },
+      { level: 3, text: "Can discuss the political meaning: Athena establishing the Areopagus court as a charter for the rule of law" },
+      { level: 3, text: "Can connect it to contemporary Athenian politics (Ephialtes' reforms of the Areopagus, c. 462 BC)" },
+      { level: 4, text: "Have read the trilogy (in translation or original)" },
+    ]
+  },
+  {
+    id: "ag_peloponnesian_war",
+    title: "The Peloponnesian War",
+    initial: "You said: Heard of it",
+    desc: "The 27-year civil war that devastated Greece and ended Athenian power.",
+    outcomes: [
+      { level: 1, text: "Know it was Athens vs Sparta (and their respective allies), lasting 431-404 BC" },
+      { level: 1, text: "Know Athens lost" },
+      { level: 2, text: "Can explain the main causes (Spartan fear of Athens, the Megarian Decree, Corcyra dispute)" },
+      { level: 2, text: "Know about the Plague of Athens and the Sicilian Expedition as turning points" },
+      { level: 3, text: "Know Thucydides wrote the definitive account and can explain his significance as a historian" },
+      { level: 3, text: "Can discuss key episodes: the Mytilenean debate, the Melian dialogue, Alcibiades' defection" },
+      { level: 4, text: "Can discuss the 'Thucydides Trap' concept and its modern applications" },
+    ]
+  },
+  {
+    id: "ag_hellenistic_world",
+    title: "The Hellenistic World After Alexander",
+    initial: "You said: Could explain",
+    desc: "Alexander's empire divided: Ptolemaic Egypt, Seleucid Asia, Antigonid Macedon.",
+    outcomes: [
+      { level: 1, text: "Know Alexander's empire was divided among his generals (the Diadochi/Successors)" },
+      { level: 1, text: "Can name at least 2 of the 3 major successor kingdoms" },
+      { level: 2, text: "Know about Alexandria as the intellectual capital (Library, Museum, Pharos)" },
+      { level: 2, text: "Can name key Hellenistic developments: Stoicism, Epicureanism, Euclid, Archimedes" },
+      { level: 3, text: "Can discuss the cultural fusion of Greek and Near Eastern elements" },
+      { level: 3, text: "Know how the Hellenistic kingdoms eventually fell to Rome" },
+      { level: 4, text: "Can discuss the Hellenistic contribution to science, philosophy, and art as distinct from Classical achievements" },
+    ]
+  },
+];
+
+const container = document.getElementById('container');
+const results = {};
+
+function render() {
+  let html = '<p style="font-family:DM Sans,sans-serif; font-size:13px; color:#6a6458; margin-bottom:20px;">Check each outcome you can genuinely do. Be honest — "sort of" counts as unchecked. The depth score auto-calculates.</p>';
+
+  for (const topic of TOPICS) {
+    const checked = results[topic.id] || new Set();
+    const maxLevel = Math.max(0, ...Array.from(checked).map(i => topic.outcomes[i].level));
+    const total = topic.outcomes.length;
+    const numChecked = checked.size;
+    const isComplete = numChecked > 0;
+
+    html += `<div class="topic-card ${isComplete ? 'complete' : ''}" data-id="${topic.id}">
+      <div class="topic-title">${topic.title}</div>
+      <div class="topic-initial">${topic.initial}</div>
+      <div class="topic-desc">${topic.desc}</div>
+      <ul class="outcome-list">`;
+
+    topic.outcomes.forEach((outcome, i) => {
+      const isChecked = checked.has(i);
+      html += `<li class="outcome-item ${isChecked ? 'checked' : ''}" data-topic="${topic.id}" data-idx="${i}">
+        <div class="outcome-check">${isChecked ? '✓' : ''}</div>
+        <div class="outcome-level">L${outcome.level}</div>
+        <div class="outcome-text">${outcome.text}</div>
+      </li>`;
+    });
+
+    html += `</ul>
+      <div class="topic-summary">Depth: <span class="depth-label">${numChecked}/${total} outcomes</span> · Max level reached: <span class="depth-label">L${maxLevel}</span></div>
+    </div>`;
+  }
+
+  // Summary section
+  html += `<div class="results-section">
+    <h2>Depth Summary</h2>`;
+  for (const topic of TOPICS) {
+    const checked = results[topic.id] || new Set();
+    const maxLevel = Math.max(0, ...Array.from(checked).map(i => topic.outcomes[i].level));
+    const numChecked = checked.size;
+    const total = topic.outcomes.length;
+    html += `<div class="result-row">
+      <span>${topic.title}</span>
+      <span class="result-depth depth-${maxLevel}">${numChecked}/${total} · L${maxLevel}</span>
+    </div>`;
+  }
+  html += `<button class="copy-btn" onclick="copyResults()">Copy results as JSON</button></div>`;
+
+  container.innerHTML = html;
+
+  // Wire up click handlers
+  container.querySelectorAll('.outcome-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const topicId = item.dataset.topic;
+      const idx = parseInt(item.dataset.idx);
+      if (!results[topicId]) results[topicId] = new Set();
+      if (results[topicId].has(idx)) {
+        results[topicId].delete(idx);
+      } else {
+        results[topicId].add(idx);
+      }
+      render();
+    });
+  });
+}
+
+function copyResults() {
+  const out = {};
+  for (const topic of TOPICS) {
+    const checked = results[topic.id] || new Set();
+    const checkedOutcomes = Array.from(checked).map(i => topic.outcomes[i]);
+    out[topic.id] = {
+      title: topic.title,
+      outcomes_checked: checkedOutcomes.map(o => o.text),
+      max_level: Math.max(0, ...checkedOutcomes.map(o => o.level)),
+      checked_count: checked.size,
+      total_outcomes: topic.outcomes.length,
+    };
+  }
+  navigator.clipboard.writeText(JSON.stringify(out, null, 2)).then(() => {
+    document.querySelector('.copy-btn').textContent = 'Copied!';
+  });
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Guided Voice Dump</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Crimson Pro', serif;
+    background: #f7f4ec; color: #2a2420;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .header { text-align: center; padding: 32px 16px 16px; max-width: 680px; width: 100%; }
+  .header h1 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 26px; margin-bottom: 4px; }
+  .header .sub { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #6a6458; margin-bottom: 12px; }
+  .header .intro { font-size: 16px; line-height: 1.6; color: #333; text-align: left; }
+  .double-rule { max-width: 680px; width: 100%; border-top: 2px solid #8b2500; padding-top: 5px; border-bottom: 1px solid #8b2500; height: 0; margin-bottom: 24px; }
+
+  .container { max-width: 680px; width: 100%; padding: 0 16px 60px; }
+
+  .prompt-card {
+    background: #fff; border: 1px solid #e4dfd4; border-radius: 6px;
+    padding: 24px; margin-bottom: 20px;
+  }
+  .prompt-num {
+    font-family: 'DM Sans', sans-serif; font-size: 11px;
+    color: #b0a898; letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .prompt-topic {
+    font-family: 'Cormorant Garamond', serif; font-weight: 600;
+    font-size: 22px; margin-bottom: 4px;
+  }
+  .prompt-context {
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    color: #6a6458; margin-bottom: 16px;
+    padding-bottom: 12px; border-bottom: 1px solid #e4dfd4;
+  }
+  .prompt-main {
+    font-size: 17px; line-height: 1.6; color: #2a2420;
+    margin-bottom: 16px; font-style: italic;
+  }
+  .probe-list { list-style: none; margin-bottom: 12px; }
+  .probe-item {
+    display: flex; gap: 8px; padding: 6px 0;
+    font-size: 15px; line-height: 1.4; color: #333;
+  }
+  .probe-bullet {
+    width: 4px; height: 4px; min-width: 4px;
+    border-radius: 2px; background: #8b2500;
+    margin-top: 8px;
+  }
+  .prompt-note {
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    color: #b0a898; font-style: italic;
+  }
+  .duration {
+    font-family: 'DM Sans', sans-serif; font-size: 11px;
+    color: #8b2500; display: inline-block;
+    padding: 2px 8px; border: 1px solid rgba(139,37,0,0.2);
+    border-radius: 10px; margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>✦ Guided Voice Dump</h1>
+  <div class="sub">Talk through what you know — 2-5 minutes per topic</div>
+  <div class="intro">
+    Pick one or more topics below. Hit record on your phone, go for a walk or sit comfortably, and talk through the prompts. Don't try to be comprehensive — just say what comes to mind. Tangents are welcome. The goal is to capture the <em>texture</em> of what you know, not a perfect answer.
+  </div>
+</div>
+<div class="double-rule"></div>
+
+<div class="container">
+
+  <div class="prompt-card">
+    <div class="prompt-num">Prompt 1</div>
+    <div class="prompt-topic">Homer and the Epics</div>
+    <div class="prompt-context">You rated this "know deeply" — let's capture what that means</div>
+    <span class="duration">~3-5 min</span>
+    <div class="prompt-main">"Tell me about Homer and the Iliad and Odyssey — what do you know, what stands out to you, what connections do you see?"</div>
+    <ul class="probe-list">
+      <li class="probe-item"><div class="probe-bullet"></div><div>What have you actually read? Translations, adaptations, excerpts?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What do you find most striking or memorable about the stories?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>How do you think Homer connects to the rest of Greek culture — drama, philosophy, art?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Do you know anything about the "Homeric Question" — how were these texts created and transmitted?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Any modern works (novels, films, adaptations) that shaped your understanding?</div></li>
+    </ul>
+    <div class="prompt-note">Don't worry about covering every sub-question. Follow what's interesting to you.</div>
+  </div>
+
+  <div class="prompt-card">
+    <div class="prompt-num">Prompt 2</div>
+    <div class="prompt-topic">Plato — What Do You Actually Know?</div>
+    <div class="prompt-context">You rated this "know the basics" but noted the calibration problem — let's find out what your basics are</div>
+    <span class="duration">~3-5 min</span>
+    <div class="prompt-main">"Walk me through what you know about Plato — his life, his ideas, his works, his influence."</div>
+    <ul class="probe-list">
+      <li class="probe-item"><div class="probe-bullet"></div><div>Can you place him in time and context? Who came before, who came after?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What do you know about the Theory of Forms? The Allegory of the Cave?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Have you read any of his dialogues? Which ones, what do you remember?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What's the relationship between Socrates and Plato? Where does one end and the other begin?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>How has Plato influenced later thought — Christianity, the Renaissance, modern philosophy?</div></li>
+    </ul>
+    <div class="prompt-note">It's fine to say "I'm not sure about this part" — that's useful data too.</div>
+  </div>
+
+  <div class="prompt-card">
+    <div class="prompt-num">Prompt 3</div>
+    <div class="prompt-topic">The Persian Wars — Your Vivid Picture</div>
+    <div class="prompt-context">You've read Iggulden's novels. What stuck? What's vivid and what's fuzzy?</div>
+    <span class="duration">~3-5 min</span>
+    <div class="prompt-main">"Tell me the story of the Persian Wars as you understand it — what happened, why it mattered, what you remember most vividly."</div>
+    <ul class="probe-list">
+      <li class="probe-item"><div class="probe-bullet"></div><div>What triggered the conflict? Why did Persia invade?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Walk through the key events — Marathon, Thermopylae, Salamis, Plataea</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Which people do you remember? Themistocles, Leonidas, Xerxes, Darius?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What parts are vivid from the novels? What parts are fuzzy or you're unsure about?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Do you know what was happening in Sicily at the same time? (Battle of Himera, Carthage)</div></li>
+    </ul>
+    <div class="prompt-note">The novels gave you a vivid experience — we want to capture what's still active vs what's become latent.</div>
+  </div>
+
+  <div class="prompt-card">
+    <div class="prompt-num">Prompt 4</div>
+    <div class="prompt-topic">Greek Drama — Plays, Playwrights, and Why It Matters</div>
+    <div class="prompt-context">You rated this "could explain" — one of your stronger areas</div>
+    <span class="duration">~2-3 min</span>
+    <div class="prompt-main">"What do you know about Greek theater — who, what, why, and what have you actually read or seen?"</div>
+    <ul class="probe-list">
+      <li class="probe-item"><div class="probe-bullet"></div><div>Can you characterize each of the three tragedians? What makes them different?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What plays do you know? Which ones have you read?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What about comedy — Aristophanes?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Why was drama a civic/religious event, not just entertainment?</div></li>
+    </ul>
+  </div>
+
+  <div class="prompt-card">
+    <div class="prompt-num">Prompt 5</div>
+    <div class="prompt-topic">Connections and Gaps</div>
+    <div class="prompt-context">The most interesting part — what links do you see, and where do you feel lost?</div>
+    <span class="duration">~3-5 min</span>
+    <div class="prompt-main">"Looking at ancient Greece as a whole — what are the connections that excite you most, and where do you feel the biggest gaps?"</div>
+    <ul class="probe-list">
+      <li class="probe-item"><div class="probe-bullet"></div><div>What cross-connections have you noticed? (e.g., Salamis and Himera in 480 BC)</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>Where do you feel like you have strong anchors that you could build from?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>What topics came up in the assessment where you thought "I really want to know more about that"?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>If you could have a one-hour conversation with an expert about one aspect of ancient Greece, what would you ask about?</div></li>
+      <li class="probe-item"><div class="probe-bullet"></div><div>How does your knowledge of Greece connect to other things you know — Rome, the Renaissance, modern politics, literature?</div></li>
+    </ul>
+    <div class="prompt-note">This is the most open-ended prompt. Follow your curiosity.</div>
+  </div>
+
+</div>
+</body>
+</html>
