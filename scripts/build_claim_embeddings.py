@@ -29,9 +29,7 @@ ARTICLES_PATH = DATA_DIR / "articles.json"
 EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 CLAIMS_INDEX_PATH = DATA_DIR / "claims_index.json"
 
-# Amygdala local embedding (replaces Gemini API — free, fast, Norwegian-capable)
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
-from amygdala import EmbeddingModel
+from amygdala import EmbeddingModel, pairwise_cosine
 
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # amygdala default
 
@@ -77,15 +75,8 @@ def embed_claims(claims: list[dict]) -> np.ndarray:
 
 
 def compute_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
-    """Compute cosine similarity matrix between all embeddings."""
-    # Normalize embeddings
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms[norms == 0] = 1  # avoid division by zero
-    normalized = embeddings / norms
-
-    # Cosine similarity = dot product of normalized vectors
-    similarity = normalized @ normalized.T
-    return similarity
+    """Compute cosine similarity matrix via amygdala."""
+    return pairwise_cosine(embeddings)
 
 
 def find_similar_pairs(similarity: np.ndarray, claims: list[dict],

@@ -20,8 +20,6 @@ from collections import defaultdict
 
 import numpy as np
 
-# Amygdala for clustering
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
 from amygdala import complete_linkage_cluster, pairwise_cosine
 
 SCRIPT_DIR = Path(__file__).parent

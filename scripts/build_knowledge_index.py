@@ -25,9 +25,7 @@ from collections import defaultdict
 
 import numpy as np
 
-# Amygdala NLI for ambiguous-zone classification (replaces Gemini LLM judge)
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
-from amygdala import nli_classify_batch
+from amygdala import pairwise_cosine, extract_pairs, classify_pairs
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -45,11 +43,6 @@ THRESHOLD_EXTENDS = 0.72
 def normalize_topic(topic: str) -> str:
     """Normalize a topic string: hyphens to spaces, lowercase, strip whitespace."""
     return re.sub(r"\s+", " ", topic.replace("-", " ")).strip().lower()
-
-# NLI classification for ambiguous zone (replaces LLM judge)
-# Entailment → promote to KNOWN, Contradiction → demote to NEW, Neutral → EXTENDS
-NLI_ZONE_LOW = 0.72
-NLI_ZONE_HIGH = 0.88
 
 # Sub-topic splitting threshold
 SUBTOPIC_CLAIM_THRESHOLD = 30
@@ -115,88 +108,53 @@ def load_embeddings(expected_count: int) -> np.ndarray:
 
 
 def compute_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
-    """Compute cosine similarity matrix (normalized dot product)."""
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms[norms == 0] = 1
-    normalized = embeddings / norms
-    return normalized @ normalized.T
+    """Compute cosine similarity matrix via amygdala."""
+    return pairwise_cosine(embeddings)
 
 
 def extract_cross_article_pairs(similarity: np.ndarray, claims: list[dict],
-                                threshold: float = 0.68) -> list[dict]:
-    """Extract all cross-article pairs with similarity >= threshold."""
-    n = len(claims)
-    pairs = []
-
-    # Build article_id lookup for fast same-article check
+                                threshold: float = 0.72) -> list[dict]:
+    """Extract cross-article pairs via amygdala, decorated with claim IDs."""
     article_ids = [c["article_id"] for c in claims]
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if article_ids[i] == article_ids[j]:
-                continue
-            sim = float(similarity[i, j])
-            if sim >= threshold:
-                pairs.append({
-                    "a": claims[i]["id"],
-                    "b": claims[j]["id"],
-                    "score": round(sim, 3),
-                })
-
-    pairs.sort(key=lambda p: p["score"], reverse=True)
-    return pairs
+    raw_pairs = extract_pairs(similarity, threshold, groups=article_ids, cross_group_only=True)
+    return [
+        {"a": claims[i]["id"], "b": claims[j]["id"], "score": round(score, 3)}
+        for i, j, score in raw_pairs
+    ]
 
 
-def classify_ambiguous_pairs(pairs: list[dict], claims: list[dict]) -> tuple[dict[str, str], int]:
-    """Use NLI to classify pairs in the ambiguous similarity zone (0.72-0.88).
+def run_nli_cascade(pairs: list[dict], claims: list[dict]) -> tuple[dict[str, str], int]:
+    """Run amygdala classify_pairs on the extracted pairs.
 
-    Returns (nli_verdicts dict, number of pairs that changed classification).
-    The verdicts dict maps "claimA_id::claimB_id" to one of ENTAILS/EXTENDS/UNRELATED.
-
-    NLI label mapping:
-      entailment   → ENTAILS  (promote to KNOWN)
-      neutral      → EXTENDS  (keep as EXTENDS)
-      contradiction → UNRELATED (demote to NEW)
+    Returns (verdicts dict mapping "claimA::claimB" to classification, count changed).
     """
     claim_lookup = {c["id"]: c for c in claims}
 
-    ambiguous = [
-        p for p in pairs
-        if NLI_ZONE_LOW <= p["score"] < NLI_ZONE_HIGH
-    ]
-
-    if not ambiguous:
-        log("  No ambiguous pairs to classify")
-        return {}, 0
-
-    log(f"  {len(ambiguous)} ambiguous pairs ({NLI_ZONE_LOW}-{NLI_ZONE_HIGH}), classifying with NLI...")
-
-    # Build text pairs for batch classification
-    nli_pairs = []
-    for p in ambiguous:
+    texts = []
+    scores = []
+    for p in pairs:
         text_a = claim_lookup.get(p["a"], {}).get("normalized_text", p["a"])
         text_b = claim_lookup.get(p["b"], {}).get("normalized_text", p["b"])
-        nli_pairs.append((text_a, text_b))
+        texts.append((text_a, text_b))
+        scores.append(p["score"])
 
     t0 = time.time()
-    nli_results = nli_classify_batch(nli_pairs)
+    results = classify_pairs(texts, scores, THRESHOLD_KNOWN, THRESHOLD_EXTENDS)
     elapsed = time.time() - t0
-    log(f"  NLI classified {len(nli_pairs)} pairs in {elapsed:.1f}s ({len(nli_pairs)/max(elapsed,0.01):.0f} pairs/s)")
 
-    NLI_TO_VERDICT = {
-        "entailment": "ENTAILS",
-        "neutral": "EXTENDS",
-        "contradiction": "UNRELATED",
-    }
+    ambiguous_count = sum(1 for r in results if r["nli_label"] is not None)
+    log(f"  {len(pairs)} pairs classified ({ambiguous_count} via NLI) in {elapsed:.1f}s")
 
+    # Build verdicts dict for the output JSON (only for NLI-resolved pairs)
+    classification_to_verdict = {"KNOWN": "ENTAILS", "EXTENDS": "EXTENDS", "NEW": "UNRELATED"}
     verdicts: dict[str, str] = {}
     changed = 0
-    for pair, nli in zip(ambiguous, nli_results):
-        verdict = NLI_TO_VERDICT.get(nli["label"], "EXTENDS")
-        key = f"{pair['a']}::{pair['b']}"
-        verdicts[key] = verdict
-        if verdict in ("ENTAILS", "UNRELATED"):
-            changed += 1
+    for pair, result in zip(pairs, results):
+        if result["nli_label"] is not None:
+            verdict = classification_to_verdict[result["classification"]]
+            verdicts[f"{pair['a']}::{pair['b']}"] = verdict
+            if result["classification"] != "EXTENDS":
+                changed += 1
 
     return verdicts, changed
 
@@ -598,14 +556,14 @@ def main():
     pairs = extract_cross_article_pairs(similarity, claims, threshold=THRESHOLD_EXTENDS)
     log(f"  {len(pairs)} cross-article pairs found")
 
-    # 2b. NLI classification for ambiguous pairs (optional)
+    # 2b. NLI cascade for pair classification (optional)
     nli_verdicts = {}
     nli_changed = 0
     if args.skip_judge:
         log("Skipping NLI classification (--skip-judge)")
     else:
-        log("Running NLI on ambiguous pairs (0.72-0.88)...")
-        nli_verdicts, nli_changed = classify_ambiguous_pairs(pairs, claims)
+        log("Running NLI cascade on pairs...")
+        nli_verdicts, nli_changed = run_nli_cascade(pairs, claims)
         entails_count = sum(1 for v in nli_verdicts.values() if v == "ENTAILS")
         unrelated_count = sum(1 for v in nli_verdicts.values() if v == "UNRELATED")
         log(f"  NLI: {len(nli_verdicts)} pairs classified, {nli_changed} changed "

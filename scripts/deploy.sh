@@ -3,9 +3,15 @@ set -e
 
 SERVER="alif"
 REMOTE_DIR="/opt/petrarca"
+AMYGDALA_LOCAL="$HOME/src/amygdala"
+AMYGDALA_REMOTE="/opt/amygdala"
 
 echo "=== TypeScript check ==="
 (cd app && npx tsc --noEmit --skipLibCheck)
+
+echo "=== Syncing amygdala ==="
+rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' \
+    "$AMYGDALA_LOCAL/" "$SERVER:$AMYGDALA_REMOTE/"
 
 echo "=== Deploying to $SERVER ==="
 ssh $SERVER "cd $REMOTE_DIR && git pull && cd app && npm install --no-audit --no-fund && systemctl restart petrarca-expo"
