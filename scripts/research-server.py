@@ -83,21 +83,10 @@ PROJECTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# Projects helpers
+# Database + ID helpers
 # ---------------------------------------------------------------------------
 
-def _load_projects():
-    if not PROJECTS_PATH.exists():
-        return {"projects": [], "notes": []}
-    try:
-        return json.loads(PROJECTS_PATH.read_text())
-    except (json.JSONDecodeError, OSError):
-        return {"projects": [], "notes": []}
-
-
-def _save_projects(data):
-    PROJECTS_PATH.write_text(json.dumps(data, indent=2))
-
+from db import get_connection, init_db
 
 def _gen_id(prefix: str) -> str:
     suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -117,8 +106,11 @@ def route_voice_input(transcript: str, source_context: dict) -> dict:
               "confidence": 0.0-1.0,
               "cleaned_text": str}
     """
-    data = _load_projects()
-    active_projects = [p for p in data.get('projects', []) if p.get('status') == 'active']
+    conn = get_connection(readonly=True)
+    active_projects = [dict(r) for r in conn.execute(
+        "SELECT id, name FROM projects WHERE status = 'active'"
+    ).fetchall()]
+    conn.close()
     project_names_list = [p['name'] for p in active_projects]
 
     from gemini_llm import call_llm
@@ -191,18 +183,15 @@ def _route_and_enrich_feedback(feedback_id: str, transcript: str, context: dict)
 
         # Auto-create project note if matched
         if routing.get('intent') == 'project_note' and routing.get('project_id'):
-            data = _load_projects()
             note_id = _gen_id('note')
-            note = {
-                'id': note_id,
-                'project_id': routing['project_id'],
-                'text': routing.get('cleaned_text', transcript),
-                'audio_file': None,
-                'source': context,
-                'created_at': datetime.now(timezone.utc).isoformat(),
-            }
-            data['notes'].append(note)
-            _save_projects(data)
+            conn = get_connection()
+            conn.execute(
+                "INSERT INTO project_notes (id, project_id, text, audio_file, source, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (note_id, routing['project_id'], routing.get('cleaned_text', transcript),
+                 None, json.dumps(context), datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            conn.close()
             print(f'[voice-routing] Auto-created project note {note_id} for project {routing["project_id"]}', flush=True)
 
     except Exception as e:
@@ -229,18 +218,16 @@ def _route_and_enrich_note(note_id: str, transcript: str, article_id: str, artic
 
         # Auto-create project note if matched
         if routing.get('intent') == 'project_note' and routing.get('project_id'):
-            data = _load_projects()
             proj_note_id = _gen_id('note')
-            proj_note = {
-                'id': proj_note_id,
-                'project_id': routing['project_id'],
-                'text': routing.get('cleaned_text', transcript),
-                'audio_file': None,
-                'source': {'type': 'article', 'id': article_id, 'title': article_title},
-                'created_at': datetime.now(timezone.utc).isoformat(),
-            }
-            data['notes'].append(proj_note)
-            _save_projects(data)
+            conn = get_connection()
+            conn.execute(
+                "INSERT INTO project_notes (id, project_id, text, audio_file, source, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (proj_note_id, routing['project_id'], routing.get('cleaned_text', transcript),
+                 None, json.dumps({'type': 'article', 'id': article_id, 'title': article_title}),
+                 datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            conn.close()
             print(f'[voice-routing] Auto-created project note {proj_note_id} from voice note {note_id}', flush=True)
 
     except Exception as e:
@@ -2289,48 +2276,54 @@ class ResearchHandler(BaseHTTPRequestHandler):
 
     def _handle_projects_list(self):
         """GET /projects — list all projects with note counts."""
-        data = _load_projects()
-        projects = data.get('projects', [])
-        notes = data.get('notes', [])
-
-        result = []
-        for p in projects:
-            proj_notes = [n for n in notes if n.get('project_id') == p['id']]
-            note_timestamps = [n.get('created_at', '') for n in proj_notes]
-            last_activity = max(note_timestamps) if note_timestamps else p.get('created_at', '')
-            result.append({
-                **p,
-                'note_count': len(proj_notes),
-                'last_activity': last_activity,
-            })
-
-        result.sort(key=lambda x: x.get('last_activity', ''), reverse=True)
-        self._send_json_response(200, {'projects': result})
+        conn = get_connection(readonly=True)
+        rows = conn.execute("""
+            SELECT p.id, p.name, p.description, p.status, p.created_at,
+                   COUNT(n.id) as note_count,
+                   COALESCE(MAX(n.created_at), p.created_at) as last_activity
+            FROM projects p
+            LEFT JOIN project_notes n ON n.project_id = p.id
+            GROUP BY p.id
+            ORDER BY last_activity DESC
+        """).fetchall()
+        conn.close()
+        self._send_json_response(200, {'projects': [dict(r) for r in rows]})
 
     def _handle_project_detail(self):
         """GET /projects/{id} — get project with all its notes."""
         project_id = self.path.split('/')[2]
-        data = _load_projects()
-        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
-        if not project:
+        conn = get_connection(readonly=True)
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            conn.close()
             self._send_json_response(404, {'error': 'Project not found'})
             return
-
-        notes = [n for n in data.get('notes', []) if n.get('project_id') == project_id]
-        notes.sort(key=lambda n: n.get('created_at', ''), reverse=True)
-        self._send_json_response(200, {'project': project, 'notes': notes})
+        notes = conn.execute(
+            "SELECT * FROM project_notes WHERE project_id = ? ORDER BY created_at DESC",
+            (project_id,),
+        ).fetchall()
+        conn.close()
+        # Parse source JSON back to dict for each note
+        note_list = []
+        for n in notes:
+            nd = dict(n)
+            if nd.get('source'):
+                try:
+                    nd['source'] = json.loads(nd['source'])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            note_list.append(nd)
+        self._send_json_response(200, {'project': dict(row), 'notes': note_list})
 
     def _handle_project_create(self):
         """POST /projects — create a new project."""
         body = self._read_json_body()
         if body is None:
             return
-
         name = body.get('name', '').strip()
         if not name:
             self._send_json_response(400, {'error': 'Missing required field: name'})
             return
-
         project = {
             'id': _gen_id('proj'),
             'name': name,
@@ -2338,11 +2331,13 @@ class ResearchHandler(BaseHTTPRequestHandler):
             'status': 'active',
             'description': body.get('description', ''),
         }
-
-        data = _load_projects()
-        data['projects'].append(project)
-        _save_projects(data)
-
+        conn = get_connection()
+        conn.execute(
+            "INSERT INTO projects (id, name, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            (project['id'], project['name'], project['description'], project['status'], project['created_at']),
+        )
+        conn.commit()
+        conn.close()
         print(f'[projects] Created project {project["id"]}: {name}', flush=True)
         self._send_json_response(201, {'project': project})
 
@@ -2358,28 +2353,22 @@ class ResearchHandler(BaseHTTPRequestHandler):
                 'CONTENT_LENGTH': self.headers.get('Content-Length', '0'),
             }
             form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ=environ)
-
             project_id = form.getvalue('project_id', '')
             text = form.getvalue('text', '')
             source_raw = form.getvalue('source', '')
-
             try:
                 source = json.loads(source_raw) if source_raw else None
             except json.JSONDecodeError:
                 source = None
-
-            # Save audio if present
             audio_file = None
+            note_id = _gen_id('note')
             if 'audio' in form and form['audio'].file:
-                note_id = _gen_id('note')
                 audio_filename = f'{note_id}_audio.m4a'
                 audio_path = PROJECTS_MEDIA_DIR / audio_filename
                 audio_data = form['audio'].file.read()
                 audio_path.write_bytes(audio_data if isinstance(audio_data, bytes) else audio_data.encode('latin-1'))
                 audio_file = audio_filename
                 print(f'[projects] Saved audio: {audio_filename}', flush=True)
-            else:
-                note_id = _gen_id('note')
         elif 'application/json' in content_type:
             body = self._read_json_body()
             if body is None:
@@ -2397,23 +2386,23 @@ class ResearchHandler(BaseHTTPRequestHandler):
             self._send_json_response(400, {'error': 'Missing required field: project_id'})
             return
 
-        data = _load_projects()
-        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
-        if not project:
+        conn = get_connection()
+        row = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            conn.close()
             self._send_json_response(404, {'error': 'Project not found'})
             return
 
-        note = {
-            'id': note_id,
-            'project_id': project_id,
-            'text': text,
-            'audio_file': audio_file,
-            'source': source,
-            'created_at': datetime.now(timezone.utc).isoformat(),
-        }
-        data['notes'].append(note)
-        _save_projects(data)
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO project_notes (id, project_id, text, audio_file, source, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (note_id, project_id, text, audio_file, json.dumps(source) if source else None, now),
+        )
+        conn.commit()
+        conn.close()
 
+        note = {'id': note_id, 'project_id': project_id, 'text': text,
+                'audio_file': audio_file, 'source': source, 'created_at': now}
         print(f'[projects] Added note {note_id} to project {project_id}', flush=True)
         self._send_json_response(201, {'note': note})
 
@@ -2421,24 +2410,27 @@ class ResearchHandler(BaseHTTPRequestHandler):
         """POST /projects/{id}/update — update project fields."""
         parts = self.path.split('/')
         project_id = parts[2] if len(parts) >= 4 else ''
-
         body = self._read_json_body()
         if body is None:
             return
 
-        data = _load_projects()
-        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
-        if not project:
+        conn = get_connection()
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            conn.close()
             self._send_json_response(404, {'error': 'Project not found'})
             return
 
-        for field in ('name', 'status', 'description'):
-            if field in body:
-                project[field] = body[field]
+        updates = {k: body[k] for k in ('name', 'status', 'description') if k in body}
+        if updates:
+            set_clause = ', '.join(f'{k} = ?' for k in updates)
+            conn.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", (*updates.values(), project_id))
+            conn.commit()
 
-        _save_projects(data)
+        updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        conn.close()
         print(f'[projects] Updated project {project_id}', flush=True)
-        self._send_json_response(200, {'project': project})
+        self._send_json_response(200, {'project': dict(updated)})
 
     def _handle_feedback(self):
         """Receive feedback with optional screenshot, audio, text, and context."""
@@ -4443,6 +4435,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 if __name__ == '__main__':
+    init_db()
     server = ThreadingHTTPServer(('0.0.0.0', PORT), ResearchHandler)
     print(f'Research server listening on port {PORT}')
     print(f'Results directory: {RESULTS_DIR}')
