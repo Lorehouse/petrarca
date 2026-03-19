@@ -49,6 +49,11 @@ __pycache__/
 # Large JSON data files — downloaded from server at runtime, not bundled
 app/data/articles.json
 app/data/knowledge_index.json
+app/data/concepts.json
+app/data/manifest.json
+app/data/syntheses.json
+app/data/claim_embeddings.npz
+app/data/concept_clusters.json
 
 # Temp files
 stderr.tmp
