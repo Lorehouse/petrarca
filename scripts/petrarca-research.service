@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/petrarca
-ExecStart=/usr/bin/python3 /opt/petrarca/scripts/research-server.py
+ExecStart=/opt/petrarca/.venv/bin/python3 /opt/petrarca/scripts/research-server.py
 Restart=always
 RestartSec=5
 Environment=RESEARCH_RESULTS_DIR=/opt/petrarca/research-results
