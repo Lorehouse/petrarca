@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, Pressable, TextInput, StyleSheet,
   Platform, Animated, Modal, Dimensions, Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Audio } from 'expo-av';
 // react-native-view-shot requires a custom dev client (not Expo Go)
@@ -206,6 +207,7 @@ export default function FeedbackCapture() {
 
       {/* Overlay modal */}
       <Modal visible={overlayVisible} transparent animationType="fade" onRequestClose={dismissOverlay}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={styles.backdrop} onPress={dismissOverlay}>
           <Pressable style={styles.overlayCard} onPress={e => e.stopPropagation()}>
             {/* Header */}
@@ -294,6 +296,7 @@ export default function FeedbackCapture() {
             )}
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

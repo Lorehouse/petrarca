@@ -113,7 +113,7 @@ export default function FeedScreen() {
 
   const feedVersion = getFeedVersion();
 
-  const articles = useMemo(() => getArticlesByLens('best'), [feedVersion]);
+  const articles = useMemo(() => getArticlesByLens('best').slice(0, 30), [feedVersion]);
 
   const handleDismiss = useCallback(() => { bumpFeedVersion(); forceUpdate(n => n + 1); }, []);
   const handleQueue = useCallback(() => { bumpFeedVersion(); forceUpdate(n => n + 1); }, []);
