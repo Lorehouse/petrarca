@@ -109,6 +109,11 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             onPress={() => navigate('knowledge_map', '/knowledge-map')}
           />
           <NavItem
+            title="Projects"
+            subtitle="Collect notes around a theme"
+            onPress={() => navigate('projects', '/projects')}
+          />
+          <NavItem
             title="Reading Trails"
             subtitle="Follow threads of ideas"
             onPress={() => navigate('trails', '/trails')}
@@ -116,6 +121,7 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
           <NavItem
             title="Queue"
             subtitle={`${queueCount} articles queued`}
+            badge={queueCount > 0 ? queueCount : undefined}
             onPress={() => navigate('queue', '/queue')}
           />
           <NavItem
@@ -146,16 +152,23 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
 function NavItem({
   title,
   subtitle,
+  badge,
   onPress,
 }: {
   title: string;
   subtitle: string;
+  badge?: number;
   onPress: () => void;
 }) {
   return (
     <Pressable style={styles.navItem} onPress={onPress}>
       <View style={styles.navLeft}>
-        <Text style={styles.navTitle}>{title}</Text>
+        <View style={styles.navTitleRow}>
+          <Text style={styles.navTitle}>{title}</Text>
+          {badge !== undefined && (
+            <Text style={styles.navBadge}>{badge}</Text>
+          )}
+        </View>
         <Text style={styles.navSubtitle}>{subtitle}</Text>
       </View>
       <Text style={styles.navChevron}>{'\u203A'}</Text>
@@ -245,10 +258,20 @@ const styles = StyleSheet.create({
   navLeft: {
     flex: 1,
   },
+  navTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   navTitle: {
     fontFamily: fonts.body,
     fontSize: 15,
     color: colors.parchment,
+  },
+  navBadge: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: 'rgba(247, 244, 236, 0.4)',
   },
   navSubtitle: {
     fontFamily: fonts.ui,

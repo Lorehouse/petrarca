@@ -16,7 +16,7 @@ import { Article } from '../../data/types';
 import { logEvent } from '../../data/logger';
 import { colors, fonts, type, layout } from '../../design/tokens';
 import { setFeedbackContext } from '../../lib/feedback-context';
-import { addToQueue, getNextQueued } from '../../data/queue';
+import { addToQueue, getNextQueued, getQueuedArticleIds } from '../../data/queue';
 import ContinueBar from '../../components/ContinueBar';
 import SynthesisScroll from '../../components/SynthesisScroll';
 import ArticleRow from '../../components/ArticleRow';
@@ -30,7 +30,8 @@ import { useKeyboardShortcuts, type ShortcutMap } from '../../hooks/useKeyboardS
 type ListItem =
   | { type: 'article'; article: Article }
   | { type: 'separator' }
-  | { type: 'read'; article: Article };
+  | { type: 'read'; article: Article }
+  | { type: 'queue_header' };
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -222,6 +223,8 @@ export default function FeedScreen() {
   const focusedArticleId = focusedIndex >= 0 && focusedIndex < articles.length
     ? articles[focusedIndex].id : null;
 
+  const queuedSet = useMemo(() => new Set(getQueuedArticleIds()), [feedVersion]);
+
   // --- Web layout ---
   if (Platform.OS === 'web') {
     const webReadArticles = getReadArticles();
@@ -237,16 +240,26 @@ export default function FeedScreen() {
                 <Text style={s.emptySubtitle}>Content will appear here once synced</Text>
               </View>
             ) : (
-              articles.map(article => (
-                <View key={article.id} nativeID={`article-${article.id}`}>
-                  <ArticleRow
-                    article={article}
-                    onDismiss={handleDismiss}
-                    onQueue={handleQueue}
-                    isFocused={article.id === focusedArticleId}
-                  />
-                </View>
-              ))
+              articles.map((article, i) => {
+                const showQueueHeader = i === 0 && queuedSet.has(article.id);
+                return (
+                  <View key={article.id} nativeID={`article-${article.id}`}>
+                    {showQueueHeader && (
+                      <View style={s.queueHeader}>
+                        <Text style={s.queueHeaderText}>
+                          <Text style={{ color: colors.rubric }}>{'\u2726'} </Text>UP NEXT
+                        </Text>
+                      </View>
+                    )}
+                    <ArticleRow
+                      article={article}
+                      onDismiss={handleDismiss}
+                      onQueue={handleQueue}
+                      isFocused={article.id === focusedArticleId}
+                    />
+                  </View>
+                );
+              })
             )}
             {webReadArticles.length > 0 && (
               <>
@@ -273,14 +286,21 @@ export default function FeedScreen() {
   // --- Mobile layout ---
   const mobileListData = useMemo((): ListItem[] => {
     const items: ListItem[] = [];
-    for (const a of articles) items.push({ type: 'article', article: a });
+    let addedQueueHeader = false;
+    for (const a of articles) {
+      if (!addedQueueHeader && queuedSet.has(a.id)) {
+        items.push({ type: 'queue_header' });
+        addedQueueHeader = true;
+      }
+      items.push({ type: 'article', article: a });
+    }
     const readArticles = getReadArticles();
     if (readArticles.length > 0) {
       items.push({ type: 'separator' });
       for (const a of readArticles) items.push({ type: 'read', article: a });
     }
     return items;
-  }, [feedVersion, articles]);
+  }, [feedVersion, articles, queuedSet]);
 
   const firstArticleId = useMemo(() => {
     const first = mobileListData.find(item => item.type === 'article');
@@ -310,6 +330,14 @@ export default function FeedScreen() {
           </View>
         );
       }
+      case 'queue_header':
+        return (
+          <View style={s.queueHeader}>
+            <Text style={s.queueHeaderText}>
+              <Text style={{ color: colors.rubric }}>{'\u2726'} </Text>UP NEXT
+            </Text>
+          </View>
+        );
       case 'separator':
         return (
           <View style={[s.readSeparator, { paddingHorizontal: layout.screenPadding }]}>
@@ -327,6 +355,7 @@ export default function FeedScreen() {
 
   const mobileKeyExtractor = useCallback((item: ListItem, index: number) => {
     if (item.type === 'article' || item.type === 'read') return item.article.id;
+    if (item.type === 'queue_header') return 'queue-header';
     return `${item.type}-${index}`;
   }, []);
 
@@ -383,6 +412,9 @@ const s = StyleSheet.create({
 
   refreshOrnament: { alignItems: 'center' as const, paddingVertical: 12 },
   refreshStar: { fontFamily: fonts.display, fontSize: 22, color: colors.rubric },
+
+  queueHeader: { paddingHorizontal: layout.screenPadding, paddingTop: 10, paddingBottom: 4 },
+  queueHeaderText: { fontFamily: fonts.body, fontSize: 11, color: colors.rubric, letterSpacing: 2, textTransform: 'uppercase' as const },
 
   readSeparator: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 12 },
   readSeparatorLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.rule },

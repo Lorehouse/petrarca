@@ -541,8 +541,8 @@ export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article
     case 'latest':
       return candidates.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-    case 'best':
-      return getRankedFeedArticles().filter(a => {
+    case 'best': {
+      let ranked = getRankedFeedArticles().filter(a => {
         if (topicFilter) {
           const topics = (a.interest_topics || []).map(t => t.broad);
           const fallback = topics.length > 0 ? topics : a.topics;
@@ -550,6 +550,18 @@ export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article
         }
         return true;
       });
+      // Boost queued articles to top, preserving queue order
+      const queuedIds = getQueuedArticleIds();
+      if (queuedIds.length > 0) {
+        const queuedSet = new Set(queuedIds);
+        const queued = queuedIds
+          .map(id => ranked.find(a => a.id === id))
+          .filter((a): a is Article => !!a);
+        const rest = ranked.filter(a => !queuedSet.has(a.id));
+        ranked = [...queued, ...rest];
+      }
+      return ranked;
+    }
 
     case 'quick': {
       const quickCandidates = candidates.filter(a => a.estimated_read_minutes <= 3);

@@ -147,26 +147,25 @@ export default function RelatedArticles({ article }: { article: Article }) {
 
   const groups = useMemo<RelatedGroup[]>(() => {
     const result: RelatedGroup[] = [];
+    const usedIds = new Set<string>();
 
     const sameTopic = findSameTopicArticles(article, allArticles);
     if (sameTopic.length > 0) {
       result.push({ key: 'same_topic', label: 'SAME TOPIC', articles: sameTopic });
+      sameTopic.forEach(a => usedIds.add(a.id));
     }
 
     const sharedConcepts = findSharedConceptArticles(article, allArticles);
-    // Deduplicate against same topic
-    const sameTopicIds = new Set(sameTopic.map(a => a.id));
-    const uniqueShared = sharedConcepts.filter(a => !sameTopicIds.has(a.id));
+    const uniqueShared = sharedConcepts.filter(a => !usedIds.has(a.id)).slice(0, MAX_PER_GROUP);
     if (uniqueShared.length > 0) {
-      result.push({ key: 'shared_concepts', label: 'SHARED CONCEPTS', articles: uniqueShared.slice(0, MAX_PER_GROUP) });
+      result.push({ key: 'shared_concepts', label: 'SHARED CONCEPTS', articles: uniqueShared });
+      uniqueShared.forEach(a => usedIds.add(a.id));
     }
 
     const sameSource = findSameSourceArticles(article, allArticles);
-    // Deduplicate against previous groups
-    const usedIds = new Set([...sameTopic, ...uniqueShared].map(a => a.id));
-    const uniqueSource = sameSource.filter(a => !usedIds.has(a.id));
+    const uniqueSource = sameSource.filter(a => !usedIds.has(a.id)).slice(0, MAX_PER_GROUP);
     if (uniqueSource.length > 0) {
-      result.push({ key: 'same_source', label: 'FROM SAME SOURCE', articles: uniqueSource.slice(0, MAX_PER_GROUP) });
+      result.push({ key: 'same_source', label: 'FROM SAME SOURCE', articles: uniqueSource });
     }
 
     return result;

@@ -20,11 +20,15 @@ from collections import defaultdict
 
 import numpy as np
 
+# Amygdala for clustering
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
+from amygdala import complete_linkage_cluster, pairwise_cosine
+
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_DIR / "data"
 ARTICLES_PATH = DATA_DIR / "articles.json"
-EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings_nomic.npz"
+EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 
 KNOWN_THRESHOLD = 0.78
 NEAR_THRESHOLD = 0.72
@@ -73,84 +77,26 @@ def load_data():
     return articles, claims, normed, article_lookup
 
 
-class UnionFind:
-    """Union-Find data structure for clustering."""
-
-    def __init__(self, n):
-        self.parent = list(range(n))
-        self.rank = [0] * n
-
-    def find(self, x):
-        while self.parent[x] != x:
-            self.parent[x] = self.parent[self.parent[x]]
-            x = self.parent[x]
-        return x
-
-    def union(self, x, y):
-        rx, ry = self.find(x), self.find(y)
-        if rx == ry:
-            return
-        if self.rank[rx] < self.rank[ry]:
-            rx, ry = ry, rx
-        self.parent[ry] = rx
-        if self.rank[rx] == self.rank[ry]:
-            self.rank[rx] += 1
-
-
 def build_similarity_graph(normed, threshold):
     """Find all pairs above threshold using matrix multiplication."""
     similarity = normed @ normed.T
-    # Zero out diagonal (self-similarity)
     np.fill_diagonal(similarity, 0)
     return similarity
 
 
-def cluster_duplicates(claims, similarity, threshold):
-    """Cluster claims using complete-linkage: ALL pairs in a cluster must be above threshold.
+def cluster_duplicates(normed_embeddings, similarity, threshold):
+    """Cluster claims using amygdala's complete-linkage clustering.
 
-    Single-linkage (union-find) creates runaway transitive chains. Complete-linkage
-    ensures every member of a cluster is genuinely similar to every other member.
+    Every member of a cluster is genuinely similar to every other member
+    (no transitive chaining).
     """
-    n = len(claims)
-
-    # Build adjacency list of pairs above threshold
-    pairs = []
-    adj = defaultdict(set)
-    rows, cols = np.where(similarity >= threshold)
-    for r, c in zip(rows, cols):
-        if r < c:
-            adj[int(r)].add(int(c))
-            adj[int(c)].add(int(r))
-            pairs.append((int(r), int(c), float(similarity[r, c])))
-
-    # Greedy complete-linkage: grow clusters where all members are pairwise above threshold
-    assigned = set()
-    clusters = []
-
-    # Sort nodes by degree (most connections first) for better clusters
-    nodes_by_degree = sorted(adj.keys(), key=lambda x: -len(adj[x]))
-
-    for seed in nodes_by_degree:
-        if seed in assigned:
-            continue
-
-        # Start cluster with seed
-        cluster = {seed}
-        candidates = adj[seed] - assigned
-
-        # Try adding each candidate — must be above threshold with ALL current members
-        for candidate in sorted(candidates, key=lambda c: -float(similarity[seed, c])):
-            if candidate in assigned:
-                continue
-            # Check complete linkage: candidate must be similar to ALL cluster members
-            if all(float(similarity[candidate, m]) >= threshold for m in cluster):
-                cluster.add(candidate)
-
-        if len(cluster) >= 2:
-            clusters.append(sorted(cluster))
-            assigned.update(cluster)
-
+    clusters = complete_linkage_cluster(normed_embeddings, threshold=threshold)
     clusters.sort(key=lambda x: -len(x))
+
+    # Count pairs for stats
+    rows, cols = np.where(similarity >= threshold)
+    pairs = [(int(r), int(c), float(similarity[r, c])) for r, c in zip(rows, cols) if r < c]
+
     return clusters, pairs
 
 
@@ -321,7 +267,7 @@ def main():
     similarity = build_similarity_graph(normed, KNOWN_THRESHOLD)
 
     print(f"Clustering duplicates (threshold={KNOWN_THRESHOLD})...", file=sys.stderr)
-    clusters, dup_pairs = cluster_duplicates(claims, similarity, KNOWN_THRESHOLD)
+    clusters, dup_pairs = cluster_duplicates(normed, similarity, KNOWN_THRESHOLD)
     print(f"  {len(clusters)} clusters from {len(dup_pairs)} pairs", file=sys.stderr)
 
     # Build cluster data with canonical picks

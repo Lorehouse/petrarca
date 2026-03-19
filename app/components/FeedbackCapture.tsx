@@ -18,6 +18,8 @@ import { colors, fonts, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
 import { getFeedbackContext } from '../lib/feedback-context';
 import { uploadFeedback } from '../lib/chat-api';
+import { addProjectNote, Project } from '../lib/projects-api';
+import ProjectPicker from './ProjectPicker';
 
 const FEEDBACK_HIDDEN_KEY = '@petrarca/feedback_button_hidden';
 
@@ -36,6 +38,8 @@ export default function FeedbackCapture() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [addedToProject, setAddedToProject] = useState(false);
 
   const recRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,6 +94,8 @@ export default function FeedbackCapture() {
     setAudioUri(null);
     setTextInput('');
     setDuration(0);
+    setPickerVisible(false);
+    setAddedToProject(false);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
@@ -163,7 +169,6 @@ export default function FeedbackCapture() {
 
       setSent(true);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => { setOverlayVisible(false); setSent(false); }, 1200);
     } catch (e) {
       setError(`Upload failed — saved locally`);
       // Fallback: save locally
@@ -184,6 +189,25 @@ export default function FeedbackCapture() {
       setSending(false);
     }
   };
+
+  const handleProjectSelect = useCallback(async (project: Project) => {
+    setPickerVisible(false);
+    const feedbackText = textInput.trim() || 'Voice feedback';
+    const ctx = contextRef.current;
+    const source = ctx.articleId
+      ? { type: 'article', id: ctx.articleId, title: ctx.articleTitle || 'Untitled' }
+      : ctx.screen
+        ? { type: 'screen', id: ctx.screen, title: ctx.screen }
+        : undefined;
+    try {
+      await addProjectNote(project.id, feedbackText, source);
+      logEvent('feedback_added_to_project', { project_id: project.id });
+      setAddedToProject(true);
+      setTimeout(() => { setOverlayVisible(false); setSent(false); setAddedToProject(false); }, 1200);
+    } catch {
+      // Silently fail — feedback was already sent successfully
+    }
+  }, [textInput]);
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
@@ -227,7 +251,15 @@ export default function FeedbackCapture() {
 
             {sent ? (
               <View style={styles.sentRow}>
-                <Text style={styles.sentText}>Sent ✓</Text>
+                <Text style={styles.sentText}>{addedToProject ? 'Added to project \u2713' : 'Sent \u2713'}</Text>
+                {!addedToProject && (
+                  <Pressable
+                    onPress={() => { logEvent('feedback_add_to_project_tap'); setPickerVisible(true); }}
+                    style={styles.projectLink}
+                  >
+                    <Text style={styles.projectLinkText}>Add to project? {'\u2192'}</Text>
+                  </Pressable>
+                )}
               </View>
             ) : (
               <>
@@ -298,6 +330,12 @@ export default function FeedbackCapture() {
         </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ProjectPicker
+        visible={pickerVisible}
+        onSelect={handleProjectSelect}
+        onClose={() => setPickerVisible(false)}
+      />
     </>
   );
 }
@@ -490,5 +528,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 14,
     color: colors.claimNew,
+  },
+  projectLink: {
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  projectLinkText: {
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    color: colors.rubric,
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}),
   },
 });

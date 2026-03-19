@@ -22,6 +22,7 @@ import { toggleBookmark, isBookmarked } from '../data/bookmarks';
 import { getInterestProfile } from '../data/interest-model';
 import { getQueuedArticleIds, removeFromQueue } from '../data/queue';
 import RelatedArticles from '../components/RelatedArticles';
+import LinkToast from '../components/LinkToast';
 import KeyboardHintBar from '../components/KeyboardHintBar';
 import { useKeyboardShortcuts, type ShortcutMap } from '../hooks/useKeyboardShortcuts';
 import { colors, fonts, type, spacing, layout } from '../design/tokens';
@@ -554,6 +555,7 @@ function ReadingModeToggle({ mode, onModeChange }: {
 interface LinkHandler {
   ingestStates: Record<string, IngestState>;
   onIngest: (url: string) => void;
+  onIngestQueued?: (url: string, articleId: string) => void;
 }
 
 function isIngestableUrl(url: string): boolean {
@@ -591,11 +593,13 @@ function renderInlineMarkdown(
 
         const canIngest = linkHandler && isIngestableUrl(seg.url);
         const ingestState = canIngest ? linkHandler.ingestStates[seg.url] : undefined;
+        const linkStyle = canIngest ? styles.markdownLinkIngest : styles.markdownLinkExternal;
+        const suffixChar = canIngest ? ' \u2295' : ' \u2197';
 
         return (
           <Text key={`link-${i}`}>
             <Text
-              style={styles.markdownLink}
+              style={linkStyle}
               onPress={() => {
                 if (canIngest && !ingestState) {
                   logEvent('reader_link_ingest', { url: seg.url, link_text: seg.text?.slice(0, 80) });
@@ -613,11 +617,12 @@ function renderInlineMarkdown(
             >
               {seg.text}
             </Text>
+            <Text style={styles.linkSuffix}>{suffixChar}</Text>
             {ingestState?.status === 'processing' && (
-              <Text style={styles.ingestBadgeProcessing}>{' processing…'}</Text>
+              <Text style={styles.ingestBadgeProcessing}>{' processing\u2026'}</Text>
             )}
             {ingestState?.status === 'queued' && (
-              <Text style={styles.ingestBadgeQueued}>{' queued ✓'}</Text>
+              <Text style={styles.ingestBadgeQueued}>{' queued \u2713'}</Text>
             )}
             {ingestState?.status === 'failed' && (
               <Text style={styles.ingestBadgeFailed}>{' failed'}</Text>
@@ -1630,8 +1635,10 @@ export default function ReaderScreen() {
   const [showVoiceFeedback, setShowVoiceFeedback] = useState(false);
   const [activeEntity, setActiveEntity] = useState<ArticleEntity | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [linkToast, setLinkToast] = useState<{ domain: string; articleId: string } | null>(null);
   const [autoAdvanceToast, setAutoAdvanceToast] = useState<{ title: string; articleId: string } | null>(null);
   const autoAdvanceToastAnim = useRef(new Animated.Value(0)).current;
+  const voicePulseAnim = useRef(new Animated.Value(1)).current;
 
   // Adjacent articles for top bar navigation
   const prevArticleId = useMemo(() => article ? getAdjacentArticleId(article.id, 'prev', feedLens) : null, [article, feedLens]);
@@ -1689,6 +1696,22 @@ export default function ReaderScreen() {
     }, 3000);
     return () => clearTimeout(t);
   }, [autoAdvanceToast]);
+
+  // Voice note pulsing animation
+  useEffect(() => {
+    if (showVoiceFeedback) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(voicePulseAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+          Animated.timing(voicePulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      voicePulseAnim.setValue(1);
+    }
+  }, [showVoiceFeedback]);
 
   // --- Keyboard shortcuts (web only) ---
   const readingModes: ReadingMode[] = ['full', 'guided', 'new_only'];
@@ -1757,6 +1780,11 @@ export default function ReaderScreen() {
             }));
             await addToQueue(result.article_id);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            try {
+              const domain = new URL(url).hostname.replace(/^www\./, '');
+              setLinkToast({ domain, articleId: result.article_id });
+            } catch {}
+            logEvent('reader_link_queued', { url, article_id: result.article_id });
           } else if (status.status === 'failed') {
             clearInterval(timer);
             delete pollTimers.current[url];
@@ -2191,6 +2219,18 @@ export default function ReaderScreen() {
               </Text>
             </Pressable>
             <Pressable onPress={() => {
+              setShowVoiceFeedback(!showVoiceFeedback);
+              logEvent('voice_note_toolbar_tap', { article_id: article.id });
+            }} style={styles.voiceToolbarButton}>
+              {showVoiceFeedback ? (
+                <Animated.Text style={[styles.voiceToolbarDotActive, { opacity: voicePulseAnim }]}>
+                  {'\u25CF'}
+                </Animated.Text>
+              ) : (
+                <Text style={styles.voiceToolbarDot}>{'\u25CF'}</Text>
+              )}
+            </Pressable>
+            <Pressable onPress={() => {
               setShowMenu(!showMenu);
               logEvent('reader_menu_toggle', { article_id: article.id });
             }} style={styles.menuButton}>
@@ -2336,6 +2376,19 @@ export default function ReaderScreen() {
           <Text style={styles.statusToastText}>{statusMessage}</Text>
         </View>
       ) : null}
+
+      {/* Link queued toast */}
+      {linkToast && (
+        <LinkToast
+          domain={linkToast.domain}
+          articleId={linkToast.articleId}
+          onViewQueue={() => {
+            setLinkToast(null);
+            router.push('/queue');
+          }}
+          onDismiss={() => setLinkToast(null)}
+        />
+      )}
 
       {/* Auto-advance toast */}
       {autoAdvanceToast ? (
@@ -2744,6 +2797,24 @@ const styles = StyleSheet.create({
   bookmarkTextActive: {
     color: colors.rubric,
   },
+  voiceToolbarButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  voiceToolbarDot: {
+    fontFamily: fonts.ui,
+    fontSize: 16,
+    color: colors.textMuted,
+  },
+  voiceToolbarDotActive: {
+    fontFamily: fonts.ui,
+    fontSize: 16,
+    color: colors.rubric,
+  },
   menuButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -3127,6 +3198,22 @@ const styles = StyleSheet.create({
     color: colors.rubric,
     textDecorationLine: 'underline' as const,
     textDecorationColor: 'rgba(139,37,0,0.15)' as any,
+  },
+  markdownLinkIngest: {
+    color: colors.rubric,
+    textDecorationLine: 'underline' as const,
+    textDecorationColor: 'rgba(139,37,0,0.15)' as any,
+  },
+  markdownLinkExternal: {
+    color: colors.rubric,
+    textDecorationLine: 'underline' as const,
+    textDecorationStyle: 'dashed' as const,
+    textDecorationColor: 'rgba(139,37,0,0.15)' as any,
+  },
+  linkSuffix: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: colors.textMuted,
   },
   ingestBadgeProcessing: {
     fontFamily: fonts.ui,

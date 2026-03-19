@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Build the pre-computed knowledge index served to the Petrarca mobile app.
 
-Loads articles + claim embeddings, computes pairwise similarities,
-article-level novelty matrix, paragraph mappings, and optional LLM-generated
-delta reports per topic.
+Loads articles + claim embeddings (amygdala MiniLM 384d), computes pairwise
+similarities, NLI classification for ambiguous pairs, article-level novelty
+matrix, paragraph mappings, and optional LLM-generated delta reports per topic.
 
 Output: data/knowledge_index.json
 
 Usage:
-    python3 scripts/build_knowledge_index.py                # full build with delta reports + LLM judge
+    python3 scripts/build_knowledge_index.py                # full build with delta reports + NLI
     python3 scripts/build_knowledge_index.py --skip-delta   # skip LLM delta reports
-    python3 scripts/build_knowledge_index.py --skip-judge   # skip LLM judge for ambiguous pairs
+    python3 scripts/build_knowledge_index.py --skip-judge   # skip NLI for ambiguous pairs
 """
 
 import json
@@ -25,29 +25,31 @@ from collections import defaultdict
 
 import numpy as np
 
+# Amygdala NLI for ambiguous-zone classification (replaces Gemini LLM judge)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
+from amygdala import nli_classify_batch
+
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_DIR / "data"
 ARTICLES_PATH = DATA_DIR / "articles.json"
-EMBEDDINGS_PATH_NOMIC = DATA_DIR / "claim_embeddings_nomic.npz"
-EMBEDDINGS_PATH_GEMINI = DATA_DIR / "claim_embeddings.npz"
+EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 OUTPUT_PATH = DATA_DIR / "knowledge_index.json"
 
-# Thresholds validated by experiments
-THRESHOLD_KNOWN = 0.78
-THRESHOLD_EXTENDS = 0.68
+# Thresholds calibrated for paraphrase-multilingual-MiniLM-L12-v2 (384d)
+# See ~/src/amygdala/experiments/calibration_petrarca_thresholds.md
+THRESHOLD_KNOWN = 0.88
+THRESHOLD_EXTENDS = 0.72
 
 
 def normalize_topic(topic: str) -> str:
     """Normalize a topic string: hyphens to spaces, lowercase, strip whitespace."""
     return re.sub(r"\s+", " ", topic.replace("-", " ")).strip().lower()
 
-# LLM judge: ambiguous zone where cosine overestimates similarity
-JUDGE_AMBIGUOUS_LOW = 0.68
-JUDGE_AMBIGUOUS_HIGH = 0.78
-JUDGE_MAX_PAIRS = 200
-# Prioritize pairs closest to the boundary (0.72-0.78) when capping
-JUDGE_PRIORITY_LOW = 0.72
+# NLI classification for ambiguous zone (replaces LLM judge)
+# Entailment → promote to KNOWN, Contradiction → demote to NEW, Neutral → EXTENDS
+NLI_ZONE_LOW = 0.72
+NLI_ZONE_HIGH = 0.88
 
 # Sub-topic splitting threshold
 SUBTOPIC_CLAIM_THRESHOLD = 30
@@ -95,23 +97,13 @@ def load_articles_and_claims() -> tuple[list[dict], list[dict], dict[str, int]]:
 
 
 def load_embeddings(expected_count: int) -> np.ndarray:
-    """Load pre-computed embeddings and verify dimensions.
-
-    Tries Nomic embeddings first (calibrated thresholds), falls back to Gemini.
-    """
-    embeddings_path = None
-    if EMBEDDINGS_PATH_NOMIC.exists():
-        embeddings_path = EMBEDDINGS_PATH_NOMIC
-        log(f"  Using Nomic embeddings: {embeddings_path}")
-    elif EMBEDDINGS_PATH_GEMINI.exists():
-        embeddings_path = EMBEDDINGS_PATH_GEMINI
-        log(f"  Using Gemini embeddings: {embeddings_path}")
-    else:
-        log(f"ERROR: No embeddings found. Expected {EMBEDDINGS_PATH_NOMIC} or {EMBEDDINGS_PATH_GEMINI}")
+    """Load pre-computed embeddings from amygdala (MiniLM 384d) and verify dimensions."""
+    if not EMBEDDINGS_PATH.exists():
+        log(f"ERROR: No embeddings found at {EMBEDDINGS_PATH}")
         log("Run build_claim_embeddings.py to generate embeddings.")
         sys.exit(1)
 
-    data = np.load(embeddings_path)
+    data = np.load(EMBEDDINGS_PATH)
     embeddings = data["embeddings"]
 
     if len(embeddings) != expected_count:
@@ -155,76 +147,56 @@ def extract_cross_article_pairs(similarity: np.ndarray, claims: list[dict],
     return pairs
 
 
-def judge_ambiguous_pairs(pairs: list[dict], claims: list[dict]) -> tuple[dict[str, str], int]:
-    """Use LLM to classify pairs in the ambiguous similarity zone (0.68-0.78).
+def classify_ambiguous_pairs(pairs: list[dict], claims: list[dict]) -> tuple[dict[str, str], int]:
+    """Use NLI to classify pairs in the ambiguous similarity zone (0.72-0.88).
 
-    Returns (llm_verdicts dict, number of pairs that changed classification).
+    Returns (nli_verdicts dict, number of pairs that changed classification).
     The verdicts dict maps "claimA_id::claimB_id" to one of ENTAILS/EXTENDS/UNRELATED.
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from gemini_llm import call_llm
 
+    NLI label mapping:
+      entailment   → ENTAILS  (promote to KNOWN)
+      neutral      → EXTENDS  (keep as EXTENDS)
+      contradiction → UNRELATED (demote to NEW)
+    """
     claim_lookup = {c["id"]: c for c in claims}
 
     ambiguous = [
         p for p in pairs
-        if JUDGE_AMBIGUOUS_LOW <= p["score"] < JUDGE_AMBIGUOUS_HIGH
+        if NLI_ZONE_LOW <= p["score"] < NLI_ZONE_HIGH
     ]
 
     if not ambiguous:
-        log("  No ambiguous pairs to judge")
+        log("  No ambiguous pairs to classify")
         return {}, 0
 
-    priority = [p for p in ambiguous if p["score"] >= JUDGE_PRIORITY_LOW]
-    rest = [p for p in ambiguous if p["score"] < JUDGE_PRIORITY_LOW]
-    ordered = priority + rest
-    to_judge = ordered[:JUDGE_MAX_PAIRS]
+    log(f"  {len(ambiguous)} ambiguous pairs ({NLI_ZONE_LOW}-{NLI_ZONE_HIGH}), classifying with NLI...")
 
-    log(f"  {len(ambiguous)} ambiguous pairs (0.68-0.78), judging {len(to_judge)} (cap {JUDGE_MAX_PAIRS})")
+    # Build text pairs for batch classification
+    nli_pairs = []
+    for p in ambiguous:
+        text_a = claim_lookup.get(p["a"], {}).get("normalized_text", p["a"])
+        text_b = claim_lookup.get(p["b"], {}).get("normalized_text", p["b"])
+        nli_pairs.append((text_a, text_b))
+
+    t0 = time.time()
+    nli_results = nli_classify_batch(nli_pairs)
+    elapsed = time.time() - t0
+    log(f"  NLI classified {len(nli_pairs)} pairs in {elapsed:.1f}s ({len(nli_pairs)/max(elapsed,0.01):.0f} pairs/s)")
+
+    NLI_TO_VERDICT = {
+        "entailment": "ENTAILS",
+        "neutral": "EXTENDS",
+        "contradiction": "UNRELATED",
+    }
 
     verdicts: dict[str, str] = {}
     changed = 0
-
-    def _judge_pair(pair: dict, index: int) -> tuple[str, str, str]:
-        text_a = claim_lookup.get(pair["a"], {}).get("normalized_text", pair["a"])
-        text_b = claim_lookup.get(pair["b"], {}).get("normalized_text", pair["b"])
-
-        prompt = (
-            "Given these two claims, classify their relationship:\n"
-            "(a) ENTAILS — they say the SAME thing (semantically equivalent)\n"
-            "(b) EXTENDS — one extends, refines, or adds detail to the other\n"
-            "(c) UNRELATED — they are genuinely DIFFERENT claims about different things\n\n"
-            f"Claim A: {text_a}\n"
-            f"Claim B: {text_b}\n\n"
-            "Respond with ONLY one word: ENTAILS, EXTENDS, or UNRELATED."
-        )
-
-        answer = call_llm(prompt, max_tokens=10)
-        if answer:
-            answer = answer.upper()
-            if "ENTAILS" in answer:
-                return pair["a"], pair["b"], "ENTAILS"
-            elif "UNRELATED" in answer:
-                return pair["a"], pair["b"], "UNRELATED"
-            elif "EXTENDS" in answer:
-                return pair["a"], pair["b"], "EXTENDS"
-        return pair["a"], pair["b"], "EXTENDS"
-
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {
-            executor.submit(_judge_pair, pair, i): pair
-            for i, pair in enumerate(to_judge)
-        }
-        completed = 0
-        for future in as_completed(futures):
-            completed += 1
-            claim_a, claim_b, verdict = future.result()
-            key = f"{claim_a}::{claim_b}"
-            verdicts[key] = verdict
-            if verdict in ("ENTAILS", "UNRELATED"):
-                changed += 1
-            if completed % 50 == 0 or completed == len(futures):
-                log(f"  [{completed}/{len(futures)}] pairs judged")
+    for pair, nli in zip(ambiguous, nli_results):
+        verdict = NLI_TO_VERDICT.get(nli["label"], "EXTENDS")
+        key = f"{pair['a']}::{pair['b']}"
+        verdicts[key] = verdict
+        if verdict in ("ENTAILS", "UNRELATED"):
+            changed += 1
 
     return verdicts, changed
 
@@ -622,21 +594,21 @@ def main():
     log("Computing similarity matrix...")
     similarity = compute_similarity_matrix(embeddings)
 
-    log("Extracting cross-article similarity pairs (>= 0.68)...")
-    pairs = extract_cross_article_pairs(similarity, claims)
+    log(f"Extracting cross-article similarity pairs (>= {THRESHOLD_EXTENDS})...")
+    pairs = extract_cross_article_pairs(similarity, claims, threshold=THRESHOLD_EXTENDS)
     log(f"  {len(pairs)} cross-article pairs found")
 
-    # 2b. LLM judge for ambiguous pairs (optional)
-    llm_verdicts = {}
-    judge_changed = 0
+    # 2b. NLI classification for ambiguous pairs (optional)
+    nli_verdicts = {}
+    nli_changed = 0
     if args.skip_judge:
-        log("Skipping LLM judge (--skip-judge)")
+        log("Skipping NLI classification (--skip-judge)")
     else:
-        log("Running LLM judge on ambiguous pairs (0.68-0.78)...")
-        llm_verdicts, judge_changed = judge_ambiguous_pairs(pairs, claims)
-        entails_count = sum(1 for v in llm_verdicts.values() if v == "ENTAILS")
-        unrelated_count = sum(1 for v in llm_verdicts.values() if v == "UNRELATED")
-        log(f"  LLM judge: {len(llm_verdicts)} pairs verified, {judge_changed} changed classification "
+        log("Running NLI on ambiguous pairs (0.72-0.88)...")
+        nli_verdicts, nli_changed = classify_ambiguous_pairs(pairs, claims)
+        entails_count = sum(1 for v in nli_verdicts.values() if v == "ENTAILS")
+        unrelated_count = sum(1 for v in nli_verdicts.values() if v == "UNRELATED")
+        log(f"  NLI: {len(nli_verdicts)} pairs classified, {nli_changed} changed "
             f"({entails_count} ENTAILS, {unrelated_count} UNRELATED)")
 
     # 3. Build paragraph mapping
@@ -692,14 +664,14 @@ def main():
             "total_similarity_pairs": len(pairs),
             "total_topics": len(all_topics),
             "delta_report_count": len(delta_reports),
-            "judge_pairs_verified": len(llm_verdicts),
-            "judge_changed": judge_changed,
+            "nli_pairs_classified": len(nli_verdicts),
+            "nli_changed": nli_changed,
         },
         "claims": claims_dict,
         "article_claims": article_claims,
         "paragraph_map": paragraph_map,
         "similarities": pairs,
-        "llm_verdicts": llm_verdicts,
+        "nli_verdicts": nli_verdicts,
         "article_novelty_matrix": novelty_matrix,
         "delta_reports": delta_reports,
     }
@@ -719,14 +691,14 @@ def main():
     print(f"  Articles:  {output['stats']['total_articles']}")
     print(f"  Claims:    {output['stats']['total_claims']}")
     print(f"  Topics:    {output['stats']['total_topics']}")
-    print(f"  Sim pairs: {output['stats']['total_similarity_pairs']} (>= 0.68)")
-    print(f"  Judge:     {output['stats']['judge_pairs_verified']} verified, {output['stats']['judge_changed']} changed")
+    print(f"  Sim pairs: {output['stats']['total_similarity_pairs']} (>= {THRESHOLD_EXTENDS})")
+    print(f"  NLI:       {output['stats']['nli_pairs_classified']} classified, {output['stats']['nli_changed']} changed")
     print(f"  Delta rpts:{output['stats']['delta_report_count']}")
     print(f"  File size: {file_size:,} bytes ({file_size / 1024:.1f} KB)")
     print()
 
     # Similarity distribution
-    thresholds = [0.90, 0.85, 0.80, 0.78, 0.75, 0.68, 0.60, 0.50]
+    thresholds = [0.95, 0.90, 0.88, 0.85, 0.80, 0.78, 0.75, 0.72]
     print("  Similarity distribution (cross-article pairs):")
     for t in thresholds:
         count = sum(1 for p in pairs if p["score"] >= t)

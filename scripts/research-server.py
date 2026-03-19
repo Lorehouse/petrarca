@@ -17,7 +17,9 @@ import email.policy
 import hashlib
 import json
 import os
+import random
 import re
+import string
 import subprocess
 import sys
 import tempfile
@@ -52,6 +54,8 @@ KINDLE_DATA_PATH = Path(os.environ.get('KINDLE_DATA_PATH', '/opt/petrarca/data/k
 KINDLE_HIGHLIGHTS_PATH = Path(os.environ.get('KINDLE_HIGHLIGHTS_PATH', '/opt/petrarca/data/kindle_highlights.json'))
 KINDLE_SYNC_LOG_PATH = Path(os.environ.get('KINDLE_SYNC_LOG_PATH', '/opt/petrarca/data/kindle_sync_log.jsonl'))
 FEEDBACK_DIR = Path(os.environ.get('FEEDBACK_DIR', '/opt/petrarca/data/feedback'))
+PROJECTS_PATH = Path(os.environ.get('PROJECTS_PATH', '/opt/petrarca/data/projects.json'))
+PROJECTS_MEDIA_DIR = Path(os.environ.get('PROJECTS_MEDIA_DIR', '/opt/petrarca/data/projects'))
 
 from server_log import log_server_event
 from curriculum import (
@@ -75,6 +79,172 @@ NOTES_DIR.mkdir(parents=True, exist_ok=True)
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 BOOK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+PROJECTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Projects helpers
+# ---------------------------------------------------------------------------
+
+def _load_projects():
+    if not PROJECTS_PATH.exists():
+        return {"projects": [], "notes": []}
+    try:
+        return json.loads(PROJECTS_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {"projects": [], "notes": []}
+
+
+def _save_projects(data):
+    PROJECTS_PATH.write_text(json.dumps(data, indent=2))
+
+
+def _gen_id(prefix: str) -> str:
+    suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    return f'{prefix}_{int(time.time())}_{suffix}'
+
+
+# ---------------------------------------------------------------------------
+# Voice routing
+# ---------------------------------------------------------------------------
+
+def route_voice_input(transcript: str, source_context: dict) -> dict:
+    """Classify voice input and route to appropriate handler.
+
+    Returns: {"intent": "project_note|research_request|article_feedback|general_note",
+              "project_id": str or None,
+              "project_name": str or None,
+              "confidence": 0.0-1.0,
+              "cleaned_text": str}
+    """
+    data = _load_projects()
+    active_projects = [p for p in data.get('projects', []) if p.get('status') == 'active']
+    project_names_list = [p['name'] for p in active_projects]
+
+    from gemini_llm import call_llm
+
+    prompt = f"""Classify this voice input. The user has these active projects: {json.dumps(project_names_list)}
+
+Voice transcript: "{transcript}"
+
+Source context: {json.dumps(source_context)}
+
+Classify the intent as one of:
+- "project_note": The user is adding a note to a specific project (mentions a project name or clearly refers to one)
+- "research_request": The user is asking to research or investigate something
+- "article_feedback": The user is giving feedback about the current article/content
+- "general_note": A general thought or note not tied to a specific project
+
+Return JSON only:
+{{"intent": "...", "project_name": "..." or null, "confidence": 0.0-1.0, "cleaned_text": "the note text without the routing prefix"}}"""
+
+    try:
+        raw = call_llm(prompt)
+        json_start = raw.find('{')
+        json_end = raw.rfind('}') + 1
+        if json_start < 0 or json_end <= json_start:
+            return {"intent": "general_note", "project_id": None, "project_name": None,
+                    "confidence": 0.0, "cleaned_text": transcript}
+
+        result = json.loads(raw[json_start:json_end])
+
+        # Resolve project_name to project_id via fuzzy match
+        matched_project = None
+        if result.get('project_name'):
+            target = result['project_name'].lower().strip()
+            for p in active_projects:
+                if target in p['name'].lower() or p['name'].lower() in target:
+                    matched_project = p
+                    break
+
+        result['project_id'] = matched_project['id'] if matched_project else None
+        if matched_project:
+            result['project_name'] = matched_project['name']
+
+        return result
+    except Exception as e:
+        print(f'[voice-routing] Classification failed: {e}', flush=True)
+        return {"intent": "general_note", "project_id": None, "project_name": None,
+                "confidence": 0.0, "cleaned_text": transcript}
+
+
+def _route_and_enrich_feedback(feedback_id: str, transcript: str, context: dict):
+    """Background: classify voice transcript and auto-create project note if matched."""
+    try:
+        routing = route_voice_input(transcript, context)
+        print(f'[voice-routing] {feedback_id} → {routing["intent"]} '
+              f'(project={routing.get("project_name")}, conf={routing.get("confidence")})', flush=True)
+
+        # Update the feedback JSON with routing info
+        meta_path = FEEDBACK_DIR / f'{feedback_id}.json'
+        for _ in range(10):
+            if meta_path.exists():
+                break
+            time.sleep(0.5)
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+                meta['voice_routing'] = routing
+                meta_path.write_text(json.dumps(meta, indent=2))
+            except (json.JSONDecodeError, OSError) as e:
+                print(f'[voice-routing] Failed to update feedback meta: {e}', flush=True)
+
+        # Auto-create project note if matched
+        if routing.get('intent') == 'project_note' and routing.get('project_id'):
+            data = _load_projects()
+            note_id = _gen_id('note')
+            note = {
+                'id': note_id,
+                'project_id': routing['project_id'],
+                'text': routing.get('cleaned_text', transcript),
+                'audio_file': None,
+                'source': context,
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            }
+            data['notes'].append(note)
+            _save_projects(data)
+            print(f'[voice-routing] Auto-created project note {note_id} for project {routing["project_id"]}', flush=True)
+
+    except Exception as e:
+        print(f'[voice-routing] Background routing failed for {feedback_id}: {e}', flush=True)
+
+
+def _route_and_enrich_note(note_id: str, transcript: str, article_id: str, article_title: str):
+    """Background: classify voice note transcript and auto-create project note if matched."""
+    try:
+        context = {'type': 'article', 'id': article_id, 'title': article_title}
+        routing = route_voice_input(transcript, context)
+        print(f'[voice-routing] note {note_id} → {routing["intent"]} '
+              f'(project={routing.get("project_name")}, conf={routing.get("confidence")})', flush=True)
+
+        # Update the note JSON with routing info
+        note_path = NOTES_DIR / f'{note_id}.json'
+        if note_path.exists():
+            try:
+                note = json.loads(note_path.read_text())
+                note['voice_routing'] = routing
+                note_path.write_text(json.dumps(note, indent=2))
+            except (json.JSONDecodeError, OSError) as e:
+                print(f'[voice-routing] Failed to update note: {e}', flush=True)
+
+        # Auto-create project note if matched
+        if routing.get('intent') == 'project_note' and routing.get('project_id'):
+            data = _load_projects()
+            proj_note_id = _gen_id('note')
+            proj_note = {
+                'id': proj_note_id,
+                'project_id': routing['project_id'],
+                'text': routing.get('cleaned_text', transcript),
+                'audio_file': None,
+                'source': {'type': 'article', 'id': article_id, 'title': article_title},
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            }
+            data['notes'].append(proj_note)
+            _save_projects(data)
+            print(f'[voice-routing] Auto-created project note {proj_note_id} from voice note {note_id}', flush=True)
+
+    except Exception as e:
+        print(f'[voice-routing] Background note routing failed for {note_id}: {e}', flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1095,6 +1265,13 @@ def process_voice_note(note_id: str, audio_path: Path, article_id: str, topics: 
             note['actions'] = actions
             note_path.write_text(json.dumps(note, indent=2))
             print(f'[note] {note_id} extracted {len(actions)} actions', flush=True)
+
+        # Voice routing (best-effort, non-blocking)
+        threading.Thread(
+            target=_route_and_enrich_note,
+            args=(note_id, transcript, article_id, article_title),
+            daemon=True,
+        ).start()
     except Exception as e:
         note['status'] = 'failed'
         note['error'] = str(e)
@@ -2108,6 +2285,161 @@ class ResearchHandler(BaseHTTPRequestHandler):
         print(f'[scrape-report] Reported {article_id}: {title[:60]}', flush=True)
         self._send_json_response(200, {'status': 'reported'})
 
+    # --- Project handlers ---
+
+    def _handle_projects_list(self):
+        """GET /projects — list all projects with note counts."""
+        data = _load_projects()
+        projects = data.get('projects', [])
+        notes = data.get('notes', [])
+
+        result = []
+        for p in projects:
+            proj_notes = [n for n in notes if n.get('project_id') == p['id']]
+            note_timestamps = [n.get('created_at', '') for n in proj_notes]
+            last_activity = max(note_timestamps) if note_timestamps else p.get('created_at', '')
+            result.append({
+                **p,
+                'note_count': len(proj_notes),
+                'last_activity': last_activity,
+            })
+
+        result.sort(key=lambda x: x.get('last_activity', ''), reverse=True)
+        self._send_json_response(200, {'projects': result})
+
+    def _handle_project_detail(self):
+        """GET /projects/{id} — get project with all its notes."""
+        project_id = self.path.split('/')[2]
+        data = _load_projects()
+        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
+        if not project:
+            self._send_json_response(404, {'error': 'Project not found'})
+            return
+
+        notes = [n for n in data.get('notes', []) if n.get('project_id') == project_id]
+        notes.sort(key=lambda n: n.get('created_at', ''), reverse=True)
+        self._send_json_response(200, {'project': project, 'notes': notes})
+
+    def _handle_project_create(self):
+        """POST /projects — create a new project."""
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        name = body.get('name', '').strip()
+        if not name:
+            self._send_json_response(400, {'error': 'Missing required field: name'})
+            return
+
+        project = {
+            'id': _gen_id('proj'),
+            'name': name,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'status': 'active',
+            'description': body.get('description', ''),
+        }
+
+        data = _load_projects()
+        data['projects'].append(project)
+        _save_projects(data)
+
+        print(f'[projects] Created project {project["id"]}: {name}', flush=True)
+        self._send_json_response(201, {'project': project})
+
+    def _handle_project_note(self):
+        """POST /projects/note — add a note to a project (multipart/form-data or JSON)."""
+        content_type = self.headers.get('Content-Type', '')
+
+        if 'multipart/form-data' in content_type:
+            import cgi
+            environ = {
+                'REQUEST_METHOD': 'POST',
+                'CONTENT_TYPE': content_type,
+                'CONTENT_LENGTH': self.headers.get('Content-Length', '0'),
+            }
+            form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ=environ)
+
+            project_id = form.getvalue('project_id', '')
+            text = form.getvalue('text', '')
+            source_raw = form.getvalue('source', '')
+
+            try:
+                source = json.loads(source_raw) if source_raw else None
+            except json.JSONDecodeError:
+                source = None
+
+            # Save audio if present
+            audio_file = None
+            if 'audio' in form and form['audio'].file:
+                note_id = _gen_id('note')
+                audio_filename = f'{note_id}_audio.m4a'
+                audio_path = PROJECTS_MEDIA_DIR / audio_filename
+                audio_data = form['audio'].file.read()
+                audio_path.write_bytes(audio_data if isinstance(audio_data, bytes) else audio_data.encode('latin-1'))
+                audio_file = audio_filename
+                print(f'[projects] Saved audio: {audio_filename}', flush=True)
+            else:
+                note_id = _gen_id('note')
+        elif 'application/json' in content_type:
+            body = self._read_json_body()
+            if body is None:
+                return
+            project_id = body.get('project_id', '')
+            text = body.get('text', '')
+            source = body.get('source')
+            audio_file = None
+            note_id = _gen_id('note')
+        else:
+            self._send_json_response(400, {'error': 'Expected multipart/form-data or application/json'})
+            return
+
+        if not project_id:
+            self._send_json_response(400, {'error': 'Missing required field: project_id'})
+            return
+
+        data = _load_projects()
+        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
+        if not project:
+            self._send_json_response(404, {'error': 'Project not found'})
+            return
+
+        note = {
+            'id': note_id,
+            'project_id': project_id,
+            'text': text,
+            'audio_file': audio_file,
+            'source': source,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        }
+        data['notes'].append(note)
+        _save_projects(data)
+
+        print(f'[projects] Added note {note_id} to project {project_id}', flush=True)
+        self._send_json_response(201, {'note': note})
+
+    def _handle_project_update(self):
+        """POST /projects/{id}/update — update project fields."""
+        parts = self.path.split('/')
+        project_id = parts[2] if len(parts) >= 4 else ''
+
+        body = self._read_json_body()
+        if body is None:
+            return
+
+        data = _load_projects()
+        project = next((p for p in data.get('projects', []) if p['id'] == project_id), None)
+        if not project:
+            self._send_json_response(404, {'error': 'Project not found'})
+            return
+
+        for field in ('name', 'status', 'description'):
+            if field in body:
+                project[field] = body[field]
+
+        _save_projects(data)
+        print(f'[projects] Updated project {project_id}', flush=True)
+        self._send_json_response(200, {'project': project})
+
     def _handle_feedback(self):
         """Receive feedback with optional screenshot, audio, text, and context."""
         import cgi
@@ -2170,6 +2502,7 @@ class ResearchHandler(BaseHTTPRequestHandler):
         # Transcribe audio in background if present
         if audio_path:
             def _transcribe_and_update():
+                transcript = None
                 try:
                     transcript = transcribe_on_server(audio_path)
                     metadata['transcript'] = transcript
@@ -2180,6 +2513,13 @@ class ResearchHandler(BaseHTTPRequestHandler):
                 finally:
                     meta_path = FEEDBACK_DIR / f'{feedback_id}.json'
                     meta_path.write_text(json.dumps(metadata, indent=2))
+                # Voice routing (best-effort, non-blocking)
+                if transcript:
+                    threading.Thread(
+                        target=_route_and_enrich_feedback,
+                        args=(feedback_id, transcript, context),
+                        daemon=True,
+                    ).start()
 
             thread = threading.Thread(target=_transcribe_and_update, daemon=True)
             thread.start()
@@ -2187,6 +2527,15 @@ class ResearchHandler(BaseHTTPRequestHandler):
             # No audio — save metadata immediately
             meta_path = FEEDBACK_DIR / f'{feedback_id}.json'
             meta_path.write_text(json.dumps(metadata, indent=2))
+
+        # Voice routing for text-only feedback
+        effective_text = text if isinstance(text, str) else ''
+        if effective_text and not audio_path:
+            threading.Thread(
+                target=_route_and_enrich_feedback,
+                args=(feedback_id, effective_text, context),
+                daemon=True,
+            ).start()
 
         print(f'[feedback] Received {feedback_id} (text={bool(text)}, audio={bool(audio_path)}, screenshot={"screenshot" in saved_files})', flush=True)
         log_server_event('feedback_received', feedback_id=feedback_id)
@@ -3462,6 +3811,14 @@ JSON array only:"""
         if self.path == '/kindle/resolve-titles':
             return self._handle_kindle_resolve_titles()
 
+        # Project endpoints
+        if self.path == '/projects':
+            return self._handle_project_create()
+        if self.path == '/projects/note':
+            return self._handle_project_note()
+        if self.path.endswith('/update') and self.path.startswith('/projects/'):
+            return self._handle_project_update()
+
         # Curriculum endpoints
         if self.path == '/curriculum/generate':
             return self._handle_curriculum_generate()
@@ -3954,6 +4311,12 @@ JSON array only:"""
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):
             return self._handle_kindle_highlights_get()
+
+        # Project GET endpoints
+        if self.path == '/projects':
+            return self._handle_projects_list()
+        if self.path.startswith('/projects/') and self.path.count('/') == 2:
+            return self._handle_project_detail()
 
         # Curriculum GET endpoints
         if self.path == '/curriculum/list':

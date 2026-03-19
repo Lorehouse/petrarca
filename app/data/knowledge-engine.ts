@@ -12,8 +12,9 @@ import type {
 
 const LEDGER_KEY = '@petrarca/knowledge_ledger';
 
-const KNOWN_THRESHOLD = 0.78;
-const EXTENDS_THRESHOLD = 0.68;
+// Calibrated for paraphrase-multilingual-MiniLM-L12-v2 (384d)
+const KNOWN_THRESHOLD = 0.88;
+const EXTENDS_THRESHOLD = 0.72;
 const FORGOTTEN_THRESHOLD = 0.3;
 
 const STABILITY_SKIM = 9;
@@ -83,12 +84,12 @@ export function getKnowledgeIndex(): KnowledgeIndex | null {
   return knowledgeIndex;
 }
 
-// --- LLM Verdict Lookup ---
+// --- NLI Verdict Lookup ---
 
-function getLlmVerdict(claimA: string, claimB: string): 'ENTAILS' | 'EXTENDS' | 'UNRELATED' | null {
-  if (!knowledgeIndex?.llm_verdicts) return null;
-  return knowledgeIndex.llm_verdicts[`${claimA}::${claimB}`]
-    ?? knowledgeIndex.llm_verdicts[`${claimB}::${claimA}`]
+function getNliVerdict(claimA: string, claimB: string): 'ENTAILS' | 'EXTENDS' | 'UNRELATED' | null {
+  if (!knowledgeIndex?.nli_verdicts) return null;
+  return knowledgeIndex.nli_verdicts[`${claimA}::${claimB}`]
+    ?? knowledgeIndex.nli_verdicts[`${claimB}::${claimA}`]
     ?? null;
 }
 
@@ -123,7 +124,7 @@ export function classifyArticleClaims(articleId: string): ClaimClassification[] 
       if (score >= KNOWN_THRESHOLD) {
         classification = 'KNOWN';
       } else if (score >= EXTENDS_THRESHOLD) {
-        const verdict = getLlmVerdict(claimId, target);
+        const verdict = getNliVerdict(claimId, target);
         if (verdict === 'UNRELATED') {
           classification = 'NEW';
         } else if (verdict === 'ENTAILS') {
@@ -470,7 +471,7 @@ export interface CrossArticleConnection {
 
 export function getCrossArticleConnections(
   articleId: string,
-  threshold: number = 0.78,
+  threshold: number = KNOWN_THRESHOLD,
   maxResults: number = 5,
 ): CrossArticleConnection[] {
   if (!knowledgeIndex) return [];
@@ -522,7 +523,7 @@ export function getCrossArticleConnections(
 
 export function getParagraphConnections(
   articleId: string,
-  threshold: number = 0.78,
+  threshold: number = KNOWN_THRESHOLD,
 ): Map<number, Array<{ articleId: string; claimText: string }>> {
   const connections = getCrossArticleConnections(articleId, threshold, 10);
   const paragraphMap = new Map<number, Array<{ articleId: string; claimText: string }>>();

@@ -29,9 +29,11 @@ ARTICLES_PATH = DATA_DIR / "articles.json"
 EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 CLAIMS_INDEX_PATH = DATA_DIR / "claims_index.json"
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMINI_KEY", "")
-EMBEDDING_MODEL = "models/gemini-embedding-001"
-BATCH_SIZE = 100  # Gemini supports up to 100 per batch
+# Amygdala local embedding (replaces Gemini API — free, fast, Norwegian-capable)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "amygdala"))
+from amygdala import EmbeddingModel
+
+EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # amygdala default
 
 
 def load_all_claims(articles_path: Path) -> tuple[list[dict], list[dict]]:
@@ -58,48 +60,20 @@ def load_all_claims(articles_path: Path) -> tuple[list[dict], list[dict]]:
     return articles, claims
 
 
-def embed_claims(claims: list[dict], batch_size: int = BATCH_SIZE) -> np.ndarray:
-    """Embed all claims using Gemini embedding API. Returns numpy array of shape (n, dim)."""
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY)
+def embed_claims(claims: list[dict]) -> np.ndarray:
+    """Embed all claims using amygdala (local, free, no API key needed).
 
+    Returns numpy array of shape (n, dim). Uses paraphrase-multilingual-MiniLM-L12-v2
+    (384-dim) which handles English + Norwegian and has best discrimination in experiments.
+    """
+    model = EmbeddingModel(model_name=EMBEDDING_MODEL_NAME)
     texts = [c["normalized_text"] for c in claims]
-    all_embeddings = []
-
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        print(f"  Embedding batch {i // batch_size + 1}/{(len(texts) - 1) // batch_size + 1} "
-              f"({len(batch)} claims)...", file=sys.stderr)
-
-        result = genai.embed_content(
-            model=EMBEDDING_MODEL,
-            content=batch,
-        )
-        all_embeddings.extend(result["embedding"])
-
-        # Audit embedding API usage (approximate token count from text length)
-        try:
-            from llm_audit import audit_llm_call
-            approx_tokens = sum(len(t.split()) * 1.3 for t in batch)
-            audit_llm_call(
-                type("FakeResponse", (), {
-                    "usage": type("Usage", (), {
-                        "prompt_tokens": int(approx_tokens),
-                        "completion_tokens": 0,
-                        "total_tokens": int(approx_tokens),
-                        "prompt_tokens_details": None,
-                    })(),
-                    "model": EMBEDDING_MODEL,
-                })(),
-                script="build_claim_embeddings.py",
-                purpose="claim_embedding",
-            )
-        except Exception:
-            pass
-
-        time.sleep(0.5)  # rate limiting
-
-    return np.array(all_embeddings, dtype=np.float32)
+    print(f"  Embedding {len(texts)} claims with {EMBEDDING_MODEL_NAME}...", file=sys.stderr)
+    t0 = time.time()
+    embeddings = model.embed_batch(texts)
+    elapsed = time.time() - t0
+    print(f"  Embedded {len(texts)} claims in {elapsed:.1f}s ({len(texts)/elapsed:.0f} claims/s)", file=sys.stderr)
+    return embeddings
 
 
 def compute_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
@@ -355,10 +329,6 @@ def main():
     parser.add_argument("--journey", action="store_true", help="Simulate reading journey")
     parser.add_argument("--delta", type=str, help="Generate delta report for topic")
     args = parser.parse_args()
-
-    if not GEMINI_API_KEY and not args.skip_embed:
-        print("Error: GEMINI_KEY or GEMINI_API_KEY required", file=sys.stderr)
-        sys.exit(1)
 
     # Load claims
     print("Loading articles and claims...", file=sys.stderr)

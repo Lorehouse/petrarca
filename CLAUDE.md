@@ -19,7 +19,7 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 ### Architecture
 - **Frontend**: Expo SDK 54 (React Native), 2-tab layout (Feed / Library) + ✦ drawer for secondary screens, deployed at `exp://alifstian.duckdns.org:8082` (native) and `http://alifstian.duckdns.org:8084` (web)
 - **Backend**: Hetzner VM — nginx content server (:8083), research server (:8090), 4-hour cron pipeline
-- **Pipeline**: Twitter bookmarks + Readwise Reader → Gemini Flash extraction → atomic claims → Nomic embeddings → knowledge index → served via nginx
+- **Pipeline**: Twitter bookmarks + Readwise Reader → Gemini Flash extraction → atomic claims → amygdala MiniLM embeddings → NLI-enhanced knowledge index → served via nginx
 - **State**: Module-level vars in `store.ts`, persisted to AsyncStorage. No Redux/Context.
 - **Interest Model**: Topic-level interest tracking with Bayesian smoothing, 30-day decay, feed ranking
 - **Knowledge System**: Server-computed INDEX (claim similarities, paragraph mappings, delta reports) + client-side LEDGER (FSRS decay, claim classification, paragraph dimming)
@@ -40,7 +40,7 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 | `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring |
 | `app/data/queue.ts` | Reading queue with AsyncStorage persistence |
 | `scripts/build_knowledge_index.py` | Server pipeline — embeddings → similarity matrix → delta reports → knowledge_index.json |
-| `scripts/build_claim_embeddings.py` | Generate Nomic-embed-text-v1.5 embeddings for claims |
+| `scripts/build_claim_embeddings.py` | Generate claim embeddings via amygdala (was Gemini API, migrated 2026-03-19) |
 | `scripts/deploy_knowledge_index.sh` | Deploy knowledge_index.json to nginx + update manifest |
 
 ### Key Files (Curriculum & Knowledge Mapping)
@@ -66,7 +66,7 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 - Client syncs to server after every mutation via `syncToServer()` in `book-store.ts`
 
 ### Algorithm Parameters (experiment-validated)
-- KNOWN threshold: ≥ 0.78 cosine, EXTENDS: ≥ 0.68, FORGOTTEN: R < 0.3
+- KNOWN threshold: ≥ 0.88 cosine (MiniLM 384d), EXTENDS: ≥ 0.72, NLI cascade for 0.72–0.88 zone, FORGOTTEN: R < 0.3
 - FSRS stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
 - Curiosity peak: 70% novelty, Gaussian σ=0.15
 - Reader: 3 modes (Full / Guided / New Only), familiar paragraph opacity=0.55
@@ -197,7 +197,12 @@ All research lives in `research/` directory:
 - **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
 - **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **`../amygdala`**: Shared embedding/clustering/novelty library — identified for integration but not yet wired in. Would replace Gemini API embeddings with local all-MiniLM + whitening.
+- **`../amygdala`**: Shared embedding/clustering/novelty library. **Migration in progress (2026-03-19)**:
+  - ✅ `build_claim_embeddings.py`: Gemini API → `amygdala.EmbeddingModel` (paraphrase-multilingual-MiniLM-L12-v2, local, free, Norwegian-capable)
+  - ✅ `experiment_claim_dedup.py`: Manual complete-linkage → `amygdala.complete_linkage_cluster`
+  - ✅ `build_knowledge_index.py`: Nomic loader → single `claim_embeddings.npz`, Gemini LLM judge → `amygdala.nli_classify_batch`, thresholds recalibrated (KNOWN 0.88, EXTENDS 0.72)
+  - ✅ Threshold recalibration: NLI cross-validated on 90 pairs across 6 cosine bands. See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md`
+  - ⬜ Other experiment scripts: `experiment_curiosity_zone.py`, `experiment_knowledge_map.py`, `experiment_contradiction_detection.py` — update embeddings loading
 
 ### 7. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param

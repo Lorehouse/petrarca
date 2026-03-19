@@ -302,8 +302,8 @@ export interface KnowledgeIndex {
     total_similarity_pairs: number;
     total_topics: number;
     delta_report_count: number;
-    judge_pairs_verified?: number;
-    judge_changed?: number;
+    nli_pairs_classified?: number;
+    nli_changed?: number;
   };
   claims: Record<string, {
     text: string;
@@ -314,7 +314,7 @@ export interface KnowledgeIndex {
   }>;
   article_claims: Record<string, string[]>;
   similarities: Array<{ a: string; b: string; score: number }>;
-  llm_verdicts?: Record<string, 'ENTAILS' | 'EXTENDS' | 'UNRELATED'>;
+  nli_verdicts?: Record<string, 'ENTAILS' | 'EXTENDS' | 'UNRELATED'>;
   article_novelty_matrix: Record<string, Record<string, { new: number; extends: number; known: number }>>;
   delta_reports: Record<string, DeltaReport>;
 }

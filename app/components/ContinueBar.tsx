@@ -2,14 +2,22 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, fonts } from '../design/tokens';
 import { logEvent } from '../data/logger';
-import { getInProgressArticles, getReadingState } from '../data/store';
+import { getInProgressArticles, getReadingState, getArticleById } from '../data/store';
+import { getNextQueued } from '../data/queue';
 import { getDisplayTitle } from '../lib/display-utils';
 
 export default function ContinueBar() {
   const router = useRouter();
 
   const inProgress = getInProgressArticles();
-  const article = inProgress[0];
+  const inProgressArticle = inProgress[0];
+
+  // Fallback to next queued article if nothing in progress
+  const queuedId = !inProgressArticle ? getNextQueued() : null;
+  const queuedArticle = queuedId ? getArticleById(queuedId) : undefined;
+
+  const article = inProgressArticle || queuedArticle;
+  const isQueued = !inProgressArticle && !!queuedArticle;
 
   if (!article) return null;
 
@@ -23,17 +31,21 @@ export default function ContinueBar() {
     <Pressable
       style={styles.bar}
       onPress={() => {
-        logEvent('continue_bar_tap', { article_id: article.id });
+        logEvent(isQueued ? 'continue_bar_queue_tap' : 'continue_bar_tap', { article_id: article.id });
         router.push({ pathname: '/reader', params: { id: article.id } });
       }}
     >
-      <Text style={styles.label}>CONTINUE</Text>
+      <Text style={styles.label}>{isQueued ? 'UP NEXT' : 'CONTINUE'}</Text>
       <Text style={styles.title} numberOfLines={1}>{getDisplayTitle(article)}</Text>
-      <View style={styles.progressRing}>
-        <View style={styles.progressCircle}>
-          <Text style={styles.progressText}>{progressPercent}</Text>
+      {isQueued ? (
+        <Text style={styles.playIcon}>{'\u25B8'}</Text>
+      ) : (
+        <View style={styles.progressRing}>
+          <View style={styles.progressCircle}>
+            <Text style={styles.progressText}>{progressPercent}</Text>
+          </View>
         </View>
-      </View>
+      )}
     </Pressable>
   );
 }
@@ -81,5 +93,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#ffffff',
     ...(Platform.OS === 'web' ? { fontWeight: '600' } : {}),
+  },
+  playIcon: {
+    fontFamily: fonts.ui,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.5)',
+    width: 22,
+    textAlign: 'center' as const,
   },
 });
