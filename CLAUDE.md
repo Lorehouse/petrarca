@@ -197,12 +197,11 @@ All research lives in `research/` directory:
 - **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
 - **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **`../amygdala`**: Shared embedding/clustering/novelty library. **Migration in progress (2026-03-19)**:
-  - ✅ `build_claim_embeddings.py`: Gemini API → `amygdala.EmbeddingModel` (paraphrase-multilingual-MiniLM-L12-v2, local, free, Norwegian-capable)
-  - ✅ `experiment_claim_dedup.py`: Manual complete-linkage → `amygdala.complete_linkage_cluster`
-  - ✅ `build_knowledge_index.py`: Nomic loader → single `claim_embeddings.npz`, Gemini LLM judge → `amygdala.nli_classify_batch`, thresholds recalibrated (KNOWN 0.88, EXTENDS 0.72)
-  - ✅ Threshold recalibration: NLI cross-validated on 90 pairs across 6 cosine bands. See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md`
-  - ⬜ Other experiment scripts: `experiment_curiosity_zone.py`, `experiment_knowledge_map.py`, `experiment_contradiction_detection.py` — update embeddings loading
+- **`amygdala`**: Shared embedding/clustering/novelty library (`pip install -e ~/src/amygdala`). Server: `/opt/amygdala` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/amygdala` (private).
+  - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
+  - Thresholds calibrated for MiniLM 384d: KNOWN 0.88, EXTENDS 0.72, NLI cascade for 0.72–0.88 zone
+  - See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md` for calibration methodology
+  - ⬜ Other experiment scripts: `experiment_curiosity_zone.py`, `experiment_knowledge_map.py`, etc. — still reference old `claim_embeddings_nomic.npz`
 
 ### 7. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
