@@ -24,13 +24,21 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 - **Interest Model**: Topic-level interest tracking with Bayesian smoothing, 30-day decay, feed ranking
 - **Knowledge System**: Server-computed INDEX (claim similarities, paragraph mappings, delta reports) + client-side LEDGER (FSRS decay, claim classification, paragraph dimming)
 
+### Key Files (Feed & UI)
+| File | Role |
+|------|------|
+| `app/app/(tabs)/index.tsx` | Feed screen — orchestrates ContinueBar + SynthesisScroll + ArticleRow list |
+| `app/components/ContinueBar.tsx` | Dark ink bar for in-progress article at top of feed |
+| `app/components/SynthesisScroll.tsx` | Horizontal-scroll synthesis cards with margin numbers |
+| `app/components/ArticleRow.tsx` | Tabular article row with novelty badge margin + swipe gestures |
+| `app/app/(tabs)/topics.tsx` | Syntheses screen — synthesis-led (not topic-led), accessible via ✦ drawer |
+| `app/components/FeedbackCapture.tsx` | Global floating ✦ feedback button — voice + text + screenshot + context |
+
 ### Key Files (Knowledge System)
 | File | Role |
 |------|------|
 | `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring |
 | `app/data/queue.ts` | Reading queue with AsyncStorage persistence |
-| `app/app/(tabs)/topics.tsx` | Topics screen — articles grouped by topic, delta reports |
-| `app/app/(tabs)/queue.tsx` | Queue screen — saved-for-later articles |
 | `scripts/build_knowledge_index.py` | Server pipeline — embeddings → similarity matrix → delta reports → knowledge_index.json |
 | `scripts/build_claim_embeddings.py` | Generate Nomic-embed-text-v1.5 embeddings for claims |
 | `scripts/deploy_knowledge_index.sh` | Deploy knowledge_index.json to nginx + update manifest |
@@ -149,13 +157,14 @@ All research lives in `research/` directory:
 - Log BEFORE making changes, not after
 - Include: date, what was tried, results, conclusions
 
-### 3. Interaction Logging
+### 3. Interaction Logging & Feedback Context
 - ALL user interactions must be logged via `logEvent()` from `app/data/logger.ts`
 - When adding new UI elements (buttons, gestures, toggles), always add a `logEvent()` call
 - Log files: `{documentDirectory}/logs/interactions_YYYY-MM-DD.jsonl` (daily, append-only)
 - Every event includes: timestamp, event name, session_id, plus context-specific fields
 - Signals are persisted to AsyncStorage via `app/data/persistence.ts` — never lose user decisions
-- Export logs via the Event Log section in Progress tab, or read JSONL files directly
+- **Feedback context**: Every screen MUST call `setFeedbackContext()` from `app/lib/feedback-context.ts` on focus/mount — this powers the ✦ feedback capture button (which screen, what article, etc.)
+- When adding a new screen, add `setFeedbackContext({ screen: 'screen-name' })` in a `useFocusEffect` (tabs) or `useEffect` (stack screens)
 
 ### 4. Pipeline Prompt & Model Iteration
 - Use the **pipeline testing framework** (`scripts/pipeline-tests/run.py`) when iterating on prompts, models, or extraction logic
@@ -184,7 +193,11 @@ All research lives in `research/` directory:
 - Commit after every significant change
 - After SCP'ing scripts directly to server, the next `deploy.sh` will fail on `git pull` — must `git stash` or `rm` the conflicting files on server first
 - Always commit + push before deploying — both web (`deploy-web.sh`) and mobile (`~/src/expo/scripts/deploy.sh petrarca`) pull from git
-- **✦ Drawer**: Must be explicitly added to each tab screen (import `PetrarcaDrawer`, add state + render). Currently on Feed + Library tabs.
+- **✦ Drawer**: Must be explicitly added to each tab screen (import `PetrarcaDrawer`, add state + render). Currently on Feed, Library, and Topics tabs.
+- **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
+- **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
+- **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
+- **`../amygdala`**: Shared embedding/clustering/novelty library — identified for integration but not yet wired in. Would replace Gemini API embeddings with local all-MiniLM + whitening.
 
 ### 7. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
