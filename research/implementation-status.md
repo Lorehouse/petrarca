@@ -1,6 +1,44 @@
 # Knowledge System Implementation Status
 
-**Date**: March 16, 2026 (last updated — session 28: capture reliability fixes)
+**Date**: March 19, 2026 (last updated — session 30: reader UX + projects + queue priority)
+
+## Session 30: Reader UX Overhaul + Projects System (March 19, 2026)
+
+### Reader Link Clarity
+- **Visual differentiation**: ingestable links show `⊕` suffix (solid underline), external links show `↗` (dashed underline)
+- **LinkToast component**: bottom snackbar "Queued: [domain] ✓" with "View Queue" action, auto-dismiss 3s
+- **Files**: `reader.tsx` (link rendering), `components/LinkToast.tsx`
+
+### Voice Note Discoverability
+- **Always-visible ● icon** in reader toolbar (between star and menu buttons)
+- Pulsing red when recording, one tap to start — no menu navigation needed
+- **File**: `reader.tsx` (toolbar area)
+
+### Projects System (new feature)
+- **Server**: `GET/POST /projects`, `POST /projects/note`, `GET /projects/{id}`, `POST /projects/{id}/update`
+- **Data**: `/opt/petrarca/data/projects.json` (projects + notes), `/opt/petrarca/data/projects/` (audio files)
+- **Client**: `projects-api.ts`, `ProjectPicker.tsx` (bottom-sheet), `projects.tsx` (list), `project-detail.tsx` (notes + add)
+- **Integration**: FeedbackCapture → "Add to project?" after sending, drawer entry
+
+### Voice Routing (auto-classify transcripts)
+- `route_voice_input()` in research-server.py — Gemini Flash classifies intent (project_note, research_request, article_feedback, general_note)
+- Fuzzy-matches project names, auto-creates project notes when matched
+- Background enrichment via daemon threads after feedback/voice note transcription
+
+### Queue Priority in Feed
+- Queued articles boosted to top of 'best' feed lens, queue order preserved
+- "✦ UP NEXT" section header before queued articles in feed
+- ContinueBar falls back to next queued article with "UP NEXT" label when nothing in-progress
+- Queue count badge in ✦ drawer
+
+### Bug Fixes
+- **Duplicate related articles**: replaced cascading dedup sets with single accumulating `usedIds` set
+- **API endpoint mismatches**: fixed client-server contract for projects endpoints (response unwrapping, correct paths)
+
+### Amygdala Migration (completed)
+- `build_claim_embeddings.py`: Gemini API → `amygdala.EmbeddingModel` (local MiniLM)
+- `build_knowledge_index.py`: Nomic → single `claim_embeddings.npz`, Gemini judge → `amygdala.nli_classify_batch`
+- `experiment_claim_dedup.py`: manual complete-linkage → `amygdala.complete_linkage_cluster`
 
 ## Session 28: Capture Reliability Fixes (March 16, 2026)
 
