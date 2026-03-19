@@ -20,8 +20,12 @@ import { uploadFeedback } from '../lib/chat-api';
 
 const FEEDBACK_HIDDEN_KEY = '@petrarca/feedback_button_hidden';
 
+// Event-based re-show: drawer calls showFeedbackButton() which sets this
+let _showCallback: (() => void) | null = null;
+
 export default function FeedbackCapture() {
-  const [hidden, setHidden] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [recording, setRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -37,15 +41,21 @@ export default function FeedbackCapture() {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const contextRef = useRef<Record<string, any>>({});
 
-  // Load hidden state
+  // Load hidden state + register re-show callback
   useEffect(() => {
     AsyncStorage.getItem(FEEDBACK_HIDDEN_KEY).then((val) => {
       const isHidden = val === 'true';
       setHidden(isHidden);
+      setLoaded(true);
       if (!isHidden) {
         Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
       }
     });
+    _showCallback = () => {
+      setHidden(false);
+      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    };
+    return () => { _showCallback = null; };
   }, []);
 
   const toggleVisibility = useCallback(() => {
@@ -176,7 +186,7 @@ export default function FeedbackCapture() {
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  if (hidden) return null;
+  if (!loaded || hidden) return null;
 
   return (
     <>
@@ -291,6 +301,7 @@ export default function FeedbackCapture() {
 
 export async function showFeedbackButton(): Promise<void> {
   await AsyncStorage.setItem(FEEDBACK_HIDDEN_KEY, 'false');
+  _showCallback?.();
 }
 
 const BUTTON_SIZE = 30;
@@ -298,7 +309,7 @@ const BUTTON_SIZE = 30;
 const styles = StyleSheet.create({
   floatingButton: {
     position: 'absolute',
-    bottom: 24,
+    bottom: Platform.select({ ios: 76, android: 60, default: 24 }),
     right: 16,
     zIndex: 9999,
   },

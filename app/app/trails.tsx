@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
+import { setFeedbackContext } from '../lib/feedback-context';
 import { getActiveThreads, getCrossThreadBridges } from '../lib/reading-insights';
 import type { ReadingThread } from '../lib/reading-insights';
 import DoubleRule from '../components/DoubleRule';
@@ -16,6 +17,10 @@ export default function TrailsScreen() {
   );
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
   const [hoveredArticle, setHoveredArticle] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'trails' });
+  }, []);
 
   logEvent('trails_open');
 

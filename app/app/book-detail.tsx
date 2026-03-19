@@ -18,6 +18,7 @@ import { useBookStoreVersion } from '../data/use-book-store';
 import { ocrPage, uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
+import { setFeedbackContext } from '../lib/feedback-context';
 import DoubleRule from '../components/DoubleRule';
 import BookCurriculumContext from '../components/BookCurriculumContext';
 
@@ -233,6 +234,7 @@ export default function BookDetailScreen() {
 
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
+    setFeedbackContext({ screen: 'book-detail', extra: { bookId: id } });
     // Queue any existing failed photo captures that have local URIs (e.g. from before retry was added)
     if (id) {
       const caps = getBookCaptures(id);

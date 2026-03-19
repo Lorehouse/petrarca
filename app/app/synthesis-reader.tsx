@@ -17,6 +17,7 @@ import { spawnTopicResearch } from '../lib/chat-api';
 import DoubleRule from '../components/DoubleRule';
 import { useKeyboardShortcuts, type ShortcutMap } from '../hooks/useKeyboardShortcuts';
 import { fonts } from '../design/tokens';
+import { setFeedbackContext } from '../lib/feedback-context';
 
 let SynthesisChat: any = null;
 try {
@@ -630,6 +631,10 @@ export default function SynthesisReaderScreen() {
   const observerRef = useRef<any>(null);
 
   const synthesis = clusterId ? getSynthesisForCluster(clusterId) : undefined;
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'synthesis-reader', extra: { clusterId, label: synthesis?.label } });
+  }, [clusterId, synthesis?.label]);
   const completed = clusterId ? isSynthesisCompleted(clusterId) : false;
 
   const sourceArticles = useMemo(() => {

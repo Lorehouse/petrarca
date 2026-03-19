@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Platform, ActivityIndica
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, fonts, type, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
+import { setFeedbackContext } from '../lib/feedback-context';
 import { RESEARCH_BASE } from '../lib/chat-api';
 import DoubleRule from '../components/DoubleRule';
 
@@ -37,6 +38,10 @@ export default function CurriculumScanScreen() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<string | null>(null);
   const sortedRef = useRef<Node[]>([]);
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'curriculum-scan' });
+  }, []);
 
   // Load curriculum
   useEffect(() => {

@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { setFeedbackContext } from '../../lib/feedback-context';
 import { logEvent } from '../../data/logger';
 import { getPhysicalBooks, getBookCaptures } from '../../data/book-store';
 import { useBookStoreVersion } from '../../data/use-book-store';
@@ -130,6 +131,7 @@ export default function LibraryScreen() {
   // Re-read books when screen is focused
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
+    setFeedbackContext({ screen: 'library' });
   }, []));
 
   const storeVersion = useBookStoreVersion();

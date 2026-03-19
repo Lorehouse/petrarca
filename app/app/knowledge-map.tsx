@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Platform, ActivityIndica
 import { useRouter } from 'expo-router';
 import { colors, fonts, type, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
+import { setFeedbackContext } from '../lib/feedback-context';
 import { RESEARCH_BASE } from '../lib/chat-api';
 import DoubleRule from '../components/DoubleRule';
 
@@ -53,6 +54,10 @@ export default function KnowledgeMapScreen() {
   const [curriculum, setCurriculum] = useState<CurriculumData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'knowledge-map' });
+  }, []);
 
   useEffect(() => {
     logEvent('knowledge_map_open');

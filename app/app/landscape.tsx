@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
+import { setFeedbackContext } from '../lib/feedback-context';
 import { getTopicBubbles, getRecentSessions, getReadingStats, getCrossThreadBridges } from '../lib/reading-insights';
 import { getDisplayTitle } from '../lib/display-utils';
 import { getFeedVersion } from '../data/store';
@@ -11,6 +12,10 @@ import DoubleRule from '../components/DoubleRule';
 export default function LandscapeScreen() {
   const router = useRouter();
   const feedVersion = getFeedVersion();
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'landscape' });
+  }, []);
 
   const bubbles = useMemo(() => getTopicBubbles(), [feedVersion]);
   const sessions = useMemo(() => getRecentSessions(5), []);

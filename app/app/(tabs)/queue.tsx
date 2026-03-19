@@ -7,6 +7,7 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { getArticleById, recordInterestSignal } from '../../data/store';
 import { Article } from '../../data/types';
 import { logEvent } from '../../data/logger';
+import { setFeedbackContext } from '../../lib/feedback-context';
 import { getDisplayTitle } from '../../lib/display-utils';
 import { colors, fonts, type, spacing, layout } from '../../design/tokens';
 import { loadQueue, getQueuedArticleIds, removeFromQueue } from '../../data/queue';
@@ -167,6 +168,10 @@ export default function QueueScreen() {
   const [, forceUpdate] = useState(0);
   const [ready, setReady] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  useEffect(() => {
+    setFeedbackContext({ screen: 'queue' });
+  }, []);
 
   useEffect(() => {
     loadQueue().then(() => {

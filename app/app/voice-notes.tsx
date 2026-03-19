@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Platform, ScrollView } fro
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, fonts, type, spacing, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
+import { setFeedbackContext } from '../lib/feedback-context';
 import { fetchAllNotes, executeNoteAction } from '../lib/voice-notes-api';
 import VoiceNoteCard from '../components/VoiceNoteCard';
 import DoubleRule from '../components/DoubleRule';
@@ -60,6 +61,7 @@ export default function VoiceNotesScreen() {
   useFocusEffect(
     useCallback(() => {
       logEvent('voice_notes_screen_open');
+      setFeedbackContext({ screen: 'voice-notes' });
       loadNotes();
     }, [loadNotes])
   );

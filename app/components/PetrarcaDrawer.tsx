@@ -2,9 +2,10 @@ import { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { logEvent } from '../data/logger';
-import { getReadArticles } from '../data/store';
+import { getReadArticles, getSyntheses } from '../data/store';
 import { getQueuedArticleIds } from '../data/queue';
 import { colors, fonts } from '../design/tokens';
+import { showFeedbackButton } from './FeedbackCapture';
 
 interface PetrarcaDrawerProps {
   visible: boolean;
@@ -20,6 +21,10 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
   );
   const queueCount = useMemo(
     () => (visible ? getQueuedArticleIds().length : 0),
+    [visible],
+  );
+  const synthesesCount = useMemo(
+    () => (visible ? getSyntheses().length : 0),
     [visible],
   );
 
@@ -79,6 +84,11 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
 
           {/* Navigation items */}
           <NavItem
+            title="Syntheses"
+            subtitle={`${synthesesCount} synthesized topic threads`}
+            onPress={() => navigate('syntheses', '/(tabs)/topics')}
+          />
+          <NavItem
             title="Voice Notes"
             subtitle="3 notes"
             onPress={() => navigate('voice_notes', '/voice-notes')}
@@ -116,6 +126,15 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
               onClose();
               const url = Platform.OS === 'web' ? '/guide/' : 'https://alifstian.duckdns.org:8084/guide/';
               Linking.openURL(url);
+            }}
+          />
+          <NavItem
+            title="Show Feedback Button"
+            subtitle="Re-enable the \u2726 feedback capture"
+            onPress={() => {
+              logEvent('drawer_item_tap', { item: 'show_feedback' });
+              showFeedbackButton();
+              onClose();
             }}
           />
         </Pressable>
