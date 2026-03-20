@@ -38,6 +38,10 @@ function NoveltyBadge({ noveltyRatio }: { noveltyRatio: number }) {
   );
 }
 
+function isResearchArticle(article: Article): boolean {
+  return (article.sources || []).some(s => s.type?.startsWith('research:'));
+}
+
 export default function ArticleRow({
   article,
   onDismiss,
@@ -158,6 +162,9 @@ export default function ArticleRow({
         {novelty ? (
           <NoveltyBadge noveltyRatio={novelty.novelty_ratio} />
         ) : null}
+        {isResearchArticle(article) && (
+          <Text style={styles.researchLabel}>{'↗ AI'}</Text>
+        )}
       </View>
       <View style={styles.content}>
         <Text style={[styles.title, isRead && styles.titleRead]} numberOfLines={1}>
@@ -255,6 +262,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#ffffff',
     ...(Platform.OS === 'web' ? { fontWeight: '500' } : {}),
+  },
+  researchLabel: {
+    fontFamily: fonts.ui,
+    fontSize: 8,
+    color: colors.rubric,
+    marginTop: 3,
+    letterSpacing: 0.5,
   },
   content: {
     flex: 1,
