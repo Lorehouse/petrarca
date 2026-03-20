@@ -222,12 +222,15 @@ export function getRankedFeedArticles(): Article[] {
     if (state && state.status === 'read') return false;
     const synthCoverage = getArticleSynthesisCoverage(a.id);
     if (synthCoverage !== null && synthCoverage >= 0.80) return false;
+    // Skip short Wikipedia chunks (stub intros / thin sections)
+    const isWiki = a.source_url?.includes('wikipedia.org');
+    if (isWiki && (a.word_count || 0) < 500) return false;
     return true;
   });
 
   const hasEnoughSignals = getTotalSignalCount() >= 10;
   if (!hasEnoughSignals) {
-    return candidates; // Already sorted by date from initStore
+    return _capPerSource(candidates);
   }
 
   // Build recent topic list (last 10 articles shown) for variety penalty
@@ -237,7 +240,7 @@ export function getRankedFeedArticles(): Article[] {
 
   const useKnowledge = isKnowledgeReady();
 
-  return candidates
+  const ranked = candidates
     .map(a => {
       const interestScore = scoreArticle(a, recentTopics);
       let score: number;
@@ -256,6 +259,28 @@ export function getRankedFeedArticles(): Article[] {
     })
     .sort((a, b) => b.score - a.score)
     .map(x => x.article);
+
+  return _capPerSource(ranked);
+}
+
+// Cap chunked articles to 3 per base source URL (keeps top-ranked chunks)
+function _capPerSource(sorted: Article[], max: number = 3): Article[] {
+  const counts = new Map<string, number>();
+  return sorted.filter(a => {
+    const url = _baseSourceUrl(a.source_url);
+    if (!url) return true;
+    const n = (counts.get(url) || 0) + 1;
+    counts.set(url, n);
+    return n <= max;
+  });
+}
+
+function _baseSourceUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  // Only cap multi-chunk sources (Wikipedia, etc.)
+  if (!url.includes('wikipedia.org')) return undefined;
+  // Strip #chunk-N fragments
+  return url.split('#')[0];
 }
 
 /**

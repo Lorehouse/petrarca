@@ -10,7 +10,7 @@ import DoubleRule from '../components/DoubleRule';
 import { spawnTopicResearch, ingestUrl, getIngestStatus, reportBadScrape, generateMoreQuestions } from '../lib/chat-api';
 import { addToQueue, addToQueueFront } from '../data/queue';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, recordTopicInterestSignalAtLevel, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
+import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
 import type { FeedLens } from '../data/store';
 import { Article, ArticleEntity, FollowUpQuestion, InterestTopic } from '../data/types';
 import type { CrossArticleConnection } from '../data/knowledge-engine';
@@ -19,7 +19,6 @@ import { logEvent } from '../data/logger';
 import { isSectionValid, parseInlineMarkdown, splitMarkdownBlocks, parseMarkdownBlock } from '../lib/markdown-utils';
 import { getDisplayTitle } from '../lib/display-utils';
 import { toggleBookmark, isBookmarked } from '../data/bookmarks';
-import { getInterestProfile } from '../data/interest-model';
 import { getQueuedArticleIds, removeFromQueue } from '../data/queue';
 import RelatedArticles from '../components/RelatedArticles';
 import LinkToast from '../components/LinkToast';
@@ -335,173 +334,6 @@ function formatTopicLabel(slug: string): string {
   return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-type TopicState = 'interested' | 'neutral' | 'less';
-
-function getTopicState(key: string): TopicState {
-  const profile = getInterestProfile();
-  const t = profile.topics[key];
-  if (!t || (t.positive_signals === 0 && t.negative_signals === 0)) return 'neutral';
-  if (t.interest_score >= 0.6) return 'interested';
-  if (t.interest_score <= 0.35) return 'less';
-  return 'neutral';
-}
-
-function isTopicNew(key: string): boolean {
-  const profile = getInterestProfile();
-  const t = profile.topics[key];
-  return !t || (t.positive_signals === 0 && t.negative_signals === 0 && t.articles_seen <= 1);
-}
-
-const STATE_COLORS: Record<TopicState, string> = {
-  interested: '#2a7a4a',
-  neutral: '#e4dfd4',
-  less: '#d0ccc0',
-};
-
-const CYCLE_ORDER: TopicState[] = ['neutral', 'interested', 'less'];
-
-function KnownTopicDot({ label, topicKey, level, parent, onSignal }: {
-  label: string;
-  topicKey: string;
-  level: 'broad' | 'specific' | 'entity';
-  parent?: string;
-  onSignal: (topicKey: string, level: 'broad' | 'specific' | 'entity', positive: boolean, parent?: string) => void;
-}) {
-  const [state, setState] = useState<TopicState>(() => getTopicState(topicKey));
-
-  const cycle = () => {
-    const idx = CYCLE_ORDER.indexOf(state);
-    const next = CYCLE_ORDER[(idx + 1) % CYCLE_ORDER.length];
-    setState(next);
-    onSignal(topicKey, level, next === 'interested', parent);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const textColor = state === 'interested' ? '#6a6458' : state === 'less' ? colors.claimKnown : colors.textMuted;
-
-  return (
-    <Pressable onPress={cycle} hitSlop={6} style={interestStyles.knownItem}>
-      <View style={[interestStyles.dot, { backgroundColor: STATE_COLORS[state] }]} />
-      <Text style={[
-        interestStyles.knownLabel,
-        { color: textColor },
-        level === 'entity' && { fontFamily: fonts.bodyItalic, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
-      ]} numberOfLines={1}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function PostReadInterestCard({ topics, onLevelSignal, onClose }: {
-  topics: InterestTopic[];
-  onLevelSignal: (topicKey: string, level: 'broad' | 'specific' | 'entity', positive: boolean, parent?: string) => void;
-  onClose: () => void;
-}) {
-  // Flatten all topics into unique items with their keys
-  const allTopics = useMemo(() => {
-    const seen = new Set<string>();
-    const items: Array<{ key: string; label: string; level: 'broad' | 'specific' | 'entity'; parent?: string; context?: string }> = [];
-    for (const t of topics) {
-      if (!seen.has(t.broad)) {
-        seen.add(t.broad);
-        items.push({ key: t.broad, label: formatTopicLabel(t.broad), level: 'broad' });
-      }
-      if (!seen.has(t.specific)) {
-        seen.add(t.specific);
-        items.push({ key: t.specific, label: formatTopicLabel(t.specific), level: 'specific', parent: t.broad, context: formatTopicLabel(t.broad) });
-      }
-      if (t.entity) {
-        const entityKey = t.entity.toLowerCase().replace(/\s+/g, '-');
-        if (!seen.has(entityKey)) {
-          seen.add(entityKey);
-          items.push({ key: entityKey, label: t.entity, level: 'entity', parent: t.specific, context: formatTopicLabel(t.specific) });
-        }
-      }
-    }
-    return items;
-  }, [topics]);
-
-  const newTopics = allTopics.filter(t => isTopicNew(t.key));
-  const knownTopics = allTopics.filter(t => !isTopicNew(t.key));
-
-  return (
-    <View style={styles.interestCardOverlay}>
-      <View style={styles.interestCard}>
-        {/* New topics — prominent with +/− */}
-        {newTopics.length > 0 && (
-          <>
-            <Text style={[styles.interestCardTitle, { color: '#2a7a4a' }]}>{'✦ NEW TOPICS'}</Text>
-            <View style={interestStyles.newSection}>
-              {newTopics.map((t) => (
-                <View key={t.key} style={interestStyles.newRow}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[
-                      interestStyles.newLabel,
-                      t.level === 'entity' && { fontFamily: fonts.bodyItalic, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
-                    ]} numberOfLines={1}>{t.label}</Text>
-                    {t.context && (
-                      <Text style={interestStyles.newContext}>{t.level} · {t.context}</Text>
-                    )}
-                  </View>
-                  <Pressable
-                    style={interestStyles.newBtnPlus}
-                    onPress={() => {
-                      onLevelSignal(t.key, t.level, true, t.parent);
-                    }}
-                    hitSlop={4}
-                  >
-                    <Text style={interestStyles.newBtnPlusText}>+</Text>
-                  </Pressable>
-                  <Pressable
-                    style={interestStyles.newBtnMinus}
-                    onPress={() => {
-                      onLevelSignal(t.key, t.level, false, t.parent);
-                    }}
-                    hitSlop={4}
-                  >
-                    <Text style={interestStyles.newBtnMinusText}>−</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* Known topics — compact dot list */}
-        {knownTopics.length > 0 && (
-          <>
-            <Text style={[styles.interestCardTitle, { color: colors.textMuted, marginTop: newTopics.length > 0 ? 12 : 0 }]}>{'✦ KNOWN TOPICS'}</Text>
-            <View style={interestStyles.knownSection}>
-              {knownTopics.map((t) => (
-                <KnownTopicDot
-                  key={t.key}
-                  label={t.label}
-                  topicKey={t.key}
-                  level={t.level}
-                  parent={t.parent}
-                  onSignal={onLevelSignal}
-                />
-              ))}
-            </View>
-            <View style={interestStyles.legendRow}>
-              <View style={[interestStyles.dot, { backgroundColor: '#2a7a4a' }]} />
-              <Text style={interestStyles.legendText}>interested</Text>
-              <Text style={interestStyles.legendSep}>·</Text>
-              <View style={[interestStyles.dot, { backgroundColor: '#e4dfd4' }]} />
-              <Text style={interestStyles.legendText}>neutral</Text>
-              <Text style={interestStyles.legendSep}>·</Text>
-              <View style={[interestStyles.dot, { backgroundColor: '#d0ccc0' }]} />
-              <Text style={interestStyles.legendText}>less</Text>
-            </View>
-          </>
-        )}
-
-        <Pressable style={styles.interestCloseButton} onPress={onClose}>
-          <Text style={styles.interestCloseText}>Done</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
 
 function stripLeadingTitle(text: string, title: string): string {
   if (!text) return '';
@@ -1623,8 +1455,7 @@ export default function ReaderScreen() {
   const lastPositionSaveTime = useRef(0);
   const scrollMilestone = useRef(0);
   const [highlightedBlocks, setHighlightedBlocks] = useState<Set<number>>(new Set());
-  const [showInterestCard, setShowInterestCard] = useState(false);
-  const [readingMode, setReadingMode] = useState<ReadingMode>('full');
+  const [readingMode, setReadingMode] = useState<ReadingMode>('guided');
   const [scrollProgress, setScrollProgress] = useState(0);
 
   // Sync feedback context with reading state
@@ -2074,7 +1905,7 @@ export default function ReaderScreen() {
     setActiveEntityUrl(undefined);
   }, [article, activeEntity, activeEntityUrl]);
 
-  // Auto-advance to next queued article, or go back to feed
+  // Auto-advance: queue first, then next in feed ranking, then back
   const advanceOrGoBack = useCallback(async () => {
     if (!article) return;
     await removeFromQueue(article.id);
@@ -2083,14 +1914,21 @@ export default function ReaderScreen() {
     const nextArticle = nextId ? getArticleById(nextId) : null;
 
     if (nextArticle) {
-      logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: nextArticle.id });
+      logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: nextArticle.id, source: 'queue' });
       router.replace({ pathname: '/reader', params: { id: nextArticle.id, autoAdvanceFrom: article.id } });
     } else {
-      router.back();
+      // No queue — advance to next ranked article in feed
+      const nextFeedId = getAdjacentArticleId(article.id, 'next', feedLens);
+      if (nextFeedId) {
+        logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: nextFeedId, source: 'feed' });
+        router.replace({ pathname: '/reader', params: { id: nextFeedId, autoAdvanceFrom: article.id } });
+      } else {
+        router.back();
+      }
     }
-  }, [article, router]);
+  }, [article, router, feedLens]);
 
-  // Done handler — user explicitly finished, so mark ALL claims
+  // Done handler — mark read and immediately advance to next
   const handleDone = useCallback(() => {
     if (!article) return;
     markArticleRead(article.id);
@@ -2098,22 +1936,16 @@ export default function ReaderScreen() {
     recordInterestSignal('tap_done', article.id);
     logEvent('reader_done', { article_id: article.id });
 
-    // Play completion flash, then proceed
+    // Brief completion flash, then advance
     completionFlash.setValue(0);
     Animated.timing(completionFlash, {
       toValue: 1,
-      duration: 600,
+      duration: 400,
       useNativeDriver: true,
     }).start(() => {
-      const topics = article.interest_topics || [];
-      if (topics.length > 0) {
-        setShowInterestCard(true);
-        logEvent('interest_card_shown', { article_id: article.id, topic_count: topics.length });
-      } else {
-        advanceOrGoBack();
-      }
+      advanceOrGoBack();
     });
-  }, [article, router, advanceOrGoBack]);
+  }, [article, advanceOrGoBack]);
 
   // Up next handler — navigate to next queued article
   const handleUpNext = useCallback(async () => {
@@ -2126,19 +1958,6 @@ export default function ReaderScreen() {
     router.replace({ pathname: '/reader', params: { id: nextQueuedArticle.id } });
   }, [article, nextQueuedArticle, router]);
 
-  const handleLevelSignal = useCallback((topicKey: string, level: 'broad' | 'specific' | 'entity', positive: boolean, parent?: string) => {
-    if (!article) return;
-    const action = positive ? 'interest_chip_positive' : 'interest_chip_negative';
-    recordTopicInterestSignalAtLevel(action, topicKey, level, parent);
-    logEvent('interest_chip_tap', { article_id: article.id, topic: topicKey, level, positive });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [article]);
-
-  const handleInterestClose = useCallback(() => {
-    logEvent('interest_card_close', { article_id: article?.id });
-    setShowInterestCard(false);
-    advanceOrGoBack();
-  }, [article, advanceOrGoBack]);
 
   const isWeb = Platform.OS === 'web';
   const hasDimming = !!(blockDimming && Array.from(blockDimming.values()).some(d => d.opacity < 1));
@@ -2651,7 +2470,7 @@ export default function ReaderScreen() {
       </View>
 
       {/* Bottom action bar — mobile: triage buttons, web: keyboard hint bar */}
-      {!showInterestCard && Platform.OS !== 'web' && (
+      {Platform.OS !== 'web' && (
         <View style={styles.footerBar}>
           <Pressable style={styles.actionBtn} onPress={() => {
             const next = !bookmarked;
@@ -2687,14 +2506,6 @@ export default function ReaderScreen() {
         </View>
       )}
 
-      {/* Post-Read Interest Card */}
-      {showInterestCard && article.interest_topics && (
-        <PostReadInterestCard
-          topics={article.interest_topics}
-          onLevelSignal={handleLevelSignal}
-          onClose={handleInterestClose}
-        />
-      )}
 
       {/* AI Chat */}
       {showAIChat && (
@@ -3345,54 +3156,6 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
   },
 
-  // Post-Read Interest Card
-  interestCardOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingTop: 100,
-    flex: 1,
-  },
-  interestCard: {
-    backgroundColor: colors.parchment,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0 -4px 16px rgba(0,0,0,0.1)',
-    } : {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.1,
-      shadowRadius: 16,
-      elevation: 8,
-    }),
-  },
-  interestCardTitle: {
-    ...type.sectionHead,
-    color: colors.ink,
-    marginBottom: 4,
-  },
-  interestCardSubtitle: {
-    ...type.metadata,
-    color: colors.textMuted,
-    marginBottom: 16,
-  },
-  interestCloseButton: {
-    alignSelf: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-  },
-  interestCloseText: {
-    ...type.metadata,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
 
   // Error state
   errorText: {
@@ -3541,105 +3304,6 @@ const followUpStyles = StyleSheet.create({
 
 // --- Hierarchical Interest Card Styles ---
 
-const interestStyles = StyleSheet.create({
-  newSection: {
-    gap: 4,
-    marginBottom: 8,
-    marginTop: 6,
-  },
-  newRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderLeftWidth: 2,
-    borderLeftColor: '#2a7a4a',
-    backgroundColor: 'rgba(42, 122, 74, 0.015)',
-    gap: 8,
-  },
-  newLabel: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  newContext: {
-    fontFamily: fonts.ui,
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 1,
-  },
-  newBtnPlus: {
-    width: 36,
-    height: 36,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    borderColor: '#2a7a4a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newBtnPlusText: {
-    fontFamily: fonts.uiMedium,
-    fontSize: 16,
-    color: '#2a7a4a',
-    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
-  },
-  newBtnMinus: {
-    width: 36,
-    height: 36,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    borderColor: colors.rule,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newBtnMinusText: {
-    fontFamily: fonts.uiMedium,
-    fontSize: 16,
-    color: colors.claimKnown,
-    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
-  },
-  knownSection: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    columnGap: 10,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  knownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingVertical: 4,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  knownLabel: {
-    fontFamily: fonts.body,
-    fontSize: 12,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  legendText: {
-    fontFamily: fonts.ui,
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-  legendSep: {
-    fontFamily: fonts.ui,
-    fontSize: 9,
-    color: colors.textMuted,
-    marginHorizontal: 2,
-  },
-});
 
 // --- Connected Reading Styles ---
 
