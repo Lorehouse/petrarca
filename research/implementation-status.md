@@ -1,6 +1,34 @@
 # Knowledge System Implementation Status
 
-**Date**: March 19, 2026 (last updated — session 30: reader UX + projects + queue priority)
+**Date**: March 20, 2026 (last updated — session 32: reading flow fixes + feed quality)
+
+## Session 32: Reading Flow Fixes + Feed Quality (March 20, 2026)
+
+### Reading Flow
+- **Removed PostReadInterestCard** — topic +/- modal after Done was useless friction
+- **Auto-advance after Done**: queue → next ranked feed article → back (no more losing scroll position)
+- **Bug fix**: pre-compute next article BEFORE `markArticleRead()` (read articles get filtered from feed list)
+- **Default reading mode → 'guided'** — known paragraphs dimmed at 0.55 opacity from start
+
+### Feed Quality: Wikipedia Filters
+- 146/237 articles were Wikipedia fragments from entity research chunking at H2 boundaries
+- **Min word filter**: Wikipedia chunks <500w excluded (36 stubs removed)
+- **Per-page cap**: Max 3 per Wikipedia page in feed (29 excess removed)
+- **Implementation**: `_capPerSource()` and word count check in `getRankedFeedArticles()` in store.ts
+
+### Research Article Tagging
+- `run_ingest()` now passes real source tag to `import_url.py` (was always `--tag manual`)
+- **'↗ AI' badge** on ArticleRow for `sources[].type.startsWith('research:')`
+- `ArticleSource.type` widened from union literal to `string`
+
+### Race Condition Fix (Critical)
+- `build_articles.py` (cron) would overwrite research articles added by concurrent `import_url.py`
+- Now acquires `.articles.lock`, re-reads from disk, merges in new articles before final save
+- **Root cause of 16/21 lost research articles**
+
+### Related Articles Cleanup
+- Connected Reading filters out read articles
+- Related Reading excludes read articles + articles already in Connected Reading (fixes duplicate bug)
 
 ## Session 30: Reader UX Overhaul + Projects System (March 19, 2026)
 
