@@ -905,7 +905,8 @@ def run_ingest(url: str, title: str, content: str, selected_text: str, comment: 
 
     content_file = None
     try:
-        cmd = [VENV_PYTHON, str(SCRIPTS_DIR / 'import_url.py'), url, '--tag', 'manual']
+        tag = source if source else 'manual'
+        cmd = [VENV_PYTHON, str(SCRIPTS_DIR / 'import_url.py'), url, '--tag', tag]
 
         # If content was provided by the clipper, write it to a temp file
         if content and len(content.strip()) > 100:

@@ -48,7 +48,7 @@ export interface ArticleSection {
 }
 
 export interface ArticleSource {
-  type: 'twitter_bookmark' | 'rss' | 'manual';
+  type: string;
   tweet_id?: string;
   author_username?: string;
   tweet_text?: string;

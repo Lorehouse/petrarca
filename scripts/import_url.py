@@ -398,8 +398,8 @@ def main():
     parser.add_argument("urls", nargs="*", help="URLs to import")
     parser.add_argument("--urls-file", help="File with one URL per line")
     parser.add_argument("--from-exploration", help="Exploration JSON file to import URLs from")
-    parser.add_argument("--tag", choices=["manual", "exploration", "research_recommendation"],
-                        default="manual", help="Source tag (default: manual)")
+    parser.add_argument("--tag", default="manual",
+                        help="Source tag (default: manual). Any string accepted.")
     parser.add_argument("--exploration-tag", help="Tag for grouping exploration articles")
     parser.add_argument("--chunk", action="store_true",
                         help="Split long articles at H2 boundaries (>3000 words)")
