@@ -2322,10 +2322,28 @@ def main():
         print(f"\n=== Step 4c: Atomic Claim Extraction ===", file=sys.stderr)
         articles = extract_atomic_claims(articles, dry_run=args.dry_run)
 
-    # Save final output
-    _save_json(articles, ARTICLES_PATH)
-    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _save_json(articles, APP_DATA_DIR / "articles.json")
+    # Merge in any articles added by concurrent processes (e.g. import_url.py
+    # from research triggers) since we loaded articles.json at the start.
+    lock_path = ARTICLES_PATH.parent / '.articles.lock'
+    lock_path.touch(exist_ok=True)
+    with open(lock_path, 'r') as lock_fd:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        try:
+            current_on_disk = _load_json(ARTICLES_PATH) or []
+            our_ids = {a['id'] for a in articles}
+            merged_in = 0
+            for a in current_on_disk:
+                if a['id'] not in our_ids:
+                    articles.append(a)
+                    our_ids.add(a['id'])
+                    merged_in += 1
+            if merged_in:
+                print(f"  Merged {merged_in} articles added by concurrent processes", file=sys.stderr)
+            _save_json(articles, ARTICLES_PATH)
+            APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            _save_json(articles, APP_DATA_DIR / "articles.json")
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
     # Save topic registry if it was updated during processing
     if _topic_registry is not None:
