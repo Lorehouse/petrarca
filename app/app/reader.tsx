@@ -1931,6 +1931,8 @@ export default function ReaderScreen() {
   // Done handler — mark read and immediately advance to next
   const handleDone = useCallback(() => {
     if (!article) return;
+    // Capture next feed article BEFORE marking read (read articles are filtered from feed)
+    const precomputedNextFeedId = getAdjacentArticleId(article.id, 'next', feedLens);
     markArticleRead(article.id);
     markArticleEncountered(article.id, 'read');
     recordInterestSignal('tap_done', article.id);
@@ -1942,10 +1944,24 @@ export default function ReaderScreen() {
       toValue: 1,
       duration: 400,
       useNativeDriver: true,
-    }).start(() => {
-      advanceOrGoBack();
+    }).start(async () => {
+      // Queue takes priority, then precomputed feed next, then back
+      await removeFromQueue(article.id);
+      const queuedIds = getQueuedArticleIds();
+      const nextQueueId = queuedIds.find(qId => qId !== article.id);
+      const nextQueued = nextQueueId ? getArticleById(nextQueueId) : null;
+
+      if (nextQueued) {
+        logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: nextQueued.id, source: 'queue' });
+        router.replace({ pathname: '/reader', params: { id: nextQueued.id, autoAdvanceFrom: article.id } });
+      } else if (precomputedNextFeedId) {
+        logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: precomputedNextFeedId, source: 'feed' });
+        router.replace({ pathname: '/reader', params: { id: precomputedNextFeedId, autoAdvanceFrom: article.id } });
+      } else {
+        router.back();
+      }
     });
-  }, [article, advanceOrGoBack]);
+  }, [article, feedLens, router]);
 
   // Up next handler — navigate to next queued article
   const handleUpNext = useCallback(async () => {
@@ -2439,7 +2455,7 @@ export default function ReaderScreen() {
             )}
 
             <ConnectedReadingSection
-              connections={crossArticleConnections}
+              connections={crossArticleConnections.filter(c => getReadingState(c.articleId).status !== 'read')}
               articleId={article.id}
             />
 
@@ -2450,7 +2466,7 @@ export default function ReaderScreen() {
               articleSummary={article.one_line_summary}
             />
 
-            <RelatedArticles article={article} />
+            <RelatedArticles article={article} excludeIds={new Set(crossArticleConnections.map(c => c.articleId))} />
 
             <View style={{ height: 100 }} />
           </ScrollView>

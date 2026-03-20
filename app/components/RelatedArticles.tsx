@@ -142,8 +142,16 @@ function ArticleRow({ article, group, sourceArticleId }: {
   );
 }
 
-export default function RelatedArticles({ article }: { article: Article }) {
-  const allArticles = useMemo(() => getArticles(), []);
+export default function RelatedArticles({ article, excludeIds }: { article: Article; excludeIds?: Set<string> }) {
+  const allArticles = useMemo(() => {
+    // Filter out already-read articles and any IDs shown elsewhere (e.g. Connected Reading)
+    return getArticles().filter(a => {
+      if (excludeIds?.has(a.id)) return false;
+      const state = getReadingState(a.id);
+      if (state.status === 'read') return false;
+      return true;
+    });
+  }, [excludeIds]);
 
   const groups = useMemo<RelatedGroup[]>(() => {
     const result: RelatedGroup[] = [];
