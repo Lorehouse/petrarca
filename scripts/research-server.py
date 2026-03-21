@@ -297,11 +297,14 @@ def score_url(url: str) -> int:
         return -1
     if re.match(r'^(click|track|open|pixel|beacon|email|links?)\.', hostname):
         return -1
-    if re.search(r'unsub|opt-out|optout|manage.preferences|email-preferences', full):
+    if re.search(r'unsub|opt-out|optout|manage.preferences|email-preferences|disable_email', full):
         return -1
     if 'substack.com' in hostname and re.match(r'^/(sign-in|account|app-link|embed|profile)', pathname):
         return -1
     if pathname in ('/', '/subscribe', '/publish', ''):
+        return -1
+    # Reject subscribe/share/action pages on any substack
+    if re.search(r'\.substack\.com/(subscribe|action/|account)', full):
         return -1
     if re.match(r'^/@[^/]+/?$', pathname):
         return -1
@@ -310,6 +313,14 @@ def score_url(url: str) -> int:
     if hostname == 't.co':
         return -1
     if re.match(r'^https?://(www\.)?(twitter|x)\.com/[^/]+/?$', url, re.IGNORECASE):
+        return -1
+    # Reject bare homepages (no meaningful path)
+    if re.match(r'^/?(\?.*)?$', pathname):
+        return -1
+    # Reject unresolved redirect/tracking URLs — these should be resolved first
+    if 'substack.com/redirect/' in full:
+        return -1
+    if re.search(r'/emails?/click/', full):
         return -1
 
     # --- Scoring ---
@@ -325,7 +336,6 @@ def score_url(url: str) -> int:
     if re.search(r'/\d{4}/\d{2}/\d{2}/', pathname): score += 12
     if 'wordpress.com' in hostname and len(segments) >= 2: score += 10
     if re.search(r'/(article|post|blog|story|news|p)/', pathname, re.IGNORECASE): score += 8
-    if re.search(r'substack\.com/redirect/', full): score -= 5
 
     last_seg = segments[-1] if segments else ''
     if '-' in last_seg and len(last_seg) > 10: score += 5
@@ -360,55 +370,127 @@ def canonicalize_url(url: str) -> str:
 
 
 def decode_substack_redirect(url: str) -> str | None:
-    """Try to decode Substack redirect URLs to get the real destination."""
+    """Decode Substack redirect URLs to extract the real destination.
+
+    Current format (v2): substack.com/redirect/2/{payload}.{signature}
+        Payload is base64url JSON with "e" field containing the destination URL.
+        If "e" is a /subscribe page, the actual article may be in its "next" param.
+    Legacy format: substack.com/redirect/{id}/{base64_url}
+    """
     import base64
+
     m = re.search(r'substack\.com/redirect/\d+/([A-Za-z0-9_-]+)', url)
     if not m:
         return None
+
+    # Extract the first base64url segment (before any dot separator)
+    token_part = url.split('/redirect/')[1].split('/', 1)[-1]  # everything after /redirect/N/
+    first_segment = token_part.split('.')[0]
+
     try:
-        b64 = m.group(1).replace('-', '+').replace('_', '/')
+        b64 = first_segment.replace('-', '+').replace('_', '/')
         while len(b64) % 4:
             b64 += '='
         decoded = base64.b64decode(b64).decode('utf-8', errors='replace')
+
+        # If it decodes directly to a URL (legacy format)
         if decoded.startswith('http'):
             return decoded
-        try:
-            data = json.loads(decoded)
-            return data.get('url') or data.get('r')
-        except json.JSONDecodeError:
+
+        # Try parsing as JSON (v2 format with "e" field)
+        data = json.loads(decoded)
+        real_url = data.get('e') or data.get('url') or data.get('r')
+        if not real_url or not real_url.startswith('http'):
             return None
+
+        # If the "e" URL is a subscribe page, extract the actual article from "next" param
+        if '/subscribe' in real_url:
+            try:
+                qs = parse_qs(urlparse(real_url).query)
+                next_urls = qs.get('next', [])
+                if next_urls and next_urls[0].startswith('http'):
+                    return next_urls[0]
+            except Exception:
+                pass
+
+        return real_url
+
     except Exception:
         return None
 
 
+def resolve_redirect_url(url: str, timeout: float = 5.0) -> str:
+    """Follow HTTP redirects to get the final destination URL.
+
+    Handles Substack redirects, every.to click tracking, newsletter click tracking, etc.
+    Falls back to the original URL if resolution fails.
+    """
+    import requests as req
+
+    # Try client-side decode first for Substack (avoids HTTP roundtrip)
+    if 'substack.com/redirect/' in url:
+        decoded = decode_substack_redirect(url)
+        if decoded:
+            return decoded
+
+    # For known redirect/tracking patterns, follow the HTTP redirect
+    needs_resolve = any(p in url for p in [
+        '/redirect/', '/emails/click/', '/email/click/', '/click?',
+        '/track/', '/track?', 'email.mg.', 'links.',
+        'click.', 'mailchi.mp/', 'elink.', 'post.spmailtechno',
+    ])
+
+    if not needs_resolve:
+        return url
+
+    try:
+        resp = req.head(url, allow_redirects=True, timeout=timeout,
+                        headers={'User-Agent': 'Mozilla/5.0 (compatible; Petrarca/1.0)'})
+        final = resp.url
+        if final and final != url:
+            print(f'[email] Resolved redirect: {url[:60]}... → {final[:100]}', flush=True)
+            return final
+    except Exception as e:
+        print(f'[email] Redirect resolve failed for {url[:60]}...: {e}', flush=True)
+
+    return url
+
+
 def find_article_urls(html: str, plain_text: str) -> list[dict]:
-    """Extract and rank article URLs from email content. Returns list of {url, score}."""
-    url_scores: dict[str, int] = {}
+    """Extract and rank article URLs from email content. Returns list of {url, score}.
+
+    Process: extract raw URLs → resolve redirects → clean → score → dedup.
+    """
+    raw_urls: set[str] = set()
 
     # Extract from HTML href attributes
     if html:
         for m in re.finditer(r'href=["\']?(https?://[^"\'>\s]+)', html, re.IGNORECASE):
-            url = clean_url(m.group(1))
-            if url:
-                url_scores[url] = max(url_scores.get(url, 0), score_url(url))
+            cleaned = clean_url(m.group(1))
+            if cleaned:
+                raw_urls.add(cleaned)
 
     # Extract from plain text
     if plain_text:
         for m in re.finditer(r'https?://[^\s<>"{}|\\^`\[\]()]+', plain_text):
-            url = clean_url(m.group(0))
-            if url:
-                url_scores[url] = max(url_scores.get(url, 0), score_url(url))
+            cleaned = clean_url(m.group(0))
+            if cleaned:
+                raw_urls.add(cleaned)
 
-    # Decode Substack redirect URLs
-    for url in list(url_scores.keys()):
-        if 'substack.com/redirect/' in url:
-            real = decode_substack_redirect(url)
-            if real:
-                cleaned = clean_url(real)
-                if cleaned:
-                    s = score_url(cleaned)
-                    if s > 0:
-                        url_scores[cleaned] = max(url_scores.get(cleaned, 0), s)
+    print(f'[email] Extracted {len(raw_urls)} unique raw URLs', flush=True)
+
+    # Resolve redirects for all URLs that look like tracking/redirect links
+    resolved: dict[str, str] = {}  # raw → resolved
+    for raw in raw_urls:
+        resolved[raw] = resolve_redirect_url(raw)
+
+    # Score the resolved URLs, dedup by canonical form
+    url_scores: dict[str, int] = {}
+    for raw, final_url in resolved.items():
+        cleaned = clean_url(final_url)
+        if cleaned:
+            s = score_url(cleaned)
+            url_scores[cleaned] = max(url_scores.get(cleaned, 0), s)
 
     # Filter, sort, dedup
     candidates = [{'url': u, 'score': s} for u, s in url_scores.items() if s > 0]
@@ -477,7 +559,12 @@ def extract_clean_content(html: str, plain_text: str) -> str:
 
 
 def process_email(raw_text: str) -> None:
-    """Process a raw email: save it, extract URLs or content, and ingest."""
+    """Process a raw email: save it, extract URLs or content, and ingest.
+
+    Strategy: resolve redirects first, score resolved URLs, prefer strong article URLs
+    over many weak ones. For newsletters with one main article and supporting links,
+    ingest only the primary article (score gap ≥ 2x).
+    """
     # Save raw email for replay
     ts = int(time.time())
     raw_path = EMAILS_DIR / f'email_{ts}.eml'
@@ -489,23 +576,41 @@ def process_email(raw_text: str) -> None:
     print(f'[email] Subject: "{subject}", from: {parsed["from"]}', flush=True)
     print(f'[email] HTML: {len(parsed["text_html"])} chars, Plain: {len(parsed["text_plain"])} chars', flush=True)
 
-    # Strategy 1: Find article URLs
+    # Strategy 1: Find article URLs (resolves redirects, scores resolved URLs)
     candidates = find_article_urls(parsed['text_html'], parsed['text_plain'])
-    top5 = candidates[:5]
-    print(f'[email] Found {len(candidates)} candidate URLs', flush=True)
-    for c in top5:
+
+    # Boost URLs whose slug matches the email subject (the "main" article)
+    if subject and candidates:
+        subject_words = set(re.findall(r'[a-z]{3,}', subject.lower()))
+        for c in candidates:
+            slug = urlparse(c['url']).path.split('/')[-1].lower()
+            slug_words = set(re.findall(r'[a-z]{3,}', slug))
+            overlap = len(subject_words & slug_words)
+            if overlap >= 3:
+                c['score'] += 10
+                print(f'[email] Subject match boost (+10): {c["url"][:80]}', flush=True)
+        candidates.sort(key=lambda c: c['score'], reverse=True)
+
+    print(f'[email] Found {len(candidates)} candidate URLs after resolve+dedup', flush=True)
+    for c in candidates[:8]:
         print(f'  [{c["score"]:3d}] {c["url"][:100]}', flush=True)
 
     if candidates:
         top_score = candidates[0]['score']
-        strong = [c for c in candidates if c['score'] >= top_score * 0.5]
-        to_send = strong[:5]
+        # If the top URL is 2x+ stronger than the second, it's clearly the main article
+        # — just ingest that one. Otherwise take URLs scoring ≥ 60% of the top.
+        if len(candidates) >= 2 and top_score >= candidates[1]['score'] * 2:
+            to_send = [candidates[0]]
+            print(f'[email] Clear primary article (score gap: {top_score} vs {candidates[1]["score"]})', flush=True)
+        else:
+            to_send = [c for c in candidates if c['score'] >= top_score * 0.6][:3]
+
         for c in to_send:
             print(f'[email] Ingesting URL: {c["url"][:100]}', flush=True)
             run_ingest(c['url'], subject, '', '', '', 'email')
         return
 
-    # Strategy 2: Extract clean body text
+    # Strategy 2: Extract clean body text (email IS the content)
     clean = extract_clean_content(parsed['text_html'], parsed['text_plain'])
     print(f'[email] No strong URLs found. Clean content: {len(clean)} chars', flush=True)
 
