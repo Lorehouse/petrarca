@@ -150,7 +150,7 @@ Currently, Petrarca recomputes the full pairwise similarity matrix on every pipe
 - Tracks when items were added (for temporal decay)
 
 ```python
-from amygdala import ContentSimilarityIndex
+from limbic.amygdala import ContentSimilarityIndex
 
 index = ContentSimilarityIndex("knowledge.db")
 index.add("claim_42", "Archimedes died during the siege of Syracuse",
@@ -175,7 +175,7 @@ novelty = index.novelty_breakdown(["claim_100", "claim_101", ...],
 Every project will need to calibrate thresholds for "same", "related", and "different." Petrarca's manual process (sample pairs per cosine band, rate them, find cliffs) should become a reusable tool.
 
 ```python
-from amygdala import SimilarityCalibrator
+from limbic.amygdala import SimilarityCalibrator
 
 cal = SimilarityCalibrator(index)
 # Generate a stratified sample of pairs across cosine bands
@@ -196,7 +196,7 @@ thresholds = cal.find_thresholds()
 A scheduling constraint module that takes a similarity matrix and prevents scheduling similar items too close together.
 
 ```python
-from amygdala import InterferenceFilter
+from limbic.amygdala import InterferenceFilter
 
 filt = InterferenceFilter(similarity_index, min_gap_minutes=60)
 # Given a candidate review queue, reorder to maximize spacing between similar items

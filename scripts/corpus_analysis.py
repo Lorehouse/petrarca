@@ -31,7 +31,7 @@ def load_articles():
 
 
 def embed_summaries(articles):
-    from amygdala import EmbeddingModel
+    from limbic.amygdala import EmbeddingModel
 
     model = EmbeddingModel()
     texts = [a["full_summary"] for a in articles]

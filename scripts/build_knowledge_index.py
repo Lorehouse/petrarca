@@ -25,7 +25,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from amygdala import pairwise_cosine, extract_pairs, classify_pairs
+from limbic.amygdala import pairwise_cosine, extract_pairs, classify_pairs
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -268,7 +268,7 @@ def compute_article_summary_similarities(articles: list[dict],
     Recommended thresholds: briefing_card=0.52, feed_ranking=0.49, dedup=0.64
     We store pairs >= 0.40 to allow client-side threshold tuning.
     """
-    from amygdala import Document, find_similar_documents
+    from limbic.amygdala import Document, find_similar_documents
 
     docs = []
     for a in articles:

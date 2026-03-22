@@ -12,7 +12,7 @@ Usage:
     conn.close()
 
 Connection-per-request pattern: each handler opens/commits/closes its own
-connection. WAL mode (via amygdala.connect) makes this safe and cheap with
+connection. WAL mode (via limbic.amygdala.connect) makes this safe and cheap with
 ThreadingHTTPServer.
 """
 
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, '/opt/amygdala')
-from amygdala import connect
+from limbic.amygdala import connect
 
 DB_PATH = Path(os.environ.get('PETRARCA_DB', '/opt/petrarca/data/petrarca.db'))
 

@@ -38,7 +38,7 @@ for env_path in [Path.home() / ".env", Path("/opt/petrarca/.env")]:
                     if key not in os.environ:
                         os.environ[key] = value
 
-from amygdala import EmbeddingModel
+from limbic.amygdala import EmbeddingModel
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Algorithm Calibration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f7f4ec;
+    color: #2a2420;
+    font-family: 'Crimson Pro', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    width: 100%;
+    max-width: 640px;
+    padding: 24px 16px 0;
+  }
+
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: #2a2420;
+    margin-bottom: 2px;
+  }
+
+  .header .subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #6a6458;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .double-rule {
+    border-top: 2px solid #2a2420;
+    padding-top: 5px;
+    border-bottom: 1px solid #2a2420;
+    height: 0;
+    margin-bottom: 16px;
+  }
+
+  /* Progress bar */
+  .progress-area {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .progress-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 100px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 3px;
+    background: #e4dfd4;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #8b2500;
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  .progress-count {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  /* Round indicator */
+  .round-indicator {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .round-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #e4dfd4;
+  }
+
+  .round-tab {
+    font-family: 'EB Garamond', serif;
+    font-size: 13px;
+    padding: 6px 16px;
+    color: #b0a898;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .round-tab.active {
+    color: #2a2420;
+    border-bottom-color: #8b2500;
+  }
+
+  .round-tab.done {
+    color: #6a6458;
+  }
+
+  .round-tab .check { color: #2a7a4a; margin-left: 4px; }
+
+  /* Card area */
+  .card-area {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .round-title {
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    color: #8b2500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+
+  .round-title::before {
+    content: '✦ ';
+  }
+
+  .round-question {
+    font-family: 'Crimson Pro', serif;
+    font-size: 15px;
+    color: #6a6458;
+    margin-bottom: 16px;
+  }
+
+  /* The card itself */
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-left: 3px solid #e4dfd4;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .card.exit-left {
+    transform: translateX(-120%);
+    opacity: 0;
+    transition: all 0.25s ease;
+  }
+
+  .card.exit-right {
+    transform: translateX(120%);
+    opacity: 0;
+    transition: all 0.25s ease;
+  }
+
+  .card.exit-up {
+    transform: translateY(-80%);
+    opacity: 0;
+    transition: all 0.25s ease;
+  }
+
+  .card .source {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .card .claim-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 18px;
+    line-height: 1.45;
+    color: #2a2420;
+  }
+
+  .card .claim-type {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 10px;
+  }
+
+  /* Pair card */
+  .pair-card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    padding: 0;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .pair-card.exit-left, .pair-card.exit-right, .pair-card.exit-up {
+    opacity: 0;
+    transition: all 0.25s ease;
+  }
+  .pair-card.exit-left { transform: translateX(-120%); }
+  .pair-card.exit-right { transform: translateX(120%); }
+  .pair-card.exit-up { transform: translateY(-80%); }
+
+  .pair-half {
+    padding: 16px 20px;
+  }
+
+  .pair-half:first-child {
+    border-bottom: 1px solid #e4dfd4;
+  }
+
+  .pair-half .source {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .pair-half .claim-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 16px;
+    line-height: 1.4;
+    color: #2a2420;
+  }
+
+  .pair-meta {
+    padding: 6px 20px;
+    background: #f7f4ec;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Key hints */
+  .key-hints {
+    width: 100%;
+    max-width: 640px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    position: sticky;
+    bottom: 0;
+    background: #f7f4ec;
+    border-top: 1px solid #e4dfd4;
+  }
+
+  .key-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: #6a6458;
+  }
+
+  .key-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #d0ccc0;
+    border-radius: 4px;
+    background: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 13px;
+    color: #2a2420;
+  }
+
+  .key-hint .hint-label {
+    font-size: 12px;
+  }
+
+  /* Flash feedback */
+  .flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 48px;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+  }
+
+  .flash.show { opacity: 0.6; }
+  .flash.good { color: #2a7a4a; }
+  .flash.mid { color: #c9a84c; }
+  .flash.bad { color: #8b2500; }
+
+  /* Results screen */
+  .results {
+    width: 100%;
+    max-width: 640px;
+    padding: 24px 16px;
+    display: none;
+  }
+
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+
+  .results table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .results th {
+    text-align: left;
+    font-weight: 500;
+    color: #6a6458;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e4dfd4;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .results td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0ece2;
+    color: #333;
+  }
+
+  .results .stat-number {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: #8b2500;
+  }
+
+  .results .stat-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    text-transform: uppercase;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 20px;
+  }
+
+  .json-output {
+    background: #2a2420;
+    color: #e4dfd4;
+    padding: 16px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 12px;
+    cursor: pointer;
+  }
+
+  .copy-hint {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    margin-top: 4px;
+  }
+
+  .analysis-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e4dfd4;
+  }
+
+  .analysis-section h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    color: #8b2500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+
+  .analysis-section h3::before { content: '✦ '; }
+
+  .analysis-section p {
+    font-family: 'Crimson Pro', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    margin-bottom: 8px;
+  }
+
+  .threshold-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+
+  .threshold-bar .bar {
+    flex: 1;
+    height: 6px;
+    background: #e4dfd4;
+    border-radius: 3px;
+    position: relative;
+  }
+
+  .threshold-bar .marker {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 12px;
+    background: #8b2500;
+  }
+
+  .threshold-bar label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 60px;
+  }
+
+  .threshold-bar .value {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #2a2420;
+    min-width: 40px;
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Algorithm Calibration</h1>
+  <div class="subtitle">10 minutes · 100 cards · 3 rounds</div>
+  <div class="double-rule"></div>
+</div>
+
+<div class="progress-area">
+  <div class="progress-row">
+    <span class="progress-label">Overall</span>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width: 0%"></div></div>
+    <span class="progress-count" id="progress-count">0/100</span>
+  </div>
+</div>
+
+<div class="round-indicator">
+  <div class="round-tabs">
+    <div class="round-tab active" id="tab-0">Worth extracting?</div>
+    <div class="round-tab" id="tab-1">Same thing?</div>
+    <div class="round-tab" id="tab-2">Knew this?</div>
+  </div>
+</div>
+
+<div class="card-area" id="card-area"></div>
+
+<div class="key-hints" id="key-hints"></div>
+
+<div class="flash" id="flash"></div>
+
+<div class="results" id="results"></div>
+
+<script>
+// Embedded data
+const DATA = {"claim_quality": [{"claim_id": "c79e3ab764b4", "text": "The Axel and Margaret Ax:son Johnson Foundation hosts seminars that foster intellectual history and expertise in a media environment often dominated by short-form content.", "claim_type": "evaluative", "article_title": "On Poetry, Publishing, and Intellectual Curiosity", "article_id": "585de5f2af9f"}, {"claim_id": "7a07b101451c", "text": "Syracuse lends its name to the southeastern Sicilian escarpment, known as the \"Malta and Syracuse Escarpment\" (also called the \"Hyblaean-Maltese Escarpment\").", "claim_type": "factual", "article_title": "Syracuse, Sicily — Geography, Climate, and Natural Features", "article_id": "cc768c9a501d"}, {"claim_id": "96a744128405", "text": "Morten Øen's poetry collection 'lengsel, øyefall' is published by Oktober Forlag.", "claim_type": "factual", "article_title": "Estetikkens umulige ideal: En kritikk av Morten Øens 90-tallslyrikk", "article_id": "0a3e1588ff59"}, {"claim_id": "7dc4a614bdaf", "text": "The municipality of Syracuse borders Melilli and Priolo Gargallo to the north.", "claim_type": "factual", "article_title": "Syracuse, Sicily — Human Geography & Economy", "article_id": "9f4131dff942"}, {"claim_id": "3bc350381d78", "text": "The \"Aeolian Arc\" extends for more than 140 km.", "claim_type": "factual", "article_title": "Aeolian Islands", "article_id": "6022bb99b415"}, {"claim_id": "631ddf6f01c0", "text": "Authorities in Muslim Sicily operated a *tiraz*, an official workshop that produced valuable fabrics like silk.", "claim_type": "factual", "article_title": "Muslim Sicily: Government, Coinage, and the End of Islamic Rule", "article_id": "58b05920c6d8"}, {"claim_id": "c291565049c9", "text": "Unlike most AI tools, a Claw can proactively act on its own, such as checking a user's calendar or inbox, based on user-defined rules.", "claim_type": "factual", "article_title": "OpenClaw: A Comprehensive Guide to Your Personal AI Assistant", "article_id": "966a864140c9"}, {"claim_id": "df5f2e6516ee", "text": "The War of the Sicilian Vespers was fought over competing dynastic claims to the throne of Sicily.", "claim_type": "factual", "article_title": "War of the Sicilian Vespers (1282–1302)", "article_id": "0ede0e0d53b1"}, {"claim_id": "a8a43c3e400a", "text": "Archimedes' work in engineering arose from fulfilling the needs of Syracuse.", "claim_type": "causal", "article_title": "Archimedes: Biography of the Ancient Greek Mathematician", "article_id": "89c1fe114171"}, {"claim_id": "453a1f140ae1", "text": "Arancini al ragù produced in eastern Sicily have a conical shape inspired by the volcano Etna.", "claim_type": "factual", "article_title": "Arancini: Sicily's Iconic Stuffed Rice Balls", "article_id": "6acca797aee7"}, {"claim_id": "d626b7161db6", "text": "Archimedes showed that pi is greater than 223/71 (3.1408...) and less than 22/7 (3.1428...).", "claim_type": "factual", "article_title": "Archimedes: Surviving Writings and Lost Works", "article_id": "02158cf3b656"}, {"claim_id": "5a6fefb31c4c", "text": "The Terminal CLI and VS Code support third-party providers for Claude Code.", "claim_type": "factual", "article_title": "Claude Code: Overview and Capabilities", "article_id": "b77235353457"}, {"claim_id": "ee162e0a3fb6", "text": "The highest peak of the Madonie range is Pizzo Carbonara at 1,979 metres (6,493 ft).", "claim_type": "factual", "article_title": "Madonie — Mountain Range in Sicily", "article_id": "59ade95c6b2a"}, {"claim_id": "eac54ab143fc", "text": "On September 22nd, Doctor Luigi Montallegri reported that Vincenzo Bellini had a very restless night during the thirteenth day of his illness.", "claim_type": "factual", "article_title": "Vincenzo Bellini: Final Illness, Death, and Legacy", "article_id": "8b5ffafe4dc6"}, {"claim_id": "023408f09b7e", "text": "The 1948 film *La Terra Trema* is entirely in Sicilian.", "claim_type": "factual", "article_title": "Sicilian Language: Current Status, Speakers, and Diaspora", "article_id": "39fa7904ceff"}, {"claim_id": "848f9dd381f1", "text": "Luigi Pirandello accepted an offer to teach Italian at the Istituto Superiore di Magistero di Roma in 1897.", "claim_type": "factual", "article_title": "Luigi Pirandello — Biography", "article_id": "5d39ab007272"}, {"claim_id": "7c301a1d8cf7", "text": "Erulo Eroli created an Italian painting of the Sicilian Vespers between 1890 and 1891.", "claim_type": "factual", "article_title": "Sicilian Vespers: Cultural Legacy and Representations", "article_id": "cb6894653c77"}, {"claim_id": "f4c20b638977", "text": "Researchers Aruna Ranganathan and Xingqi Maggie Ye conducted an eight-month observational study on AI's impact on work habits at a 200-employee U.S. tech company.", "claim_type": "factual", "article_title": "AI Was Supposed to Free My Time. It Consumed It.", "article_id": "3ffa4c16591f"}, {"claim_id": "f7bb5af2eb8c", "text": "The Normans captured Noto in 1091, completing the conquest of Sicily.", "claim_type": "factual", "article_title": "History of Islam in Southern Italy and Sicily", "article_id": "d76933afa09d"}, {"claim_id": "7fb5afd0111b", "text": "Ellen Einan and Tor Ulven established writing practices based on French interwar surrealism, which paradoxically broke with the avant-garde requirement for constant artistic renewal.", "claim_type": "causal", "article_title": "Etter kroppsmodernismen: Norsk lyrikk og 90-tallsestetikk", "article_id": "be3d53d771fc"}, {"claim_id": "9e6a68304206", "text": "Recap DocType uses direct Loro APIs and nested Loro containers to facilitate granular CRDT tracking of dynamic data.", "claim_type": "factual", "article_title": "Recap DocType Architectural Specification and Security Review", "article_id": "75972a5d6aa1"}, {"claim_id": "8946dd74bd8c", "text": "Luigi Pirandello wrote the play *L'uomo, la bestia e la virtù*, also known as *Man, Beast and Virtue*, in 1919.", "claim_type": "factual", "article_title": "Luigi Pirandello — Selected Works", "article_id": "f7466b029b01"}, {"claim_id": "e94b14dd6f1f", "text": "Sanjeev Majalikar authored a study guide for spoken Sanskrit known as Samskrita Bodhinii.", "claim_type": "factual", "article_title": "A Curated Library of World Literature and Language Resources", "article_id": "fcd1fba5245c"}, {"claim_id": "303bdf1a380e", "text": "Since 2001, regional assessors in Sicily do not necessarily have to be deputies to the Sicilian Regional Assembly.", "claim_type": "factual", "article_title": "Sicily: Political System and Special Autonomy", "article_id": "86d5c301ee7c"}, {"claim_id": "1edc65a3c610", "text": "Vincenzo Bellini's opera I Capuleti e i Montecchi premiered at La Fenice on 11 March 1830.", "claim_type": "factual", "article_title": "Vincenzo Bellini: Major Achievements (1829–1831)", "article_id": "7e960899e0cf"}, {"claim_id": "66ea44765768", "text": "The Raccordo autostradale 15, or Tangenziale di Catania, is a 24 km road that bypasses the city of Catania and is toll-free.", "claim_type": "factual", "article_title": "Sicily: Infrastructure and Transport", "article_id": "37a08bc0a260"}, {"claim_id": "09119eaec10e", "text": "Manfred of Sicily continued the Sicilian School after Frederick II's death.", "claim_type": "factual", "article_title": "The Sicilian School: Origins of Italian Literary Poetry", "article_id": "e37152283342"}, {"claim_id": "d53199a33756", "text": "Frederick II forged an early absolutist state in the Kingdom of Sicily and much of Italy.", "claim_type": "factual", "article_title": "Frederick II, Holy Roman Emperor — Introduction", "article_id": "9acd4ca11fe0"}, {"claim_id": "2a2ed06e2ab2", "text": "Athens unsuccessfully attempted to subjugate Syracuse.", "claim_type": "factual", "article_title": "Syracuse, Sicily — Introduction and Etymology", "article_id": "32afa0f1aac6"}, {"claim_id": "c8b8a8e5a124", "text": "Shopkeepers often pay the Mafia to protect them from thieves.", "claim_type": "factual", "article_title": "The Sicilian Mafia as a Private Protection Industry", "article_id": "61ada289d493"}, {"claim_id": "920a3825d56c", "text": "Ancient Greek and Byzantine Greek coexisted for a long time in diglossia with Latin in Sicily.", "claim_type": "factual", "article_title": "Sicilian Language — Vocabulary: Historical Substrates and Etymological Layers", "article_id": "05ebdd7e0ee6"}, {"claim_id": "6cd1f76cf751", "text": "The mendicant orders of Northern Italy, in particularly the Dominican Friars, were predominately pro-Guelph.", "claim_type": "factual", "article_title": "War of the Sicilian Vespers — Legacy and Cultural Impact", "article_id": "70b78532ae36"}, {"claim_id": "49f59e561d0b", "text": "AgentHub provides a platform for collaborative work between multiple AI agents on a shared codebase.", "claim_type": "factual", "article_title": "AgentHub: A GitHub-style Collaboration Platform for AI Agent Swarms", "article_id": "265493334801"}, {"claim_id": "376203c71da1", "text": "Sicily was treated differently than other Roman conquests because the island's complex ethnic mixture and the need for fiscal recoupment led to an institutional system excluding broad autonomy.", "claim_type": "causal", "article_title": "Sicilia: Rome's First Province — From the Punic Wars to Imperial Administration", "article_id": "e3eda58cb094"}, {"claim_id": "67c3890021a9", "text": "Empedocles theorized that all humans, or maybe only a selected few among them, were originally long-lived daimons who dwelt in a state of bliss until committing an unspecified crime.", "claim_type": "factual", "article_title": "Empedocles: Life, Philosophy, and Legacy", "article_id": "eae8bb966c6f"}, {"claim_id": "2c6bb002f667", "text": "The *Elliniki Agogi method* argues for pedagogical alignment with historical precedent and cognitive insight when teaching Ancient Greek.", "claim_type": "evaluative", "article_title": "The Lost Art of Speaking Ancient Greek: A Pedagogical History", "article_id": "88aa887432b2"}, {"claim_id": "fb1567752acc", "text": "The city of Caltanisetta gets its name from the Saracen name قلعة النساء *Qal‘at al-Nisā’*('Fort of the Women').", "claim_type": "factual", "article_title": "Islamic and Arabic Legacy in Sicily: Language, Culture, and Genetics", "article_id": "0771d7795a17"}, {"claim_id": "840bfaf7355c", "text": "Vincenzo Bellini died at the age of 33 in Puteaux, France.", "claim_type": "factual", "article_title": "Vincenzo Bellini: Life and Legacy of the Bel Canto Master", "article_id": "9a9d60609420"}, {"claim_id": "f38695131d0e", "text": "The Cosa Nostra consigliere must be an impartial mediator to prevent conflicts of interest and supervise financial matters.", "claim_type": "factual", "article_title": "Sicilian Mafia: Structure, Membership, and Internal Governance", "article_id": "c52bb1581752"}, {"claim_id": "a82201b0768f", "text": "The Tuscan Guelph histories emphasize John of Procida's involvement in the Sicilian Vespers.", "claim_type": "factual", "article_title": "The Sicilian Vespers: Michael Palaeologos's Commentary and Historical Sources", "article_id": "8c5fa360e38b"}], "pair_judgment": [{"a_id": "80bc9803f0cf", "b_id": "74896bca27bc", "a_text": "Greek and Latin were the main languages of Roman Sicily.", "b_text": "By the time the Romans occupied Sicily, the Latin language had made its own borrowings from Greek.", "a_article": "Sicilia: Rome's First Provincial Acquisition", "b_article": "History of the Sicilian Language: Linguistic Layers from Prehistory to Modernity", "score": 0.865, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "49960ab47c03", "b_id": "2fe5832661b4", "a_text": "Giacomo da Lentini is widely credited for inventing the sonnet.", "b_text": "Most scholars attribute the paternity of the sonnet to Giacomo da Lentini.", "a_article": "The Sicilian School: Origins of Italian Literary Poetry", "b_article": "The End of the Sicilian School and Its Later Tradition", "score": 0.851, "nli": "ENTAILS", "zone": "known_boundary"}, {"a_id": "57179571df58", "b_id": "1e3da69443bd", "a_text": "The official language in Sicily is Italian.", "b_text": "Sicilian is one of the most spoken languages of Italy.", "a_article": "Sicily: Demographics, Economy, and Politics", "b_article": "Sicilian Language: Its Influence on the Italian Lexicon", "score": 0.892, "nli": "none", "zone": "known_boundary"}, {"a_id": "234d1ebf1134", "b_id": "977af8903834", "a_text": "The County of Sicily was a Norman state from 1071 to 1130.", "b_text": "The County of Sicily was founded in 1071 during the Norman conquest of the southern peninsula.", "a_article": "County of Sicily: The Norman State (1071–1130)", "b_article": "Kingdom of Sicily: From Norman Foundation to Italian Unification (1130–1816)", "score": 0.871, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "d174594af192", "b_id": "57179571df58", "a_text": "Sicily is mostly bilingual, with most people speaking both Italian and Sicilian.", "b_text": "The official language in Sicily is Italian.", "a_article": "Sicily: Culture — Art, Literature, Music, and Languages", "b_article": "Sicily: Demographics, Economy, and Politics", "score": 0.902, "nli": "none", "zone": "known_boundary"}, {"a_id": "1abd9e64a4ee", "b_id": "a5b77949fea7", "a_text": "Sicilian has five vowels, descending from North African Latin.", "b_text": "Unlike the Italian language, which has seven vowels, Sicilian has a five-vowel system.", "a_article": "The End of the Sicilian School and Its Later Tradition", "b_article": "Fonologia della lingua siciliana", "score": 0.872, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "a552e9a11baa", "b_id": "1e3da69443bd", "a_text": "The official language spoken in Sicily is Italian.", "b_text": "Sicilian is one of the most spoken languages of Italy.", "a_article": "Sicilia: Società, Demografia e Lingue", "b_article": "Sicilian Language: Its Influence on the Italian Lexicon", "score": 0.908, "nli": "none", "zone": "known_boundary"}, {"a_id": "cb59e5c174a7", "b_id": "7ec4346459a0", "a_text": "Arab-Norman architecture reflects the architecture, culture, and royal lineage of the Normans.", "b_text": "The new Norman rulers built various structures in the Arab-Norman style.", "a_article": "Sicily: Monuments and Places of Interest", "b_article": "Arab-Norman Palermo and the Cathedrals of Cefalù and Monreale — UNESCO World Heritage Site", "score": 0.853, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "32fa7cf7cae8", "b_id": "f53d493c68cf", "a_text": "Giuseppe Tomasi di Lampedusa first conceived the book that became *The Leopard* in the 1930s.", "b_text": "Giuseppe Tomasi di Lampedusa first conceived his novel *The Leopard* shortly after inheriting his princely title.", "a_article": "The Leopard (Il Gattopardo) — Origins, Plot & Legacy", "b_article": "Giuseppe Tomasi di Lampedusa — Life and Biography", "score": 0.879, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "c98f6d37e69b", "b_id": "54b52a0bf190", "a_text": "Giacomo da Lentini is credited with the invention of the sonnet.", "b_text": "Giacomo da Lentini, a notary at the court, is credited with the invention of the sonnet form.", "a_article": "Sicily: Culture — Art, Literature, Music, and Languages", "b_article": "Scuola siciliana — The Sicilian School of Poetry", "score": 0.857, "nli": "EXTENDS", "zone": "known_boundary"}, {"a_id": "9307f72c111c", "b_id": "a112c332ffca", "a_text": "The Norman conquests established Roman Catholicism firmly in Sicily and Southern Italy.", "b_text": "Chalandon's *Historie de la Domination Normande en Italia* is an excellent source for describing the Norman Conquest of Italy and Sicily.", "a_article": "History of Islam in Southern Italy and Sicily", "b_article": "The Sicilian Vespers: Michael Palaeologos's Commentary and Historical Sources", "score": 0.722, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "42b05e909fd0", "b_id": "9ca134e17c03", "a_text": "The groups of brigands in Sicily self-named \"mafia\" were the foundation of the modern Sicilian Mafia.", "b_text": "The spread of the Mafia in Sicily at the end of the 19th century was partly shaped by the rise of socialist peasant Fasci organizations.", "a_article": "Kingdom of Sicily — Society and Feudal Decline", "b_article": "Fasci Siciliani: Mafia Involvement in the Sicilian Worker Leagues", "score": 0.749, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "74d243296649", "b_id": "87cd9277b59d", "a_text": "Sicilian is primarily used as a home language among peers and close associates.", "b_text": "The Greek influence on the Sicilian language is not limited to lexical borrowings.", "a_article": "Sicilian Language: Current Status, Speakers, and Diaspora", "b_article": "Sicilian Language — Vocabulary: Historical Substrates and Etymological Layers", "score": 0.727, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "20d594f57ee8", "b_id": "b719bd204c8d", "a_text": "Luigi Pirandello's works include novels, hundreds of short stories, and about 40 plays.", "b_text": "Luigi Pirandello wrote the short story collection *Novelle per un anno*, also known as *Short Stories for a Year*, from 1922 to 1937, consisting of 15 volumes.", "a_article": "Luigi Pirandello — Biography", "b_article": "Luigi Pirandello — Selected Works", "score": 0.734, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "3b9339a7149e", "b_id": "d0ea69fb7b10", "a_text": "Sicilian displays a rich and varied influence from several languages in its lexical stock and grammar because Sicily is the largest island in the Mediterranean Sea and many peoples have passed through it.", "b_text": "Approximately 5 million people currently speak the Sicilian language in Sicily.", "a_article": "History of the Sicilian Language: Linguistic Layers from Prehistory to Modernity", "b_article": "Lingua siciliana: Status, Classification, and Geographic Distribution", "score": 0.738, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "d174594af192", "b_id": "e17fbb0f7740", "a_text": "Sicily is mostly bilingual, with most people speaking both Italian and Sicilian.", "b_text": "Sicilian has its own dialects, including Western Sicilian, Central Metafonetic, Southeast Metafonetic, Ennese, Eastern Non-Metafonetic, Messinese, Eoliano, Pantesco, and Reggino.", "a_article": "Sicily: Culture — Art, Literature, Music, and Languages", "b_article": "Sicilian: A Distinct Romance Language, Not Just a Dialect", "score": 0.736, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "8f8d1e4ad085", "b_id": "a44e5a5e7442", "a_text": "Cicero described Syracuse as 'the most beautiful and largest Greek city' in the 1st century BC.", "b_text": "During the Greek era, Syracuse was one of the first densely populated metropolises of antiquity.", "a_article": "History of Syracuse, Sicily", "b_article": "Syracuse, Sicily: Demographics, Language, Religion & Culture", "score": 0.746, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "c7523b9b2dc4", "b_id": "d12c218fcec9", "a_text": "Latin Catholic political power in the Kingdom of Sicily favored Latin Catholicism over other religious practices.", "b_text": "The papacy considered Sicily vital to the defense of Rome and the papal states.", "a_article": "Kingdom of Sicily: Coinage and Religion", "b_article": "War of the Sicilian Vespers — Background", "score": 0.726, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "fbe2cd2693c4", "b_id": "87cd9277b59d", "a_text": "A Latin-Greek bilingualism developed in Roman Sicily, which continued until the Byzantine period.", "b_text": "The Greek influence on the Sicilian language is not limited to lexical borrowings.", "a_article": "Language and Major Centres of Roman Sicily", "b_article": "Sicilian Language — Vocabulary: Historical Substrates and Etymological Layers", "score": 0.728, "nli": "EXTENDS", "zone": "extends_boundary"}, {"a_id": "9dc3b6731605", "b_id": "8c23ab7a64e6", "a_text": "During the Sicilian Vespers, messengers called on the men of Palermo to rise against the French.", "b_text": "The War of the Sicilian Vespers began with the revolt of the Sicilian Vespers.", "a_article": "The Sicilian Vespers: The Uprising of 1282", "b_article": "War of the Sicilian Vespers (1282–1302)", "score": 0.736, "nli": "ENTAILS", "zone": "extends_boundary"}, {"a_id": "5afe0913d409", "b_id": "977af8903834", "a_text": "The Norman conquest of southern Italy led to the creation of the County of Sicily in 1071.", "b_text": "The County of Sicily was founded in 1071 during the Norman conquest of the southern peninsula.", "a_article": "Sicily — Overview and History", "b_article": "Kingdom of Sicily: From Norman Foundation to Italian Unification (1130–1816)", "score": 0.942, "nli": "none", "zone": "known_boundary"}, {"a_id": "be22dbe100f0", "b_id": "0e6e6ccf3dbf", "a_text": "Syracuse is located on the southeastern coast of Sicily.", "b_text": "Syracuse is located on the southeastern side of Sicily.", "a_article": "Syracuse, Sicily — Introduction and Etymology", "b_article": "Syracuse, Sicily — Geography, Climate, and Natural Features", "score": 0.98, "nli": "none", "zone": "known_boundary"}, {"a_id": "93afc4dd43ed", "b_id": "ea557d968b96", "a_text": "Sicilian belongs to the Extreme Southern Italian language group.", "b_text": "The Sicilian language belongs to the extreme southern Italian dialect group.", "a_article": "Sicilian: A Distinct Romance Language, Not Just a Dialect", "b_article": "Lingua siciliana: Status, Classification, and Geographic Distribution", "score": 0.972, "nli": "none", "zone": "known_boundary"}, {"a_id": "75b8a58306f5", "b_id": "b71cddac2aa8", "a_text": "Agentic systems often trade latency and cost for better task performance.", "b_text": "Agentic systems introduce trade-offs between latency and cost versus improved task performance.", "a_article": "Building Effective LLM Agents: A Practical Guide", "b_article": "Building Effective Agentic Systems", "score": 0.945, "nli": "none", "zone": "known_boundary"}, {"a_id": "d590885249b7", "b_id": "7fd62ebaec68", "a_text": "Mount Etna was designated as a UNESCO World Heritage Site in 2013.", "b_text": "Mount Etna was added to the list of UNESCO World Heritage Sites in June 2013.", "a_article": "Sicily: Monuments and Places of Interest", "b_article": "Mount Etna — Overview, Etymology, and Mythology", "score": 0.946, "nli": "none", "zone": "known_boundary"}, {"a_id": "ebd8b44821d9", "b_id": "2a5cc02f9cc8", "a_text": "The autonomous regional parliament of Sicily legislated Regional Law No. 9/2011 to encourage the teaching of Sicilian at all schools.", "b_text": "The Assembly of the Sicilian Region passed a law in 2011 to promote the linguistic heritage and Sicilian literature in the region's schools.", "a_article": "Sicilian: A Distinct Romance Language, Not Just a Dialect", "b_article": "Lingua siciliana: Status, Classification, and Geographic Distribution", "score": 0.793, "nli": "ENTAILS", "zone": "mid"}, {"a_id": "0f939d470663", "b_id": "bd136582896a", "a_text": "The Sicilian Mafia has used other names to describe itself, such as The *Honored Society* (*Onorata Società*) or *Brotherhood* (*Fratellanza*).", "b_text": "Alternative names for Sicilian are *Calabro-Sicilian*, *sicilianu*, and *sìculu*.", "a_article": "Etymology of the Word 'Mafia'", "b_article": "Sicilian: A Distinct Romance Language, Not Just a Dialect", "score": 0.72, "nli": "ENTAILS", "zone": "extends_boundary"}, {"a_id": "45eb65c74f1a", "b_id": "f53d493c68cf", "a_text": "Giuseppe Tomasi di Lampedusa began writing *The Leopard* shortly after attending a literary conference in San Pellegrino Terme in 1954.", "b_text": "Giuseppe Tomasi di Lampedusa first conceived his novel *The Leopard* shortly after inheriting his princely title.", "a_article": "The Leopard (Il Gattopardo) — Origins, Plot & Legacy", "b_article": "Giuseppe Tomasi di Lampedusa — Life and Biography", "score": 0.785, "nli": "UNRELATED", "zone": "mid"}, {"a_id": "572a023b8307", "b_id": "4b0c5e132c45", "a_text": "The Syracusan dialect falls into the Eastern Sicilian dialect and Southeastern metaphonetic Sicilian dialect categories.", "b_text": "The Sicilian Region refers to Sicilian as a language.", "a_article": "Syracuse, Sicily: Demographics, Language, Religion & Culture", "b_article": "Sicilian: A Distinct Romance Language, Not Just a Dialect", "score": 0.775, "nli": "ENTAILS", "zone": "mid"}, {"a_id": "a7fcb1860877", "b_id": "8c23ab7a64e6", "a_text": "The Sicilian Vespers revolt in 1282 threw off Angevin rule in the island of Sicily.", "b_text": "The War of the Sicilian Vespers began with the revolt of the Sicilian Vespers.", "a_article": "Kingdom of Sicily: From Norman Foundation to Italian Unification (1130–1816)", "b_article": "War of the Sicilian Vespers (1282–1302)", "score": 0.75, "nli": "ENTAILS", "zone": "extends_boundary"}], "knowledge_check": [{"claim_id": "303bdf1a380e", "text": "Since 2001, regional assessors in Sicily do not necessarily have to be deputies to the Sicilian Regional Assembly.", "claim_type": "factual", "article_title": "Sicily: Political System and Special Autonomy", "topics": ["italian-politics", "sicily", "regional-autonomy"]}, {"claim_id": "a659546e9335", "text": "Luigi Pirandello wrote his first tragedy by the age of twelve.", "claim_type": "factual", "article_title": "Luigi Pirandello — Biography", "topics": ["italian-literature", "theater", "nobel-prize"]}, {"claim_id": "d53199a33756", "text": "Frederick II forged an early absolutist state in the Kingdom of Sicily and much of Italy.", "claim_type": "factual", "article_title": "Frederick II, Holy Roman Emperor — Introduction", "topics": ["medieval-history", "holy-roman-empire", "hohenstaufen"]}, {"claim_id": "6e806cd53e4f", "text": "By intercepting partial tool call JSON streams, Pi extensions can open a Glimpse window early to provide a real-time, progressive rendering experience similar to Claude.", "claim_type": "procedural", "article_title": "Reverse-Engineering Claude's Generative UI and Building for the Terminal", "topics": ["artificial-intelligence", "ai-coding-tools", "llm-applications"]}, {"claim_id": "848f9dd381f1", "text": "Luigi Pirandello accepted an offer to teach Italian at the Istituto Superiore di Magistero di Roma in 1897.", "claim_type": "factual", "article_title": "Luigi Pirandello — Biography", "topics": ["italian-literature", "theater", "nobel-prize"]}, {"claim_id": "66ea44765768", "text": "The Raccordo autostradale 15, or Tangenziale di Catania, is a 24 km road that bypasses the city of Catania and is toll-free.", "claim_type": "factual", "article_title": "Sicily: Infrastructure and Transport", "topics": ["sicily", "italian-infrastructure", "transport"]}, {"claim_id": "f5f0589b9d74", "text": "*The Leopard* chronicles the changes in Sicilian life and society during the Risorgimento.", "claim_type": "factual", "article_title": "The Leopard (Il Gattopardo) — Origins, Plot & Legacy", "topics": ["italian-literature", "sicily", "risorgimento"]}, {"claim_id": "c291565049c9", "text": "Unlike most AI tools, a Claw can proactively act on its own, such as checking a user's calendar or inbox, based on user-defined rules.", "claim_type": "factual", "article_title": "OpenClaw: A Comprehensive Guide to Your Personal AI Assistant", "topics": ["personal-ai-assistant", "ai-automation", "open-source"]}, {"claim_id": "e4d29b7b7168", "text": "The 1948 film *La Terra Trema* uses local amateur actors.", "claim_type": "factual", "article_title": "Sicilian Language: Current Status, Speakers, and Diaspora", "topics": ["Sicilian", "endangered-languages", "Romance-languages"]}, {"claim_id": "44970dfabc47", "text": "In Sicilian, 'arancini' is grammatically plural.", "claim_type": "factual", "article_title": "Arancini: Sicily's Iconic Stuffed Rice Balls", "topics": ["sicilian-cuisine", "italian-food", "rice-dishes"]}, {"claim_id": "7c301a1d8cf7", "text": "Erulo Eroli created an Italian painting of the Sicilian Vespers between 1890 and 1891.", "claim_type": "factual", "article_title": "Sicilian Vespers: Cultural Legacy and Representations", "topics": ["sicilian-vespers", "italian-history", "mafia-origins"]}, {"claim_id": "60a9708ebd30", "text": "Frederic successfully created the first modern state in Europe, run by an efficient bureaucracy.", "claim_type": "factual", "article_title": "The Sicilian School: Origins of Italian Literary Poetry", "topics": ["medieval-literature", "italian-poetry", "sicilian-school"]}, {"claim_id": "d0b8c8471feb", "text": "Many clients, particularly criminals, actively seek Mafia protection.", "claim_type": "factual", "article_title": "The Sicilian Mafia as a Private Protection Industry", "topics": ["organized-crime", "protection-rackets", "institutional-economics"]}, {"claim_id": "7a07b101451c", "text": "Syracuse lends its name to the southeastern Sicilian escarpment, known as the \"Malta and Syracuse Escarpment\" (also called the \"Hyblaean-Maltese Escarpment\").", "claim_type": "factual", "article_title": "Syracuse, Sicily — Geography, Climate, and Natural Features", "topics": ["geography", "sicily", "syracuse"]}, {"claim_id": "376203c71da1", "text": "Sicily was treated differently than other Roman conquests because the island's complex ethnic mixture and the need for fiscal recoupment led to an institutional system excluding broad autonomy.", "claim_type": "causal", "article_title": "Sicilia: Rome's First Province — From the Punic Wars to Imperial Administration", "topics": ["roman-history", "sicily", "punic-wars"]}, {"claim_id": "a8a43c3e400a", "text": "Archimedes' work in engineering arose from fulfilling the needs of Syracuse.", "claim_type": "causal", "article_title": "Archimedes: Biography of the Ancient Greek Mathematician", "topics": ["ancient-greece", "history-of-science", "mathematics"]}, {"claim_id": "f7bb5af2eb8c", "text": "The Normans captured Noto in 1091, completing the conquest of Sicily.", "claim_type": "factual", "article_title": "History of Islam in Southern Italy and Sicily", "topics": ["medieval-history", "islamic-history", "sicily"]}, {"claim_id": "ab242c85b81b", "text": "Heavy grain extraction in Sicily provoked armed uprisings known as the First and Second Servile Wars.", "claim_type": "causal", "article_title": "Sicilia: Rome's First Provincial Acquisition", "topics": ["roman-history", "sicily", "roman-provinces"]}, {"claim_id": "f13a9968bb8a", "text": "*Il pirata* introduced audiences to Giovanni Battista Rubini's dual personality as a singer and actor.", "claim_type": "factual", "article_title": "Vincenzo Bellini: Northern Italy Years (1827–1833)", "topics": ["opera", "bel-canto", "19th-century-music"]}, {"claim_id": "eed7dd6ae819", "text": "Renaissance students using *Dialogus I* were engaging in dialogue, not just memorizing declensions.", "claim_type": "factual", "article_title": "The Lost Art of Speaking Ancient Greek: A Pedagogical History", "topics": ["ancient-greek", "language-learning", "pedagogy"]}, {"claim_id": "c8b8a8e5a124", "text": "Shopkeepers often pay the Mafia to protect them from thieves.", "claim_type": "factual", "article_title": "The Sicilian Mafia as a Private Protection Industry", "topics": ["organized-crime", "protection-rackets", "institutional-economics"]}, {"claim_id": "840bfaf7355c", "text": "Vincenzo Bellini died at the age of 33 in Puteaux, France.", "claim_type": "factual", "article_title": "Vincenzo Bellini: Life and Legacy of the Bel Canto Master", "topics": ["opera", "bel-canto", "19th-century-music"]}, {"claim_id": "df5f2e6516ee", "text": "The War of the Sicilian Vespers was fought over competing dynastic claims to the throne of Sicily.", "claim_type": "factual", "article_title": "War of the Sicilian Vespers (1282–1302)", "topics": ["medieval-history", "sicily", "mediterranean"]}, {"claim_id": "3eb7581921fa", "text": "Mafiosi sometimes induct smugglers into their clans to bind them more firmly, especially in operations like heroin smuggling with high volumes and profits.", "claim_type": "procedural", "article_title": "Sicilian Mafia: Other Activities Beyond Protection Rackets", "topics": ["organized-crime", "sicilian-mafia", "italian-politics"]}, {"claim_id": "920a3825d56c", "text": "Ancient Greek and Byzantine Greek coexisted for a long time in diglossia with Latin in Sicily.", "claim_type": "factual", "article_title": "Sicilian Language — Vocabulary: Historical Substrates and Etymological Layers", "topics": ["sicilian-language", "historical-linguistics", "etymology"]}, {"claim_id": "a2690be74935", "text": "Supervised fine-tuning of Large Language Models requires robust safeguards against data poisoning attacks.", "claim_type": "evaluative", "article_title": "Learning to Poison Large Language Models for Downstream Manipulation", "topics": ["llm-applications", "model-architecture", "ai-safety"]}, {"claim_id": "67c3890021a9", "text": "Empedocles theorized that all humans, or maybe only a selected few among them, were originally long-lived daimons who dwelt in a state of bliss until committing an unspecified crime.", "claim_type": "factual", "article_title": "Empedocles: Life, Philosophy, and Legacy", "topics": ["pre-socratic-philosophy", "ancient-greece", "cosmogony"]}, {"claim_id": "766240753411", "text": "The emir appointed governors of major cities, high ranking judges (*qāḍī*), and arbitrators for minor disputes between individuals.", "claim_type": "factual", "article_title": "Muslim Sicily: Government, Coinage, and the End of Islamic Rule", "topics": ["medieval-history", "islamic-civilization", "sicily"]}, {"claim_id": "92c5d26978d1", "text": "Mission Control enables inter-agent messaging and comms.", "claim_type": "factual", "article_title": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "topics": ["ai-agents", "orchestration", "dashboard"]}, {"claim_id": "51428a54b2c0", "text": "Naxos is located in the Metropolitan City of Messina.", "claim_type": "factual", "article_title": "Sicily: Monuments and Places of Interest", "topics": ["sicily", "archaeology", "architecture"]}]};
+
+const ROUNDS = [
+  {
+    key: 'claim_quality',
+    title: 'Claim Quality',
+    question: 'Is this worth extracting from the article?',
+    options: [
+      { key: 'j', label: 'Good', value: 'good', flash: '✓', css: 'good', exit: 'exit-right' },
+      { key: 'k', label: 'Trivial', value: 'trivial', flash: '~', css: 'mid', exit: 'exit-up' },
+      { key: 'l', label: 'Bad', value: 'bad', flash: '✗', css: 'bad', exit: 'exit-left' },
+    ],
+    renderCard: (item) => `
+      <div class="card" id="current-card">
+        <div class="source">${escHtml(item.article_title)}</div>
+        <div class="claim-text">${escHtml(item.text)}</div>
+        <div class="claim-type">${item.claim_type}</div>
+      </div>
+    `
+  },
+  {
+    key: 'pair_judgment',
+    title: 'Similarity Calibration',
+    question: 'Are these two claims saying the same thing?',
+    options: [
+      { key: 'j', label: 'Same', value: 'same', flash: '=', css: 'good', exit: 'exit-right' },
+      { key: 'k', label: 'Related', value: 'related', flash: '≈', css: 'mid', exit: 'exit-up' },
+      { key: 'l', label: 'Different', value: 'different', flash: '≠', css: 'bad', exit: 'exit-left' },
+    ],
+    renderCard: (item) => `
+      <div class="pair-card" id="current-card">
+        <div class="pair-half">
+          <div class="source">${escHtml(item.a_article)}</div>
+          <div class="claim-text">${escHtml(item.a_text)}</div>
+        </div>
+        <div class="pair-half">
+          <div class="source">${escHtml(item.b_article)}</div>
+          <div class="claim-text">${escHtml(item.b_text)}</div>
+        </div>
+        <div class="pair-meta">
+          <span>cosine: ${item.score.toFixed(3)}</span>
+          <span>nli: ${item.nli}</span>
+          <span>${item.zone.replace('_', ' ')}</span>
+        </div>
+      </div>
+    `
+  },
+  {
+    key: 'knowledge_check',
+    title: 'Knowledge Ground Truth',
+    question: 'Did you already know this before reading the article?',
+    options: [
+      { key: 'j', label: 'Knew it', value: 'known', flash: '✓', css: 'good', exit: 'exit-right' },
+      { key: 'k', label: 'Vaguely', value: 'vague', flash: '~', css: 'mid', exit: 'exit-up' },
+      { key: 'l', label: 'New', value: 'new', flash: '✗', css: 'bad', exit: 'exit-left' },
+    ],
+    renderCard: (item) => `
+      <div class="card" id="current-card">
+        <div class="source">${escHtml(item.article_title)}</div>
+        <div class="claim-text">${escHtml(item.text)}</div>
+        <div class="claim-type">${item.claim_type}${item.topics ? ' · ' + item.topics.join(', ') : ''}</div>
+      </div>
+    `
+  }
+];
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// State
+let currentRound = 0;
+let currentIndex = 0;
+let totalAnswered = 0;
+const results = { claim_quality: [], pair_judgment: [], knowledge_check: [] };
+const startTime = Date.now();
+let locked = false;
+
+function totalCards() {
+  return DATA.claim_quality.length + DATA.pair_judgment.length + DATA.knowledge_check.length;
+}
+
+function currentData() {
+  return DATA[ROUNDS[currentRound].key];
+}
+
+function renderCard() {
+  const round = ROUNDS[currentRound];
+  const items = currentData();
+
+  if (currentIndex >= items.length) {
+    nextRound();
+    return;
+  }
+
+  const item = items[currentIndex];
+  document.getElementById('card-area').innerHTML = `
+    <div class="round-title">${round.title}</div>
+    <div class="round-question">${round.question}</div>
+    ${round.renderCard(item)}
+  `;
+
+  // Update hints
+  document.getElementById('key-hints').innerHTML = round.options.map(o =>
+    `<div class="key-hint"><kbd>${o.key.toUpperCase()}</kbd><span class="hint-label">${o.label}</span></div>`
+  ).join('');
+
+  // Update tabs
+  ROUNDS.forEach((r, i) => {
+    const tab = document.getElementById('tab-' + i);
+    tab.className = 'round-tab' + (i === currentRound ? ' active' : '') +
+      (i < currentRound ? ' done' : '');
+    if (i < currentRound) tab.innerHTML = r.title + '<span class="check">✓</span>';
+  });
+
+  updateProgress();
+}
+
+function updateProgress() {
+  const pct = (totalAnswered / totalCards() * 100).toFixed(1);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-count').textContent = totalAnswered + '/' + totalCards();
+}
+
+function showFlash(text, css) {
+  const el = document.getElementById('flash');
+  el.textContent = text;
+  el.className = 'flash show ' + css;
+  setTimeout(() => el.className = 'flash', 200);
+}
+
+function answer(optionIndex) {
+  if (locked) return;
+  locked = true;
+
+  const round = ROUNDS[currentRound];
+  const option = round.options[optionIndex];
+  const item = currentData()[currentIndex];
+
+  // Record
+  const entry = { ...item, judgment: option.value, time_ms: Date.now() - startTime };
+  results[round.key].push(entry);
+
+  // Animate
+  showFlash(option.flash, option.css);
+  const card = document.getElementById('current-card');
+  if (card) card.classList.add(option.exit);
+
+  totalAnswered++;
+  currentIndex++;
+
+  setTimeout(() => {
+    locked = false;
+    renderCard();
+  }, 250);
+}
+
+function nextRound() {
+  currentRound++;
+  currentIndex = 0;
+  if (currentRound >= ROUNDS.length) {
+    showResults();
+    return;
+  }
+  renderCard();
+}
+
+function showResults() {
+  document.getElementById('card-area').style.display = 'none';
+  document.getElementById('key-hints').style.display = 'none';
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+  const perCard = (elapsed / totalAnswered).toFixed(1);
+
+  // Compute stats
+  const cq = results.claim_quality;
+  const pj = results.pair_judgment;
+  const kc = results.knowledge_check;
+
+  const cqCounts = { good: 0, trivial: 0, bad: 0 };
+  cq.forEach(c => cqCounts[c.judgment]++);
+
+  const pjCounts = { same: 0, related: 0, different: 0 };
+  pj.forEach(p => pjCounts[p.judgment]++);
+
+  const kcCounts = { known: 0, vague: 0, new: 0 };
+  kc.forEach(k => kcCounts[k.judgment]++);
+
+  // Threshold analysis
+  const sameScores = pj.filter(p => p.judgment === 'same').map(p => p.score);
+  const relatedScores = pj.filter(p => p.judgment === 'related').map(p => p.score);
+  const diffScores = pj.filter(p => p.judgment === 'different').map(p => p.score);
+
+  const avg = arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3) : 'n/a';
+  const min = arr => arr.length ? Math.min(...arr).toFixed(3) : 'n/a';
+  const max = arr => arr.length ? Math.max(...arr).toFixed(3) : 'n/a';
+
+  // NLI accuracy
+  const nliCorrect = pj.filter(p => {
+    if (p.judgment === 'same' && p.nli === 'ENTAILS') return true;
+    if (p.judgment === 'related' && p.nli === 'EXTENDS') return true;
+    if (p.judgment === 'different' && p.nli === 'UNRELATED') return true;
+    return false;
+  }).length;
+  const nliTotal = pj.filter(p => p.nli && p.nli !== 'none').length;
+
+  // Claim type breakdown
+  const typeJudgments = {};
+  cq.forEach(c => {
+    if (!typeJudgments[c.claim_type]) typeJudgments[c.claim_type] = { good: 0, trivial: 0, bad: 0 };
+    typeJudgments[c.claim_type][c.judgment]++;
+  });
+
+  el.innerHTML = `
+    <h2>Calibration Complete</h2>
+    <div class="double-rule"></div>
+
+    <div class="stat-row">
+      <div><div class="stat-number">${totalAnswered}</div><div class="stat-label">cards rated</div></div>
+      <div><div class="stat-number">${elapsed}s</div><div class="stat-label">elapsed</div></div>
+      <div><div class="stat-number">${perCard}s</div><div class="stat-label">per card</div></div>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Round 1 — Claim Quality</h3>
+      <table>
+        <tr><th>Verdict</th><th>Count</th><th>%</th></tr>
+        <tr><td>Good</td><td>${cqCounts.good}</td><td>${(cqCounts.good / cq.length * 100).toFixed(0)}%</td></tr>
+        <tr><td>Trivial</td><td>${cqCounts.trivial}</td><td>${(cqCounts.trivial / cq.length * 100).toFixed(0)}%</td></tr>
+        <tr><td>Bad</td><td>${cqCounts.bad}</td><td>${(cqCounts.bad / cq.length * 100).toFixed(0)}%</td></tr>
+      </table>
+      ${Object.keys(typeJudgments).length > 0 ? `
+        <p style="font-size:13px; color:#6a6458;">By claim type:</p>
+        <table>
+          <tr><th>Type</th><th>Good</th><th>Trivial</th><th>Bad</th></tr>
+          ${Object.entries(typeJudgments).map(([t, j]) =>
+            `<tr><td>${t}</td><td>${j.good}</td><td>${j.trivial}</td><td>${j.bad}</td></tr>`
+          ).join('')}
+        </table>
+      ` : ''}
+    </div>
+
+    <div class="analysis-section">
+      <h3>Round 2 — Similarity Thresholds</h3>
+      <table>
+        <tr><th>Your verdict</th><th>Count</th><th>Avg score</th><th>Range</th></tr>
+        <tr><td>Same</td><td>${pjCounts.same}</td><td>${avg(sameScores)}</td><td>${min(sameScores)} – ${max(sameScores)}</td></tr>
+        <tr><td>Related</td><td>${pjCounts.related}</td><td>${avg(relatedScores)}</td><td>${min(relatedScores)} – ${max(relatedScores)}</td></tr>
+        <tr><td>Different</td><td>${pjCounts.different}</td><td>${avg(diffScores)}</td><td>${min(diffScores)} – ${max(diffScores)}</td></tr>
+      </table>
+      <p>Current KNOWN threshold: <strong>0.880</strong> · Current EXTENDS threshold: <strong>0.720</strong></p>
+      <p>Suggested KNOWN: <strong>${sameScores.length ? min(sameScores) : '?'}</strong> (min score you called "same")</p>
+      <p>NLI accuracy vs your judgment: <strong>${nliTotal > 0 ? (nliCorrect / nliTotal * 100).toFixed(0) + '%' : 'n/a'}</strong> (${nliCorrect}/${nliTotal} matched)</p>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Round 3 — Knowledge Ground Truth</h3>
+      <table>
+        <tr><th>Your knowledge</th><th>Count</th><th>%</th></tr>
+        <tr><td>Knew it</td><td>${kcCounts.known}</td><td>${(kcCounts.known / kc.length * 100).toFixed(0)}%</td></tr>
+        <tr><td>Vaguely</td><td>${kcCounts.vague}</td><td>${(kcCounts.vague / kc.length * 100).toFixed(0)}%</td></tr>
+        <tr><td>New to me</td><td>${kcCounts.new}</td><td>${(kcCounts.new / kc.length * 100).toFixed(0)}%</td></tr>
+      </table>
+    </div>
+
+    <div class="analysis-section">
+      <h3>Raw Results (JSON)</h3>
+      <p>Click to copy, then paste back into Claude Code for analysis.</p>
+      <div class="json-output" id="json-output" onclick="copyJson()">${escHtml(JSON.stringify(results, null, 2))}</div>
+      <div class="copy-hint" id="copy-hint">Click to copy to clipboard</div>
+    </div>
+  `;
+}
+
+function copyJson() {
+  navigator.clipboard.writeText(JSON.stringify(results)).then(() => {
+    document.getElementById('copy-hint').textContent = 'Copied!';
+  });
+}
+
+// Keyboard handler
+document.addEventListener('keydown', (e) => {
+  const round = ROUNDS[currentRound];
+  if (!round) return;
+
+  const idx = round.options.findIndex(o => o.key === e.key.toLowerCase());
+  if (idx !== -1) {
+    e.preventDefault();
+    answer(idx);
+  }
+});
+
+// Init
+renderCard();
+</script>
+</body>
+</html>

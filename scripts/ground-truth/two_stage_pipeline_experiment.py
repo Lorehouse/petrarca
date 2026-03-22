@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.expanduser('~/.env'))
 
 from gemini_llm import call_llm
-from amygdala import EmbeddingModel
+from limbic.amygdala import EmbeddingModel
 
 # ---------- Constants ----------
 ARTICLES_PATH = Path('/Users/stian/src/petrarca/app/data/articles.json')

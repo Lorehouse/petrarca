@@ -1,6 +1,55 @@
 # Knowledge System Implementation Status
 
-**Date**: March 22, 2026 (last updated — session 34: curriculum enrichment + article-curriculum bridge)
+**Date**: March 22, 2026 (last updated — session 35: claim calibration, article similarity, prompt overhaul)
+
+## Session 35: Claim Calibration + Article Similarity + Prompt Overhaul (March 21–22, 2026)
+
+### Extraction Prompt Overhaul
+- **Both prompts rewritten** in `build_articles.py`: article extraction + atomic claims now prioritize insights, patterns, comparisons over product feature lists
+- **Calibration results**: V1 had 31% noise, 17% insight rate. V2: 0% noise, 91% insight rate
+- **Model switch**: pipeline tests + defaults → `gemini-3.1-flash-lite-preview` (fastest, cheapest, 5% factual claim rate vs 60% before)
+- **All 257 articles backfilled** with new prompt — claims went from 1,473 to 1,045 (fewer but insight-focused), novelty claims 156→368, entities/follow-ups now on 100%
+
+### Article-Level Similarity (amygdala `document_similarity` module)
+- **New amygdala module**: `Document`, `find_similar_documents()`, weighted multi-field embeddings
+- **Best strategy**: 0.5×summary + 0.5×claims embedding = 94% accuracy, Spearman ρ=0.818 (18 human-rated pairs)
+- **Validated**: 300 LLM-rated pairs (AUROC=0.930), 50 synthetic benchmark pairs (ρ=0.895)
+- **Calibrated thresholds**: briefing card=0.52 (P=80%, R=78%), feed ranking=0.49, dedup=0.64
+- **Integrated**: `build_knowledge_index.py` → `article_similarities` field (6,815 pairs), client `getSimilarArticles()` in knowledge-engine.ts
+- **What didn't work**: LLM judge (78%), topic Jaccard (50%), two-stage embed→LLM (no improvement)
+
+### Briefing Card in Reader
+- **Verdict line**: "Almost entirely new" / "Extends what you know — N new, M deepening" / "Mostly familiar — N details worth scanning"
+- **Similar articles**: top 3 read articles with similarity %, tappable to navigate
+- **Skip nudge**: when >70% known, "Read N new claims only →" switches to new_only mode
+- **Graceful degradation**: all features return empty when knowledge index not loaded
+
+### Reader UI Additions
+- **Follow Topics section**: 2-3 toggleable chips (entity + specific topics) below article, sends interest_chip signals
+- **Copy link**: "Copy link" in ⋯ dropdown menu, copies source_url to clipboard
+
+### 9-Agent Research Swarm
+- **Datasets**: `scripts/ground-truth/` — 300 LLM-rated pairs, 50 synthetic benchmark, 11 embedding strategies, corpus cluster analysis, two-stage pipeline experiments, threshold config
+- **Experiment report**: `scripts/ground-truth/experiment-report.html` — visual report of all experiments
+- **Research docs**: `research/auto-research-patterns.md` (Karpathy loop), `research/cross-project-similarity-applications.md` (Petrarca/Alif/Hamarquizen)
+- **Amygdala design doc**: `experiments/document_similarity_design.md`
+
+### Corpus Analysis (257 articles)
+- 26 natural clusters, 119 singletons (46% don't cluster)
+- 70% of articles have 10+ neighbors at threshold 0.47 — briefing card useful for majority
+- Sicily dominates overlap (clusters at 0.75-0.88 cohesion); AI/tech articles naturally isolated
+- 5-10 near-duplicate pairs identified (>0.90 similarity)
+
+### Otak Integration
+- `scripts/dedup_check.py` — pre-ingestion duplicate screening against existing sources
+- `scripts/readwise_triage.py` — clusters 11K+ Readwise docs for ingestion prioritization
+- `canonical_synthesis.py` — replaced hand-rolled similarity with amygdala's `pairwise_cosine`
+
+### Next Priorities
+- SQLite migration (replace JSON knowledge index + articles with server-side SQLite + API endpoints)
+- Atomic claims re-extraction with new prompt (separate from article-level backfill already done)
+- Knowledge index rebuild after atomic claims update
+- Web deploy with briefing card changes
 
 ## Session 34: Overlapping Curricula + Article-Curriculum Bridge (March 21–22, 2026)
 
@@ -112,9 +161,9 @@
 - **API endpoint mismatches**: fixed client-server contract for projects endpoints (response unwrapping, correct paths)
 
 ### Amygdala Migration (completed)
-- `build_claim_embeddings.py`: Gemini API → `amygdala.EmbeddingModel` (local MiniLM)
-- `build_knowledge_index.py`: Nomic → single `claim_embeddings.npz`, Gemini judge → `amygdala.nli_classify_batch`
-- `experiment_claim_dedup.py`: manual complete-linkage → `amygdala.complete_linkage_cluster`
+- `build_claim_embeddings.py`: Gemini API → `limbic.amygdala.EmbeddingModel` (local MiniLM)
+- `build_knowledge_index.py`: Nomic → single `claim_embeddings.npz`, Gemini judge → `limbic.amygdala.nli_classify_batch`
+- `experiment_claim_dedup.py`: manual complete-linkage → `limbic.amygdala.complete_linkage_cluster`
 
 ## Session 28: Capture Reliability Fixes (March 16, 2026)
 

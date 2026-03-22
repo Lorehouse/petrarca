@@ -20,7 +20,7 @@ sys.path.insert(0, ".")
 
 from gemini_llm import call_llm
 
-from amygdala import EmbeddingModel
+from limbic.amygdala import EmbeddingModel
 
 # ---------------------------------------------------------------------------
 # Category definitions

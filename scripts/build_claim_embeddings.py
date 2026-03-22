@@ -29,7 +29,7 @@ ARTICLES_PATH = DATA_DIR / "articles.json"
 EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 CLAIMS_INDEX_PATH = DATA_DIR / "claims_index.json"
 
-from amygdala import EmbeddingModel, pairwise_cosine
+from limbic.amygdala import EmbeddingModel, pairwise_cosine
 
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # amygdala default
 

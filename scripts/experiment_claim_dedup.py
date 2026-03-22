@@ -20,7 +20,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from amygdala import complete_linkage_cluster, pairwise_cosine
+from limbic.amygdala import complete_linkage_cluster, pairwise_cosine
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent

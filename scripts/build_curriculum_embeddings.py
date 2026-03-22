@@ -21,7 +21,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from amygdala import EmbeddingModel, pairwise_cosine
+from limbic.amygdala import EmbeddingModel, pairwise_cosine
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent

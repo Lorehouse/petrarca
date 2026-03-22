@@ -16,7 +16,7 @@ from scipy.spatial.distance import cosine as cosine_dist
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from amygdala import EmbeddingModel
+from limbic.amygdala import EmbeddingModel
 
 # ---------- Ground truth ----------
 GROUND_TRUTH = [

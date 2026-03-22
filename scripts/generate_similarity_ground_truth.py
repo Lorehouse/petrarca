@@ -44,7 +44,7 @@ def load_articles():
 
 
 def compute_embeddings(articles):
-    from amygdala import EmbeddingModel
+    from limbic.amygdala import EmbeddingModel
     model = EmbeddingModel()
     texts = [f"{a['title']}. {a.get('full_summary', a.get('one_line_summary', ''))}" for a in articles]
     print(f"Computing embeddings for {len(texts)} articles...")

@@ -182,7 +182,7 @@ Amygdala already provides the building blocks: `pairwise_cosine`, `extract_pairs
 ### API Sketch
 
 ```python
-from amygdala import auto_calibrate
+from limbic.amygdala import auto_calibrate
 
 result = auto_calibrate(
     # Ground truth
@@ -285,7 +285,7 @@ against human judgments in ground_truth/calibration-2026-03-20.json.
 
 ## Setup
 1. Verify ground truth exists: ground_truth/calibration-2026-03-20.json
-2. Verify amygdala is installed: python -c "from amygdala import pairwise_cosine"
+2. Verify amygdala is installed: python -c "from limbic.amygdala import pairwise_cosine"
 3. Run baseline: python eval.py
 4. Record baseline in results.tsv
 5. Create branch: git checkout -b autoresearch/calibration-<date>
