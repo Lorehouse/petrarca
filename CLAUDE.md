@@ -64,7 +64,7 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 - `GET /curriculum/book-context/{book_id}` composes all curriculum data for a book
 
 ### Book Data Architecture
-- Server stores books + captures in `physical_books.json` as `{"books": [...], "captures": [...]}`
+- Server stores books + captures in SQLite (`physical_books`, `book_captures` tables in petrarca.db)
 - Captures are a **top-level array**, NOT nested inside each book object — filtered by `book_id` field
 - Voice notes uploaded to `/book/voice-note`, transcription saved to `/data/notes/`, capture record synced via `/book/sync`
 - Client syncs to server after every mutation via `syncToServer()` in `book-store.ts`
@@ -207,19 +207,30 @@ All research lives in `research/` directory:
 - **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
 - **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **`limbic.amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/limbic`). Server: `/opt/limbic` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/limbic` (private).
+- **`limbic.amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/limbic`). Server: `/opt/limbic` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/limbic` (private). Locally: `PYTHONPATH=/Users/stian/src/limbic` to run pipeline scripts.
   - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs, **Document, find_similar_documents**), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
   - **Document similarity** (session 35): `find_similar_documents()` with weighted multi-field embeddings. 94% accuracy, AUROC=0.930. See `~/src/limbic/experiments/calibration_document_similarity.md`
   - **Claim thresholds** (session 33): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate. See `~/src/limbic/experiments/calibration_petrarca_thresholds.md`
   - Ground truth datasets in `scripts/ground-truth/` — 300 LLM-rated pairs, 50 synthetic pairs, 11 embedding strategies tested
 
-### 7. Curriculum Generation
+### 7. SQLite Content Pipeline
+- **`petrarca.db`** at `/opt/petrarca/data/petrarca.db` (configurable via `PETRARCA_DB` env) — stores all content pipeline data alongside books/projects/kindle tables
+- **Dual-write**: Pipeline scripts write JSON + SQLite. SQLite sync is non-fatal (wrapped in try/except).
+- **Sync helpers** in `db.py`: `sync_articles()`, `sync_knowledge_index()`, `sync_clusters()`, `sync_syntheses()` — each runs in one transaction
+- **Export**: `scripts/export_content_json.py` reconstructs JSON from SQLite (matching original format)
+- **Verify**: `scripts/verify_migration.py` does deep semantic comparison (values, not key ordering)
+- **Gotcha — knowledge_index claims are derived**: Topics are normalized (hyphens→spaces, lowercase), and only articles with embeddings (in paragraph_claim_map) are included. Don't naively dump from atomic_claims table.
+- **Gotcha — duplicate claim IDs**: One claim ID can appear in multiple articles. `atomic_claims` uses composite PK `(article_id, id)`.
+- **Gotcha — JSON formatting**: articles.json uses `indent=2`, knowledge_index.json uses compact (no indent). Export must match.
+- **Phase status**: Phase 1+2 complete (schema, migration, export, verify, dual-write). Phase 3 (SQLite-primary) and Phase 4 (API endpoints) are future work.
+
+### 9. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
 - `generate_curriculum()` accepts a `model` parameter but server `gemini_llm.py` only supports Gemini models
 - For Opus: generate locally via `claude -p`, parse JSON, run through `curriculum.py` node builder, save to `data/curricula/`
 - Assessment format: v2 (3-level: new/some/all + description-first + binary interest) — validated, built into app as curriculum-scan screen
 
-### 8. Reference Projects
+### 10. Reference Projects
 - `../alif` — Arabic learning app with FSRS-based knowledge tracking, Expo mobile setup, good model for "modeling knowledge at granular level"
 - `interview.md` — Original brainstorm interview (language learning focus evolved into read-later concept)
 
