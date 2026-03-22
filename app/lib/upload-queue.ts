@@ -7,7 +7,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { RESEARCH_BASE } from './chat-api';
+import { RESEARCH_BASE, fetchWithTimeout } from './chat-api';
 import { updateBookCapture } from '../data/book-store';
 import { logEvent } from '../data/logger';
 
@@ -157,9 +157,10 @@ async function uploadOne(item: UploadItem): Promise<void> {
     if (item.pageNumber !== undefined) formData.append('page_number', String(item.pageNumber));
     if (item.chapter) formData.append('chapter', item.chapter);
 
-    const resp = await fetch(`${RESEARCH_BASE}/book/upload-photo`, {
+    const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/upload-photo`, {
       method: 'POST',
       body: formData,
+      timeout: 30000, // image upload can be large
     });
 
     if (!resp.ok) {
@@ -208,10 +209,11 @@ export async function pollPhotoResults(): Promise<number> {
   const captureIds = [...pendingOcrIds];
 
   try {
-    const resp = await fetch(`${RESEARCH_BASE}/book/photo-results`, {
+    const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/photo-results`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ capture_ids: captureIds }),
+      timeout: 8000,
     });
 
     if (!resp.ok) return 0;

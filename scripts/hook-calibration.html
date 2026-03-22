@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Temporal Hook Calibration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f7f4ec;
+    color: #2a2420;
+    font-family: 'Crimson Pro', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    width: 100%;
+    max-width: 640px;
+    padding: 24px 16px 0;
+  }
+
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: #2a2420;
+    margin-bottom: 2px;
+  }
+
+  .header .subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #6a6458;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .double-rule {
+    border-top: 2px solid #2a2420;
+    padding-top: 5px;
+    border-bottom: 1px solid #2a2420;
+    height: 0;
+    margin-bottom: 16px;
+  }
+
+  .progress-area {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .progress-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 100px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 3px;
+    background: #e4dfd4;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #8b2500;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-count {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 48px;
+    text-align: right;
+  }
+
+  .card-area {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px;
+    flex: 1;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    padding: 24px;
+    margin-bottom: 16px;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .card.exit-left { transform: translateX(-120%); opacity: 0; }
+  .card.exit-right { transform: translateX(120%); opacity: 0; }
+  .card.exit-up { transform: translateY(-120%); opacity: 0; }
+
+  .card-meta {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .badge-type {
+    background: #2a2420;
+    color: #f7f4ec;
+  }
+
+  .badge-period {
+    background: #8b2500;
+    color: #f7f4ec;
+  }
+
+  .badge-curriculum {
+    background: transparent;
+    border: 1px solid #b0a898;
+    color: #6a6458;
+  }
+
+  .hook-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #2a2420;
+    margin-bottom: 16px;
+  }
+
+  .card-node {
+    font-family: 'EB Garamond', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: #8b2500;
+    margin-bottom: 20px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .action-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 10px 24px;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #f7f4ec;
+    color: #2a2420;
+    transition: all 0.15s;
+  }
+
+  .action-btn:hover { background: #e4dfd4; }
+
+  .action-btn.selected-useful {
+    background: #2a7a4a;
+    color: #fff;
+    border-color: #2a7a4a;
+  }
+
+  .action-btn.selected-meh {
+    background: #b0a898;
+    color: #fff;
+    border-color: #b0a898;
+  }
+
+  .action-btn.selected-wrong {
+    background: #8b2500;
+    color: #fff;
+    border-color: #8b2500;
+  }
+
+  .key-hint {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+  }
+
+  .flash.show { opacity: 1; }
+  .flash.useful { color: #2a7a4a; }
+  .flash.meh { color: #b0a898; }
+  .flash.wrong { color: #8b2500; }
+
+  /* Results */
+  .results {
+    width: 100%;
+    max-width: 640px;
+    padding: 0 16px 48px;
+    display: none;
+  }
+
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+
+  .results-table th, .results-table td {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e4dfd4;
+  }
+
+  .results-table th {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6a6458;
+    font-weight: 500;
+  }
+
+  .hook-list-item {
+    padding: 12px 0;
+    border-bottom: 1px solid #e4dfd4;
+  }
+
+  .hook-list-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 4px;
+  }
+
+  .hook-list-meta {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+  }
+
+  .rating-useful { color: #2a7a4a; font-weight: 600; }
+  .rating-meh { color: #b0a898; font-weight: 600; }
+  .rating-wrong { color: #8b2500; font-weight: 600; }
+
+  .copy-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 8px 20px;
+    background: #2a2420;
+    color: #f7f4ec;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+
+  .copy-btn:hover { background: #8b2500; }
+
+  .notes-area {
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .notes-input {
+    width: 100%;
+    font-family: 'Crimson Pro', serif;
+    font-size: 14px;
+    padding: 8px;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    background: #f7f4ec;
+    resize: vertical;
+    min-height: 40px;
+  }
+
+  .notes-input:focus {
+    outline: none;
+    border-color: #8b2500;
+  }
+
+  .notes-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Temporal Hook Calibration</h1>
+  <div class="subtitle">✦ Rate 30 hooks connecting Sicily to Greece &amp; Rome</div>
+  <div class="double-rule"></div>
+</div>
+
+<div class="progress-area">
+  <div class="progress-row">
+    <span class="progress-label" id="progressLabel">Hook 1 of 30</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <span class="progress-count" id="progressCount">0%</span>
+  </div>
+</div>
+
+<div class="card-area" id="cardArea"></div>
+
+<div class="flash" id="flash"></div>
+
+<div class="results" id="results"></div>
+
+<script>
+const HOOKS = [{"hook_text": "When Rome organized Sicily for grain extraction after 241 BC and institutionalized the latifundia, it planted absentee landlordism, exploited tenants, and the destruction of the rural middle class — a social structure that would outlast every subsequent conqueror and strangle Sicily until 1860.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_the_latifundia_sicilys_feudal_curse", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_consequences_expansion"}], "period": "roman"}, {"hook_text": "The First Sicilian Slave War erupted in 135 BC — just eleven years after Rome had simultaneously destroyed both Carthage and Corinth in 146 BC; the orgy of conquest had flooded Sicily with enslaved prisoners of war, and their revenge came almost immediately.", "hook_type": "same_moment", "sicily_node_id": "sicily_his_the_sicilian_slave_wars", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_punic_wars"}, {"curriculum": "rome", "node_id": "rm_conquest_greece"}], "period": "roman"}, {"hook_text": "Cicero's prosecution of Verres in 70 BC was the case that made him Rome's most famous orator — Sicily's sufferings directly created the career of the man who would stand as the Republic's last defender against Caesar and Antony two decades later.", "hook_type": "known_anchor", "sicily_node_id": "sicily_his_verres_the_plundering_governor", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_cicero"}], "period": "roman"}, {"hook_text": "Hiero II's gamble at the outbreak of the First Punic War in 264 BC — switching immediately to Rome's side — bought Syracuse fifty years of autonomous prosperity; without that alliance, the last great chapter of Greek Sicilian culture under his reign never happens.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_hiero_ii_and_the_twilight_kingdom", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_punic_wars"}], "period": "roman"}, {"hook_text": "The Arab conquest of Sicily beginning in 827 AD was precisely what Henri Pirenne argued closed the ancient world: the Mediterranean ceased to be a Roman-Byzantine lake and became an Islamic sea, severing the trade and culture that had held the old empire together.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_the_arab_conquest_of_sicily", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_pirenne_thesis"}], "period": "arab_norman"}, {"hook_text": "When Ibn Hawqal counted over 300 mosques in Palermo in 973 AD, the city was one of the largest in the world — and Constantinople, the 'New Rome' Constantine had built 640 years earlier, was at that same moment its own greatest medieval rival; both heirs of Roman power were simultaneously at their zenith.", "hook_type": "same_moment", "sicily_node_id": "sicily_his_palermo_from_provincial_town_to_islamic", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_constantine"}], "period": "arab_norman"}, {"hook_text": "Roger II was crowned King of Sicily on Christmas Day 1130, consciously invoking Charlemagne's imperial coronation on Christmas Day 800; both men were claiming to inherit Rome's authority, and Roger's Norman kingdom became the latest link in a chain of Roman succession stretching back to Augustus.", "hook_type": "known_anchor", "sicily_node_id": "sicily_his_roger_ii_rex_siciliae", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_idea_of_rome"}], "period": "arab_norman"}, {"hook_text": "The Arab-Norman synthesis was not just an aesthetic marvel — it was the intellectual pipeline through which Aristotle re-entered Europe: Arabic commentaries on Greek philosophy were translated into Latin in Norman Sicily and Spain, making the 12th-century scholastic revolution and eventually the Renaissance possible.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_the_arabnorman_synthesis", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_aristotle"}, {"curriculum": "greece", "node_id": "ag_reception_hellenism"}], "period": "arab_norman"}, {"hook_text": "While Frederick II's poets in Palermo were inventing the Italian sonnet in the 1230s — using a vernacular descended directly from Latin — Aristotle's newly-recovered texts were simultaneously overturning theology in Paris; both movements flowed through the same Arab-Norman intellectual infrastructure Sicily had built.", "hook_type": "same_moment", "sicily_node_id": "sicily_his_the_sicilian_school_of_poetry", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_aristotle"}, {"curriculum": "rome", "node_id": "rm_romance_languages"}], "period": "arab_norman"}, {"hook_text": "The Cappella Palatina, completed around 1140 AD with its Islamic muqarnas ceiling, Byzantine gold mosaics, and Latin inscriptions, is the most literal monument to the fact that Greek, Roman, and Arab civilizations had all washed over this one island — a compressed archaeology of 2,000 years of Mediterranean history in a single room.", "hook_type": "surprising_proximity", "sicily_node_id": "sicily_his_the_cappella_palatina", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_hellenism_legacy"}, {"curriculum": "rome", "node_id": "rm_idea_of_rome"}], "period": "arab_norman"}, {"hook_text": "The Sicilian Vespers of 1282 — a spontaneous uprising so total it killed every Frenchman on the island within hours — was the product of 1,700 years of Sicilian experience with foreign rulers: from the Athenian invaders who had killed 50,000 of their men at Syracuse in 413 BC, every outside power had confirmed the same lesson.", "hook_type": "surprising_proximity", "sicily_node_id": "sicily_his_the_sicilian_vespers_1282", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_tyranny"}, {"curriculum": "greece", "node_id": "ag_sicilian_expedition"}], "period": "medieval"}, {"hook_text": "The Spanish Habsburgs who governed Sicily from 1516 to 1713 presented themselves as Holy Roman Emperors — direct heirs of Charlemagne and Augustus — ruling an island whose first foreign masters had been Roman governors installed after 241 BC; the unbroken claim of Roman succession stretched across 1,750 years.", "hook_type": "known_anchor", "sicily_node_id": "sicily_his_aragonese_and_spanish_rule", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_idea_of_rome"}], "period": "medieval"}, {"hook_text": "The Val di Noto's Baroque cities, rebuilt after the 1693 earthquake, deployed Corinthian columns and classical proportions that Sicilian architects had inherited through an unbroken tradition — the architectural orders Akragas had used in 500 BC were still setting the vocabulary for Sicilian stone 2,200 years later.", "hook_type": "surprising_proximity", "sicily_node_id": "sicily_his_the_1693_earthquake_and_baroque_rebirth", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_architectural_orders"}], "period": "medieval"}, {"hook_text": "The Sicilian language — recognized by UNESCO as distinct from Italian — descends in an unbroken line from the Greek koine that Corinthian settlers brought to Ortygia in 734 BC, buried under Latin, Arabic, and Norman French; speak Sicilian and you are, at many removes, speaking the language in which Archimedes described his discoveries.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_the_sicilian_language_and_identity", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_koine_greek"}, {"curriculum": "greece", "node_id": "ag_sicily_magna_graecia"}], "period": "greek"}, {"hook_text": "The Mafia's patron-client structure — bosses protecting subordinates in exchange for absolute loyalty, violence as the ultimate sanction — was structurally identical to the Roman clientela system; when Italian unification in 1860 destroyed Sicily's existing social networks, the gabelloti filled a vacuum that Roman governors had first created 2,100 years earlier.", "hook_type": "causal_chain", "sicily_node_id": "sicily_his_origins_gabelloti_land_and_the_culture", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_patron_client"}], "period": "modern"}, {"hook_text": "Garibaldi landed his Thousand at Marsala on May 11, 1860 — at the site of ancient Lilybaeum, the last Carthaginian stronghold in Sicily, which had resisted Rome for nine years before surrendering in 241 BC to end the First Punic War; Sicily's liberation from Bourbon rule began at the exact beach where Roman domination had begun 2,101 years earlier.", "hook_type": "known_anchor", "sicily_node_id": "sicily_his_garibaldi_and_the_thousand", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_punic_wars"}], "period": "modern"}, {"hook_text": "Operation Husky (July 1943), the largest amphibious invasion in history until D-Day, landed on Sicily's southern coast — the same coastline where Carthaginian armies had battled Greeks for three centuries and where Rome had fought its first overseas war in 264 BC; every empire that contested the Mediterranean has used the same beaches.", "hook_type": "surprising_proximity", "sicily_node_id": "sicily_his_the_allied_invasion_of_sicily_1943", "connected_nodes": [{"curriculum": "rome", "node_id": "rm_punic_wars"}, {"curriculum": "rome", "node_id": "rm_mediterranean_expansion"}], "period": "modern"}, {"hook_text": "Luigi Pirandello was born in 1867 near the ruins of Akragas — the very city where Empedocles had philosophized about appearance and reality 2,400 years earlier; the playwright who would spend his career dissolving the border between illusion and truth grew up within walking distance of temples built by a man who first asked whether anything is truly what it seems.", "hook_type": "surprising_proximity", "sicily_node_id": "sicily_his_luigi_pirandello_masks_and_madness", "connected_nodes": [{"curriculum": "greece", "node_id": "ag_presocratics"}, {"curriculum": "greece", "node_id": "ag_greek_drama"}], "period": "modern"}, {"hook_text": "Syracuse was founded in 734 BC — just 19 years after Rome's legendary founding (753 BC). While Romulus was supposedly drawing Rome's sacred boundary ditch, Corinthian sailors were already building what would become the most powerful Greek city in the western Mediterranean.", "hook_type": "surprising_proximity", "sicily_node_id": "syracuse-corinths-greatest-colony", "connected_nodes": [{"curriculum": "ancient-rome", "node_id": "founding-of-rome"}], "period": "greek"}, {"hook_text": "Greek colonists planted Syracuse's foundation stone in 734 BC while Homer was still composing — or just finishing — the Odyssey. The settlers who crossed to Sicily lived in the same mental world that imagined Odysseus navigating these same mythical western seas.", "hook_type": "known_anchor", "sicily_node_id": "western-greeks-why-they-came", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "homer-iliad-odyssey"}], "period": "greek"}, {"hook_text": "On the same day in September 480 BC — according to ancient tradition — Gelon destroyed the Carthaginian army at Himera in Sicily while Themistocles destroyed Xerxes' fleet at Salamis. The Greek world fought for its survival on two fronts simultaneously, 600 miles apart.", "hook_type": "same_moment", "sicily_node_id": "gelon-battle-of-himera", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "battle-of-salamis-480bc"}, {"curriculum": "ancient-greece", "node_id": "persian-wars"}], "period": "greek"}, {"hook_text": "Athens' catastrophic invasion of Sicily (415–413 BC) destroyed 50,000 soldiers and 200 ships — and directly enabled Sparta's final victory in the Peloponnesian War nine years later. The Sicilian Expedition didn't just end one campaign; it ended Athenian imperial history.", "hook_type": "causal_chain", "sicily_node_id": "syracuse-corinths-greatest-colony", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "peloponnesian-war"}, {"curriculum": "ancient-greece", "node_id": "pericles"}], "period": "greek"}, {"hook_text": "Dionysius I seized Syracuse in 405 BC — the exact year Athens surrendered to Sparta, ending the Peloponnesian War. As Greek civilization exhausted itself in civil war, Dionysius filled the vacuum and built the western Greeks' first true empire.", "hook_type": "same_moment", "sicily_node_id": "dionysius-i-empire-builder", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "peloponnesian-war"}, {"curriculum": "ancient-greece", "node_id": "sparta-hegemony"}], "period": "greek"}, {"hook_text": "Plato first sailed to Syracuse in 388 BC, just 11 years after watching his mentor Socrates drink hemlock. Still raw with grief, he went to Sicily hoping the tyrant Dionysius I might become the philosopher-king he'd failed to make of Athens — and was sold into slavery for his trouble.", "hook_type": "known_anchor", "sicily_node_id": "platos-syracuse", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "socrates-trial-and-death"}, {"curriculum": "ancient-greece", "node_id": "plato"}], "period": "greek"}, {"hook_text": "Gelon's victory at Himera in 480 BC flooded Syracuse with Carthaginian plunder and slave labor — resources that built Syracuse's magnificent temples in the same decade Pericles was using Persian War spoils to build the Parthenon. Both cities were simultaneously monumentalizing their Greek-world victories in stone.", "hook_type": "same_moment", "sicily_node_id": "gelon-battle-of-himera", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "pericles-golden-age"}, {"curriculum": "ancient-greece", "node_id": "parthenon"}], "period": "greek"}, {"hook_text": "Aeschylus — the playwright who had fought at Marathon in 490 BC — personally came to Syracuse to stage his tragedies in the 470s BC. The same man who witnessed the Persian Wars brought Athens' theatrical revolution to Sicily, making Syracuse a living branch of the Athenian golden age.", "hook_type": "known_anchor", "sicily_node_id": "greek-theater-of-syracuse", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "battle-of-marathon"}, {"curriculum": "ancient-greece", "node_id": "athenian-tragedy-aeschylus"}], "period": "greek"}, {"hook_text": "Archimedes was born in 287 BC — just 35 years after Aristotle died, in a world still organized by Aristotle's encyclopedic systematization of knowledge. Archimedes inherited that framework and then demolished its limits, discovering principles of physics and mathematics Aristotle never imagined.", "hook_type": "surprising_proximity", "sicily_node_id": "archimedes-of-syracuse", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "aristotle"}], "period": "greek"}, {"hook_text": "When Agathocles invaded Africa in 310 BC — carrying the war to Carthage's own doorstep — Ptolemy was seizing Egypt, Seleucus was taking Babylon, and Antigonus was fighting for Macedonia. Agathocles was playing the exact same ruthless Successor game as Alexander's generals, just on Sicily's board.", "hook_type": "same_moment", "sicily_node_id": "agathocles-adventurer-king", "connected_nodes": [{"curriculum": "ancient-greece", "node_id": "wars-of-the-diadochi"}, {"curriculum": "ancient-greece", "node_id": "alexander-the-great"}], "period": "greek"}, {"hook_text": "When Roman legions breached Syracuse's walls in 212 BC — killing Archimedes in the street — Hannibal was simultaneously marching undefeated through Italy, nine years after Cannae. Rome was fighting the greatest existential crisis of its history while simultaneously conquering the Greek world.", "hook_type": "same_moment", "sicily_node_id": "siege-of-syracuse-212bc", "connected_nodes": [{"curriculum": "ancient-rome", "node_id": "second-punic-war"}, {"curriculum": "ancient-rome", "node_id": "hannibal-barca"}], "period": "roman"}, {"hook_text": "The fall of Syracuse in 212 BC was Rome's cultural turning point: plundering Archimedes' city introduced Roman generals to Greek art, science, and philosophy on an industrial scale. The general Marcellus wept at its beauty — the conquest that killed Archimedes is the same event that made Rome Greek.", "hook_type": "causal_chain", "sicily_node_id": "siege-of-syracuse-212bc", "connected_nodes": [{"curriculum": "ancient-rome", "node_id": "roman-hellenization"}, {"curriculum": "ancient-greece", "node_id": "greek-cultural-legacy"}], "period": "roman"}];
+
+let current = 0;
+const ratings = [];
+
+function formatType(t) {
+  return t.replace(/_/g, ' ');
+}
+
+function formatPeriod(p) {
+  const map = {greek:'Greek Sicily', roman:'Roman Sicily', arab_norman:'Arab-Norman', medieval:'Medieval', modern:'Modern'};
+  return map[p] || p;
+}
+
+function connectedCurricula(hook) {
+  const curs = new Set();
+  (hook.connected_nodes || []).forEach(n => curs.add(n.curriculum));
+  return Array.from(curs).map(c => c === 'greece' ? 'Greece' : c === 'rome' ? 'Rome' : c).join(' + ');
+}
+
+function renderCard() {
+  if (current >= HOOKS.length) {
+    showResults();
+    return;
+  }
+
+  const hook = HOOKS[current];
+  const area = document.getElementById('cardArea');
+  area.innerHTML = `
+    <div class="card" id="currentCard">
+      <div class="card-meta">
+        <span class="badge badge-type">${formatType(hook.hook_type)}</span>
+        <span class="badge badge-period">${formatPeriod(hook.period)}</span>
+        <span class="badge badge-curriculum">→ ${connectedCurricula(hook)}</span>
+      </div>
+      <div class="hook-text">${hook.hook_text}</div>
+      <div class="actions">
+        <button class="action-btn" onclick="rate('useful')" id="btn-useful">
+          Useful
+          <span class="key-hint">J</span>
+        </button>
+        <button class="action-btn" onclick="rate('meh')" id="btn-meh">
+          Meh
+          <span class="key-hint">K</span>
+        </button>
+        <button class="action-btn" onclick="rate('wrong')" id="btn-wrong">
+          Wrong / Forced
+          <span class="key-hint">L</span>
+        </button>
+      </div>
+      <div class="notes-area">
+        <label class="notes-label">Optional note (why?)</label>
+        <input type="text" class="notes-input" id="noteInput" placeholder="e.g. 'date seems wrong' or 'love the Plato connection'">
+      </div>
+    </div>
+  `;
+
+  updateProgress();
+}
+
+function rate(rating) {
+  const hook = HOOKS[current];
+  const note = document.getElementById('noteInput')?.value || '';
+  const card = document.getElementById('currentCard');
+
+  ratings.push({
+    index: current,
+    hook_type: hook.hook_type,
+    period: hook.period,
+    sicily_node: hook.sicily_node_id,
+    rating: rating,
+    note: note,
+    hook_text: hook.hook_text
+  });
+
+  // Flash feedback
+  const flash = document.getElementById('flash');
+  flash.textContent = rating === 'useful' ? 'Useful!' : rating === 'meh' ? 'Meh' : 'Wrong';
+  flash.className = `flash show ${rating}`;
+  setTimeout(() => flash.className = 'flash', 400);
+
+  // Animate card exit
+  const dir = rating === 'useful' ? 'exit-right' : rating === 'wrong' ? 'exit-left' : 'exit-up';
+  card.classList.add(dir);
+
+  setTimeout(() => {
+    current++;
+    renderCard();
+  }, 300);
+}
+
+function updateProgress() {
+  const pct = Math.round((current / HOOKS.length) * 100);
+  document.getElementById('progressLabel').textContent = `Hook ${current + 1} of ${HOOKS.length}`;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressCount').textContent = pct + '%';
+}
+
+function showResults() {
+  document.getElementById('cardArea').style.display = 'none';
+  document.querySelector('.progress-area').style.display = 'none';
+  const results = document.getElementById('results');
+  results.style.display = 'block';
+
+  const counts = {useful: 0, meh: 0, wrong: 0};
+  const typeCounts = {};
+  const periodCounts = {};
+
+  ratings.forEach(r => {
+    counts[r.rating]++;
+    const tk = r.hook_type;
+    if (!typeCounts[tk]) typeCounts[tk] = {useful:0, meh:0, wrong:0};
+    typeCounts[tk][r.rating]++;
+    const pk = r.period;
+    if (!periodCounts[pk]) periodCounts[pk] = {useful:0, meh:0, wrong:0};
+    periodCounts[pk][r.rating]++;
+  });
+
+  let html = `<h2>Results</h2>`;
+
+  // Summary
+  html += `<table class="results-table">
+    <tr><th>Rating</th><th>Count</th><th>%</th></tr>
+    <tr><td class="rating-useful">Useful</td><td>${counts.useful}</td><td>${Math.round(counts.useful/HOOKS.length*100)}%</td></tr>
+    <tr><td class="rating-meh">Meh</td><td>${counts.meh}</td><td>${Math.round(counts.meh/HOOKS.length*100)}%</td></tr>
+    <tr><td class="rating-wrong">Wrong / Forced</td><td>${counts.wrong}</td><td>${Math.round(counts.wrong/HOOKS.length*100)}%</td></tr>
+  </table>`;
+
+  // By type
+  html += `<h2>By Hook Type</h2><table class="results-table">
+    <tr><th>Type</th><th>Useful</th><th>Meh</th><th>Wrong</th></tr>`;
+  for (const [type, c] of Object.entries(typeCounts)) {
+    html += `<tr><td>${formatType(type)}</td><td>${c.useful}</td><td>${c.meh}</td><td>${c.wrong}</td></tr>`;
+  }
+  html += `</table>`;
+
+  // By period
+  html += `<h2>By Period</h2><table class="results-table">
+    <tr><th>Period</th><th>Useful</th><th>Meh</th><th>Wrong</th></tr>`;
+  for (const [period, c] of Object.entries(periodCounts)) {
+    html += `<tr><td>${formatPeriod(period)}</td><td>${c.useful}</td><td>${c.meh}</td><td>${c.wrong}</td></tr>`;
+  }
+  html += `</table>`;
+
+  // Hook details
+  html += `<h2>All Hooks</h2>`;
+  ratings.forEach(r => {
+    const ratingClass = `rating-${r.rating}`;
+    html += `<div class="hook-list-item">
+      <div class="hook-list-text">${r.hook_text}</div>
+      <div class="hook-list-meta">
+        <span class="${ratingClass}">${r.rating.toUpperCase()}</span> · ${formatType(r.hook_type)} · ${formatPeriod(r.period)}
+        ${r.note ? `· <em>"${r.note}"</em>` : ''}
+      </div>
+    </div>`;
+  });
+
+  // Copy button
+  html += `<button class="copy-btn" onclick="copyResults()">Copy JSON to clipboard</button>`;
+
+  results.innerHTML = html;
+}
+
+function copyResults() {
+  const data = {
+    timestamp: new Date().toISOString(),
+    total: HOOKS.length,
+    ratings: ratings,
+    summary: {
+      useful: ratings.filter(r => r.rating === 'useful').length,
+      meh: ratings.filter(r => r.rating === 'meh').length,
+      wrong: ratings.filter(r => r.rating === 'wrong').length,
+    }
+  };
+  navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+  document.querySelector('.copy-btn').textContent = 'Copied!';
+  setTimeout(() => document.querySelector('.copy-btn').textContent = 'Copy JSON to clipboard', 2000);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (current >= HOOKS.length) return;
+
+  if (e.key === 'j' || e.key === 'J') rate('useful');
+  else if (e.key === 'k' || e.key === 'K') rate('meh');
+  else if (e.key === 'l' || e.key === 'L') rate('wrong');
+});
+
+// Start
+renderCard();
+</script>
+
+</body>
+</html>

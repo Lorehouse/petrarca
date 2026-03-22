@@ -4,7 +4,7 @@
  */
 
 import { Platform } from 'react-native';
-import { RESEARCH_BASE } from './chat-api';
+import { RESEARCH_BASE, fetchWithTimeout } from './chat-api';
 import type {
   PhysicalBookChapter, BookResearch, ChapterInsights, StorySoFarBriefing,
 } from '../data/types';
@@ -172,7 +172,7 @@ export async function researchBook(
   topics: string[],
   isbn?: string,
 ): Promise<void> {
-  const resp = await fetch(`${RESEARCH_BASE}/book/research`, {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -180,6 +180,7 @@ export async function researchBook(
       chapters: chapters.map(ch => ({ number: ch.number, title: ch.title })),
       topics,
     }),
+    timeout: 120000, // research spawns claude -p, can take a while
   });
   if (!resp.ok) {
     const text = await resp.text();
@@ -190,7 +191,7 @@ export async function researchBook(
 export async function getBookResearch(
   bookId: string,
 ): Promise<BookResearch | null> {
-  const resp = await fetch(`${RESEARCH_BASE}/book/research/${bookId}`);
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/research/${bookId}`, { timeout: 8000 });
   if (resp.status === 404) return null;
   if (!resp.ok) {
     const text = await resp.text();
@@ -231,7 +232,7 @@ export async function getStorySoFar(
   pageCount?: number,
   captures?: Array<{ text?: string; ocr_text?: string; transcript?: string; chapter?: string; page_number?: number; extracted_ideas?: string[] }>,
 ): Promise<StorySoFarBriefing> {
-  const resp = await fetch(`${RESEARCH_BASE}/book/story-so-far`, {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/story-so-far`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -241,6 +242,7 @@ export async function getStorySoFar(
       page_count: pageCount,
       captures: captures || [],
     }),
+    timeout: 30000,
   });
   if (!resp.ok) {
     const text = await resp.text();
@@ -310,10 +312,11 @@ export async function syncBooksToServer(
       audio_uri: undefined,
     }));
 
-    await fetch(`${RESEARCH_BASE}/book/sync`, {
+    await fetchWithTimeout(`${RESEARCH_BASE}/book/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ books: cleanBooks, captures: cleanCaptures }),
+      timeout: 10000,
     });
   } catch {
     // Sync failure is non-critical — local data is preserved
@@ -324,7 +327,7 @@ export async function loadBooksFromServer(): Promise<{
   books: PhysicalBook[];
   captures: BookCapture[];
 }> {
-  const resp = await fetch(`${RESEARCH_BASE}/book/sync`);
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/sync`, { timeout: 8000 });
   if (!resp.ok) return { books: [], captures: [] };
   return resp.json();
 }

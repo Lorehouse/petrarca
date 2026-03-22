@@ -177,6 +177,7 @@ export default function BookDetailScreen() {
   const [researchLoading, setResearchLoading] = useState(false);
   const [storySoFar, setStorySoFar] = useState<StorySoFarBriefing | null>(null);
   const [showStorySoFar, setShowStorySoFar] = useState(false);
+  const [chapterCompleteText, setChapterCompleteText] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
@@ -238,10 +239,12 @@ export default function BookDetailScreen() {
             setResearchLoading(true);
             logEvent('book_research_started', { book_id: book.id, title: book.title });
             await researchBook(book.id, book.title, book.author, book.chapters, book.topics, book.isbn);
-            setResearchLoading(false);
+            if (!cancelled) setResearchLoading(false);
           }
         }
-      } catch { /* ignore */ }
+      } catch {
+        if (!cancelled) setResearchLoading(false);
+      }
 
       // Check if we should show Story So Far (last interaction > 48 hours)
       const hoursSinceLastInteraction = (Date.now() - book.last_interaction_at) / 3600000;
@@ -293,11 +296,24 @@ export default function BookDetailScreen() {
   };
 
   const handleChapterSelect = async (ch: { number: number; title: string }) => {
+    const previousChapter = book.current_chapter;
     const chapterLabel = `Ch ${ch.number}: ${ch.title}`;
     setSelectedChapter(chapterLabel);
     setChapterDropdownOpen(false);
     await updateReadingPosition(book.id, undefined, chapterLabel);
     logEvent('book_chapter_select', { book_id: book.id, chapter: ch.number });
+
+    // Advancing to a new chapter implies finishing the previous one
+    if (previousChapter && previousChapter !== chapterLabel) {
+      logEvent('book_chapter_completed', {
+        book_id: book.id,
+        completed_chapter: previousChapter,
+        next_chapter: chapterLabel,
+      });
+      // Show brief chapter-complete acknowledgment
+      setChapterCompleteText(`Finished ${previousChapter}`);
+      setTimeout(() => setChapterCompleteText(null), 3000);
+    }
     setRefreshKey(k => k + 1);
   };
 
@@ -521,6 +537,13 @@ export default function BookDetailScreen() {
               </View>
             )}
           </>
+        )}
+        {chapterCompleteText && (
+          <View style={{ backgroundColor: '#2a7a4a15', borderLeftWidth: 2, borderLeftColor: '#2a7a4a', padding: 10, marginBottom: 8, borderRadius: 3 }}>
+            <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 12, color: '#2a7a4a' }}>
+              {'\u2726'} {chapterCompleteText}
+            </Text>
+          </View>
         )}
         <View style={styles.positionRow}>
           <Text style={styles.fieldLabel}>Page</Text>

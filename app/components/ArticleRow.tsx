@@ -6,6 +6,7 @@ import { colors, fonts } from '../design/tokens';
 import { logEvent } from '../data/logger';
 import {
   getReadingState, dismissArticle, recordInterestSignal, markArticleRead,
+  getArticleBookConnections,
 } from '../data/store';
 import { addToQueue } from '../data/queue';
 import { isKnowledgeReady, getArticleNovelty } from '../data/knowledge-engine';
@@ -55,6 +56,7 @@ export default function ArticleRow({
   const [hovered, setHovered] = useState(false);
 
   const novelty = isKnowledgeReady() ? getArticleNovelty(article.id) : null;
+  const bookConnections = getArticleBookConnections(article.id);
 
   const handleSwipeRight = () => {
     dismissArticle(article.id, 'swiped');
@@ -165,6 +167,9 @@ export default function ArticleRow({
         {isResearchArticle(article) && (
           <Text style={styles.researchLabel}>{'↗ AI'}</Text>
         )}
+        {bookConnections.length > 0 && (
+          <Text style={styles.bookConnectionLabel}>{'📖'}</Text>
+        )}
       </View>
       <View style={styles.content}>
         <Text style={[styles.title, isRead && styles.titleRead]} numberOfLines={1}>
@@ -269,6 +274,10 @@ const styles = StyleSheet.create({
     color: colors.rubric,
     marginTop: 3,
     letterSpacing: 0.5,
+  },
+  bookConnectionLabel: {
+    fontSize: 9,
+    marginTop: 2,
   },
   content: {
     flex: 1,

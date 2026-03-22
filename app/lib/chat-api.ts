@@ -4,6 +4,18 @@ export const RESEARCH_BASE = Platform.OS === 'web'
   ? `${window.location.protocol}//${window.location.hostname}:8090`
   : 'http://alifstian.duckdns.org:8090';
 
+/**
+ * Fetch with timeout. Rejects if the request takes longer than `ms` milliseconds.
+ * Default: 15 seconds. Use longer timeouts for LLM-heavy endpoints.
+ */
+export function fetchWithTimeout(input: RequestInfo, init?: RequestInit & { timeout?: number }): Promise<Response> {
+  const ms = init?.timeout ?? 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  const { timeout: _, ...fetchInit } = init ?? {};
+  return fetch(input, { ...fetchInit, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 interface ChatResponse {
   answer: string;
   conversation_id: string;

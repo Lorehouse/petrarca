@@ -32,14 +32,19 @@ const fontAssets = {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('Loading…');
 
   useEffect(() => {
     (async () => {
       startNewSession();
-      await Promise.all([
-        initStore(),
-        Font.loadAsync(fontAssets),
-      ]);
+      try {
+        setLoadingStatus('Loading fonts…');
+        await Font.loadAsync(fontAssets);
+        setLoadingStatus('Loading data…');
+        await initStore();
+      } catch (e) {
+        console.warn('[layout] Init error, proceeding anyway:', e);
+      }
       setReady(true);
       await SplashScreen.hideAsync();
     })();
@@ -49,7 +54,7 @@ export default function RootLayout() {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.rubric} size="large" />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>{loadingStatus}</Text>
       </View>
     );
   }

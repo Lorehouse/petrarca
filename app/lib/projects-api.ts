@@ -1,4 +1,4 @@
-import { RESEARCH_BASE } from './chat-api';
+import { RESEARCH_BASE, fetchWithTimeout } from './chat-api';
 
 export interface Project {
   id: string;
@@ -20,7 +20,7 @@ export interface ProjectNote {
 }
 
 export async function listProjects(): Promise<Project[]> {
-  const resp = await fetch(`${RESEARCH_BASE}/projects`);
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/projects`);
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`List projects failed (${resp.status}): ${text}`);
@@ -30,7 +30,7 @@ export async function listProjects(): Promise<Project[]> {
 }
 
 export async function createProject(name: string, description?: string): Promise<Project> {
-  const resp = await fetch(`${RESEARCH_BASE}/projects`, {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, description: description || '' }),
@@ -44,7 +44,7 @@ export async function createProject(name: string, description?: string): Promise
 }
 
 export async function getProject(id: string): Promise<{ project: Project; notes: ProjectNote[] }> {
-  const resp = await fetch(`${RESEARCH_BASE}/projects/${encodeURIComponent(id)}`);
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/projects/${encodeURIComponent(id)}`);
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`Get project failed (${resp.status}): ${text}`);
@@ -57,7 +57,7 @@ export async function addProjectNote(
   text: string,
   source?: { type: string; id: string; title: string },
 ): Promise<ProjectNote> {
-  const resp = await fetch(`${RESEARCH_BASE}/projects/note`, {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/projects/note`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project_id: projectId, text, source: source || null }),
@@ -74,7 +74,7 @@ export async function updateProject(
   id: string,
   updates: Partial<Pick<Project, 'name' | 'status' | 'description'>>,
 ): Promise<Project> {
-  const resp = await fetch(`${RESEARCH_BASE}/projects/${encodeURIComponent(id)}/update`, {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/projects/${encodeURIComponent(id)}/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),

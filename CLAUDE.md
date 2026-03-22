@@ -66,7 +66,7 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 - Client syncs to server after every mutation via `syncToServer()` in `book-store.ts`
 
 ### Algorithm Parameters (experiment-validated)
-- KNOWN threshold: ≥ 0.88 cosine (MiniLM 384d), EXTENDS: ≥ 0.72, NLI cascade for 0.72–0.88 zone, FORGOTTEN: R < 0.3
+- KNOWN threshold: ≥ 0.82 cosine (MiniLM 384d), EXTENDS: ≥ 0.74, NLI cascade for 0.74–0.82 zone (59% accurate — consider disabling), FORGOTTEN: R < 0.3
 - FSRS stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
 - Curiosity peak: 70% novelty, Gaussian σ=0.15
 - Reader: 3 modes (Full / Guided / New Only), familiar paragraph opacity=0.55
@@ -199,7 +199,7 @@ All research lives in `research/` directory:
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
 - **`amygdala`**: Shared embedding/clustering/novelty library (`pip install -e ~/src/amygdala`). Server: `/opt/amygdala` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/amygdala` (private).
   - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
-  - Thresholds calibrated for MiniLM 384d: KNOWN 0.88, EXTENDS 0.72, NLI cascade for 0.72–0.88 zone
+  - Thresholds calibrated via human feedback (2026-03-20): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate
   - See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md` for calibration methodology
   - ⬜ Other experiment scripts: `experiment_curiosity_zone.py`, `experiment_knowledge_map.py`, etc. — still reference old `claim_embeddings_nomic.npz`
 

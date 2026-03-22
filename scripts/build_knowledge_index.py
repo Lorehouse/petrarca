@@ -658,7 +658,19 @@ def main():
     for c in claims:
         all_topics.update(c.get("topics", []))
 
-    # 9. Build and write output
+    # 9. Load curriculum ↔ article mappings (if available)
+    article_curriculum_nodes = {}
+    curriculum_mappings_path = Path("/opt/petrarca/data/curricula/article_curriculum_mappings.json")
+    if not curriculum_mappings_path.exists():
+        curriculum_mappings_path = Path("/tmp/curricula/article_curriculum_mappings.json")
+    if curriculum_mappings_path.exists():
+        log("Loading curriculum ↔ article mappings...")
+        with open(curriculum_mappings_path) as f:
+            cm = json.load(f)
+        article_curriculum_nodes = cm.get("article_nodes", {})
+        log(f"  {len(article_curriculum_nodes)} articles with curriculum node coverage")
+
+    # 10. Build and write output
     log("Building output...")
     output = {
         "version": 2,
@@ -681,6 +693,7 @@ def main():
         "article_novelty_matrix": novelty_matrix,
         "article_similarities": article_similarities,
         "delta_reports": delta_reports,
+        "article_curriculum_nodes": article_curriculum_nodes,
     }
 
     log(f"Writing {OUTPUT_PATH}...")

@@ -16,11 +16,12 @@ import {
   getDeltaReports as _getDeltaReports,
   getCrossArticleConnections as _getCrossArticleConnections,
   getParagraphConnections as _getParagraphConnections,
+  getArticleCurriculumNodes,
 } from './knowledge-engine';
 import type { CrossArticleConnection } from './knowledge-engine';
 import { loadQueue, getQueuedArticleIds, isQueued } from './queue';
 import { loadBookmarks } from './bookmarks';
-import { initBookStore } from './book-store';
+import { initBookStore, getPhysicalBooks } from './book-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let articles: Article[] = [];
@@ -253,6 +254,10 @@ export function getRankedFeedArticles(): Article[] {
         // Curiosity score already peaks at 70% novelty via Gaussian
         score = interestScore * 0.6 + curiosity * 0.4;
       }
+      // Boost articles matching topics of actively-read books
+      const bookBoost = _getActiveBookTopicBoost(a);
+      score += bookBoost;
+
       const sc = getArticleSynthesisCoverage(a.id);
       if (sc !== null && sc >= 0.50) score *= (1 - sc * 0.5);
       return { article: a, score };
@@ -281,6 +286,70 @@ function _baseSourceUrl(url: string | undefined): string | undefined {
   if (!url.includes('wikipedia.org')) return undefined;
   // Strip #chunk-N fragments
   return url.split('#')[0];
+}
+
+// --- Active book reading boost ---
+
+let _activeBookTopicsCache: { topics: Set<string>; at: number } | null = null;
+
+function _getActiveBookTopics(): Set<string> {
+  // Cache for 60s to avoid re-scanning books on every article score
+  if (_activeBookTopicsCache && Date.now() - _activeBookTopicsCache.at < 60_000) {
+    return _activeBookTopicsCache.topics;
+  }
+  const topics = new Set<string>();
+  for (const book of getPhysicalBooks()) {
+    if (book.reading_status === 'reading') {
+      for (const t of (book.topics || [])) {
+        topics.add(t.toLowerCase());
+      }
+    }
+  }
+  _activeBookTopicsCache = { topics, at: Date.now() };
+  return topics;
+}
+
+function _getActiveBookTopicBoost(article: Article): number {
+  const bookTopics = _getActiveBookTopics();
+  if (bookTopics.size === 0) return 0;
+  const articleTopics = (article.topics || []).map(t => t.toLowerCase());
+  const overlap = articleTopics.filter(t => bookTopics.has(t)).length;
+  return overlap > 0 ? 0.15 : 0;
+}
+
+/**
+ * Get curriculum-based book connections for an article.
+ * Returns book titles whose curriculum nodes overlap with the article's claims.
+ */
+export function getArticleBookConnections(articleId: string): string[] {
+  const nodes = getArticleCurriculumNodes(articleId);
+  if (nodes.length === 0) return [];
+
+  const activeBooks = getPhysicalBooks().filter(b => b.reading_status === 'reading');
+  if (activeBooks.length === 0) return [];
+
+  // For now, match via topic overlap between article's curriculum domain
+  // and book topics. Full curriculum-mediated matching requires book→curriculum
+  // mapping data on the client, which we'll add in the next iteration.
+  const articleDomains = new Set(nodes.map(n => n.domain_id));
+  const matches: string[] = [];
+  for (const book of activeBooks) {
+    const bookTopicLower = (book.topics || []).map(t => t.toLowerCase());
+    // Check if book topics suggest overlap with article's curriculum domains
+    const domainKeywords: Record<string, string[]> = {
+      'sicily_history_culture_and_legacy': ['sicily', 'sicilia', 'mafia', 'syracuse'],
+      'ancient_greece_800300_bc_political_military_cultural_and': ['greece', 'greek', 'athens', 'sparta', 'hellenism'],
+      'roman_republic_and_empire': ['rome', 'roman', 'republic', 'empire', 'cicero', 'caesar'],
+    };
+    for (const domain of articleDomains) {
+      const keywords = domainKeywords[domain] || [];
+      if (bookTopicLower.some(t => keywords.some(k => t.includes(k)))) {
+        matches.push(book.title);
+        break;
+      }
+    }
+  }
+  return matches;
 }
 
 /**
