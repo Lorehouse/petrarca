@@ -3,8 +3,8 @@ set -e
 
 SERVER="alif"
 REMOTE_DIR="/opt/petrarca"
-AMYGDALA_LOCAL="$HOME/src/amygdala"
-AMYGDALA_REMOTE="/opt/amygdala"
+AMYGDALA_LOCAL="$HOME/src/limbic"
+AMYGDALA_REMOTE="/opt/limbic"
 
 echo "=== TypeScript check ==="
 (cd app && npx tsc --noEmit --skipLibCheck)

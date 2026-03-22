@@ -207,10 +207,10 @@ All research lives in `research/` directory:
 - **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
 - **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **`limbic.amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/amygdala`). Server: `/opt/amygdala` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/amygdala` (private).
+- **`limbic.amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/limbic`). Server: `/opt/limbic` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/limbic` (private).
   - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs, **Document, find_similar_documents**), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
-  - **Document similarity** (session 35): `find_similar_documents()` with weighted multi-field embeddings. 94% accuracy, AUROC=0.930. See `~/src/amygdala/experiments/calibration_document_similarity.md`
-  - **Claim thresholds** (session 33): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate. See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md`
+  - **Document similarity** (session 35): `find_similar_documents()` with weighted multi-field embeddings. 94% accuracy, AUROC=0.930. See `~/src/limbic/experiments/calibration_document_similarity.md`
+  - **Claim thresholds** (session 33): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate. See `~/src/limbic/experiments/calibration_petrarca_thresholds.md`
   - Ground truth datasets in `scripts/ground-truth/` — 300 LLM-rated pairs, 50 synthetic pairs, 11 embedding strategies tested
 
 ### 7. Curriculum Generation
