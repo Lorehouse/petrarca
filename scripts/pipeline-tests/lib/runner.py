@@ -20,7 +20,7 @@ if os.environ.get("ANTHROPIC_KEY") and not os.environ.get("ANTHROPIC_API_KEY"):
 
 def check_api_keys(model: str | None = None):
     """Validate that required API keys are set for the given model. Raises RuntimeError if not."""
-    model = model or os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-2.0-flash")
+    model = model or os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-3.1-flash-lite-preview")
     if model.startswith("gemini/"):
         if not os.environ.get("GEMINI_API_KEY") and not os.environ.get("GEMINI_KEY"):
             raise RuntimeError(
@@ -42,7 +42,7 @@ def call_llm_instrumented(prompt: str, model: str | None = None,
     """
     from litellm import completion
 
-    model = model or os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-2.0-flash")
+    model = model or os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-3.1-flash-lite-preview")
     start = time.time()
 
     try:

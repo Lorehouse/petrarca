@@ -53,7 +53,7 @@ load_env()
 if os.environ.get("GEMINI_KEY") and not os.environ.get("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = os.environ["GEMINI_KEY"]
 
-LLM_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-2.0-flash")
+LLM_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-3.1-flash-lite-preview")
 
 # ---------------------------------------------------------------------------
 # LLM call (same pattern as build_articles.py)

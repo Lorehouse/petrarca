@@ -316,7 +316,16 @@ export interface KnowledgeIndex {
   similarities: Array<{ a: string; b: string; score: number }>;
   nli_verdicts?: Record<string, 'ENTAILS' | 'EXTENDS' | 'UNRELATED'>;
   article_novelty_matrix: Record<string, Record<string, { new: number; extends: number; known: number }>>;
+  article_similarities?: Array<{ a: string; b: string; score: number }>;
   delta_reports: Record<string, DeltaReport>;
+  article_curriculum_nodes?: Record<string, Array<{
+    node_id: string;
+    domain_id: string;
+    node_title: string;
+    claim_count: number;
+    avg_similarity: number;
+    max_similarity: number;
+  }>>;
 }
 
 export interface DeltaReport {

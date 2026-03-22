@@ -10,7 +10,7 @@ import DoubleRule from '../components/DoubleRule';
 import { spawnTopicResearch, ingestUrl, getIngestStatus, reportBadScrape, generateMoreQuestions } from '../lib/chat-api';
 import { addToQueue, addToQueueFront } from '../data/queue';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
+import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, recordTopicInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
 import type { FeedLens } from '../data/store';
 import { Article, ArticleEntity, FollowUpQuestion, InterestTopic } from '../data/types';
 import type { CrossArticleConnection } from '../data/knowledge-engine';
@@ -709,6 +709,81 @@ function FollowUpSection({
           <Text style={followUpStyles.generateMoreText}>{'More questions \u2197'}</Text>
         )}
       </Pressable>
+    </View>
+  );
+}
+
+// --- Follow Topics Section ---
+
+function pickFollowChips(topics: InterestTopic[]): { label: string; topic: InterestTopic }[] {
+  if (!topics || topics.length === 0) return [];
+  const chips: { label: string; topic: InterestTopic }[] = [];
+  const seen = new Set<string>();
+
+  // First pass: entities (most specific, e.g. "Moss")
+  for (const t of topics) {
+    if (t.entity && !seen.has(t.entity)) {
+      seen.add(t.entity);
+      chips.push({ label: t.entity, topic: t });
+      if (chips.length >= 2) break;
+    }
+  }
+
+  // Second pass: specific topics (e.g. "agent collaboration tools")
+  for (const t of topics) {
+    const key = t.specific;
+    if (!seen.has(key)) {
+      seen.add(key);
+      const label = key.replace(/-/g, ' ');
+      chips.push({ label, topic: t });
+      if (chips.length >= 3) break;
+    }
+  }
+
+  return chips;
+}
+
+function FollowTopicsSection({ topics, articleId }: { topics: InterestTopic[]; articleId: string }) {
+  const chips = useMemo(() => pickFollowChips(topics), [topics]);
+  const [active, setActive] = useState<Set<string>>(new Set());
+
+  if (chips.length === 0) return null;
+
+  const toggle = (label: string, topic: InterestTopic) => {
+    const next = new Set(active);
+    const isOn = next.has(label);
+    if (isOn) {
+      next.delete(label);
+      recordTopicInterestSignal('interest_chip_negative', topic);
+      logEvent('follow_topic_off', { article_id: articleId, label, broad: topic.broad, specific: topic.specific });
+    } else {
+      next.add(label);
+      recordTopicInterestSignal('interest_chip_positive', topic);
+      logEvent('follow_topic_on', { article_id: articleId, label, broad: topic.broad, specific: topic.specific });
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setActive(next);
+  };
+
+  return (
+    <View style={followTopicStyles.container}>
+      <Text style={followTopicStyles.sectionTitle}>{'\u2726 FOLLOW'}</Text>
+      <View style={followTopicStyles.chipRow}>
+        {chips.map(({ label, topic }) => {
+          const isOn = active.has(label);
+          return (
+            <Pressable
+              key={label}
+              style={[followTopicStyles.chip, isOn && followTopicStyles.chipActive]}
+              onPress={() => toggle(label, topic)}
+            >
+              <Text style={[followTopicStyles.chipText, isOn && followTopicStyles.chipTextActive]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -1467,8 +1542,6 @@ export default function ReaderScreen() {
   const [activeEntity, setActiveEntity] = useState<ArticleEntity | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [linkToast, setLinkToast] = useState<{ domain: string; articleId: string } | null>(null);
-  const [autoAdvanceToast, setAutoAdvanceToast] = useState<{ title: string; articleId: string } | null>(null);
-  const autoAdvanceToastAnim = useRef(new Animated.Value(0)).current;
   const voicePulseAnim = useRef(new Animated.Value(1)).current;
 
   // Adjacent articles for top bar navigation
@@ -1500,33 +1573,6 @@ export default function ReaderScreen() {
     return () => clearTimeout(t);
   }, [statusMessage]);
 
-  // Show "Up next" toast when arriving via auto-advance
-  useEffect(() => {
-    if (!autoAdvanceFrom || !article) return;
-    const truncTitle = getDisplayTitle(article).length > 50
-      ? getDisplayTitle(article).slice(0, 47) + '...'
-      : getDisplayTitle(article);
-    setAutoAdvanceToast({ title: truncTitle, articleId: article.id });
-    autoAdvanceToastAnim.setValue(0);
-    Animated.timing(autoAdvanceToastAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  // Auto-dismiss "Up next" toast after 3 seconds
-  useEffect(() => {
-    if (!autoAdvanceToast) return;
-    const t = setTimeout(() => {
-      Animated.timing(autoAdvanceToastAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }).start(() => setAutoAdvanceToast(null));
-    }, 3000);
-    return () => clearTimeout(t);
-  }, [autoAdvanceToast]);
 
   // Voice note pulsing animation
   useEffect(() => {
@@ -2136,6 +2182,17 @@ export default function ReaderScreen() {
             <Text style={styles.menuActionText}>Open source →</Text>
           </Pressable>
 
+          {/* Copy link */}
+          <Pressable onPress={() => {
+            Clipboard.setString(article.source_url);
+            logEvent('reader_copy_link', { article_id: article.id, url: article.source_url });
+            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setShowMenu(false);
+            setStatusMessage('Link copied');
+          }} style={styles.menuAction}>
+            <Text style={styles.menuActionText}>Copy link</Text>
+          </Pressable>
+
           {/* Report bad scrape */}
           <Pressable onPress={() => {
             reportBadScrape(article.id, article.source_url, article.title);
@@ -2224,33 +2281,6 @@ export default function ReaderScreen() {
           onDismiss={() => setLinkToast(null)}
         />
       )}
-
-      {/* Auto-advance toast */}
-      {autoAdvanceToast ? (
-        <Animated.View style={[styles.autoAdvanceToast, {
-          opacity: autoAdvanceToastAnim,
-          transform: [{
-            translateY: autoAdvanceToastAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-20, 0],
-            }),
-          }],
-        }]}>
-          <Text style={styles.autoAdvanceToastLabel}>Up next:</Text>
-          <Text style={styles.autoAdvanceToastTitle} numberOfLines={1}>{autoAdvanceToast.title}</Text>
-          <Pressable
-            style={styles.autoAdvanceToastFeedButton}
-            onPress={() => {
-              logEvent('auto_advance_cancelled', { article_id: autoAdvanceToast.articleId });
-              setAutoAdvanceToast(null);
-              router.back();
-            }}
-            hitSlop={8}
-          >
-            <Text style={styles.autoAdvanceToastFeedText}>{'\u2190 Feed'}</Text>
-          </Pressable>
-        </Animated.View>
-      ) : null}
 
       {/* Progress bar with completion flash */}
       <View style={[styles.progressBarTrack, isWeb && styles.progressBarTrackWeb]}>
@@ -2458,6 +2488,8 @@ export default function ReaderScreen() {
               connections={crossArticleConnections.filter(c => getReadingState(c.articleId).status !== 'read')}
               articleId={article.id}
             />
+
+            <FollowTopicsSection topics={article.interest_topics || []} articleId={article.id} />
 
             <FollowUpSection
               questions={article.follow_up_questions || []}
@@ -2722,55 +2754,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 13,
     color: colors.parchment,
-  },
-  autoAdvanceToast: {
-    position: 'absolute' as const,
-    top: 60,
-    left: 16,
-    right: 16,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    zIndex: 200,
-    gap: 8,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
-    } : {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 12,
-      elevation: 4,
-    }),
-  },
-  autoAdvanceToastLabel: {
-    fontFamily: fonts.ui,
-    fontSize: 11,
-    color: colors.textMuted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
-  autoAdvanceToastTitle: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  autoAdvanceToastFeedButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 32,
-    justifyContent: 'center' as const,
-  },
-  autoAdvanceToastFeedText: {
-    fontFamily: fonts.ui,
-    fontSize: 12,
-    color: colors.rubric,
   },
   voiceFeedbackOverlay: {
     position: 'absolute',
@@ -3318,8 +3301,46 @@ const followUpStyles = StyleSheet.create({
   },
 });
 
-// --- Hierarchical Interest Card Styles ---
+// --- Follow Topics Styles ---
 
+const followTopicStyles = StyleSheet.create({
+  container: {
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    ...type.sectionHead,
+    color: colors.rubric,
+    marginBottom: 12,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.rule,
+    borderRadius: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+  },
+  chipActive: {
+    borderColor: colors.rubric,
+    backgroundColor: 'rgba(139,37,0,0.05)',
+  },
+  chipText: {
+    fontFamily: fonts.bodyItalic,
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  chipTextActive: {
+    color: colors.rubric,
+  },
+});
 
 // --- Connected Reading Styles ---
 

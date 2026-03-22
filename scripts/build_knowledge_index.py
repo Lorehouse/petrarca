@@ -34,10 +34,12 @@ ARTICLES_PATH = DATA_DIR / "articles.json"
 EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 OUTPUT_PATH = DATA_DIR / "knowledge_index.json"
 
-# Thresholds calibrated for paraphrase-multilingual-MiniLM-L12-v2 (384d)
-# See ~/src/amygdala/experiments/calibration_petrarca_thresholds.md
-THRESHOLD_KNOWN = 0.88
-THRESHOLD_EXTENDS = 0.72
+# Thresholds calibrated via human feedback (2026-03-20, n=30 pairs)
+# User called pairs "same" at cosine as low as 0.75; "related" up to 0.908.
+# Previous 0.88 missed 55% of actual duplicates. NLI cascade 59% accurate → disabled.
+# See scripts/calibration-2026-03-20.json for raw data.
+THRESHOLD_KNOWN = 0.82
+THRESHOLD_EXTENDS = 0.74
 
 
 def normalize_topic(topic: str) -> str:
@@ -253,6 +255,46 @@ def compute_article_novelty_matrix(articles: list[dict], claims: list[dict],
             matrix[target_id] = target_entry
 
     return matrix
+
+
+def compute_article_summary_similarities(articles: list[dict],
+                                         threshold: float = 0.40) -> list[dict]:
+    """Compute article-level similarity using amygdala's document_similarity module.
+
+    Uses weighted 0.5×summary + 0.5×claims embedding strategy.
+    Calibrated against human-rated pairs (2026-03-21):
+      - Weighted (summary+claims): 94% accuracy, Spearman ρ=0.818 (18 pairs)
+      - Validated on 300 LLM-rated pairs: AUROC=0.930
+    Recommended thresholds: briefing_card=0.52, feed_ranking=0.49, dedup=0.64
+    We store pairs >= 0.40 to allow client-side threshold tuning.
+    """
+    from amygdala import Document, find_similar_documents
+
+    docs = []
+    for a in articles:
+        aid = a.get("id", "")
+        summary = a.get("full_summary", "") or a.get("one_line_summary", "")
+        claims = a.get("key_claims", [])
+        if not summary:
+            continue
+        docs.append(Document(
+            id=aid,
+            texts={
+                "summary": summary,
+                "claims": " ".join(claims) if claims else summary,
+            },
+        ))
+
+    if len(docs) < 2:
+        return []
+
+    pairs = find_similar_documents(
+        docs,
+        text_fields={"summary": 0.5, "claims": 0.5},
+        threshold=threshold,
+    )
+
+    return [{"a": p.id_a, "b": p.id_b, "score": p.score} for p in pairs]
 
 
 def _get_subtopic_labels(topic: str, t_claims: list[dict], gemini_key: str) -> list[str]:
@@ -597,7 +639,12 @@ def main():
     total_entries = sum(len(v) for v in novelty_matrix.values())
     log(f"  {len(novelty_matrix)} target articles, {total_entries} pair entries")
 
-    # 7. Generate delta reports (optional)
+    # 7. Compute article-level summary similarity
+    log("Computing article summary similarities...")
+    article_similarities = compute_article_summary_similarities(articles)
+    log(f"  {len(article_similarities)} article pairs with summary similarity >= 0.40")
+
+    # 8. Generate delta reports (optional)
     delta_reports = {}
     if args.skip_delta:
         log("Skipping delta reports (--skip-delta)")
@@ -611,10 +658,10 @@ def main():
     for c in claims:
         all_topics.update(c.get("topics", []))
 
-    # 8. Build and write output
+    # 9. Build and write output
     log("Building output...")
     output = {
-        "version": 1,
+        "version": 2,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "stats": {
             "total_articles": len(articles),
@@ -624,6 +671,7 @@ def main():
             "delta_report_count": len(delta_reports),
             "nli_pairs_classified": len(nli_verdicts),
             "nli_changed": nli_changed,
+            "article_similarity_pairs": len(article_similarities),
         },
         "claims": claims_dict,
         "article_claims": article_claims,
@@ -631,6 +679,7 @@ def main():
         "similarities": pairs,
         "nli_verdicts": nli_verdicts,
         "article_novelty_matrix": novelty_matrix,
+        "article_similarities": article_similarities,
         "delta_reports": delta_reports,
     }
 
@@ -651,6 +700,7 @@ def main():
     print(f"  Topics:    {output['stats']['total_topics']}")
     print(f"  Sim pairs: {output['stats']['total_similarity_pairs']} (>= {THRESHOLD_EXTENDS})")
     print(f"  NLI:       {output['stats']['nli_pairs_classified']} classified, {output['stats']['nli_changed']} changed")
+    print(f"  Art sims:  {output['stats']['article_similarity_pairs']} pairs (>= 0.40)")
     print(f"  Delta rpts:{output['stats']['delta_report_count']}")
     print(f"  File size: {file_size:,} bytes ({file_size / 1024:.1f} KB)")
     print()

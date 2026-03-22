@@ -1255,10 +1255,7 @@ def _build_article_prompt(content: str, title: str) -> str:
     if len(content) > 12000:
         content = content[:12000] + "\n\n[... truncated ...]"
 
-    return f"""Analyze this article for a progressive reading app. The reader will see this at multiple depth levels:
-1. One-line summary (scanning a feed)
-2. Full summary + key claims (30-second review)
-3. Section-by-section reading (deep read)
+    return f"""Analyze this article for a knowledge-aware reading app. The reader is tracking what they know across hundreds of articles. They need to quickly assess: what does this article ARGUE or REVEAL, and is it worth reading given what I may already know about this topic?
 
 Article title: {title}
 
@@ -1268,16 +1265,16 @@ Article content:
 Return a JSON object:
 {{
   "title": "cleaned/improved title",
-  "one_line_summary": "single sentence, max 120 chars",
-  "full_summary": "3-5 sentence summary covering all key points",
+  "one_line_summary": "what the article ARGUES or REVEALS, not just what it's about. Max 120 chars. Lead with the insight, not the subject. BAD: 'An article about X'. GOOD: 'X achieves Y by doing Z' or 'Why X matters for Y'",
+  "full_summary": "3-5 sentences. First sentence: the core argument or finding. Remaining sentences: the key evidence, methods, or implications. Be specific — include numbers, names, comparisons where available.",
   "sections": [
     {{
-      "heading": "section heading",
-      "summary": "1-2 sentence summary of this section",
-      "key_claims": ["specific factual claims from this section"]
+      "heading": "descriptive heading that conveys the section's point, not just its topic. BAD: 'Architecture'. GOOD: 'Zero-dependency architecture using SQLite'",
+      "summary": "1-2 sentences: what this section establishes or argues. Never leave empty.",
+      "key_claims": ["specific claims from this section — focus on insights, comparisons, and surprising findings rather than feature descriptions"]
     }}
   ],
-  "key_claims": ["the 3-7 most important claims/insights across the whole article"],
+  "key_claims": ["3-7 claims that capture the article's INSIGHTS, PATTERNS, and ARGUMENTS — not product features. Prefer: comparisons ('X outperforms Y because...'), design principles ('the key to Z is...'), surprising findings, causal explanations, evaluative judgments. Avoid: feature lists, version numbers, API details, obvious statements."],
   "topics": ["topic tags, e.g. prompt-caching, agents, mcp"],
   "interest_topics": [
     {{"broad": "artificial-intelligence", "specific": "ai-orchestration", "entity": "Claude Code"}}
@@ -1300,7 +1297,7 @@ novelty_claims: what's genuinely new or surprising in this article. specificity 
 entities: extract 3-8 notable entities (people, books, companies, concepts, places, events, technologies) mentioned in the article. Include a 1-2 sentence synthesis and all name variations used in the text.
 follow_up_questions: generate 4 curiosity-driven questions that a thoughtful reader might want to explore after reading this article. Include a mix: some that go deeper into the article's core topic, and some that connect to adjacent domains, historical parallels, or contrasting perspectives.
 
-If the article has clear sections/headings, use them. If not, divide into 2-5 logical sections.
+If the article has clear sections/headings, use them but IMPROVE vague headings to be descriptive. If not, divide into 2-5 logical sections. Every section MUST have a non-empty summary.
 Return ONLY valid JSON."""
 
 
@@ -1765,27 +1762,26 @@ def _build_atomic_decomposition_prompt(content: str, title: str, topics: list[st
     if topics:
         topics_hint = f"\nExisting topic tags for this article: {', '.join(topics)}\nPrefer these topic tags where applicable, but add new ones if needed.\n"
 
-    return f"""Given this article, extract all knowledge contributions as atomic claims.
+    return f"""Given this article, extract knowledge contributions as atomic claims. The reader tracks claims across hundreds of articles to detect what they already know vs. what's genuinely new. Claims must be useful for CROSS-ARTICLE comparison — they should express ideas that might appear in other articles on the same topic.
+
+PRIORITIZE these claim types (most valuable for cross-article matching):
+- comparative: Comparisons, trade-offs, "X is better/worse than Y because..." ("BM25 outperforms grep for relevance ranking because it weights term rarity")
+- evaluative: Design principles, judgments, lessons learned ("Effective agentic systems rely on ground-truth environmental feedback, not just LLM reasoning")
+- causal: Cause-and-effect explanations ("Larger context windows reduce hallucination rates by providing more grounding context")
+- predictive: Trends and forecasts ("Agent orchestration dashboards are becoming a distinct software category")
+- experiential: First-hand findings ("The team found that minimal scaffolding outperformed complex agent frameworks")
+
+INCLUDE BUT DEPRIORITIZE:
+- factual: Only extract facts that are DISTINCTIVE or SURPRISING. Skip obvious feature lists, version numbers, API details, and product descriptions that won't match anything in other articles.
+- procedural: Only if the procedure embodies a transferable principle.
 
 Each claim should be:
 - MINIMAL: one single assertion (not compound sentences with "and")
 - SELF-CONTAINED: understandable without the article context (resolve ALL pronouns, add context)
-- NEVER start a claim with: It, This, They, He, She, These, Those, The paper, The author, The study.
-  Always use the specific noun, name, or subject instead. Examples:
-  BAD: "This paper presents..." → GOOD: "The Codified Context paper presents..."
-  BAD: "It is recommended to..." → GOOD: "Users should..." or "Deploying X behind a proxy is recommended"
-  BAD: "It makes sense to..." → GOOD: "Trading cost for external quality is worthwhile..."
-  BAD: "They found that..." → GOOD: "Researchers at MIT found that..."
-- TYPED: classify as factual/causal/comparative/procedural/evaluative/predictive/experiential
+- GENERALIZABLE WHERE APPROPRIATE: if a product-specific observation reflects a broader pattern, express it at the pattern level too. E.g., "Mission Control uses SQLite with no external dependencies" is product-specific, but "Zero-dependency architectures using embedded databases like SQLite simplify deployment of developer tools" captures the transferable insight.
+- NEVER start with: It, This, They, He, She, These, Those, The paper, The author, The study.
 
-Claim types:
-- factual: A verifiable statement of fact ("Claude Code supports background agents")
-- causal: Cause-and-effect relationship ("Larger context windows reduce hallucination rates")
-- comparative: Comparison between entities ("GPT-4 outperforms Claude on math benchmarks")
-- procedural: How-to or process description ("To fine-tune a model, first prepare labeled data")
-- evaluative: Judgment or assessment ("Gambetta's protection-industry framework is more practical than cultural explanations")
-- predictive: Forecast or expectation ("AI agents will replace most SaaS tools by 2027")
-- experiential: First-hand experience or observation ("We found that users preferred the simpler UI")
+Claim types: factual, causal, comparative, procedural, evaluative, predictive, experiential
 
 For each claim, provide:
 - normalized_text: the claim in canonical, self-contained form (resolve all pronouns, add context)
@@ -1810,7 +1806,7 @@ Return a JSON array of claims:
   }}
 ]
 
-Extract 10-30 claims depending on article length. Focus on substantive knowledge contributions, not obvious statements or filler.
+Extract 10-30 claims depending on article length. Aim for at least 40% non-factual claims (comparative, evaluative, causal, predictive, experiential). Skip trivial product descriptions and obvious statements.
 Return ONLY valid JSON array."""
 
 

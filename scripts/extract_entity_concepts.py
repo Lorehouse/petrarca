@@ -117,7 +117,7 @@ Return ONLY a valid JSON object mapping entity ID to array of related IDs:
 Only include entities that have at least one relationship."""
 
 
-LLM_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-2.0-flash")
+LLM_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini/gemini-3.1-flash-lite-preview")
 
 # litellm expects GEMINI_API_KEY; bridge from our GEMINI_KEY if needed
 if os.environ.get("GEMINI_KEY") and not os.environ.get("GEMINI_API_KEY"):

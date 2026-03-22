@@ -12,9 +12,9 @@ import type {
 
 const LEDGER_KEY = '@petrarca/knowledge_ledger';
 
-// Calibrated for paraphrase-multilingual-MiniLM-L12-v2 (384d)
-const KNOWN_THRESHOLD = 0.88;
-const EXTENDS_THRESHOLD = 0.72;
+// Calibrated via human feedback (2026-03-20, n=30 pairs)
+const KNOWN_THRESHOLD = 0.82;
+const EXTENDS_THRESHOLD = 0.74;
 const FORGOTTEN_THRESHOLD = 0.3;
 
 const STABILITY_SKIM = 9;
@@ -82,6 +82,15 @@ export function isKnowledgeReady(): boolean {
 
 export function getKnowledgeIndex(): KnowledgeIndex | null {
   return knowledgeIndex;
+}
+
+// --- Curriculum Node Lookup ---
+
+export function getArticleCurriculumNodes(articleId: string): Array<{
+  node_id: string; domain_id: string; node_title: string;
+  claim_count: number; avg_similarity: number; max_similarity: number;
+}> {
+  return knowledgeIndex?.article_curriculum_nodes?.[articleId] ?? [];
 }
 
 // --- NLI Verdict Lookup ---
@@ -245,6 +254,29 @@ export function getArticleNovelty(articleId: string): ArticleNovelty {
     novelty_ratio: noveltyRatio,
     curiosity_score: Math.min(1.0, curiosityScore),
   };
+}
+
+// --- Article Summary Similarity ---
+
+export interface SimilarArticle {
+  articleId: string;
+  score: number;
+}
+
+export function getSimilarArticles(articleId: string, threshold = 0.52): SimilarArticle[] {
+  if (!knowledgeIndex?.article_similarities) return [];
+
+  const results: SimilarArticle[] = [];
+  for (const pair of knowledgeIndex.article_similarities) {
+    if (pair.a === articleId && pair.score >= threshold) {
+      results.push({ articleId: pair.b, score: pair.score });
+    } else if (pair.b === articleId && pair.score >= threshold) {
+      results.push({ articleId: pair.a, score: pair.score });
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score);
+  return results;
 }
 
 // --- Knowledge Ledger Updates ---
