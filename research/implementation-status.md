@@ -1,6 +1,54 @@
 # Knowledge System Implementation Status
 
-**Date**: March 20, 2026 (last updated — session 32: reading flow fixes + feed quality)
+**Date**: March 22, 2026 (last updated — session 34: curriculum enrichment + article-curriculum bridge)
+
+## Session 34: Overlapping Curricula + Article-Curriculum Bridge (March 21–22, 2026)
+
+### Curriculum Enrichment (all 3 curricula)
+- **Date ranges**: All 192 nodes now have `date_start`/`date_end` fields (negative for BCE)
+- **Prerequisite densification**: Sicily 43→101 edges, Greece 59→84, Rome 41→57 (via Sonnet LLM pass)
+- **Cross-curriculum entities**: 25 shared entities (Archimedes, Syracuse, Punic Wars, Plato, etc.) with 74 node links and curriculum-specific "lenses"
+- **Files**: Enriched JSONs uploaded to `/opt/petrarca/data/curricula/`, `cross_curriculum_entities.json`
+
+### Temporal Hook System
+- **Hook generation**: 30 temporal hooks connecting Sicily to Greece/Rome, 4 types: known_anchor, same_moment, causal_chain, surprising_proximity
+- **Human calibration**: 29/30 useful, 1 meh, 0 wrong — all hook types work equally well
+- **Key finding**: Concrete dates + genuine historical connection + narrative framing = useful. Thematic stretches without factual grounding = meh.
+- **Files**: `scripts/hook-calibration.html`, `scripts/hook-calibration-2026-03-22.json`
+
+### Article ↔ Curriculum Bridge
+- **`scripts/build_curriculum_embeddings.py`** (new): Embeds 192 curriculum nodes with MiniLM 384d (same model as article claims), maps article claims to curriculum nodes
+- **Threshold**: 0.65 cosine (calibrated — 0.70 too strict, 0.45 too noisy)
+- **Results**: 769 claim→node links across 98/258 articles and 70/192 curriculum nodes
+- **Pipeline integration**: `build_knowledge_index.py` now includes `article_curriculum_nodes` in knowledge_index.json
+- **Client**: `getArticleCurriculumNodes()` in knowledge-engine.ts exposes data
+
+### Feed Ranking: Active Book Boost
+- Articles matching topics of actively-read books get +0.15 score boost in `getRankedFeedArticles()`
+- Topic cache with 60s TTL to avoid re-scanning books per article
+- **File**: `app/data/store.ts` — `_getActiveBookTopicBoost()`
+
+### "Connects to Your Reading" Badge
+- 📖 badge in ArticleRow margin for articles whose curriculum nodes overlap with active book domains
+- `getArticleBookConnections()` in store.ts matches article curriculum domains to book topic keywords
+- **File**: `app/components/ArticleRow.tsx`
+
+### Chapter-Complete Trigger
+- Selecting a new chapter implies finishing the previous one
+- Logs `book_chapter_completed` event with completed/next chapter
+- Shows brief green "✦ Finished Ch X" banner (fades after 3s)
+- **File**: `app/app/book-detail.tsx` — `handleChapterSelect()`
+
+### Research Documents Created
+- `research/overlapping-curricula-vision.md` — Bounded courses model, shared entities with lenses, nexus points
+- `research/reading-companion-process-design.md` — 3 interaction moments (chapter complete, cross-book review, map old book), temporal hooks, chapter semantics
+- `research/books-articles-connection-proposal.md` — Curriculum as bridge between books and articles, 5-phase plan
+
+### Key Architecture Decisions
+- **Curriculum nodes as bridge** between books and articles (not direct claim-to-claim matching — different granularity, different embedding models)
+- **Bounded courses > fractal world history** — pedagogical perspective, natural stopping points, cross-references are the richest learning
+- **Amygdala-first**: Improve amygdala for probing/mapping rather than building Petrarca-specific code
+- **No breadth scan needed for Sicily**: Knowledge starts at zero, book mappings ARE the knowledge state
 
 ## Session 32: Reading Flow Fixes + Feed Quality (March 20, 2026)
 

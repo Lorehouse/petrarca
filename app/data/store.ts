@@ -310,11 +310,18 @@ function _getActiveBookTopics(): Set<string> {
 }
 
 function _getActiveBookTopicBoost(article: Article): number {
+  // When actively reading books on a topic, articles on that SAME topic
+  // are less urgent (you're getting the knowledge from books instead).
+  // Only boost articles that share ONE topic with books but cover OTHER topics too
+  // (these provide complementary perspective). Pure-overlap articles get no boost.
   const bookTopics = _getActiveBookTopics();
   if (bookTopics.size === 0) return 0;
   const articleTopics = (article.topics || []).map(t => t.toLowerCase());
   const overlap = articleTopics.filter(t => bookTopics.has(t)).length;
-  return overlap > 0 ? 0.15 : 0;
+  const nonOverlap = articleTopics.length - overlap;
+  // Complementary: has some overlap (relevant) but mostly new angles
+  if (overlap > 0 && nonOverlap > overlap) return 0.08;
+  return 0;
 }
 
 /**
