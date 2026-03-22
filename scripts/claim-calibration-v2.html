@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Claim Calibration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f7f4ec;
+    color: #2a2420;
+    font-family: 'Crimson Pro', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    width: 100%;
+    max-width: 680px;
+    padding: 24px 16px 0;
+  }
+
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: #2a2420;
+    margin-bottom: 2px;
+  }
+
+  .header .subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #6a6458;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .double-rule {
+    border-top: 2px solid #2a2420;
+    padding-top: 5px;
+    border-bottom: 1px solid #2a2420;
+    height: 0;
+    margin-bottom: 16px;
+  }
+
+  /* Progress */
+  .progress-area {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 50px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 4px;
+    background: #e4dfd4;
+    border-radius: 2px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #8b2500;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  .progress-count {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* Round tabs */
+  .round-tabs {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .round-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #b0a898;
+    border-bottom: 2px solid #e4dfd4;
+    cursor: default;
+  }
+
+  .round-tab.active {
+    color: #8b2500;
+    border-bottom-color: #8b2500;
+  }
+
+  .round-tab.done {
+    color: #2a7a4a;
+    border-bottom-color: #2a7a4a;
+  }
+
+  .round-tab .check { color: #2a7a4a; margin-left: 4px; }
+
+  /* Card area */
+  .card-area {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    min-height: 300px;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+  }
+
+  .card-instruction {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8b2500;
+    margin-bottom: 12px;
+  }
+
+  .claim-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 17px;
+    line-height: 1.5;
+    color: #2a2420;
+    margin-bottom: 8px;
+  }
+
+  .claim-source {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    margin-bottom: 4px;
+  }
+
+  .claim-type-badge {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #6a6458;
+    background: #f0ece2;
+    padding: 2px 6px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Pair display (Round 2) */
+  .pair-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .pair-item {
+    border-left: 3px solid #e4dfd4;
+    padding-left: 14px;
+  }
+
+  .pair-item.a { border-left-color: #8b2500; }
+  .pair-item.b { border-left-color: #2a7a4a; }
+
+  .pair-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #b0a898;
+    margin-bottom: 4px;
+  }
+
+  .pair-claim {
+    font-family: 'Crimson Pro', serif;
+    font-size: 16px;
+    line-height: 1.45;
+    color: #2a2420;
+    margin-bottom: 4px;
+  }
+
+  .sim-score {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    margin-top: 8px;
+  }
+
+  /* Article pair (Round 3) */
+  .article-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .article-side h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: #2a2420;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .article-side .summary {
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: #6a6458;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .article-side .claim-list {
+    list-style: none;
+  }
+
+  .article-side .claim-list li {
+    font-family: 'Crimson Pro', serif;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.4;
+    padding-left: 10px;
+    border-left: 2px solid #e4dfd4;
+    margin-bottom: 6px;
+  }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 12px 8px;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    background: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: #2a2420;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .btn:hover { border-color: #8b2500; color: #8b2500; }
+
+  .btn .key-hint {
+    display: block;
+    font-size: 10px;
+    color: #b0a898;
+    margin-top: 2px;
+  }
+
+  /* Flash */
+  .flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 48px;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+  }
+
+  .flash.show { opacity: 0.5; }
+
+  /* Results */
+  .results {
+    width: 100%;
+    max-width: 680px;
+    padding: 24px 16px;
+    display: none;
+  }
+
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .results h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    color: #8b2500;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin: 20px 0 8px;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 16px;
+  }
+
+  .stat-number {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: #8b2500;
+  }
+
+  .stat-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    text-transform: uppercase;
+  }
+
+  .results table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
+  .results th {
+    text-align: left;
+    font-weight: 500;
+    color: #6a6458;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e4dfd4;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .results td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0ece2;
+    color: #333;
+  }
+
+  .json-output {
+    background: #2a2420;
+    color: #e4dfd4;
+    padding: 16px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 12px;
+    cursor: pointer;
+  }
+
+  .copy-hint {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    margin-top: 4px;
+  }
+
+  .insight-box {
+    background: rgba(139,37,0,0.03);
+    border-left: 2px solid #8b2500;
+    padding: 12px 14px;
+    margin: 12px 0;
+    font-family: 'Crimson Pro', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6a6458;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Claim Calibration</h1>
+  <div class="subtitle">V2: New prompts + 3.1 Flash Lite · ~66 cards · 3 rounds · keyboard-driven</div>
+  <div class="double-rule"></div>
+</div>
+
+<div class="progress-area">
+  <div class="progress-row">
+    <span class="progress-label">Progress</span>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <span class="progress-count" id="progress-count">0/0</span>
+  </div>
+</div>
+
+<div class="round-tabs">
+  <div class="round-tab active" id="tab-0">Worth tracking?</div>
+  <div class="round-tab" id="tab-1">Same insight?</div>
+  <div class="round-tab" id="tab-2">Article overlap?</div>
+</div>
+
+<div class="card-area" id="card-area"></div>
+
+<div class="flash" id="flash"></div>
+
+<div class="results" id="results"></div>
+
+<script>
+const DATA = {"round1": [{"id": "c4", "text": "The maturity of agentic software requires transitioning from simple CLI tools to dedicated management dashboards that offer fleet-wide visibility.", "type": "predictive", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c42", "text": "Agentic systems trade off increased latency and cost for higher task performance compared to simpler implementations.", "type": "comparative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c36", "text": "Shipping lower-quality code when using AI agents is a process failure that should be addressed by refining development workflows rather than blaming the tool.", "type": "evaluative", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "c59", "text": "Explicitly designing for session boundaries increases task reliability compared to treating AI sessions as continuous, unbounded processes.", "type": "comparative", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c18", "text": "Automated note organization and connection discovery reduce manual effort in personal knowledge management.", "type": "causal", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "c49", "text": "Orchestrator-worker patterns are superior to parallelization for tasks requiring dynamic subtask creation rather than pre-defined decomposition.", "type": "comparative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c63", "text": "Defining the scope and goals ('Genesis') before initiating work reduces the cognitive load and error rate of AI agents.", "type": "causal", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c27", "text": "Development teams should distinguish between the technology choices made by a developer and the technology recommendations provided by a model harness.", "type": "evaluative", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "c54", "text": "Tool definitions require the same level of rigorous prompt engineering as the primary LLM interaction prompts.", "type": "evaluative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c7", "text": "Outbound webhook reliability in orchestrator platforms requires implementing delivery history logs, exponential backoff, and circuit breaker patterns to handle unstable downstream services.", "type": "evaluative", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c65", "text": "Proposing lane allocations with explicit sequencing logic for agents optimizes parallel task execution.", "type": "procedural", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c22", "text": "Current coding agents do not reinforce the 'Choose Boring Technology' bias because their ability to parse documentation allows them to operate effectively on modern or private tools.", "type": "evaluative", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "c3", "text": "Bidirectional synchronization between local workspace configuration files and a centralized database ensures consistency in agent behavior definitions.", "type": "procedural", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c20", "text": "Large context windows enable AI coding agents to effectively utilize niche or private libraries by reading documentation on-the-fly, mitigating the bias toward tools present in model training data.", "type": "causal", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "c32", "text": "Exploratory prototyping using AI agents allows for faster evaluation of technology stacks by lowering the cost of running multiple experiments in parallel.", "type": "causal", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "c28", "text": "Model performance bias toward widely-used programming languages is decreasing as context windows and model reasoning capabilities improve.", "type": "comparative", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "c19", "text": "Software architectures that treat data as standard plain-text files eliminate the risk of data gravity and proprietary platform lock-in.", "type": "evaluative", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "c40", "text": "Continuous improvement of agent instructions is required to achieve high-quality results from automated engineering workflows.", "type": "evaluative", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "c55", "text": "Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "type": "evaluative", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c60", "text": "Treating the development environment interface (e.g., tmux panes) as a structured status dashboard improves visibility into agent execution states.", "type": "experiential", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c2", "text": "Implementing quality gates in automated agent workflows reduces risks by preventing task completion without human sign-off.", "type": "evaluative", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c50", "text": "Evaluator-optimizer workflows are effective only when clear evaluation criteria exist and the model is capable of iterative self-correction.", "type": "evaluative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c35", "text": "AI models tend to suggest 'boring technology' solutions because those are more common in their training data.", "type": "causal", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "c6", "text": "Effective multi-agent systems rely on standardized inter-agent communication protocols to enable coordinated workflows.", "type": "evaluative", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c62", "text": "Workflow patterns for AI-assisted development are most effective when they are tool-agnostic rather than tied to specific agentic harnesses.", "type": "evaluative", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c0", "text": "Zero-dependency architectures using embedded databases like SQLite simplify deployment and management of complex developer tools.", "type": "experiential", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c17", "text": "Removing triggers and separate modes for rich features minimizes friction in the creative flow of writing.", "type": "causal", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "c58", "text": "Architecting a multi-agent hierarchy where a dedicated 'Meta-Agent' remains at a high level of abstraction prevents task drift and implementation confusion.", "type": "evaluative", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c1", "text": "Real-time visibility into AI agent operations requires a combination of persistent connections like WebSockets and active monitoring like server-sent events.", "type": "evaluative", "article": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_id": "e0d8e9f5e16b"}, {"id": "c45", "text": "Incorrect assumptions about framework internals are a primary source of error when building agentic systems.", "type": "experiential", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c10", "text": "Markdown-based note-taking applications allow users to avoid vendor lock-in by storing data in platform-agnostic, local files.", "type": "evaluative", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "c30", "text": "Asynchronous coding agents are superior for low-friction refactoring because they allow tasks to run in the background without interrupting developer workflow.", "type": "comparative", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "c52", "text": "Agentic autonomy increases the risk of compounding errors and higher operating costs, necessitating extensive sandboxed testing.", "type": "causal", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c57", "text": "Mid-session 'composting'\u2014the practice of pausing to collect, commit, and clean state\u2014improves context management during long AI-assisted tasks.", "type": "evaluative", "article": "Metacraft: Architecting AI-Assisted Development", "article_id": "b5ec6d0add6d"}, {"id": "c21", "text": "AI coding agents can adapt to unfamiliar codebases by analyzing existing usage patterns in the project and utilizing iterative testing to validate their output.", "type": "experiential", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}], "round2": [{"claim_a": "Implementing quality gates in automated agent workflows reduces risks by preventing task completion without human sign-off.", "claim_b": "Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.715}, {"claim_a": "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "claim_b": "Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.682}, {"claim_a": "Development teams should distinguish between the technology choices made by a developer and the technology recommendations provided by a model harness.", "claim_b": "Coding agents effectively mitigate technical debt by automating simple but time-consuming tasks like API refactoring, nomenclature cleanup, and modularization.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.294}, {"claim_a": "Explicit agent skill sets are becoming a standard mechanism for improving integration between third-party software and automated AI coding assistants.", "claim_b": "Continuous improvement of agent instructions is required to achieve high-quality results from automated engineering workflows.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.709}, {"claim_a": "Treating the development environment interface (e.g., tmux panes) as a structured status dashboard improves visibility into agent execution states.", "claim_b": "Outbound webhook reliability in orchestrator platforms requires implementing delivery history logs, exponential backoff, and circuit breaker patterns to handle unstable downstream services.", "article_a": "Metacraft: Architecting AI-Assisted Development", "article_b": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "score": 0.277}, {"claim_a": "Parallelization of LLM calls improves confidence and speed when complex tasks can be decomposed into independent subtasks.", "claim_b": "Proposing lane allocations with explicit sequencing logic for agents optimizes parallel task execution.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.705}, {"claim_a": "Markdown-based note-taking applications allow users to avoid vendor lock-in by storing data in platform-agnostic, local files.", "claim_b": "Tool definitions require the same level of rigorous prompt engineering as the primary LLM interaction prompts.", "article_a": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0.104}, {"claim_a": "Advanced coding agents effectively reduce the barrier to adoption for new software by bypassing the need for models to have pre-trained knowledge of that specific tool.", "claim_b": "Coding agents effectively mitigate technical debt by automating simple but time-consuming tasks like API refactoring, nomenclature cleanup, and modularization.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.694}, {"claim_a": "Advanced coding agents effectively reduce the barrier to adoption for new software by bypassing the need for models to have pre-trained knowledge of that specific tool.", "claim_b": "Coding agents are uniquely capable of lowering the cost of experimental simulation to the point where running simultaneous load tests becomes feasible for small teams.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.703}, {"claim_a": "Explicit agent skill sets are becoming a standard mechanism for improving integration between third-party software and automated AI coding assistants.", "claim_b": "Outbound webhook reliability in orchestrator platforms requires implementing delivery history logs, exponential backoff, and circuit breaker patterns to handle unstable downstream services.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "score": 0.203}, {"claim_a": "Privacy-focused note-taking tools gain utility by functioning entirely offline without reliance on cloud-based accounts.", "claim_b": "Incorrect assumptions about framework internals are a primary source of error when building agentic systems.", "article_a": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0.024}, {"claim_a": "High levels of abstraction in agent frameworks can obscure underlying prompts and responses, complicating the debugging process.", "claim_b": "Architecting a multi-agent hierarchy where a dedicated 'Meta-Agent' remains at a high level of abstraction prevents task drift and implementation confusion.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.691}, {"claim_a": "Continuous improvement of agent instructions is required to achieve high-quality results from automated engineering workflows.", "claim_b": "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "article_a": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0.703}, {"claim_a": "High levels of abstraction in agent frameworks can obscure underlying prompts and responses, complicating the debugging process.", "claim_b": "Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.688}, {"claim_a": "Agentic autonomy increases the risk of compounding errors and higher operating costs, necessitating extensive sandboxed testing.", "claim_b": "Interoperability is achieved by supporting existing file structures without requiring data imports or migrations.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "score": 0.156}, {"claim_a": "Centralized dashboarding for AI agents creates a single point of failure and a high-value target, requiring strict role-based access control (RBAC).", "claim_b": "Workflow stability is achieved by transforming observable work patterns into crystallized, stable constraints.", "article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.263}, {"claim_a": "Removing triggers and separate modes for rich features minimizes friction in the creative flow of writing.", "claim_b": "Agentic systems require ground-truth environmental feedback during execution to accurately assess progress and handle error recovery.", "article_a": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0.218}, {"claim_a": "Agentic autonomy increases the risk of compounding errors and higher operating costs, necessitating extensive sandboxed testing.", "claim_b": "Automated note organization and connection discovery reduce manual effort in personal knowledge management.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "score": 0.256}, {"claim_a": "Shipping lower-quality code when using AI agents is a process failure that should be addressed by refining development workflows rather than blaming the tool.", "claim_b": "Workflow patterns for AI-assisted development are most effective when they are tool-agnostic rather than tied to specific agentic harnesses.", "article_a": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.69}, {"claim_a": "Explicit agent skill sets are becoming a standard mechanism for improving integration between third-party software and automated AI coding assistants.", "claim_b": "Workflow patterns for AI-assisted development are most effective when they are tool-agnostic rather than tied to specific agentic harnesses.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.674}, {"claim_a": "Defining the scope and goals ('Genesis') before initiating work reduces the cognitive load and error rate of AI agents.", "claim_b": "Decreased cost of code refactoring allows for a zero-tolerance policy regarding minor code smells and technical debt.", "article_a": "Metacraft: Architecting AI-Assisted Development", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.253}, {"claim_a": "AI coding agents can adapt to unfamiliar codebases by analyzing existing usage patterns in the project and utilizing iterative testing to validate their output.", "claim_b": "Compound engineering, which involves documenting retrospective learnings into future agent instructions, creates an iterative loop for increasing codebase quality.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.708}, {"claim_a": "Embedding AI agents directly into the document editor creates a more collaborative experience than confining them to sidebar chat windows.", "claim_b": "Explicit agent skill sets are becoming a standard mechanism for improving integration between third-party software and automated AI coding assistants.", "article_a": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_b": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "score": 0.672}, {"claim_a": "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "claim_b": "Workflow patterns for AI-assisted development are most effective when they are tool-agnostic rather than tied to specific agentic harnesses.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "score": 0.688}, {"claim_a": "AI coding agents can adapt to unfamiliar codebases by analyzing existing usage patterns in the project and utilizing iterative testing to validate their output.", "claim_b": "Coding agents effectively mitigate technical debt by automating simple but time-consuming tasks like API refactoring, nomenclature cleanup, and modularization.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.674}], "round3": [{"article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Metacraft: Architecting AI-Assisted Development", "summary_a": "Learn practical patterns for building effective LLM agents and workflows, focusing on simplicity and composability over complex frameworks.", "summary_b": "A curated collection of tool-agnostic patterns and workflows for mastering AI-assisted software development.", "claims_a": ["Simple, composable patterns are more effective for building LLM agents than complex frameworks or specialized libraries.", "Agentic systems trade off increased latency and cost for higher task performance compared to simpler implementations.", "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "High levels of abstraction in agent frameworks can obscure underlying prompts and responses, complicating the debugging process."], "claims_b": ["Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "AI agents naturally produce plausible but incorrect outputs unless constrained by deliberate architectural patterns.", "Mid-session 'composting'\u2014the practice of pausing to collect, commit, and clean state\u2014improves context management during long AI-assisted tasks.", "Architecting a multi-agent hierarchy where a dedicated 'Meta-Agent' remains at a high level of abstraction prevents task drift and implementation confusion."], "system_sim_count": 52}, {"article_a": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_b": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "summary_a": "Leverage coding agents to automate technical debt reduction, prototype solutions, and drive compound engineering.", "summary_b": "Advanced AI coding agents can effectively work with new or niche tools, challenging the \"Choose Boring Technology\" bias.", "claims_a": ["Decreased cost of code refactoring allows for a zero-tolerance policy regarding minor code smells and technical debt.", "Asynchronous coding agents are superior for low-friction refactoring because they allow tasks to run in the background without interrupting developer workflow.", "Coding agents effectively mitigate technical debt by automating simple but time-consuming tasks like API refactoring, nomenclature cleanup, and modularization.", "Exploratory prototyping using AI agents allows for faster evaluation of technology stacks by lowering the cost of running multiple experiments in parallel."], "claims_b": ["Large context windows enable AI coding agents to effectively utilize niche or private libraries by reading documentation on-the-fly, mitigating the bias toward tools present in model training data.", "AI coding agents can adapt to unfamiliar codebases by analyzing existing usage patterns in the project and utilizing iterative testing to validate their output.", "Current coding agents do not reinforce the 'Choose Boring Technology' bias because their ability to parse documentation allows them to operate effectively on modern or private tools.", "AI model recommendations for technology stacks often exhibit strong biases toward specific established vendors or 'build-over-buy' patterns, regardless of the developer's intent."], "system_sim_count": 47}, {"article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_b": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "summary_a": "Open-source dashboard for managing AI agent fleets, tracking tasks/costs, and orchestrating workflows with CLI integration.", "summary_b": "Moss is a local-first, markdown-based notes app with AI agents that organize, connect, and enhance your notes without cloud lock-in.", "claims_a": ["Zero-dependency architectures using embedded databases like SQLite simplify deployment and management of complex developer tools.", "Real-time visibility into AI agent operations requires a combination of persistent connections like WebSockets and active monitoring like server-sent events.", "Implementing quality gates in automated agent workflows reduces risks by preventing task completion without human sign-off.", "Bidirectional synchronization between local workspace configuration files and a centralized database ensures consistency in agent behavior definitions."], "claims_b": ["Markdown-based note-taking applications allow users to avoid vendor lock-in by storing data in platform-agnostic, local files.", "Embedding AI agents directly into the document editor creates a more collaborative experience than confining them to sidebar chat windows.", "Inferred organizational structure improves user workflow by removing the cognitive overhead of designing databases or defining properties.", "Storing data in standard Markdown files increases the efficiency of interactions for both human users and AI agents compared to proprietary formats."], "system_sim_count": 10}, {"article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "summary_a": "Learn practical patterns for building effective LLM agents and workflows, focusing on simplicity and composability over complex frameworks.", "summary_b": "Leverage coding agents to automate technical debt reduction, prototype solutions, and drive compound engineering.", "claims_a": ["Simple, composable patterns are more effective for building LLM agents than complex frameworks or specialized libraries.", "Agentic systems trade off increased latency and cost for higher task performance compared to simpler implementations.", "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "High levels of abstraction in agent frameworks can obscure underlying prompts and responses, complicating the debugging process."], "claims_b": ["Decreased cost of code refactoring allows for a zero-tolerance policy regarding minor code smells and technical debt.", "Asynchronous coding agents are superior for low-friction refactoring because they allow tasks to run in the background without interrupting developer workflow.", "Coding agents effectively mitigate technical debt by automating simple but time-consuming tasks like API refactoring, nomenclature cleanup, and modularization.", "Exploratory prototyping using AI agents allows for faster evaluation of technology stacks by lowering the cost of running multiple experiments in parallel."], "system_sim_count": 55}, {"article_a": "Metacraft: Architecting AI-Assisted Development", "article_b": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "summary_a": "A curated collection of tool-agnostic patterns and workflows for mastering AI-assisted software development.", "summary_b": "Advanced AI coding agents can effectively work with new or niche tools, challenging the \"Choose Boring Technology\" bias.", "claims_a": ["Effective agentic workflows require explicit naming of constraints to prevent degradation of intent across handoffs.", "AI agents naturally produce plausible but incorrect outputs unless constrained by deliberate architectural patterns.", "Mid-session 'composting'\u2014the practice of pausing to collect, commit, and clean state\u2014improves context management during long AI-assisted tasks.", "Architecting a multi-agent hierarchy where a dedicated 'Meta-Agent' remains at a high level of abstraction prevents task drift and implementation confusion."], "claims_b": ["Large context windows enable AI coding agents to effectively utilize niche or private libraries by reading documentation on-the-fly, mitigating the bias toward tools present in model training data.", "AI coding agents can adapt to unfamiliar codebases by analyzing existing usage patterns in the project and utilizing iterative testing to validate their output.", "Current coding agents do not reinforce the 'Choose Boring Technology' bias because their ability to parse documentation allows them to operate effectively on modern or private tools.", "AI model recommendations for technology stacks often exhibit strong biases toward specific established vendors or 'build-over-buy' patterns, regardless of the developer's intent."], "system_sim_count": 31}, {"article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "summary_a": "Learn practical patterns for building effective LLM agents and workflows, focusing on simplicity and composability over complex frameworks.", "summary_b": "Open-source dashboard for managing AI agent fleets, tracking tasks/costs, and orchestrating workflows with CLI integration.", "claims_a": ["Simple, composable patterns are more effective for building LLM agents than complex frameworks or specialized libraries.", "Agentic systems trade off increased latency and cost for higher task performance compared to simpler implementations.", "Workflows provide higher predictability and consistency for defined tasks, whereas agents provide greater flexibility and model-driven decision-making.", "High levels of abstraction in agent frameworks can obscure underlying prompts and responses, complicating the debugging process."], "claims_b": ["Zero-dependency architectures using embedded databases like SQLite simplify deployment and management of complex developer tools.", "Real-time visibility into AI agent operations requires a combination of persistent connections like WebSockets and active monitoring like server-sent events.", "Implementing quality gates in automated agent workflows reduces risks by preventing task completion without human sign-off.", "Bidirectional synchronization between local workspace configuration files and a centralized database ensures consistency in agent behavior definitions."], "system_sim_count": 15}]};
+
+const ROUNDS = [
+  {
+    key: 'round1',
+    title: 'Worth tracking?',
+    instruction: 'Would you want the system to track this claim across articles?',
+    buttons: [
+      { label: 'Insight', sub: 'Pattern / trend / idea I care about', value: 'insight', key: '1', flash: '★', flashClass: 'good' },
+      { label: 'Useful fact', sub: 'Specific but worth remembering', value: 'useful', key: '2', flash: '•', flashClass: 'mid' },
+      { label: 'Noise', sub: 'Too specific / obvious / don\'t care', value: 'noise', key: '3', flash: '✕', flashClass: 'bad' },
+    ],
+    renderCard(item) {
+      return `
+        <div class="claim-text">${item.text}</div>
+        <div class="claim-source">from: ${item.article}</div>
+        <div class="claim-type-badge">${item.type}</div>
+      `;
+    },
+  },
+  {
+    key: 'round2',
+    title: 'Same insight?',
+    instruction: 'Are these two claims about the same underlying idea or pattern?',
+    buttons: [
+      { label: 'Same thing', sub: 'Basically the same insight', value: 'same', key: '1', flash: '=', flashClass: 'good' },
+      { label: 'Related', sub: 'Same theme but distinct points', value: 'related', key: '2', flash: '~', flashClass: 'mid' },
+      { label: 'Different', sub: 'Unrelated despite surface similarity', value: 'different', key: '3', flash: '≠', flashClass: 'bad' },
+    ],
+    renderCard(item) {
+      return `
+        <div class="pair-container">
+          <div class="pair-item a">
+            <div class="pair-label">Article A</div>
+            <div class="pair-claim">${item.claim_a}</div>
+            <div class="claim-source">${item.article_a}</div>
+          </div>
+          <div class="pair-item b">
+            <div class="pair-label">Article B</div>
+            <div class="pair-claim">${item.claim_b}</div>
+            <div class="claim-source">${item.article_b}</div>
+          </div>
+        </div>
+        <div class="sim-score">System similarity: ${item.score > 0 ? item.score.toFixed(3) : 'not detected'}</div>
+      `;
+    },
+  },
+  {
+    key: 'round3',
+    title: 'Article overlap?',
+    instruction: 'How much would reading article A reduce the value of reading article B?',
+    buttons: [
+      { label: 'Significant overlap', sub: 'Reading both would feel redundant', value: 'high', key: '1', flash: '▮▮', flashClass: 'bad' },
+      { label: 'Shared themes', sub: 'Same topic area, distinct content', value: 'some', key: '2', flash: '▮▯', flashClass: 'mid' },
+      { label: 'No overlap', sub: 'Completely independent value', value: 'none', key: '3', flash: '▯▯', flashClass: 'good' },
+    ],
+    renderCard(item) {
+      const claimsA = item.claims_a.map(c => `<li>${c}</li>`).join('');
+      const claimsB = item.claims_b.map(c => `<li>${c}</li>`).join('');
+      return `
+        <div class="article-pair">
+          <div class="article-side">
+            <h3>${item.article_a}</h3>
+            <div class="summary">${item.summary_a}</div>
+            <ul class="claim-list">${claimsA}</ul>
+          </div>
+          <div class="article-side">
+            <h3>${item.article_b}</h3>
+            <div class="summary">${item.summary_b}</div>
+            <ul class="claim-list">${claimsB}</ul>
+          </div>
+        </div>
+        <div class="sim-score">System detected overlapping claims: ${item.system_sim_count}</div>
+      `;
+    },
+  },
+];
+
+let currentRound = 0;
+let currentIndex = 0;
+let responses = { round1: [], round2: [], round3: [] };
+
+function getItems() {
+  return DATA[ROUNDS[currentRound].key];
+}
+
+function updateProgress() {
+  const items = getItems();
+  const total = items.length;
+  const pct = total > 0 ? (currentIndex / total * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-count').textContent = `${currentIndex}/${total}`;
+}
+
+function updateTabs() {
+  ROUNDS.forEach((r, i) => {
+    const tab = document.getElementById('tab-' + i);
+    tab.className = 'round-tab' +
+      (i === currentRound ? ' active' : '') +
+      (i < currentRound ? ' done' : '');
+    if (i < currentRound) tab.innerHTML = r.title + '<span class="check"> ✓</span>';
+    else tab.textContent = r.title;
+  });
+}
+
+function renderCard() {
+  const round = ROUNDS[currentRound];
+  const items = getItems();
+
+  if (currentIndex >= items.length) {
+    nextRound();
+    return;
+  }
+
+  const item = items[currentIndex];
+  const buttons = round.buttons.map(b =>
+    `<div class="btn" data-value="${b.value}" onclick="respond('${b.value}')">
+      ${b.label}
+      <span class="key-hint">${b.sub}<br/>press ${b.key}</span>
+    </div>`
+  ).join('');
+
+  document.getElementById('card-area').innerHTML = `
+    <div class="card">
+      <div class="card-instruction">${round.instruction}</div>
+      ${round.renderCard(item)}
+    </div>
+    <div class="button-row">${buttons}</div>
+  `;
+
+  updateProgress();
+  updateTabs();
+}
+
+function showFlash(text, cls) {
+  const el = document.getElementById('flash');
+  el.textContent = text;
+  el.className = 'flash show ' + cls;
+  setTimeout(() => el.className = 'flash', 300);
+}
+
+function respond(value) {
+  const round = ROUNDS[currentRound];
+  const items = getItems();
+  const item = items[currentIndex];
+  const btn = round.buttons.find(b => b.value === value);
+
+  responses[round.key].push({ ...item, response: value });
+  showFlash(btn.flash, btn.flashClass);
+
+  currentIndex++;
+  renderCard();
+}
+
+function nextRound() {
+  currentRound++;
+  currentIndex = 0;
+
+  if (currentRound >= ROUNDS.length) {
+    showResults();
+    return;
+  }
+
+  renderCard();
+}
+
+function showResults() {
+  document.getElementById('card-area').style.display = 'none';
+
+  // Round 1 analysis
+  const r1 = responses.round1;
+  const r1Counts = { insight: 0, useful: 0, noise: 0 };
+  const r1ByType = {};
+  r1.forEach(r => {
+    r1Counts[r.response]++;
+    const t = r.type || 'unknown';
+    if (!r1ByType[t]) r1ByType[t] = { insight: 0, useful: 0, noise: 0, total: 0 };
+    r1ByType[t][r.response]++;
+    r1ByType[t].total++;
+  });
+
+  // Round 2 analysis
+  const r2 = responses.round2;
+  const r2Counts = { same: 0, related: 0, different: 0 };
+  r2.forEach(r => r2Counts[r.response]++);
+
+  // Check system accuracy
+  const r2HighSim = r2.filter(r => r.score >= 0.5);
+  const r2LowSim = r2.filter(r => r.score < 0.3 || r.score === 0);
+  const highSimSame = r2HighSim.filter(r => r.response === 'same' || r.response === 'related').length;
+  const lowSimDiff = r2LowSim.filter(r => r.response === 'different').length;
+
+  // Round 3 analysis
+  const r3 = responses.round3;
+  const r3Counts = { high: 0, some: 0, none: 0 };
+  r3.forEach(r => r3Counts[r.response]++);
+
+  // Missed overlaps: user says overlap but system detected 0
+  const r3Missed = r3.filter(r => (r.response === 'high' || r.response === 'some') && r.system_sim_count === 0);
+
+  let typeRows = '';
+  for (const [type, counts] of Object.entries(r1ByType).sort((a, b) => b[1].total - a[1].total)) {
+    const noisePct = counts.total > 0 ? Math.round(counts.noise / counts.total * 100) : 0;
+    typeRows += `<tr>
+      <td>${type}</td>
+      <td>${counts.insight}</td>
+      <td>${counts.useful}</td>
+      <td>${counts.noise}</td>
+      <td>${noisePct}%</td>
+    </tr>`;
+  }
+
+  let missedRows = r3Missed.map(r => `<tr>
+    <td>${r.article_a}</td>
+    <td>${r.article_b}</td>
+    <td>${r.response}</td>
+  </tr>`).join('');
+
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <h2>Calibration Results</h2>
+
+    <h3>Round 1 — Claim Quality</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r1Counts.insight}</div><div class="stat-label">Insights</div></div>
+      <div><div class="stat-number">${r1Counts.useful}</div><div class="stat-label">Useful facts</div></div>
+      <div><div class="stat-number">${r1Counts.noise}</div><div class="stat-label">Noise</div></div>
+    </div>
+    <div class="insight-box">
+      ${r1Counts.noise > r1Counts.insight
+        ? 'More noise than insights — the pipeline is extracting too many product-specific facts.'
+        : 'Reasonable signal-to-noise ratio.'}
+      Noise rate: ${r1.length > 0 ? Math.round(r1Counts.noise / r1.length * 100) : 0}%
+    </div>
+    <table>
+      <tr><th>Claim type</th><th>Insight</th><th>Useful</th><th>Noise</th><th>Noise %</th></tr>
+      ${typeRows}
+    </table>
+
+    <h3>Round 2 — Similarity Detection</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r2Counts.same}</div><div class="stat-label">Same insight</div></div>
+      <div><div class="stat-number">${r2Counts.related}</div><div class="stat-label">Related</div></div>
+      <div><div class="stat-number">${r2Counts.different}</div><div class="stat-label">Different</div></div>
+    </div>
+    <div class="insight-box">
+      System accuracy on high-similarity pairs (≥0.5): ${r2HighSim.length > 0
+        ? Math.round(highSimSame / r2HighSim.length * 100) + '% matched your judgment'
+        : 'no high-sim pairs shown'}.<br>
+      System accuracy on low/zero-similarity pairs: ${r2LowSim.length > 0
+        ? Math.round(lowSimDiff / r2LowSim.length * 100) + '% correctly identified as different'
+        : 'no low-sim pairs shown'}.<br>
+      ${r2Counts.same + r2Counts.related > 0 && r2LowSim.filter(r => r.response !== 'different').length > 0
+        ? `<strong>Missed connections:</strong> ${r2LowSim.filter(r => r.response !== 'different').length} pairs you consider same/related but system scored as unrelated.`
+        : ''}
+    </div>
+
+    <h3>Round 3 — Article-Level Overlap</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r3Counts.high}</div><div class="stat-label">Significant</div></div>
+      <div><div class="stat-number">${r3Counts.some}</div><div class="stat-label">Shared themes</div></div>
+      <div><div class="stat-number">${r3Counts.none}</div><div class="stat-label">No overlap</div></div>
+    </div>
+    ${r3Missed.length > 0 ? `
+      <div class="insight-box">
+        <strong>${r3Missed.length} article pair${r3Missed.length > 1 ? 's' : ''} where you see overlap but the system detected 0 similar claims.</strong>
+        This confirms claim-level matching is too narrow — the overlap exists at a higher abstraction level.
+      </div>
+      <table>
+        <tr><th>Article A</th><th>Article B</th><th>Your rating</th></tr>
+        ${missedRows}
+      </table>
+    ` : ''}
+
+    <h3>Raw Data</h3>
+    <div class="json-output" onclick="navigator.clipboard.writeText(this.textContent)">${JSON.stringify(responses, null, 2)}</div>
+    <div class="copy-hint">Click to copy JSON</div>
+  `;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (currentRound >= ROUNDS.length) return;
+  const round = ROUNDS[currentRound];
+  const btn = round.buttons.find(b => b.key === e.key);
+  if (btn) {
+    e.preventDefault();
+    respond(btn.value);
+  }
+});
+
+renderCard();
+</script>
+</body>
+</html>

@@ -1,0 +1,1280 @@
+{
+  "1_full_summary": {
+    "accuracy": 0.8889,
+    "threshold": 0.445,
+    "spearman_rho": 0.654,
+    "spearman_p": 0.0032,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.3772
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9545
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.3422
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.5597
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.4007
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.5318
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4482
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.1656
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5541
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.3516
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.4563
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3219
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4904
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6714
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3621
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5584
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.3535
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4056
+      }
+    ]
+  },
+  "2_one_line_summary": {
+    "accuracy": 0.7222,
+    "threshold": 0.465,
+    "spearman_rho": 0.3474,
+    "spearman_p": 0.1577,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.7333
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9733
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.2826
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.3532
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.3293
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.3282
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5062
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.1572
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.4675
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.2748
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.2489
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.2782
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6222
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.4692
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3563
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.4447
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.6241
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4654
+      }
+    ]
+  },
+  "3_title_one_line": {
+    "accuracy": 0.7222,
+    "threshold": 0.685,
+    "spearman_rho": 0.327,
+    "spearman_p": 0.1853,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.6634
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9927
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.2334
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.3818
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.1832
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.3882
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4072
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.1519
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.4879
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.4296
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.247
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.2661
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4105
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6883
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3204
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5445
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.514
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4216
+      }
+    ]
+  },
+  "4_full_summary_claims": {
+    "accuracy": 0.8889,
+    "threshold": 0.445,
+    "spearman_rho": 0.6949,
+    "spearman_p": 0.0014,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.3753
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9525
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.3329
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.5363
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.428
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.5318
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4454
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.2279
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5883
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.3437
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.4613
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3234
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.4844
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6714
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3554
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5432
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.3528
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.3892
+      }
+    ]
+  },
+  "5_key_claims_only": {
+    "accuracy": 0.8889,
+    "threshold": 0.615,
+    "spearman_rho": 0.6288,
+    "spearman_p": 0.0052,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.553
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.6291
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.369
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.577
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.5662
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.6766
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6168
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.2739
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.7074
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.266
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.4865
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.2627
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.7334
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.5077
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.207
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5592
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.5603
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.402
+      }
+    ]
+  },
+  "6_topics_text": {
+    "accuracy": 0.7222,
+    "threshold": 0.93,
+    "spearman_rho": -0.0204,
+    "spearman_p": 0.9358,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.7153
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9536
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.7581
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.7773
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.7516
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.7974
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5888
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.722
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.6653
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.7441
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.6362
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.7149
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.672
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.9332
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.6211
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.6965
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.9037
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.8117
+      }
+    ]
+  },
+  "7_title_summary_topics": {
+    "accuracy": 0.7222,
+    "threshold": 0.705,
+    "spearman_rho": 0.4496,
+    "spearman_p": 0.0612,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.4818
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.9802
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.3285
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.5321
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.3197
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.398
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.414
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.1689
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5426
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.4189
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.4001
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.2539
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.3848
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.7064
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3381
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5937
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.3361
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4072
+      }
+    ]
+  },
+  "8_weighted_combination": {
+    "w_summary": 0.5,
+    "w_claims": 0.5,
+    "accuracy": 0.9444,
+    "threshold": 0.65,
+    "spearman_rho": 0.8175,
+    "spearman_p": 0.0,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.5026
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.8787
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.3695
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.6188
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.5698
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.6506
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6585
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.2647
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.7577
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.4381
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.5757
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3125
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6831
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.658
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3212
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.603
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.5496
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4951
+      }
+    ]
+  },
+  "9_maxsim_claims_top3": {
+    "accuracy": 0.7222,
+    "threshold": 0.63,
+    "spearman_rho": 0.4412,
+    "spearman_p": 0.0668,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.6443
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.6342
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.5062
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.4669
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.5968
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.5678
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5618
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.4406
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5558
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.3384
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.5048
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3806
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6324
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6336
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3918
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5757
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.6018
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4619
+      }
+    ]
+  },
+  "9_maxsim_claims_top1": {
+    "accuracy": 0.7778,
+    "threshold": 0.535,
+    "spearman_rho": 0.5025,
+    "spearman_p": 0.0335,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.6457
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.6631
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.5095
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.4747
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.608
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.604
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5662
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.4614
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5587
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.3427
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.5355
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3862
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.6784
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6448
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.399
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.6094
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.6085
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4663
+      }
+    ]
+  },
+  "9_maxsim_claims_top5": {
+    "accuracy": 0.7222,
+    "threshold": 0.595,
+    "spearman_rho": 0.4532,
+    "spearman_p": 0.0589,
+    "pairs": [
+      {
+        "a": "285b8ae54c07",
+        "b": "b9d2abdd810b",
+        "rating": 0,
+        "similarity": 0.6275
+      },
+      {
+        "a": "4e3e14e51653",
+        "b": "b5f346e0da19",
+        "rating": 2,
+        "similarity": 0.609
+      },
+      {
+        "a": "285b8ae54c07",
+        "b": "43d791697511",
+        "rating": 0,
+        "similarity": 0.4887
+      },
+      {
+        "a": "265493334801",
+        "b": "51004180677e",
+        "rating": 0,
+        "similarity": 0.4596
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "a3f9376d02cb",
+        "rating": 0,
+        "similarity": 0.5693
+      },
+      {
+        "a": "84d020b998c3",
+        "b": "d0f2b608730b",
+        "rating": 1,
+        "similarity": 0.5256
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5318
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ed72c07c5d8a",
+        "rating": 0,
+        "similarity": 0.4051
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "a3f9376d02cb",
+        "rating": 1,
+        "similarity": 0.5488
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "ffea1cbfe4f7",
+        "rating": 0,
+        "similarity": 0.3343
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "ffea1cbfe4f7",
+        "rating": 1,
+        "similarity": 0.4694
+      },
+      {
+        "a": "55fb8f174d74",
+        "b": "75972a5d6aa1",
+        "rating": 0,
+        "similarity": 0.3725
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "b5ec6d0add6d",
+        "rating": 1,
+        "similarity": 0.5955
+      },
+      {
+        "a": "d0f2b608730b",
+        "b": "885101003525",
+        "rating": 1,
+        "similarity": 0.6124
+      },
+      {
+        "a": "e0d8e9f5e16b",
+        "b": "0708161ff37b",
+        "rating": 0,
+        "similarity": 0.3797
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "d0f2b608730b",
+        "rating": 0,
+        "similarity": 0.5444
+      },
+      {
+        "a": "b5ec6d0add6d",
+        "b": "885101003525",
+        "rating": 0,
+        "similarity": 0.5504
+      },
+      {
+        "a": "38c43325a50c",
+        "b": "e0d8e9f5e16b",
+        "rating": 0,
+        "similarity": 0.4483
+      }
+    ]
+  }
+}

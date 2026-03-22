@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Claim Calibration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f7f4ec;
+    color: #2a2420;
+    font-family: 'Crimson Pro', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    width: 100%;
+    max-width: 680px;
+    padding: 24px 16px 0;
+  }
+
+  .header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: #2a2420;
+    margin-bottom: 2px;
+  }
+
+  .header .subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #6a6458;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .double-rule {
+    border-top: 2px solid #2a2420;
+    padding-top: 5px;
+    border-bottom: 1px solid #2a2420;
+    height: 0;
+    margin-bottom: 16px;
+  }
+
+  /* Progress */
+  .progress-area {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 50px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 4px;
+    background: #e4dfd4;
+    border-radius: 2px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #8b2500;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  .progress-count {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* Round tabs */
+  .round-tabs {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  .round-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: #b0a898;
+    border-bottom: 2px solid #e4dfd4;
+    cursor: default;
+  }
+
+  .round-tab.active {
+    color: #8b2500;
+    border-bottom-color: #8b2500;
+  }
+
+  .round-tab.done {
+    color: #2a7a4a;
+    border-bottom-color: #2a7a4a;
+  }
+
+  .round-tab .check { color: #2a7a4a; margin-left: 4px; }
+
+  /* Card area */
+  .card-area {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 16px;
+    min-height: 300px;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+  }
+
+  .card-instruction {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8b2500;
+    margin-bottom: 12px;
+  }
+
+  .claim-text {
+    font-family: 'Crimson Pro', serif;
+    font-size: 17px;
+    line-height: 1.5;
+    color: #2a2420;
+    margin-bottom: 8px;
+  }
+
+  .claim-source {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    margin-bottom: 4px;
+  }
+
+  .claim-type-badge {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #6a6458;
+    background: #f0ece2;
+    padding: 2px 6px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Pair display (Round 2) */
+  .pair-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .pair-item {
+    border-left: 3px solid #e4dfd4;
+    padding-left: 14px;
+  }
+
+  .pair-item.a { border-left-color: #8b2500; }
+  .pair-item.b { border-left-color: #2a7a4a; }
+
+  .pair-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #b0a898;
+    margin-bottom: 4px;
+  }
+
+  .pair-claim {
+    font-family: 'Crimson Pro', serif;
+    font-size: 16px;
+    line-height: 1.45;
+    color: #2a2420;
+    margin-bottom: 4px;
+  }
+
+  .sim-score {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    color: #b0a898;
+    margin-top: 8px;
+  }
+
+  /* Article pair (Round 3) */
+  .article-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .article-side h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: #2a2420;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .article-side .summary {
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: #6a6458;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .article-side .claim-list {
+    list-style: none;
+  }
+
+  .article-side .claim-list li {
+    font-family: 'Crimson Pro', serif;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.4;
+    padding-left: 10px;
+    border-left: 2px solid #e4dfd4;
+    margin-bottom: 6px;
+  }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 12px 8px;
+    border: 1px solid #e4dfd4;
+    border-radius: 4px;
+    background: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: #2a2420;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .btn:hover { border-color: #8b2500; color: #8b2500; }
+
+  .btn .key-hint {
+    display: block;
+    font-size: 10px;
+    color: #b0a898;
+    margin-top: 2px;
+  }
+
+  /* Flash */
+  .flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 48px;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+  }
+
+  .flash.show { opacity: 0.5; }
+
+  /* Results */
+  .results {
+    width: 100%;
+    max-width: 680px;
+    padding: 24px 16px;
+    display: none;
+  }
+
+  .results h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .results h3 {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    color: #8b2500;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin: 20px 0 8px;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 16px;
+  }
+
+  .stat-number {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: #8b2500;
+  }
+
+  .stat-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #6a6458;
+    text-transform: uppercase;
+  }
+
+  .results table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
+  .results th {
+    text-align: left;
+    font-weight: 500;
+    color: #6a6458;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e4dfd4;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .results td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0ece2;
+    color: #333;
+  }
+
+  .json-output {
+    background: #2a2420;
+    color: #e4dfd4;
+    padding: 16px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 12px;
+    cursor: pointer;
+  }
+
+  .copy-hint {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #b0a898;
+    margin-top: 4px;
+  }
+
+  .insight-box {
+    background: rgba(139,37,0,0.03);
+    border-left: 2px solid #8b2500;
+    padding: 12px 14px;
+    margin: 12px 0;
+    font-family: 'Crimson Pro', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6a6458;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Claim Calibration</h1>
+  <div class="subtitle">AI Tools cluster · ~60 cards · 3 rounds · keyboard-driven</div>
+  <div class="double-rule"></div>
+</div>
+
+<div class="progress-area">
+  <div class="progress-row">
+    <span class="progress-label">Progress</span>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <span class="progress-count" id="progress-count">0/0</span>
+  </div>
+</div>
+
+<div class="round-tabs">
+  <div class="round-tab active" id="tab-0">Worth tracking?</div>
+  <div class="round-tab" id="tab-1">Same insight?</div>
+  <div class="round-tab" id="tab-2">Article overlap?</div>
+</div>
+
+<div class="card-area" id="card-area"></div>
+
+<div class="flash" id="flash"></div>
+
+<div class="results" id="results"></div>
+
+<script>
+const DATA = {"round1": [{"id": "8efbe2b6ff80", "text": "When Google Workspace adds an API endpoint or method, Google Workspace CLI picks it up automatically.", "type": "factual", "article": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "article_id": "b9d2abdd810b"}, {"id": "f6f34c1dc818", "text": "Technical debt often originates from making trade-offs where developers prioritize speed over implementing solutions in the ideal way.", "type": "factual", "article": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "article_id": "d0f2b608730b"}, {"id": "9c1793bf5d80", "text": "OpenFang possesses a solid technical foundation.", "type": "evaluative", "article": "A Review of OpenFang: An Emerging Agent Operating System", "article_id": "3d5be9f847e6"}, {"id": "178ba6a7a39c", "text": "Spotipy is a Python library that handles OAuth2 authentication and token refreshing for the Spotify API.", "type": "factual", "article": "Building Spotify playlists based on vibes using LangChain and GPT", "article_id": "d636cdf51091"}, {"id": "71a015292f81", "text": "Prompt outputs that function as simple value dumps are a common anti-pattern that reduces the effectiveness of the generated instructions.", "type": "evaluative", "article": "Playground Builder: A Framework for Interactive AI Tooling", "article_id": "ffea1cbfe4f7"}, {"id": "2e15b4fb908b", "text": "Playground Builder mandates that all CSS and JavaScript dependencies are inlined into a single HTML file to avoid external dependency issues.", "type": "procedural", "article": "Playground Builder: A Framework for Interactive AI Tooling", "article_id": "ffea1cbfe4f7"}, {"id": "d7fd97adcdbe", "text": "BM25 search performs better than grep because it ranks files by relevance based on term frequency and rarity rather than simple string occurrence.", "type": "comparative", "article": "Grep Is Dead: Building Persistent Memory for Claude Code", "article_id": "adff83710fdd"}, {"id": "535368205ab7", "text": "Paperclip functions as an orchestration layer for existing agent frameworks rather than acting as a standalone agent framework or chatbot.", "type": "comparative", "article": "Paperclip: Open-Source Orchestration for Autonomous AI Companies", "article_id": "a5e43b1572bf"}, {"id": "6e20e8235f6f", "text": "The OpenFang web dashboard provides management capabilities for skills.", "type": "factual", "article": "A Review of OpenFang: An Emerging Agent Operating System", "article_id": "3d5be9f847e6"}, {"id": "974cd69bbbfd", "text": "Shell configuration files like .zshrc or .bashrc can be modified to wrap agent execution commands with the Safehouse sandbox function automatically.", "type": "procedural", "article": "Agent Safehouse: macOS Native Sandboxing for Local AI Agents", "article_id": "284e9a4e01d2"}, {"id": "867c167a7289", "text": "Modern LLM-powered coding agents demonstrate sufficient context window lengths to ingest significant amounts of new tool documentation before initiating tasks.", "type": "factual", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "9e6a68304206", "text": "Recap DocType uses direct Loro APIs and nested Loro containers to facilitate granular CRDT tracking of dynamic data.", "type": "factual", "article": "Recap DocType Architectural Specification and Security Review", "article_id": "75972a5d6aa1"}, {"id": "cf9daaa986ac", "text": "During agent execution, it's crucial for the agents to gain \u201cground truth\u201d from the environment at each step to assess its progress.", "type": "evaluative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "76e8be563a6d", "text": "Claude Code sessions are not tied to a single surface, allowing work to be moved between environments.", "type": "factual", "article": "Claude Code: Overview and Capabilities", "article_id": "b77235353457"}, {"id": "de0a5649ecaa", "text": "Spotify's API provides internal song data for metrics such as energy level and danceability.", "type": "factual", "article": "Building Spotify playlists based on vibes using LangChain and GPT", "article_id": "d636cdf51091"}, {"id": "12a35729e95f", "text": "The key difference between orchestrator-workers and parallelization is its flexibility\u2014subtasks aren't pre-defined, but determined by the orchestrator based on the specific input.", "type": "comparative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "94e3dd444f96", "text": "Software projects like Remotion, Supabase, Vercel, and Prisma have released official skill sets to enable coding agents to use their respective tools.", "type": "factual", "article": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_id": "885101003525"}, {"id": "4cd3225429da", "text": "Making documents self-contained prevents bugs related to broken external references.", "type": "comparative", "article": "Recap DocType Architectural Specification and Security Review", "article_id": "75972a5d6aa1"}, {"id": "e17ddd6153d0", "text": "Improperly formatted skill descriptions cause AI models to fail to trigger custom skills correctly.", "type": "causal", "article": "Three Major Upgrades to Claude Skills 2.0", "article_id": "55aa1b0aad2d"}, {"id": "b94b68d403eb", "text": "Google Workspace CLI can automate project and client creation.", "type": "factual", "article": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "article_id": "b9d2abdd810b"}, {"id": "5aa7b1b51bb1", "text": "Moss utilizes a suite of AI agents to assist with note-taking.", "type": "factual", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "ef51eaff8e10", "text": "Proof enables AI agents to provide document edits and comments for human review.", "type": "factual", "article": "Proof: A Collaborative Document Editor for AI Agents and Humans", "article_id": "b5f346e0da19"}, {"id": "6f1b2df4fcac", "text": "Moss can review notes and identify connections users might have missed.", "type": "factual", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "f7112f2afce2", "text": "Collaborative document editors like Proof facilitate the alignment of repro steps and implementation tradeoffs before agents begin coding tasks.", "type": "procedural", "article": "Proof: A Collaborative Document Editor for AI Agents and Humans", "article_id": "b5f346e0da19"}, {"id": "bae7e25be931", "text": "Proof documents are accessible via shareable links.", "type": "factual", "article": "Proof: A Collaborative Document Editor for AI Agents and Humans", "article_id": "b5f346e0da19"}, {"id": "b13dc7b024ab", "text": "Moss supports rich text formatting, formulas, charts, and live data.", "type": "factual", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "6809695f470f", "text": "OpenFang is positioned as an Agent Operating System.", "type": "factual", "article": "A Review of OpenFang: An Emerging Agent Operating System", "article_id": "3d5be9f847e6"}, {"id": "28461cd0b1ad", "text": "Moss identifies connections between notes and maintains links between them.", "type": "factual", "article": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_id": "0708161ff37b"}, {"id": "69d58b23bc73", "text": "Sonar Context Augmentation lowers AI development costs.", "type": "causal", "article": "Sonar Product Updates and the Shift to Agent-Centric Development", "article_id": "7c60b892609d"}, {"id": "e5543eaf9f32", "text": "Expert software engineers view every line of code as a liability rather than an asset.", "type": "evaluative", "article": "The L in \"LLM\" Stands for Lying: The Case Against Vibe-Coding", "article_id": "84d020b998c3"}, {"id": "00af06ae558d", "text": "Agents add the most value for tasks that require both conversation and action, have clear success criteria, enable feedback loops, and integrate meaningful human oversight.", "type": "evaluative", "article": "Building Effective LLM Agents: A Practical Guide", "article_id": "38c43325a50c"}, {"id": "c593929cdd7c", "text": "Forgery is defined as the imitation of an authentic object or work presented as original.", "type": "factual", "article": "The L in \"LLM\" Stands for Lying: The Case Against Vibe-Coding", "article_id": "84d020b998c3"}, {"id": "58f65a97709f", "text": "AI coding agents like Claude Code are compatible with the setup.md files generated by autoresearch-anything.", "type": "factual", "article": "Autoresearch-anything: Automated AI Improvement Loops", "article_id": "c8ab96e1fd55"}, {"id": "1baccb60cafa", "text": "`CLAUDE.md` can be used to set coding standards, architecture decisions, preferred libraries, and review checklists for Claude Code.", "type": "procedural", "article": "Claude Code: Overview and Capabilities", "article_id": "b77235353457"}, {"id": "664429f79ac7", "text": "Google Workspace CLI provides agentic access to Gmail, Calendar, Drive, Sheets, Docs, and Contacts.", "type": "factual", "article": "Coworking for Punks: Building a Custom AI Agent Workspace", "article_id": "285b8ae54c07"}], "round2": [{"claim_a": "Coding agent developers are increasingly adopting a 'Skills' mechanism to facilitate agent interaction with specific software libraries.", "claim_b": "Compound engineering involves documenting successful agent instruction patterns into a retrospective to improve future coding agent runs.", "article_a": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "score": 0.727, "id_a": "1d45b8ab10e3", "id_b": "d49a09704354"}, {"claim_a": "Local AI agents inherently possess a risk of performing destructive actions due to the probabilistic nature of Large Language Models.", "claim_b": "Native installations of Claude Code update automatically in the background.", "article_a": "Agent Safehouse: macOS Native Sandboxing for Local AI Agents", "article_b": "Claude Code: Overview and Capabilities", "score": 0, "id_a": "4d2f0e6f00be", "id_b": "43c6387932e0"}, {"claim_a": "AgentHub delegates the definition of agent behavior, formatting, and optimization goals to the specific instructions provided to the agents rather than the platform itself.", "claim_b": "Structured outputs facilitate the direct integration of agent responses into application logic, databases, or UI components.", "article_a": "AgentHub: A GitHub-style Collaboration Platform for AI Agent Swarms", "article_b": "Getting Structured Data from Claude Agents", "score": 0.722, "id_a": "4d306c353de6", "id_b": "820e9e4706bd"}, {"claim_a": "Agent Skills represent the primary extension and specialization mechanism for AI agents.", "claim_b": "Agentic workflows involving multiple tools and sub-agents move AI interactions beyond simple question-and-answer exchanges into multi-step processes.", "article_a": "Coworking for Punks: Building a Custom AI Agent Workspace", "article_b": "Automating Presentation Slides with Agent Skills", "score": 0.725, "id_a": "df747d48704c", "id_b": "0528d98f1dad"}, {"claim_a": "Paperclip provides a Node.js server and React interface to orchestrate multiple autonomous AI agents for business operations.", "claim_b": "The programming language created by the first pair of Claude Code instances consisted of 2,495 lines of code and 41 tests.", "article_a": "Paperclip: Open-Source Orchestration for Autonomous AI Companies", "article_b": "Autonomous Claude Codes Collaborate: Building Languages and Games", "score": 0, "id_a": "4757260c247c", "id_b": "24c8674b83f4"}, {"claim_a": "Paperclip orchestrates specialized agents like OpenClaw and Claude Code by providing governance, budgets, and goal management.", "claim_b": "Mission Control features an Agent SOUL system with workspace file sync and templates.", "article_a": "Paperclip: Open-Source Orchestration for Autonomous AI Companies", "article_b": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "score": 0, "id_a": "4f6412933a8f", "id_b": "44987cebd0ad"}, {"claim_a": "Moss infers structure from user's writing and thinking naturally, rather than imposing it.", "claim_b": "The Claude SDK supports standard JSON Schema features including basic types, enums, constants, required fields, nested objects, and $ref definitions.", "article_a": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "article_b": "Getting Structured Data from Claude Agents", "score": 0, "id_a": "b59785066ac3", "id_b": "83fa19b2ddc2"}, {"claim_a": "Gemini sync via the EveryInc plugin avoids mirroring existing skills discovered from ~/.agents/skills to prevent duplicate-skill warnings.", "claim_b": "Moss supports rich text formatting, formulas, charts, and live data.", "article_a": "EveryInc Compound Engineering Plugin for Claude Code", "article_b": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "score": 0, "id_a": "c59b29a327a8", "id_b": "b13dc7b024ab"}, {"claim_a": "Google Workspace CLI handles its own authentication securely.", "claim_b": "Google Workspace CLI provides agentic access to Gmail, Calendar, Drive, Sheets, Docs, and Contacts.", "article_a": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "article_b": "Coworking for Punks: Building a Custom AI Agent Workspace", "score": 0.738, "id_a": "37747c893e8b", "id_b": "664429f79ac7"}, {"claim_a": "Mission Control tracks local Claude Code sessions by auto-discovering projects from `~/.claude/projects/`.", "claim_b": "Agents begin their work with either a command from, or interactive discussion with, the human user.", "article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0, "id_a": "f9b443a0f73b", "id_b": "a1d453536c9b"}, {"claim_a": "AgentHub serves as an organization layer for autonomous research communities by allowing distributed agents to contribute to a shared project.", "claim_b": "Paperclip is recommended for managing teams of agents rather than single-agent setups.", "article_a": "AgentHub: A GitHub-style Collaboration Platform for AI Agent Swarms", "article_b": "Paperclip: Open-Source Orchestration for Autonomous AI Companies", "score": 0, "id_a": "4126ed3ab9e0", "id_b": "43c2f90fe1eb"}, {"claim_a": "The Recap DocType architecture uses self-contained Loro documents to store HTML templates, CSS stylesheets, and structured JSON data.", "claim_b": "Implementing the reflection prompting pattern requires higher token usage and more iterations to reach a result.", "article_a": "Recap DocType Architectural Specification and Security Review", "article_b": "Automating Presentation Slides with Agent Skills", "score": 0, "id_a": "3c413db68971", "id_b": "f17797e50edc"}, {"claim_a": "Skill composition allows developers to build new workflows by integrating existing, high-quality agent skills rather than creating them from scratch.", "claim_b": "Coding agent developers are increasingly adopting a 'Skills' mechanism to facilitate agent interaction with specific software libraries.", "article_a": "Automating Presentation Slides with Agent Skills", "article_b": "Perhaps not Boring Technology after all: AI Agents and Novel Tools", "score": 0.735, "id_a": "bc686760e9ec", "id_b": "1d45b8ab10e3"}, {"claim_a": "Without routing, optimizing for one kind of input can hurt performance on other inputs.", "claim_b": "In the context of SWE-bench, an \"agent\" refers to the combination of an AI model and the software scaffolding around it.", "article_a": "Building Effective LLM Agents: A Practical Guide", "article_b": "Raising the bar on SWE-bench Verified with Claude 3.5 Sonnet", "score": 0, "id_a": "ee15604f12e7", "id_b": "7fe8e2625fa0"}, {"claim_a": "Google Workspace CLI provides structured JSON output.", "claim_b": "Google Workspace CLI provides agentic access to Gmail, Calendar, Drive, Sheets, Docs, and Contacts.", "article_a": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "article_b": "Coworking for Punks: Building a Custom AI Agent Workspace", "score": 0.733, "id_a": "54b34c25244f", "id_b": "664429f79ac7"}, {"claim_a": "Hybrid search models, combining BM25 and semantic search, achieve higher ranking accuracy for complex user queries than either method used alone.", "claim_b": "In Moss, the complexity of a note is kept to the minimum required.", "article_a": "Grep Is Dead: Building Persistent Memory for Claude Code", "article_b": "Moss: A Privacy-Focused, Agent-Powered Markdown Note-Taking App", "score": 0, "id_a": "6f19c380c808", "id_b": "4a4a554dc0c1"}, {"claim_a": "The EveryInc Compound Engineering repository includes a Bun/TypeScript CLI for converting Claude Code plugins to formats compatible with OpenCode, Codex, Factory Droid, Pi, Gemini CLI, GitHub Copilot, Kiro CLI, Windsurf, OpenClaw, and Qwen Code.", "claim_b": "The sunday-slides skill uses an interactive user question tool to establish configuration parameters like background color, image style, and branding.", "article_a": "EveryInc Compound Engineering Plugin for Claude Code", "article_b": "Automating Presentation Slides with Agent Skills", "score": 0, "id_a": "8506b55690d4", "id_b": "db9671723d0b"}, {"claim_a": "Controlled-appellation standards for products like artisanal cheese ensure market quality by restricting production methods and geographic origins.", "claim_b": "GitHub Copilot Pro+ subscriptions officially support usage within the OpenCode desktop environment.", "article_a": "The L in \"LLM\" Stands for Lying: The Case Against Vibe-Coding", "article_b": "Coworking for Punks: Building a Custom AI Agent Workspace", "score": 0, "id_a": "aa8fc2d03edd", "id_b": "921a300b9025"}, {"claim_a": "In the context of SWE-bench, an \"agent\" refers to the combination of an AI model and the software scaffolding around it.", "claim_b": "Agent Skills represent the primary extension and specialization mechanism for AI agents.", "article_a": "Raising the bar on SWE-bench Verified with Claude 3.5 Sonnet", "article_b": "Coworking for Punks: Building a Custom AI Agent Workspace", "score": 0.74, "id_a": "7fe8e2625fa0", "id_b": "df747d48704c"}, {"claim_a": "OpenFang is one of the cleanest early implementations of an agent operating system currently available.", "claim_b": "The recommended scope preset includes 85+ scopes.", "article_a": "A Review of OpenFang: An Emerging Agent Operating System", "article_b": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "score": 0, "id_a": "469834ffb0a2", "id_b": "2b77d7de7b31"}, {"claim_a": "A lead agent can coordinate the work, assign subtasks, and merge results when using multiple Claude Code agents.", "claim_b": "Claude agents can autonomously decide which tools to use to gather information and combine the resulting data into a single structured response.", "article_a": "Claude Code: Overview and Capabilities", "article_b": "Getting Structured Data from Claude Agents", "score": 0.736, "id_a": "b2407d86fb80", "id_b": "0332e27c3e60"}, {"claim_a": "Two instances of Claude Code were launched in separate terminals and instructed to find each other and build something together without further instructions or human intervention.", "claim_b": "The key difference between orchestrator-workers and parallelization is its flexibility\u2014subtasks aren't pre-defined, but determined by the orchestrator based on the specific input.", "article_a": "Autonomous Claude Codes Collaborate: Building Languages and Games", "article_b": "Building Effective LLM Agents: A Practical Guide", "score": 0, "id_a": "17731dc571e3", "id_b": "12a35729e95f"}, {"claim_a": "Claude Code can automate writing release notes.", "claim_b": "AI image models often produce inconsistent background color outputs, making direct integration with static slide designs difficult.", "article_a": "Claude Code: Overview and Capabilities", "article_b": "Automating Presentation Slides with Agent Skills", "score": 0, "id_a": "e6b4283d8fd1", "id_b": "fc463f534d9a"}, {"claim_a": "Proof is an online document editor designed for collaboration between AI agents and human users.", "claim_b": "Proof allows document creation via the user interface or an API.", "article_a": "Proof: A Collaborative Document Editor for AI Agents and Humans", "article_b": "Proof: A Collaborative Document Editor for Humans and AI Agents", "score": 0.727, "id_a": "0249218a2452", "id_b": "32613d90418e"}, {"claim_a": "In the context of SWE-bench, an \"agent\" refers to the combination of an AI model and the software scaffolding around it.", "claim_b": "Agent Browser provides a mechanism for AI agents to perform internet browsing tasks.", "article_a": "Raising the bar on SWE-bench Verified with Claude 3.5 Sonnet", "article_b": "Coworking for Punks: Building a Custom AI Agent Workspace", "score": 0.729, "id_a": "7fe8e2625fa0", "id_b": "69a1e8a69e80"}], "round3": [{"article_a": "Coworking for Punks: Building a Custom AI Agent Workspace", "summary_a": "A guide to building a modular, personalized AI agent workspace using OpenCode Desktop and custom CLI skills.", "claims_a": ["A self-assembled, open-source agent stack outperforms proprietary 'all-in-one' agent products.", "CLI-based integrations allow for deeper, more flexible control over personal digital workflows than restricted app-specific APIs.", "Model-switching is a critical feature for maintaining the highest level of agentic performance as the AI market evolves.", "Non-technical users can build highly personalized AI agent environments using modular components."], "article_b": "Google Workspace CLI: Unified Command-Line Tool with AI Agent Skills", "summary_b": "A single CLI for Google Workspace (Drive, Gmail, etc.) dynamically built from Google Discovery Service, including AI agent skills for automation.", "claims_b": ["The Google Workspace CLI (gws) unifies access to all Google Workspace APIs via a single command-line interface.", "It is designed for both human users and AI agents, offering structured JSON output and agent skills.", "The CLI dynamically updates its command surface based on Google's Discovery Service, ensuring automatic inclusion of new API features.", "Multiple authentication methods are supported, including `gcloud` integration and manual OAuth setup."], "id_a": "285b8ae54c07", "id_b": "b9d2abdd810b", "system_sim_count": 12}, {"article_a": "Proof: A Collaborative Document Editor for Humans and AI Agents", "summary_a": "Proof is a real-time collaborative document editor designed for seamless interaction between humans and AI agents.", "claims_a": ["Proof enables live, real-time collaboration between human teams and autonomous AI agents.", "The tool provides granular provenance, tracking exactly who (or which agent) authored specific text.", "It streamlines complex documentation workflows like PRDs and strategy docs by forcing interaction before final execution.", "Integration is designed to be low-friction, requiring a single copy-paste command for supported AI agents."], "article_b": "Proof: A Collaborative Document Editor for AI Agents and Humans", "summary_b": "Proof is a real-time collaborative document editor designed specifically for AI agents and humans to work together.", "claims_b": ["Collaborative document editing is more effective for AI-human workflows than static markdown files.", "Centralizing agent and human work in one platform enables better tracking of contributions and edits.", "Automating agent integration via a single setup script streamlines the adoption of collaborative documentation.", "Interactive editors allow for real-time validation of AI-generated plans before code is written."], "id_a": "4e3e14e51653", "id_b": "b5f346e0da19", "system_sim_count": 12}, {"article_a": "Coworking for Punks: Building a Custom AI Agent Workspace", "summary_a": "A guide to building a modular, personalized AI agent workspace using OpenCode Desktop and custom CLI skills.", "claims_a": ["A self-assembled, open-source agent stack outperforms proprietary 'all-in-one' agent products.", "CLI-based integrations allow for deeper, more flexible control over personal digital workflows than restricted app-specific APIs.", "Model-switching is a critical feature for maintaining the highest level of agentic performance as the AI market evolves.", "Non-technical users can build highly personalized AI agent environments using modular components."], "article_b": "Raising the bar on SWE-bench Verified with Claude 3.5 Sonnet", "summary_b": "Claude 3.5 Sonnet achieves a new state-of-the-art SWE-bench Verified score of 49% by using a minimally scaffolded agent design, giving more control to the language model itself.", "claims_b": ["Claude 3.5 Sonnet achieved a new state-of-the-art score of 49% on SWE-bench Verified.", "The agent design prioritizes minimal scaffolding and giving control to the language model.", "Detailed tool descriptions and error-proofing techniques are crucial for improving agent performance.", "The agent uses Bash and Edit tools for interacting with the environment and modifying files."], "id_a": "285b8ae54c07", "id_b": "43d791697511", "system_sim_count": 2}, {"article_a": "AgentHub: A GitHub-style Collaboration Platform for AI Agent Swarms", "summary_a": "A stripped-down, agent-first platform for autonomous AI swarms to collaborate on codebases and share research findings.", "claims_a": ["Software collaboration for AI agents requires different primitives than human collaboration.", "A DAG-based commit structure is more efficient for machine swarms than linear branching models.", "Agent-first platforms should be agnostic to the agents' specific optimization goals.", "Git bundles are a viable, lightweight transport mechanism for autonomous agent code pushes."], "article_b": "Getting Structured Data from Claude Agents", "summary_b": "Learn how to force Claude agents to return validated JSON using schemas for reliable programmatic integration.", "claims_b": ["You can guarantee output structure by passing a JSON Schema to the agent's query options.", "Zod and Pydantic simplify schema definition compared to manual JSON Schema writing.", "The SDK supports complex features including nested objects, arrays, and optional fields.", "Structured output is essential for agents that perform multi-step research or codebase analysis."], "id_a": "265493334801", "id_b": "51004180677e", "system_sim_count": 1}, {"article_a": "The L in \"LLM\" Stands for Lying: The Case Against Vibe-Coding", "summary_a": "An critique of AI-assisted software development, arguing that LLMs produce 'forgeries' rather than true engineering.", "claims_a": ["The hype surrounding LLMs is self-perpetuating and disconnected from actual improvements in software engineering.", "AI-assisted coding is fundamentally 'forgery' because it mimics professional output without the underlying domain expertise.", "Relying on AI agents turns software engineering into a liability-prone process by masking lack of understanding.", "The industry's struggle to manage modern, fragmented software infrastructure is driving the demand for 'vibe-coding' to glue systems together."], "article_b": "Automating Presentation Slides with Agent Skills", "summary_b": "Learn how to build an agentic workflow using Slidev, sub-agents, and Python to automate professional slide creation.", "claims_b": ["Complex agentic workflows are best built through iterative refinement rather than single-pass coding.", "Skill composition\u2014stacking pre-existing agent skills\u2014is the standard for scalable AI development.", "Deterministic code is a critical fallback when generative AI models struggle with consistency.", "Fanning out tasks to sub-agents is an essential pattern for performance in agentic systems."], "id_a": "84d020b998c3", "id_b": "a3f9376d02cb", "system_sim_count": 1}, {"article_a": "The L in \"LLM\" Stands for Lying: The Case Against Vibe-Coding", "summary_a": "An critique of AI-assisted software development, arguing that LLMs produce 'forgeries' rather than true engineering.", "claims_a": ["The hype surrounding LLMs is self-perpetuating and disconnected from actual improvements in software engineering.", "AI-assisted coding is fundamentally 'forgery' because it mimics professional output without the underlying domain expertise.", "Relying on AI agents turns software engineering into a liability-prone process by masking lack of understanding.", "The industry's struggle to manage modern, fragmented software infrastructure is driving the demand for 'vibe-coding' to glue systems together."], "article_b": "Agentic Engineering Patterns: Using AI to Improve Code Quality", "summary_b": "Leverage coding agents to automate technical debt reduction, prototype solutions, and drive compound engineering.", "claims_b": ["AI-assisted coding should be used to improve, not degrade, codebase quality.", "Refactoring tasks that are conceptually simple but time-consuming are the ideal use case for current coding agents.", "Coding agents significantly lower the cost of building prototypes and simulating systems to validate architectural choices.", "The 'compound engineering' approach uses documented retrospectives to evolve agent instructions for better results over time."], "id_a": "84d020b998c3", "id_b": "d0f2b608730b", "system_sim_count": 1}, {"article_a": "Building Effective Agentic Systems", "summary_a": "Practical guidance on building effective LLM agents by prioritizing simple, composable patterns over complex frameworks.", "claims_a": ["Prioritize simplicity: only add agentic complexity when it demonstrably improves outcomes.", "Frameworks often obscure underlying prompts, making it harder to debug production systems.", "Effective agentic systems rely heavily on clear tool definitions and 'ground truth' environmental feedback.", "Evaluation loops (evaluator-optimizer) are essential for complex, iterative tasks."], "article_b": "Metacraft: Architecting AI-Assisted Development", "summary_b": "A curated collection of tool-agnostic patterns and workflows for mastering AI-assisted software development.", "claims_b": ["AI agents produce 'plausible echoes' that require strict environmental constraints to ground.", "Naming specific workflow patterns is the primary mechanism for maintaining control over AI agents.", "Effective agentic work requires clear session boundaries rather than fluid, unstructured interaction.", "The meta-skill of development is transitioning from implementation to architecting the agent's environment."], "id_a": "55fb8f174d74", "id_b": "b5ec6d0add6d", "system_sim_count": 0}, {"article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "summary_a": "Open-source dashboard for managing AI agent fleets, tracking tasks/costs, and orchestrating workflows with CLI integration.", "claims_a": ["Zero external dependencies \u2014 runs entirely on SQLite with a single pnpm start command", "28 feature panels in a single dashboard covering the full AI agent operations lifecycle", "Auto-discovers and tracks local Claude Code sessions by scanning ~/.claude/projects/ every 60 seconds", "Alpha software with unstable APIs and schemas \u2014 not production-ready"], "article_b": "Refining the Writer's Workflow with Claude Code", "summary_b": "Alex Heath explores how Claude Code transforms the 0-1 writing process by acting as an intelligent co-author.", "claims_b": ["Claude Code can effectively leverage personal data silos to produce high-quality initial drafts.", "Using voice-to-text to interact with AI agents allows for a more natural, editorial creative flow.", "AI-assisted writing tools can overcome the 'blank page' hurdle, increasing enjoyment in professional writing.", "Personalization through custom styling allows LLMs to replicate a specific author's voice effectively."], "id_a": "e0d8e9f5e16b", "id_b": "ed72c07c5d8a", "system_sim_count": 0}, {"article_a": "Building Effective Agentic Systems", "summary_a": "Practical guidance on building effective LLM agents by prioritizing simple, composable patterns over complex frameworks.", "claims_a": ["Prioritize simplicity: only add agentic complexity when it demonstrably improves outcomes.", "Frameworks often obscure underlying prompts, making it harder to debug production systems.", "Effective agentic systems rely heavily on clear tool definitions and 'ground truth' environmental feedback.", "Evaluation loops (evaluator-optimizer) are essential for complex, iterative tasks."], "article_b": "Automating Presentation Slides with Agent Skills", "summary_b": "Learn how to build an agentic workflow using Slidev, sub-agents, and Python to automate professional slide creation.", "claims_b": ["Complex agentic workflows are best built through iterative refinement rather than single-pass coding.", "Skill composition\u2014stacking pre-existing agent skills\u2014is the standard for scalable AI development.", "Deterministic code is a critical fallback when generative AI models struggle with consistency.", "Fanning out tasks to sub-agents is an essential pattern for performance in agentic systems."], "id_a": "55fb8f174d74", "id_b": "a3f9376d02cb", "system_sim_count": 0}, {"article_a": "Mission Control: Open-Source Dashboard for AI Agent Orchestration", "summary_a": "Open-source dashboard for managing AI agent fleets, tracking tasks/costs, and orchestrating workflows with CLI integration.", "claims_a": ["Zero external dependencies \u2014 runs entirely on SQLite with a single pnpm start command", "28 feature panels in a single dashboard covering the full AI agent operations lifecycle", "Auto-discovers and tracks local Claude Code sessions by scanning ~/.claude/projects/ every 60 seconds", "Alpha software with unstable APIs and schemas \u2014 not production-ready"], "article_b": "Playground Builder: A Framework for Interactive AI Tooling", "summary_b": "A guide for building self-contained HTML 'playgrounds' to facilitate visual and interactive prompt engineering in Claude.", "claims_b": ["Interactive UI tools significantly improve prompt precision for complex, visual tasks.", "Single-file HTML architecture ensures maximum portability and long-term tool stability.", "State-driven UI development is the most efficient pattern for synchronizing visual adjustments with prompt generation.", "Presets are critical for providing users with immediate, cohesive starting points."], "id_a": "e0d8e9f5e16b", "id_b": "ffea1cbfe4f7", "system_sim_count": 0}, {"article_a": "Building Effective Agentic Systems", "summary_a": "Practical guidance on building effective LLM agents by prioritizing simple, composable patterns over complex frameworks.", "claims_a": ["Prioritize simplicity: only add agentic complexity when it demonstrably improves outcomes.", "Frameworks often obscure underlying prompts, making it harder to debug production systems.", "Effective agentic systems rely heavily on clear tool definitions and 'ground truth' environmental feedback.", "Evaluation loops (evaluator-optimizer) are essential for complex, iterative tasks."], "article_b": "Playground Builder: A Framework for Interactive AI Tooling", "summary_b": "A guide for building self-contained HTML 'playgrounds' to facilitate visual and interactive prompt engineering in Claude.", "claims_b": ["Interactive UI tools significantly improve prompt precision for complex, visual tasks.", "Single-file HTML architecture ensures maximum portability and long-term tool stability.", "State-driven UI development is the most efficient pattern for synchronizing visual adjustments with prompt generation.", "Presets are critical for providing users with immediate, cohesive starting points."], "id_a": "55fb8f174d74", "id_b": "ffea1cbfe4f7", "system_sim_count": 0}, {"article_a": "Building Effective Agentic Systems", "summary_a": "Practical guidance on building effective LLM agents by prioritizing simple, composable patterns over complex frameworks.", "claims_a": ["Prioritize simplicity: only add agentic complexity when it demonstrably improves outcomes.", "Frameworks often obscure underlying prompts, making it harder to debug production systems.", "Effective agentic systems rely heavily on clear tool definitions and 'ground truth' environmental feedback.", "Evaluation loops (evaluator-optimizer) are essential for complex, iterative tasks."], "article_b": "Recap DocType Architectural Specification and Security Review", "summary_b": "An architectural spec for self-contained, AI-generated 'Recap' documents using Loro CRDTs, with critical security feedback.", "claims_b": ["Moving from linked external resources to self-contained artifacts reduces broken-reference bugs.", "Decoupling CSS from HTML templates allows for future theme swapping and branding.", "The combination of LLM-generated data and user-extensible templates necessitates strict sandboxing.", "A unified extraction pipeline ensures consistency across different recap types."], "id_a": "55fb8f174d74", "id_b": "75972a5d6aa1", "system_sim_count": 0}]};
+
+const ROUNDS = [
+  {
+    key: 'round1',
+    title: 'Worth tracking?',
+    instruction: 'Would you want the system to track this claim across articles?',
+    buttons: [
+      { label: 'Insight', sub: 'Pattern / trend / idea I care about', value: 'insight', key: '1', flash: '★', flashClass: 'good' },
+      { label: 'Useful fact', sub: 'Specific but worth remembering', value: 'useful', key: '2', flash: '•', flashClass: 'mid' },
+      { label: 'Noise', sub: 'Too specific / obvious / don\'t care', value: 'noise', key: '3', flash: '✕', flashClass: 'bad' },
+    ],
+    renderCard(item) {
+      return `
+        <div class="claim-text">${item.text}</div>
+        <div class="claim-source">from: ${item.article}</div>
+        <div class="claim-type-badge">${item.type}</div>
+      `;
+    },
+  },
+  {
+    key: 'round2',
+    title: 'Same insight?',
+    instruction: 'Are these two claims about the same underlying idea or pattern?',
+    buttons: [
+      { label: 'Same thing', sub: 'Basically the same insight', value: 'same', key: '1', flash: '=', flashClass: 'good' },
+      { label: 'Related', sub: 'Same theme but distinct points', value: 'related', key: '2', flash: '~', flashClass: 'mid' },
+      { label: 'Different', sub: 'Unrelated despite surface similarity', value: 'different', key: '3', flash: '≠', flashClass: 'bad' },
+    ],
+    renderCard(item) {
+      return `
+        <div class="pair-container">
+          <div class="pair-item a">
+            <div class="pair-label">Article A</div>
+            <div class="pair-claim">${item.claim_a}</div>
+            <div class="claim-source">${item.article_a}</div>
+          </div>
+          <div class="pair-item b">
+            <div class="pair-label">Article B</div>
+            <div class="pair-claim">${item.claim_b}</div>
+            <div class="claim-source">${item.article_b}</div>
+          </div>
+        </div>
+        <div class="sim-score">System similarity: ${item.score > 0 ? item.score.toFixed(3) : 'not detected'}</div>
+      `;
+    },
+  },
+  {
+    key: 'round3',
+    title: 'Article overlap?',
+    instruction: 'How much would reading article A reduce the value of reading article B?',
+    buttons: [
+      { label: 'Significant overlap', sub: 'Reading both would feel redundant', value: 'high', key: '1', flash: '▮▮', flashClass: 'bad' },
+      { label: 'Shared themes', sub: 'Same topic area, distinct content', value: 'some', key: '2', flash: '▮▯', flashClass: 'mid' },
+      { label: 'No overlap', sub: 'Completely independent value', value: 'none', key: '3', flash: '▯▯', flashClass: 'good' },
+    ],
+    renderCard(item) {
+      const claimsA = item.claims_a.map(c => `<li>${c}</li>`).join('');
+      const claimsB = item.claims_b.map(c => `<li>${c}</li>`).join('');
+      return `
+        <div class="article-pair">
+          <div class="article-side">
+            <h3>${item.article_a}</h3>
+            <div class="summary">${item.summary_a}</div>
+            <ul class="claim-list">${claimsA}</ul>
+          </div>
+          <div class="article-side">
+            <h3>${item.article_b}</h3>
+            <div class="summary">${item.summary_b}</div>
+            <ul class="claim-list">${claimsB}</ul>
+          </div>
+        </div>
+        <div class="sim-score">System detected overlapping claims: ${item.system_sim_count}</div>
+      `;
+    },
+  },
+];
+
+let currentRound = 0;
+let currentIndex = 0;
+let responses = { round1: [], round2: [], round3: [] };
+
+function getItems() {
+  return DATA[ROUNDS[currentRound].key];
+}
+
+function updateProgress() {
+  const items = getItems();
+  const total = items.length;
+  const pct = total > 0 ? (currentIndex / total * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-count').textContent = `${currentIndex}/${total}`;
+}
+
+function updateTabs() {
+  ROUNDS.forEach((r, i) => {
+    const tab = document.getElementById('tab-' + i);
+    tab.className = 'round-tab' +
+      (i === currentRound ? ' active' : '') +
+      (i < currentRound ? ' done' : '');
+    if (i < currentRound) tab.innerHTML = r.title + '<span class="check"> ✓</span>';
+    else tab.textContent = r.title;
+  });
+}
+
+function renderCard() {
+  const round = ROUNDS[currentRound];
+  const items = getItems();
+
+  if (currentIndex >= items.length) {
+    nextRound();
+    return;
+  }
+
+  const item = items[currentIndex];
+  const buttons = round.buttons.map(b =>
+    `<div class="btn" data-value="${b.value}" onclick="respond('${b.value}')">
+      ${b.label}
+      <span class="key-hint">${b.sub}<br/>press ${b.key}</span>
+    </div>`
+  ).join('');
+
+  document.getElementById('card-area').innerHTML = `
+    <div class="card">
+      <div class="card-instruction">${round.instruction}</div>
+      ${round.renderCard(item)}
+    </div>
+    <div class="button-row">${buttons}</div>
+  `;
+
+  updateProgress();
+  updateTabs();
+}
+
+function showFlash(text, cls) {
+  const el = document.getElementById('flash');
+  el.textContent = text;
+  el.className = 'flash show ' + cls;
+  setTimeout(() => el.className = 'flash', 300);
+}
+
+function respond(value) {
+  const round = ROUNDS[currentRound];
+  const items = getItems();
+  const item = items[currentIndex];
+  const btn = round.buttons.find(b => b.value === value);
+
+  responses[round.key].push({ ...item, response: value });
+  showFlash(btn.flash, btn.flashClass);
+
+  currentIndex++;
+  renderCard();
+}
+
+function nextRound() {
+  currentRound++;
+  currentIndex = 0;
+
+  if (currentRound >= ROUNDS.length) {
+    showResults();
+    return;
+  }
+
+  renderCard();
+}
+
+function showResults() {
+  document.getElementById('card-area').style.display = 'none';
+
+  // Round 1 analysis
+  const r1 = responses.round1;
+  const r1Counts = { insight: 0, useful: 0, noise: 0 };
+  const r1ByType = {};
+  r1.forEach(r => {
+    r1Counts[r.response]++;
+    const t = r.type || 'unknown';
+    if (!r1ByType[t]) r1ByType[t] = { insight: 0, useful: 0, noise: 0, total: 0 };
+    r1ByType[t][r.response]++;
+    r1ByType[t].total++;
+  });
+
+  // Round 2 analysis
+  const r2 = responses.round2;
+  const r2Counts = { same: 0, related: 0, different: 0 };
+  r2.forEach(r => r2Counts[r.response]++);
+
+  // Check system accuracy
+  const r2HighSim = r2.filter(r => r.score >= 0.5);
+  const r2LowSim = r2.filter(r => r.score < 0.3 || r.score === 0);
+  const highSimSame = r2HighSim.filter(r => r.response === 'same' || r.response === 'related').length;
+  const lowSimDiff = r2LowSim.filter(r => r.response === 'different').length;
+
+  // Round 3 analysis
+  const r3 = responses.round3;
+  const r3Counts = { high: 0, some: 0, none: 0 };
+  r3.forEach(r => r3Counts[r.response]++);
+
+  // Missed overlaps: user says overlap but system detected 0
+  const r3Missed = r3.filter(r => (r.response === 'high' || r.response === 'some') && r.system_sim_count === 0);
+
+  let typeRows = '';
+  for (const [type, counts] of Object.entries(r1ByType).sort((a, b) => b[1].total - a[1].total)) {
+    const noisePct = counts.total > 0 ? Math.round(counts.noise / counts.total * 100) : 0;
+    typeRows += `<tr>
+      <td>${type}</td>
+      <td>${counts.insight}</td>
+      <td>${counts.useful}</td>
+      <td>${counts.noise}</td>
+      <td>${noisePct}%</td>
+    </tr>`;
+  }
+
+  let missedRows = r3Missed.map(r => `<tr>
+    <td>${r.article_a}</td>
+    <td>${r.article_b}</td>
+    <td>${r.response}</td>
+  </tr>`).join('');
+
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <h2>Calibration Results</h2>
+
+    <h3>Round 1 — Claim Quality</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r1Counts.insight}</div><div class="stat-label">Insights</div></div>
+      <div><div class="stat-number">${r1Counts.useful}</div><div class="stat-label">Useful facts</div></div>
+      <div><div class="stat-number">${r1Counts.noise}</div><div class="stat-label">Noise</div></div>
+    </div>
+    <div class="insight-box">
+      ${r1Counts.noise > r1Counts.insight
+        ? 'More noise than insights — the pipeline is extracting too many product-specific facts.'
+        : 'Reasonable signal-to-noise ratio.'}
+      Noise rate: ${r1.length > 0 ? Math.round(r1Counts.noise / r1.length * 100) : 0}%
+    </div>
+    <table>
+      <tr><th>Claim type</th><th>Insight</th><th>Useful</th><th>Noise</th><th>Noise %</th></tr>
+      ${typeRows}
+    </table>
+
+    <h3>Round 2 — Similarity Detection</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r2Counts.same}</div><div class="stat-label">Same insight</div></div>
+      <div><div class="stat-number">${r2Counts.related}</div><div class="stat-label">Related</div></div>
+      <div><div class="stat-number">${r2Counts.different}</div><div class="stat-label">Different</div></div>
+    </div>
+    <div class="insight-box">
+      System accuracy on high-similarity pairs (≥0.5): ${r2HighSim.length > 0
+        ? Math.round(highSimSame / r2HighSim.length * 100) + '% matched your judgment'
+        : 'no high-sim pairs shown'}.<br>
+      System accuracy on low/zero-similarity pairs: ${r2LowSim.length > 0
+        ? Math.round(lowSimDiff / r2LowSim.length * 100) + '% correctly identified as different'
+        : 'no low-sim pairs shown'}.<br>
+      ${r2Counts.same + r2Counts.related > 0 && r2LowSim.filter(r => r.response !== 'different').length > 0
+        ? `<strong>Missed connections:</strong> ${r2LowSim.filter(r => r.response !== 'different').length} pairs you consider same/related but system scored as unrelated.`
+        : ''}
+    </div>
+
+    <h3>Round 3 — Article-Level Overlap</h3>
+    <div class="stat-row">
+      <div><div class="stat-number">${r3Counts.high}</div><div class="stat-label">Significant</div></div>
+      <div><div class="stat-number">${r3Counts.some}</div><div class="stat-label">Shared themes</div></div>
+      <div><div class="stat-number">${r3Counts.none}</div><div class="stat-label">No overlap</div></div>
+    </div>
+    ${r3Missed.length > 0 ? `
+      <div class="insight-box">
+        <strong>${r3Missed.length} article pair${r3Missed.length > 1 ? 's' : ''} where you see overlap but the system detected 0 similar claims.</strong>
+        This confirms claim-level matching is too narrow — the overlap exists at a higher abstraction level.
+      </div>
+      <table>
+        <tr><th>Article A</th><th>Article B</th><th>Your rating</th></tr>
+        ${missedRows}
+      </table>
+    ` : ''}
+
+    <h3>Raw Data</h3>
+    <div class="json-output" onclick="navigator.clipboard.writeText(this.textContent)">${JSON.stringify(responses, null, 2)}</div>
+    <div class="copy-hint">Click to copy JSON</div>
+  `;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (currentRound >= ROUNDS.length) return;
+  const round = ROUNDS[currentRound];
+  const btn = round.buttons.find(b => b.key === e.key);
+  if (btn) {
+    e.preventDefault();
+    respond(btn.value);
+  }
+});
+
+renderCard();
+</script>
+</body>
+</html>

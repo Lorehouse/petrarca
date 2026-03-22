@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Article Similarity Experiments &mdash; Petrarca</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
+  :root {
+    --parchment: #f7f4ec;
+    --parchment-dark: #f0ece2;
+    --ink: #2a2420;
+    --rubric: #8b2500;
+    --text-primary: #1a1a18;
+    --text-body: #333333;
+    --text-secondary: #6a6458;
+    --text-muted: #b0a898;
+    --rule: #e4dfd4;
+    --claim-new: #2a7a4a;
+    --claim-known: #d0ccc0;
+    --gold: #c9a84c;
+    --bg-subtle: rgba(139,37,0,0.03);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--parchment);
+    color: var(--text-body);
+    font-family: 'Crimson Pro', Georgia, serif;
+    line-height: 1.65;
+    padding: 0 16px;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 0 80px;
+  }
+
+  /* ---- Typography ---- */
+  h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600;
+    font-size: 2.8rem;
+    line-height: 1.15;
+    color: var(--ink);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    font-weight: 300;
+    font-style: italic;
+    margin-bottom: 20px;
+  }
+
+  .date-line {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 24px;
+  }
+
+  /* Double rule — the signature element */
+  .double-rule {
+    border: none;
+    height: 0;
+    border-top: 2px solid var(--ink);
+    margin-bottom: 5px;
+  }
+  .double-rule + .double-rule-thin {
+    border: none;
+    height: 0;
+    border-top: 1px solid var(--ink);
+    margin-bottom: 32px;
+  }
+
+  .section-rule {
+    border: none;
+    height: 0;
+    border-top: 1px solid var(--rule);
+    margin: 40px 0 32px;
+  }
+
+  h2 {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .marker {
+    color: var(--rubric);
+    font-size: 0.9em;
+  }
+
+  h3 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600;
+    font-size: 1.55rem;
+    color: var(--ink);
+    margin-bottom: 12px;
+    line-height: 1.25;
+  }
+
+  h4 {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--ink);
+    margin-bottom: 8px;
+    margin-top: 24px;
+  }
+
+  p {
+    margin-bottom: 14px;
+  }
+
+  strong { color: var(--ink); }
+
+  a {
+    color: var(--rubric);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule);
+  }
+  a:hover {
+    border-bottom-color: var(--rubric);
+  }
+
+  /* ---- Tables ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 0.92rem;
+  }
+
+  thead th {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid var(--ink);
+  }
+  thead th.num {
+    text-align: right;
+  }
+
+  tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  tbody td.num {
+    text-align: right;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody td.strategy-name {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  tbody tr:hover {
+    background: var(--bg-subtle);
+  }
+
+  tbody tr.highlight-row {
+    background: rgba(42,122,74,0.06);
+  }
+  tbody tr.highlight-row td {
+    border-bottom-color: var(--claim-new);
+  }
+
+  /* ---- Metric cards ---- */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+    margin: 20px 0 28px;
+  }
+
+  .metric-card {
+    padding: 18px 16px 14px;
+    border-left: 2px solid var(--rule);
+  }
+  .metric-card.accent {
+    border-left-color: var(--rubric);
+  }
+  .metric-card.green {
+    border-left-color: var(--claim-new);
+  }
+  .metric-card.gold {
+    border-left-color: var(--gold);
+  }
+
+  .metric-value {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .metric-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+
+  /* ---- SVG Charts ---- */
+  .chart-container {
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .chart-container svg {
+    display: block;
+    margin: 0 auto;
+  }
+  .chart-caption {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---- Expandable details ---- */
+  details {
+    margin: 12px 0 20px;
+    border-left: 2px solid var(--rule);
+    padding-left: 16px;
+  }
+  details[open] {
+    border-left-color: var(--rubric);
+  }
+  summary {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--rubric);
+    cursor: pointer;
+    padding: 6px 0;
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: '\25B8  ';
+    font-size: 0.8em;
+  }
+  details[open] summary::before {
+    content: '\25BE  ';
+  }
+
+  /* ---- Code blocks ---- */
+  code {
+    font-family: 'DM Sans', monospace;
+    font-size: 0.85em;
+    background: var(--parchment-dark);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  pre {
+    background: var(--parchment-dark);
+    border-left: 2px solid var(--rule);
+    padding: 14px 16px;
+    font-family: 'DM Sans', monospace;
+    font-size: 0.8rem;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    line-height: 1.6;
+  }
+
+  /* ---- Callout ---- */
+  .callout {
+    background: var(--parchment-dark);
+    border-left: 3px solid var(--rubric);
+    padding: 16px 20px;
+    margin: 20px 0;
+    font-size: 0.95rem;
+  }
+  .callout strong {
+    color: var(--rubric);
+  }
+
+  /* ---- Cluster list ---- */
+  .cluster-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0 24px;
+  }
+  @media (max-width: 640px) {
+    .cluster-grid { grid-template-columns: 1fr; }
+  }
+  .cluster-card {
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    background: var(--parchment);
+  }
+  .cluster-card .cluster-name {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .cluster-card .cluster-meta {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .cluster-card .cluster-cohesion {
+    display: inline-block;
+    width: 40px;
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    margin-left: 8px;
+    position: relative;
+    vertical-align: middle;
+  }
+  .cluster-card .cluster-cohesion-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--rubric);
+  }
+
+  /* ---- TOC ---- */
+  .toc {
+    margin: 0 0 32px;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+    column-gap: 32px;
+  }
+  @media (max-width: 640px) {
+    .toc { columns: 1; }
+  }
+  .toc li {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 0.95rem;
+    padding: 4px 0;
+    break-inside: avoid;
+  }
+  .toc li a {
+    color: var(--text-body);
+    border-bottom: none;
+  }
+  .toc li a:hover {
+    color: var(--rubric);
+  }
+  .toc-num {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-right: 6px;
+    display: inline-block;
+    width: 24px;
+  }
+
+  /* ---- Before/After ---- */
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0 24px;
+  }
+  @media (max-width: 640px) {
+    .before-after { grid-template-columns: 1fr; }
+  }
+  .ba-panel {
+    padding: 14px 16px;
+    border-top: 2px solid var(--rule);
+  }
+  .ba-panel.before { border-top-color: var(--claim-known); }
+  .ba-panel.after { border-top-color: var(--claim-new); }
+  .ba-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+  }
+  .ba-panel.before .ba-label { color: var(--text-muted); }
+  .ba-panel.after .ba-label { color: var(--claim-new); }
+  .ba-panel p {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin-bottom: 6px;
+  }
+  .ba-panel ul {
+    margin: 4px 0 0 16px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 640px) {
+    h1 { font-size: 2rem; }
+    h3 { font-size: 1.3rem; }
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Print */
+  @media print {
+    body { padding: 0; }
+    .container { max-width: 100%; padding: 24px 0; }
+    details { border-left: none; padding-left: 0; }
+    details[open] summary { color: var(--ink); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ======== HEADER ======== -->
+<h1>Article Similarity<br>Experiments</h1>
+<p class="subtitle">Calibrating document-level semantic matching for a knowledge-tracking read-later app</p>
+<p class="date-line">Petrarca Project &middot; Session of 21 March 2026</p>
+
+<hr class="double-rule">
+<hr class="double-rule-thin">
+
+<!-- ======== TOC ======== -->
+<ol class="toc">
+  <li><a href="#exec"><span class="toc-num">I</span>Executive Summary</a></li>
+  <li><a href="#calibration"><span class="toc-num">II</span>Human Ground Truth</a></li>
+  <li><a href="#prompts"><span class="toc-num">III</span>Pipeline Prompt Overhaul</a></li>
+  <li><a href="#embeddings"><span class="toc-num">IV</span>Embedding Strategies</a></li>
+  <li><a href="#ground-truth"><span class="toc-num">V</span>Ground Truth at Scale</a></li>
+  <li><a href="#thresholds"><span class="toc-num">VI</span>Threshold Calibration</a></li>
+  <li><a href="#two-stage"><span class="toc-num">VII</span>Two-Stage Pipeline</a></li>
+  <li><a href="#corpus"><span class="toc-num">VIII</span>Corpus Analysis</a></li>
+  <li><a href="#synthetic"><span class="toc-num">IX</span>Synthetic Benchmark</a></li>
+  <li><a href="#amygdala"><span class="toc-num">X</span>Amygdala Module Design</a></li>
+  <li><a href="#changes"><span class="toc-num">XI</span>What Changed</a></li>
+</ol>
+
+<hr class="section-rule">
+
+<!-- ======== I. EXECUTIVE SUMMARY ======== -->
+<section id="exec">
+<h2><span class="marker">&#10022;</span> I. Executive Summary</h2>
+
+<h3>The Problem</h3>
+<p>Petrarca is a knowledge-tracking read-later app that models what the user knows at the granularity of individual claims. The existing claim-level matching system (MiniLM embeddings + NLI cross-encoder) was calibrated for detecting whether two atomic claims say the same thing. But when applied to the higher-level question &mdash; <em>are two articles about the same thing?</em> &mdash; it produced a <strong>70% false positive rate</strong>. Claims share vocabulary across unrelated articles, especially within domains like Sicilian history.</p>
+
+<p>This session built a complete article-level similarity pipeline from scratch: human calibration, embedding strategy experiments, 300-pair ground truth, threshold optimization, two-stage pipeline evaluation, corpus-wide analysis, and a synthetic regression benchmark.</p>
+
+<h3>Key Results</h3>
+
+<div class="metric-grid">
+  <div class="metric-card accent">
+    <div class="metric-value">94.4%</div>
+    <div class="metric-label">Best accuracy (weighted embed.)</div>
+  </div>
+  <div class="metric-card green">
+    <div class="metric-value">0.930</div>
+    <div class="metric-label">AUROC (300-pair ground truth)</div>
+  </div>
+  <div class="metric-card gold">
+    <div class="metric-value">0.818</div>
+    <div class="metric-label">Spearman &rho; (best strategy)</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">11</div>
+    <div class="metric-label">Embedding strategies tested</div>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Bottom line:</strong> A weighted combination of summary and claims embeddings (0.5 + 0.5) achieves 94% accuracy and &rho; = 0.818 on 18 human-rated pairs. At scale, the simpler full-summary embedding achieves AUROC = 0.930 on 300 LLM-rated pairs, with a calibrated threshold at 0.55 yielding 91% precision at 75% recall. Embedding alone outperforms LLM-as-judge (89% vs 78% accuracy). The proposed <code>document_similarity</code> module for amygdala will make this reusable across projects.
+</div>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== II. CALIBRATION ======== -->
+<section id="calibration">
+<h2><span class="marker">&#10022;</span> II. Calibration: Human Ground Truth</h2>
+
+<h3>Building the Calibration Tool</h3>
+<p>Before measuring article similarity, we needed to fix the upstream data quality problem. The claim extraction pipeline was generating noisy, low-insight claims &mdash; product feature bullet points rather than genuine analytical insights. We built an interactive HTML calibration tool (<code>claim-calibration.html</code>) that lets a human rapidly classify claims and rate article pairs.</p>
+
+<h4>The Before/After</h4>
+<div class="before-after">
+  <div class="ba-panel before">
+    <div class="ba-label">V1 &mdash; Before prompt overhaul</div>
+    <p><strong>31% noise rate</strong> in extracted claims</p>
+    <p><strong>70% false positive rate</strong> for similarity</p>
+    <ul>
+      <li>"Supports real-time collaboration"</li>
+      <li>"Available on multiple platforms"</li>
+      <li>"Uses modern web technologies"</li>
+    </ul>
+    <p style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);">Generic feature lists &mdash; nearly identical across any tech article</p>
+  </div>
+  <div class="ba-panel after">
+    <div class="ba-label">V2 &mdash; After prompt overhaul</div>
+    <p><strong>0% noise rate</strong> in extracted claims</p>
+    <p><strong>91% insight rate</strong></p>
+    <ul>
+      <li>"Archimedes&rsquo; principle of buoyancy was developed to detect gold fraud for King Hiero II"</li>
+      <li>"The Fasci Siciliani blended Marxist class analysis with Catholic social teaching"</li>
+      <li>"Vincenzo Bellini composed 10 operas in 6 years before dying at 33"</li>
+    </ul>
+    <p style="margin-top:8px;font-size:0.82rem;color:var(--claim-new);">Specific, verifiable, analytically interesting claims</p>
+  </div>
+</div>
+
+<h4>Calibration Method</h4>
+<p>18 article pairs were selected to span the full similarity range: near-duplicates (same article from different sources), thematically related (same topic, different angle), same domain (both history, unrelated subjects), and completely unrelated. Each pair was rated 0&ndash;2 by a human reviewer, where 0 = unrelated, 1 = thematically related, 2 = highly similar / near-duplicate.</p>
+
+<p>This small but carefully stratified dataset provided the initial signal for evaluating embedding strategies before scaling up to 300 pairs with LLM ratings.</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== III. PROMPTS ======== -->
+<section id="prompts">
+<h2><span class="marker">&#10022;</span> III. Pipeline Prompt Overhaul</h2>
+
+<h3>What Was Wrong</h3>
+<p>The original extraction prompt asked for "specific factual claims." This sounds precise but in practice produced <em>product feature lists</em> for tech articles and <em>generic truisms</em> for history articles. The word "specific" was interpreted as "concrete" rather than "analytically interesting."</p>
+
+<h4>Model Comparison</h4>
+<p>Three Gemini models were tested on the revised extraction prompt. The key metric was the rate of genuinely <em>factual</em> claims (containing verifiable, non-obvious information) versus generic/analytical claims.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th class="num">Factual rate</th>
+      <th class="num">Insight rate</th>
+      <th class="num">Cost / article</th>
+      <th class="num">Latency</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="highlight-row">
+      <td class="strategy-name">Gemini 3.1 Flash Lite</td>
+      <td class="num">5%</td>
+      <td class="num">91%</td>
+      <td class="num">~$0.0003</td>
+      <td class="num">~1.2s</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Gemini 2.5 Flash</td>
+      <td class="num">12%</td>
+      <td class="num">84%</td>
+      <td class="num">~$0.001</td>
+      <td class="num">~2.1s</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Gemini 2.5 Pro</td>
+      <td class="num">18%</td>
+      <td class="num">78%</td>
+      <td class="num">~$0.008</td>
+      <td class="num">~4.5s</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Counterintuitive result:</strong> the cheapest, fastest model produced the best claims. Larger models over-hedged and produced "analysis of analysis" rather than direct insights. Flash Lite&rsquo;s constraint to short outputs forced it to be maximally informative.</p>
+
+<h4>The New Prompt Strategy</h4>
+<p>Key changes: (1) prioritize <em>insights, patterns, and comparisons</em> over bare facts; (2) require each claim to be something "a reader would find surprising or useful to remember"; (3) explicitly forbid generic product features, truisms, and restatements of the title.</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== IV. EMBEDDING STRATEGIES ======== -->
+<section id="embeddings">
+<h2><span class="marker">&#10022;</span> IV. Embedding Strategy Experiments</h2>
+
+<h3>11 Strategies Tested</h3>
+<p>Each strategy embeds a different text representation of the article, then computes pairwise cosine similarity. All strategies use the same MiniLM-L6-v2 model (384 dimensions) via amygdala. The 18 human-rated pairs serve as ground truth.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Strategy</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Spearman &rho;</th>
+      <th class="num">p-value</th>
+      <th class="num">Threshold</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="highlight-row">
+      <td class="num">8</td>
+      <td class="strategy-name">Weighted: 0.5 summary + 0.5 claims</td>
+      <td class="num"><strong>94.4%</strong></td>
+      <td class="num"><strong>0.818</strong></td>
+      <td class="num">&lt;0.001</td>
+      <td class="num">0.650</td>
+    </tr>
+    <tr>
+      <td class="num">4</td>
+      <td class="strategy-name">Full summary + claims concatenated</td>
+      <td class="num">88.9%</td>
+      <td class="num">0.695</td>
+      <td class="num">0.001</td>
+      <td class="num">0.445</td>
+    </tr>
+    <tr>
+      <td class="num">1</td>
+      <td class="strategy-name">Full summary only</td>
+      <td class="num">88.9%</td>
+      <td class="num">0.654</td>
+      <td class="num">0.003</td>
+      <td class="num">0.445</td>
+    </tr>
+    <tr>
+      <td class="num">5</td>
+      <td class="strategy-name">Key claims only</td>
+      <td class="num">88.9%</td>
+      <td class="num">0.629</td>
+      <td class="num">0.005</td>
+      <td class="num">0.615</td>
+    </tr>
+    <tr>
+      <td class="num">9a</td>
+      <td class="strategy-name">MaxSim claims (top-1)</td>
+      <td class="num">77.8%</td>
+      <td class="num">0.503</td>
+      <td class="num">0.033</td>
+      <td class="num">0.535</td>
+    </tr>
+    <tr>
+      <td class="num">7</td>
+      <td class="strategy-name">Title + summary + topics</td>
+      <td class="num">72.2%</td>
+      <td class="num">0.450</td>
+      <td class="num">0.061</td>
+      <td class="num">0.705</td>
+    </tr>
+    <tr>
+      <td class="num">9c</td>
+      <td class="strategy-name">MaxSim claims (top-5)</td>
+      <td class="num">72.2%</td>
+      <td class="num">0.453</td>
+      <td class="num">0.059</td>
+      <td class="num">0.595</td>
+    </tr>
+    <tr>
+      <td class="num">9b</td>
+      <td class="strategy-name">MaxSim claims (top-3)</td>
+      <td class="num">72.2%</td>
+      <td class="num">0.441</td>
+      <td class="num">0.067</td>
+      <td class="num">0.630</td>
+    </tr>
+    <tr>
+      <td class="num">2</td>
+      <td class="strategy-name">One-line summary only</td>
+      <td class="num">72.2%</td>
+      <td class="num">0.347</td>
+      <td class="num">0.158</td>
+      <td class="num">0.465</td>
+    </tr>
+    <tr>
+      <td class="num">3</td>
+      <td class="strategy-name">Title + one-line summary</td>
+      <td class="num">72.2%</td>
+      <td class="num">0.327</td>
+      <td class="num">0.185</td>
+      <td class="num">0.685</td>
+    </tr>
+    <tr>
+      <td class="num">6</td>
+      <td class="strategy-name">Topic tags as text</td>
+      <td class="num">72.2%</td>
+      <td class="num">&minus;0.020</td>
+      <td class="num">0.936</td>
+      <td class="num">0.930</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Why Weighted Combination Wins</h4>
+<p>Summaries capture thematic overlap &mdash; the broad "aboutness" of an article. Claims capture specific informational content. These are complementary signals that occupy partially independent regions of embedding space. Averaging them preserves both geometry types, while concatenation (strategy 4) over-weights whichever text is longer.</p>
+
+<p>Topic tags (strategy 6) are anti-correlated with human judgments &mdash; articles tagged "history" and "culture" appear maximally similar regardless of whether they discuss ancient Sicily or modern Norwegian poetry. This confirms that topic-level similarity is too coarse for article matching.</p>
+
+<!-- Scatter Plot: Strategy 1 vs Strategy 8 -->
+<div class="chart-container">
+<svg width="780" height="340" viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="60" y="20" width="690" height="280" fill="none" stroke="var(--rule)" stroke-width="1"/>
+  <!-- Grid lines -->
+  <line x1="60" y1="90" x2="750" y2="90" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="60" y1="160" x2="750" y2="160" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="60" y1="230" x2="750" y2="230" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="197" y1="20" x2="197" y2="300" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="335" y1="20" x2="335" y2="300" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="473" y1="20" x2="473" y2="300" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="611" y1="20" x2="611" y2="300" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+
+  <!-- Axes labels -->
+  <text x="405" y="330" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)" letter-spacing="0.08em" text-transform="uppercase">COSINE SIMILARITY</text>
+  <text x="15" y="160" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)" letter-spacing="0.08em" transform="rotate(-90,15,160)">HUMAN RATING</text>
+
+  <!-- X axis ticks -->
+  <text x="60" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.0</text>
+  <text x="197" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.2</text>
+  <text x="335" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.4</text>
+  <text x="473" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.6</text>
+  <text x="611" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.8</text>
+  <text x="750" y="312" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">1.0</text>
+
+  <!-- Y axis ticks -->
+  <text x="52" y="303" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0</text>
+  <text x="52" y="163" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">1</text>
+  <text x="52" y="23" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">2</text>
+
+  <!-- Strategy 1 (full_summary) - hollow circles -->
+  <!-- Rating 0 pairs -->
+  <circle cx="319" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.377 -->
+  <circle cx="296" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.342 -->
+  <circle cx="445" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.560 -->
+  <circle cx="336" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.401 -->
+  <circle cx="174" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.166 -->
+  <circle cx="302" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.352 -->
+  <circle cx="281" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.322 -->
+  <circle cx="309" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.362 -->
+  <circle cx="444" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.558 -->
+  <circle cx="303" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.354 -->
+  <circle cx="340" cy="300" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.406 -->
+  <!-- Rating 1 pairs -->
+  <circle cx="426" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.532 -->
+  <circle cx="369" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.448 -->
+  <circle cx="441" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.554 -->
+  <circle cx="374" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.456 -->
+  <circle cx="398" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.490 -->
+  <circle cx="523" cy="160" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.671 -->
+  <!-- Rating 2 pair -->
+  <circle cx="718" cy="20" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5" opacity="0.6"/><!-- 0.955 -->
+
+  <!-- Strategy 8 (weighted) - filled rubric circles -->
+  <!-- Rating 0 pairs -->
+  <circle cx="406" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.503 -->
+  <circle cx="314" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.370 -->
+  <circle cx="486" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.619 -->
+  <circle cx="452" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.570 -->
+  <circle cx="242" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.265 -->
+  <circle cx="362" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.438 -->
+  <circle cx="275" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.313 -->
+  <circle cx="281" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.321 -->
+  <circle cx="479" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.603 -->
+  <circle cx="437" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.550 -->
+  <circle cx="401" cy="300" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.495 -->
+  <!-- Rating 1 pairs -->
+  <circle cx="508" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.651 -->
+  <circle cx="513" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.659 -->
+  <circle cx="582" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.758 -->
+  <circle cx="457" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.576 -->
+  <circle cx="531" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.683 -->
+  <circle cx="514" cy="160" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.658 -->
+  <!-- Rating 2 pair -->
+  <circle cx="665" cy="20" r="5" fill="var(--rubric)" opacity="0.7"/><!-- 0.879 -->
+
+  <!-- Legend -->
+  <circle cx="580" cy="42" r="5" fill="none" stroke="var(--text-muted)" stroke-width="1.5"/>
+  <text x="590" y="46" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Full summary (&rho;=0.654)</text>
+  <circle cx="580" cy="60" r="5" fill="var(--rubric)" opacity="0.7"/>
+  <text x="590" y="64" font-family="DM Sans, sans-serif" font-size="9" fill="var(--rubric)">Weighted 0.5+0.5 (&rho;=0.818)</text>
+</svg>
+<p class="chart-caption">Fig. 1 &mdash; Cosine similarity vs. human rating for the two best embedding strategies. The weighted combination separates ratings more cleanly.</p>
+</div>
+
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== V. GROUND TRUTH AT SCALE ======== -->
+<section id="ground-truth">
+<h2><span class="marker">&#10022;</span> V. Ground Truth at Scale &mdash; 300 Pairs</h2>
+
+<h3>Stratified Sampling</h3>
+<p>300 article pairs were sampled from the 257-article corpus, stratified across cosine similarity bands to ensure coverage of the full range from near-duplicates (0.95+) to unrelated pairs (negative cosine). Each pair was rated 0&ndash;4 by Gemini 3.1 Flash Lite as an automated judge, calibrated against 18 human ratings at 83% agreement.</p>
+
+<div class="metric-grid">
+  <div class="metric-card accent">
+    <div class="metric-value">300</div>
+    <div class="metric-label">Rated pairs</div>
+  </div>
+  <div class="metric-card green">
+    <div class="metric-value">0.930</div>
+    <div class="metric-label">AUROC</div>
+  </div>
+  <div class="metric-card gold">
+    <div class="metric-value">0.880</div>
+    <div class="metric-label">Average precision</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">0.762</div>
+    <div class="metric-label">Spearman &rho;</div>
+  </div>
+</div>
+
+<h4>Rating Distribution</h4>
+
+<div class="chart-container">
+<svg width="520" height="200" viewBox="0 0 520 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Bar chart -->
+  <line x1="80" y1="170" x2="500" y2="170" stroke="var(--ink)" stroke-width="1"/>
+
+  <!-- Rating 0 -->
+  <rect x="100" y="39" width="60" height="131" fill="var(--claim-known)" opacity="0.7"/>
+  <text x="130" y="33" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="16" font-weight="600" fill="var(--ink)">131</text>
+  <text x="130" y="188" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)">0 &mdash; Unrelated</text>
+
+  <!-- Rating 1 -->
+  <rect x="185" y="68" width="60" height="102" fill="var(--text-muted)" opacity="0.6"/>
+  <text x="215" y="62" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="16" font-weight="600" fill="var(--ink)">102</text>
+  <text x="215" y="188" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)">1 &mdash; Same field</text>
+
+  <!-- Rating 2 -->
+  <rect x="270" y="138" width="60" height="32" fill="var(--gold)" opacity="0.7"/>
+  <text x="300" y="132" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="16" font-weight="600" fill="var(--ink)">32</text>
+  <text x="300" y="188" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)">2 &mdash; Related</text>
+
+  <!-- Rating 3 -->
+  <rect x="355" y="143" width="60" height="27" fill="var(--rubric)" opacity="0.6"/>
+  <text x="385" y="137" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="16" font-weight="600" fill="var(--ink)">27</text>
+  <text x="385" y="188" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)">3 &mdash; Redundant</text>
+
+  <!-- Rating 4 -->
+  <rect x="440" y="162" width="60" height="8" fill="var(--rubric)" opacity="0.9"/>
+  <text x="470" y="156" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="16" font-weight="600" fill="var(--ink)">8</text>
+  <text x="470" y="188" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)">4 &mdash; Duplicate</text>
+</svg>
+<p class="chart-caption">Fig. 2 &mdash; Distribution of LLM ratings across 300 pairs. Most pairs are unrelated (0) or same-field (1); 67 pairs (22%) are genuinely similar (rating &ge; 2).</p>
+</div>
+
+<h4>Cosine vs. Rating Correlation</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Rating</th>
+      <th class="num">Count</th>
+      <th class="num">Mean cosine</th>
+      <th class="num">Min</th>
+      <th class="num">Max</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">0 &mdash; Unrelated</td>
+      <td class="num">131</td>
+      <td class="num">0.219</td>
+      <td class="num">&minus;0.183</td>
+      <td class="num">0.545</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">1 &mdash; Same field</td>
+      <td class="num">102</td>
+      <td class="num">0.423</td>
+      <td class="num">0.137</td>
+      <td class="num">0.846</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">2 &mdash; Related</td>
+      <td class="num">32</td>
+      <td class="num">0.626</td>
+      <td class="num">0.230</td>
+      <td class="num">0.908</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">3 &mdash; Redundant</td>
+      <td class="num">27</td>
+      <td class="num">0.870</td>
+      <td class="num">0.704</td>
+      <td class="num">0.918</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">4 &mdash; Near-duplicate</td>
+      <td class="num">8</td>
+      <td class="num">0.900</td>
+      <td class="num">0.845</td>
+      <td class="num">0.980</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The monotonic increase in mean cosine across rating levels confirms that embedding similarity reliably tracks semantic relatedness. The overlap between rating 1 and rating 2 (both can appear in the 0.4&ndash;0.8 range) represents the "ambiguous zone" where threshold choice matters most.</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== VI. THRESHOLDS ======== -->
+<section id="thresholds">
+<h2><span class="marker">&#10022;</span> VI. Threshold Calibration</h2>
+
+<h3>Precision/Recall/F1 Sweep</h3>
+<p>With the positive class defined as LLM rating &ge; 2, we sweep the cosine threshold from 0.30 to 0.90 and measure classification performance.</p>
+
+<div class="chart-container">
+<svg width="780" height="320" viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="70" y="20" width="680" height="260" fill="none" stroke="var(--rule)" stroke-width="1"/>
+  <!-- Grid -->
+  <line x1="70" y1="85" x2="750" y2="85" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="70" y1="150" x2="750" y2="150" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="70" y1="215" x2="750" y2="215" stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="4,4"/>
+
+  <!-- Axis labels -->
+  <text x="410" y="308" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)" letter-spacing="0.08em">COSINE THRESHOLD</text>
+  <text x="15" y="150" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="10" fill="var(--text-muted)" letter-spacing="0.08em" transform="rotate(-90,15,150)">SCORE</text>
+
+  <!-- X axis: 0.30 to 0.90 mapped to 70..750 -->
+  <!-- scale: x = 70 + (t - 0.30) / 0.60 * 680 -->
+  <text x="70" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.30</text>
+  <text x="183" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.40</text>
+  <text x="297" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.50</text>
+  <text x="410" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.60</text>
+  <text x="523" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.70</text>
+  <text x="637" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.80</text>
+  <text x="750" y="296" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.90</text>
+
+  <!-- Y axis: 0.0 to 1.0 mapped to 280..20 -->
+  <text x="62" y="283" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0</text>
+  <text x="62" y="153" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">0.5</text>
+  <text x="62" y="23" text-anchor="end" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">1.0</text>
+
+  <!-- Precision line (rubric) -->
+  <!-- t=0.30 P=0.338, t=0.35 P=0.353, t=0.40 P=0.414, t=0.45 P=0.509, t=0.49 P=0.705, t=0.52 P=0.800, t=0.55 P=0.909, t=0.60 P=0.925, t=0.64 P=0.961, t=0.70 P=0.961, t=0.75 P=0.960, t=0.80 P=0.960, t=0.85 P=1.000, t=0.90 P=1.000 -->
+  <polyline points="70,192 127,188 183,172 240,148 253,97 274,72 297,43 410,39 455,30 523,30 580,30 637,31 693,20 750,20" fill="none" stroke="var(--rubric)" stroke-width="2"/>
+
+  <!-- Recall line (claim-new) -->
+  <!-- t=0.30 R=0.985, t=0.35 R=0.970, t=0.40 R=0.940, t=0.45 R=0.866, t=0.49 R=0.821, t=0.52 R=0.776, t=0.55 R=0.746, t=0.60 R=0.731, t=0.64 R=0.731, t=0.70 R=0.731, t=0.75 R=0.716, t=0.80 R=0.716, t=0.85 R=0.567, t=0.90 R=0.149 -->
+  <polyline points="70,24 127,27 183,36 240,55 253,66 274,78 297,86 410,90 455,90 523,90 580,93 637,93 693,132 750,241" fill="none" stroke="var(--claim-new)" stroke-width="2"/>
+
+  <!-- F1 line (gold) -->
+  <!-- t=0.30 F1=0.504, t=0.35 F1=0.518, t=0.40 F1=0.575, t=0.45 F1=0.641, t=0.49 F1=0.759, t=0.52 F1=0.788, t=0.55 F1=0.820, t=0.60 F1=0.817, t=0.64 F1=0.831, t=0.70 F1=0.831, t=0.75 F1=0.821, t=0.80 F1=0.821, t=0.85 F1=0.724, t=0.90 F1=0.260 -->
+  <polyline points="70,149 127,145 183,130 240,113 253,83 274,75 297,67 410,67 455,64 523,64 580,66 637,66 693,92 750,212" fill="none" stroke="var(--gold)" stroke-width="2"/>
+
+  <!-- Threshold annotation at 0.55 -->
+  <line x1="297" y1="20" x2="297" y2="280" stroke="var(--rubric)" stroke-width="1" stroke-dasharray="6,3" opacity="0.5"/>
+  <text x="304" y="258" font-family="DM Sans, sans-serif" font-size="9" fill="var(--rubric)" font-weight="600">0.55</text>
+
+  <!-- Legend -->
+  <line x1="500" y1="38" x2="530" y2="38" stroke="var(--rubric)" stroke-width="2"/>
+  <text x="535" y="42" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Precision</text>
+  <line x1="500" y1="54" x2="530" y2="54" stroke="var(--claim-new)" stroke-width="2"/>
+  <text x="535" y="58" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Recall</text>
+  <line x1="500" y1="70" x2="530" y2="70" stroke="var(--gold)" stroke-width="2"/>
+  <text x="535" y="74" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">F1</text>
+</svg>
+<p class="chart-caption">Fig. 3 &mdash; Precision, recall, and F1 across cosine thresholds. The "knee" at 0.55 is where precision jumps to 91% while recall remains at 75%.</p>
+</div>
+
+<h3>Use-Case Specific Thresholds</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Use Case</th>
+      <th class="num">Threshold</th>
+      <th class="num">Precision</th>
+      <th class="num">Recall</th>
+      <th class="num">F1</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Feed ranking</td>
+      <td class="num">0.49</td>
+      <td class="num">71%</td>
+      <td class="num">82%</td>
+      <td class="num">0.76</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Briefing card</td>
+      <td class="num">0.52</td>
+      <td class="num">80%</td>
+      <td class="num">78%</td>
+      <td class="num">0.79</td>
+    </tr>
+    <tr class="highlight-row">
+      <td class="strategy-name">Best F1 (general)</td>
+      <td class="num">0.55</td>
+      <td class="num">91%</td>
+      <td class="num">75%</td>
+      <td class="num">0.82</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Deduplication</td>
+      <td class="num">0.64</td>
+      <td class="num">96%</td>
+      <td class="num">73%</td>
+      <td class="num">0.83</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Each use case has a different tolerance for false positives. Feed ranking can afford more noise (the penalty is a slightly lower-ranked article); deduplication requires near-certainty (the penalty is hiding a unique article).</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== VII. TWO-STAGE PIPELINE ======== -->
+<section id="two-stage">
+<h2><span class="marker">&#10022;</span> VII. Two-Stage Pipeline</h2>
+
+<h3>The Hypothesis</h3>
+<p>Embedding similarity is fast and cheap but misses nuanced similarity. An LLM can understand deep thematic connections but is expensive. The two-stage pipeline uses embeddings as a filter, then sends borderline pairs to an LLM judge for re-evaluation.</p>
+
+<h4>Results: Embedding Beats LLM</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Spearman &rho;</th>
+      <th class="num">LLM calls</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="highlight-row">
+      <td class="strategy-name">Embedding only (baseline)</td>
+      <td class="num"><strong>88.9%</strong></td>
+      <td class="num"><strong>0.654</strong></td>
+      <td class="num">0</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">LLM only (baseline)</td>
+      <td class="num">77.8%</td>
+      <td class="num">0.586</td>
+      <td class="num">18</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Embed filter (0.35) + LLM</td>
+      <td class="num">77.8%</td>
+      <td class="num">0.641</td>
+      <td class="num">15</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Embed filter (0.40) + LLM</td>
+      <td class="num">83.3%</td>
+      <td class="num">0.769</td>
+      <td class="num">11</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Embed filter (0.45) + LLM</td>
+      <td class="num">83.3%</td>
+      <td class="num">0.734</td>
+      <td class="num">8</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Why LLM Under-performs</h4>
+<p>The LLM judge over-rates similarity for articles within the same domain. Two articles both about Sicilian history receive a high "similarity" score even when one discusses 12th-century Norman conquest and the other discusses 20th-century anti-Mafia trials. The LLM conflates <em>topical proximity</em> with <em>informational overlap</em>. Embeddings, by contrast, represent the actual content and naturally assign lower similarity to topically adjacent but informationally distinct articles.</p>
+
+<h4>Ensemble Methods</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Ensemble</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Spearman &rho;</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Weighted average (0.1 embed + 0.9 LLM)</td>
+      <td class="num">88.9%</td>
+      <td class="num">0.695</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Max(embed, LLM)</td>
+      <td class="num">83.3%</td>
+      <td class="num">0.620</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Ambiguous zone only (LLM for 0.35&ndash;0.65)</td>
+      <td class="num">83.3%</td>
+      <td class="num">0.632</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>No ensemble configuration outperforms the weighted embedding strategy (94.4% accuracy, &rho; = 0.818). The LLM adds cost without improving accuracy. For production, embedding-only is the correct choice.</p>
+
+<div class="callout">
+  <strong>Cost analysis:</strong> Rating all 32,896 unique pairs in the 257-article corpus with the LLM would cost approximately $0.79. The cost is negligible, but accuracy is worse. The decision is quality-driven, not cost-driven.
+</div>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== VIII. CORPUS ANALYSIS ======== -->
+<section id="corpus">
+<h2><span class="marker">&#10022;</span> VIII. Corpus Analysis</h2>
+
+<h3>257 Articles, 26 Clusters</h3>
+<p>DBSCAN clustering on the 257-article corpus with &epsilon; = 0.55 (complement distance) identifies 26 clusters and 119 noise articles. The corpus is dominated by Sicilian history and culture (a deliberate research focus) alongside AI/tech articles from Twitter bookmarks.</p>
+
+<div class="metric-grid">
+  <div class="metric-card accent">
+    <div class="metric-value">257</div>
+    <div class="metric-label">Articles in corpus</div>
+  </div>
+  <div class="metric-card green">
+    <div class="metric-value">26</div>
+    <div class="metric-label">Clusters found</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">119</div>
+    <div class="metric-label">Noise / unclustered</div>
+  </div>
+  <div class="metric-card gold">
+    <div class="metric-value">0.222</div>
+    <div class="metric-label">Mean pairwise similarity</div>
+  </div>
+</div>
+
+<h4>Largest Clusters</h4>
+
+<div class="cluster-grid">
+  <div class="cluster-card">
+    <div class="cluster-name">AI & Knowledge Work</div>
+    <div class="cluster-meta">11 articles &middot; cohesion 0.57 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:57%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Vincenzo Bellini</div>
+    <div class="cluster-meta">10 articles &middot; cohesion 0.70 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:70%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Sicilian Mafia / Cosa Nostra</div>
+    <div class="cluster-meta">8 articles &middot; cohesion 0.75 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:75%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Sicilian Language &amp; Linguistics</div>
+    <div class="cluster-meta">8 articles &middot; cohesion 0.79 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:79%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Sicilian Vespers War</div>
+    <div class="cluster-meta">7 articles &middot; cohesion 0.77 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:77%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Syracuse, Sicily</div>
+    <div class="cluster-meta">7 articles &middot; cohesion 0.71 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:71%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Sicily &mdash; General Overview</div>
+    <div class="cluster-meta">7 articles &middot; cohesion 0.67 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:67%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Il Gattopardo / Lampedusa</div>
+    <div class="cluster-meta">7 articles &middot; cohesion 0.69 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:69%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Claude Code / AI Tools</div>
+    <div class="cluster-meta">6 articles &middot; cohesion 0.59 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:59%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Frederick II &mdash; Holy Roman Emperor</div>
+    <div class="cluster-meta">5 articles &middot; cohesion 0.63 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:63%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Archimedes of Syracuse</div>
+    <div class="cluster-meta">5 articles &middot; cohesion 0.55 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:55%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Giovanni Falcone / Anti-Mafia</div>
+    <div class="cluster-meta">5 articles &middot; cohesion 0.70 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:70%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Opera dei Pupi</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.88 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:88%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Muslim Sicily</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.77 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:77%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Kingdom of Sicily / Normans</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.80 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:80%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">LLM Agent Architecture</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.74 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:74%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Fasci Siciliani</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.75 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:75%"></span></span></div>
+  </div>
+  <div class="cluster-card">
+    <div class="cluster-name">Pirandello &amp; Sciascia</div>
+    <div class="cluster-meta">4 articles &middot; cohesion 0.65 <span class="cluster-cohesion"><span class="cluster-cohesion-fill" style="width:65%"></span></span></div>
+  </div>
+</div>
+
+<h4>The Sicily Effect</h4>
+<p>The corpus has a pronounced density asymmetry. Sicilian-history clusters have extremely high cohesion (0.75&ndash;0.88) because Wikipedia research articles on the same topic contain largely overlapping information from different angles. In contrast, AI/tech articles from Twitter bookmarks have lower cohesion (0.57&ndash;0.74) because they cover genuinely different topics under a broad "AI" umbrella.</p>
+
+<h4>Within-Topic Similarity</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Topic</th>
+      <th class="num">Articles</th>
+      <th class="num">Mean sim</th>
+      <th class="num">High sim fraction</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Geography</td>
+      <td class="num">11</td>
+      <td class="num">0.537</td>
+      <td class="num">62%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Linguistics</td>
+      <td class="num">37</td>
+      <td class="num">0.429</td>
+      <td class="num">36%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Art &amp; Architecture</td>
+      <td class="num">24</td>
+      <td class="num">0.409</td>
+      <td class="num">29%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Politics</td>
+      <td class="num">51</td>
+      <td class="num">0.394</td>
+      <td class="num">29%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">History</td>
+      <td class="num">142</td>
+      <td class="num">0.378</td>
+      <td class="num">21%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Literature</td>
+      <td class="num">61</td>
+      <td class="num">0.365</td>
+      <td class="num">18%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Culture</td>
+      <td class="num">71</td>
+      <td class="num">0.359</td>
+      <td class="num">18%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">AI</td>
+      <td class="num">69</td>
+      <td class="num">0.347</td>
+      <td class="num">13%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Software Engineering</td>
+      <td class="num">31</td>
+      <td class="num">0.362</td>
+      <td class="num">14%</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Education</td>
+      <td class="num">42</td>
+      <td class="num">0.280</td>
+      <td class="num">8%</td>
+    </tr>
+  </tbody>
+</table>
+
+<details>
+<summary>Cross-domain bridges &mdash; high similarity between different topics</summary>
+<table>
+  <thead>
+    <tr>
+      <th>Article A</th>
+      <th>Article B</th>
+      <th class="num">Similarity</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Sicilia: Ambiente e Avifauna</td>
+      <td>Sicilia: Societa, Demografia e Lingue</td>
+      <td class="num">0.701</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Estetikkens umulige ideal (90-tallslyrikk)</td>
+      <td>On Poetry, Publishing, and Intellectual Curiosity</td>
+      <td class="num">0.684</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Conformal Hydrodynamics</td>
+      <td>Energy-Aware Hybrid Models for Geophysics</td>
+      <td class="num">0.658</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Sicilia: Aree Naturali Protette</td>
+      <td>Sicily: Monuments and Places of Interest</td>
+      <td class="num">0.656</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">How To Study History Effectively</td>
+      <td>A Directory of Living Literature Reviews</td>
+      <td class="num">0.608</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Luigi Pirandello &mdash; Selected Works</td>
+      <td>Giuseppe Giangrande: Classical Philologist</td>
+      <td class="num">0.600</td>
+    </tr>
+  </tbody>
+</table>
+<p style="margin-top:8px;font-size:0.88rem;">These bridges reveal genuine cross-domain connections: Norwegian 90s poetry criticism connects to English-language reflection on poetry publishing; Sicilian natural areas share an embedding footprint with Sicilian demographic overviews (both describe the island from different angles).</p>
+</details>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== IX. SYNTHETIC BENCHMARK ======== -->
+<section id="synthetic">
+<h2><span class="marker">&#10022;</span> IX. Synthetic Benchmark</h2>
+
+<h3>Controlled Evaluation: 50 Pairs Across 5 Categories</h3>
+<p>To create a regression test that does not depend on the live corpus, 50 synthetic article pairs were generated with controlled overlap levels. Each pair consists of two articles with title, summary, and 3 key claims &mdash; designed to test whether the embedding can distinguish genuinely different levels of informational overlap.</p>
+
+<div class="metric-grid">
+  <div class="metric-card accent">
+    <div class="metric-value">0.895</div>
+    <div class="metric-label">Spearman &rho;</div>
+  </div>
+  <div class="metric-card green">
+    <div class="metric-value">50</div>
+    <div class="metric-label">Synthetic pairs</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">5 / 50</div>
+    <div class="metric-label">Mismatches</div>
+  </div>
+</div>
+
+<h4>Mean Cosine by Category</h4>
+
+<div class="chart-container">
+<svg width="680" height="260" viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
+  <!-- Bars -->
+  <line x1="160" y1="220" x2="650" y2="220" stroke="var(--ink)" stroke-width="1"/>
+
+  <!-- Category bars (scale: cos 0..1 mapped to height 0..180) -->
+  <!-- Unrelated: 0.128 -->
+  <rect x="175" y="197" width="70" height="23" fill="var(--claim-known)" opacity="0.5"/>
+  <text x="210" y="191" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="15" font-weight="600" fill="var(--ink)">0.128</text>
+  <text x="210" y="242" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Unrelated</text>
+
+  <!-- Same field: 0.339 -->
+  <rect x="275" y="159" width="70" height="61" fill="var(--text-muted)" opacity="0.5"/>
+  <text x="310" y="153" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="15" font-weight="600" fill="var(--ink)">0.339</text>
+  <text x="310" y="242" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Same Field</text>
+
+  <!-- Cross-domain: 0.390 -->
+  <rect x="375" y="150" width="70" height="70" fill="var(--gold)" opacity="0.6"/>
+  <text x="410" y="144" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="15" font-weight="600" fill="var(--ink)">0.390</text>
+  <text x="410" y="242" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Cross-domain</text>
+
+  <!-- Shared theme: 0.581 -->
+  <rect x="475" y="115" width="70" height="105" fill="var(--rubric)" opacity="0.5"/>
+  <text x="510" y="109" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="15" font-weight="600" fill="var(--ink)">0.581</text>
+  <text x="510" y="242" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Shared Theme</text>
+
+  <!-- Near-duplicate: 0.686 -->
+  <rect x="575" y="96" width="70" height="124" fill="var(--rubric)" opacity="0.8"/>
+  <text x="610" y="90" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="15" font-weight="600" fill="var(--ink)">0.686</text>
+  <text x="610" y="242" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)">Near-duplicate</text>
+
+  <!-- Arrow showing expected ordering -->
+  <line x1="185" y1="30" x2="635" y2="30" stroke="var(--text-muted)" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="var(--text-muted)"/></marker></defs>
+  <text x="410" y="22" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" fill="var(--text-muted)" letter-spacing="0.08em">INCREASING EXPECTED SIMILARITY</text>
+</svg>
+<p class="chart-caption">Fig. 4 &mdash; Mean cosine similarity by synthetic category. The ordering matches expectations, with &rho; = 0.895.</p>
+</div>
+
+<h4>Category Details</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th class="num">Expected</th>
+      <th class="num">Pairs</th>
+      <th class="num">Mean cos</th>
+      <th class="num">Min</th>
+      <th class="num">Max</th>
+      <th class="num">Mismatches</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Unrelated</td>
+      <td class="num">0</td>
+      <td class="num">10</td>
+      <td class="num">0.128</td>
+      <td class="num">0.027</td>
+      <td class="num">0.273</td>
+      <td class="num">0</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Same field</td>
+      <td class="num">1</td>
+      <td class="num">10</td>
+      <td class="num">0.339</td>
+      <td class="num">0.122</td>
+      <td class="num">0.524</td>
+      <td class="num">2</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Cross-domain connection</td>
+      <td class="num">1.5</td>
+      <td class="num">10</td>
+      <td class="num">0.390</td>
+      <td class="num">0.242</td>
+      <td class="num">0.512</td>
+      <td class="num">0</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Shared theme</td>
+      <td class="num">2.5</td>
+      <td class="num">10</td>
+      <td class="num">0.581</td>
+      <td class="num">0.414</td>
+      <td class="num">0.702</td>
+      <td class="num">1</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Near-duplicate</td>
+      <td class="num">4</td>
+      <td class="num">10</td>
+      <td class="num">0.686</td>
+      <td class="num">0.543</td>
+      <td class="num">0.788</td>
+      <td class="num">2</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The 5 mismatches occur at category boundaries &mdash; "near-duplicate" pairs where the articles take opposing perspectives on the same event (e.g., interest rate hike: pro-policy vs. economic-pain angle) receive lower cosine scores because the embedded content is genuinely different in framing, even though the event is shared. This is <em>correct behavior</em> for a knowledge-tracking app: two articles with opposing analyses of the same event are not redundant.</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== X. AMYGDALA MODULE ======== -->
+<section id="amygdala">
+<h2><span class="marker">&#10022;</span> X. Amygdala Module Design</h2>
+
+<h3>Proposed: <code>document_similarity.py</code></h3>
+<p>The experiments in this session validate a clear pattern: embed document text with MiniLM, compute pairwise cosine, optionally re-rank with an LLM. This pattern is useful beyond Petrarca &mdash; any project with a document corpus (articles, learning materials, book chapters) could benefit.</p>
+
+<h4>Core API</h4>
+<pre>def find_similar_documents(
+    documents: list[Document],
+    *,
+    text_field: str = "summary",
+    threshold: float = 0.40,
+    llm_rerank: bool = False,
+    llm_threshold: float = 0.50,
+    max_pairs: int | None = None,
+) -> list[SimilarityPair]</pre>
+
+<p>The module sits between <code>cluster.py</code> (raw pairwise cosine) and project-specific code (which currently orchestrates embedding, similarity, and LLM refinement). It encapsulates the two-stage pipeline pattern validated in this session.</p>
+
+<h4>Three Cross-Project Applications</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Use case</th>
+      <th>Unit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name">Petrarca</td>
+      <td>Article deduplication, feed ranking, briefing cards</td>
+      <td>Article summaries</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Alif</td>
+      <td>Sentence deduplication in generated practice content</td>
+      <td>Arabic sentences</td>
+    </tr>
+    <tr>
+      <td class="strategy-name">Hamarquizen</td>
+      <td>Question overlap detection as content scales</td>
+      <td>Quiz questions (Norwegian)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Auto-Research Patterns</h4>
+<p>The calibration workflow from this session follows the "autoresearch" pattern pioneered by Karpathy: define an immutable evaluation harness, let an agent modify the approach, measure against a fixed metric. The synthetic benchmark (50 pairs, &rho; = 0.895) serves as the regression test for future threshold or embedding changes. The 300-pair LLM-rated dataset provides the production calibration target. Both are committed to the repository for continuous re-evaluation.</p>
+</section>
+
+<hr class="section-rule">
+
+<!-- ======== XI. WHAT CHANGED ======== -->
+<section id="changes">
+<h2><span class="marker">&#10022;</span> XI. What Changed</h2>
+
+<h3>Code &amp; Data Produced</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>File</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name"><code>embedding_strategy_comparison.py</code></td>
+      <td>11-strategy embedding experiment harness</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>embedding_strategy_comparison.json</code></td>
+      <td>Results: all 11 strategies with pairs and metrics</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>evaluate_similarity.py</code></td>
+      <td>300-pair LLM ground truth generator + threshold sweep</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>article_similarity_ratings.json</code></td>
+      <td>300 rated pairs with cosine, LLM rating, reasons</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>two_stage_pipeline_experiment.py</code></td>
+      <td>Two-stage pipeline experiments + ensemble methods</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>two_stage_pipeline_results.json</code></td>
+      <td>Results: 6 pipeline configs + 5 ensembles</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>synthetic_benchmark.json</code></td>
+      <td>50 synthetic pairs across 5 overlap categories</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>corpus_analysis.json</code></td>
+      <td>26 clusters, topic stats, cross-domain bridges</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>threshold_config.json</code></td>
+      <td>Calibrated thresholds for 4 use cases</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Research Documents</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Document</th>
+      <th>Contents</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="strategy-name"><code>research/auto-research-patterns.md</code></td>
+      <td>Karpathy autoresearch pattern analysis, application to Petrarca calibration loops</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>research/cross-project-similarity-applications.md</code></td>
+      <td>Per-project similarity needs analysis (Petrarca, Alif, Hamarquizen), shared patterns, amygdala extensions</td>
+    </tr>
+    <tr>
+      <td class="strategy-name"><code>amygdala/experiments/document_similarity_design.md</code></td>
+      <td>Proposed <code>document_similarity</code> module API, architecture, relationship to existing modules</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Key Decisions</h4>
+<ol style="margin:8px 0 0 20px;line-height:1.8;">
+  <li><strong>Production embedding:</strong> full_summary (simpler, validated at scale with AUROC = 0.930)</li>
+  <li><strong>Best experimental strategy:</strong> weighted 0.5 summary + 0.5 claims (94.4% accuracy, &rho; = 0.818 &mdash; pending deployment decision)</li>
+  <li><strong>No LLM in production pipeline:</strong> embedding alone outperforms LLM judge</li>
+  <li><strong>General threshold:</strong> 0.55 cosine (91% precision, 75% recall)</li>
+  <li><strong>Dedup threshold:</strong> 0.64 cosine (96% precision, 73% recall)</li>
+  <li><strong>Regression test:</strong> synthetic benchmark with &rho; = 0.895 committed for future validation</li>
+</ol>
+</section>
+
+<!-- ======== FOOTER ======== -->
+<hr class="section-rule">
+
+<p style="text-align:center;margin-top:32px;">
+  <span style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--rubric);">&#10022;</span>
+</p>
+<p style="text-align:center;font-family:'DM Sans',sans-serif;font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.12em;margin-top:8px;">
+  Petrarca &mdash; Article Similarity Experiments &mdash; 21 March 2026
+</p>
+<p style="text-align:center;font-family:'Crimson Pro',serif;font-size:0.82rem;color:var(--text-muted);font-style:italic;margin-top:4px;">
+  Generated from experimental data in <code>scripts/ground-truth/</code>
+</p>
+
+</div><!-- .container -->
+
+</body>
+</html>

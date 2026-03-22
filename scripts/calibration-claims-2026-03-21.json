@@ -1,0 +1,37 @@
+{
+  "date": "2026-03-21",
+  "description": "Claim quality and similarity calibration — AI tools cluster",
+  "round1_summary": {
+    "total": 35,
+    "insight": 6,
+    "useful": 18,
+    "noise": 11,
+    "noise_pct": 31,
+    "by_type": {
+      "factual": {"insight": 1, "useful": 11, "noise": 8, "noise_pct": 40},
+      "evaluative": {"insight": 2, "useful": 1, "noise": 2, "noise_pct": 40},
+      "procedural": {"insight": 0, "useful": 3, "noise": 1, "noise_pct": 25},
+      "comparative": {"insight": 3, "useful": 1, "noise": 0, "noise_pct": 0},
+      "causal": {"insight": 0, "useful": 2, "noise": 0, "noise_pct": 0}
+    },
+    "insight_pattern": "Insights are comparative/evaluative claims about PATTERNS, not product-specific facts. 'X is better than Y because...' or 'The key difference is...' or 'Agents add most value when...'",
+    "noise_pattern": "Noise is product-specific feature lists, generic platitudes, definitions, and trivially obvious claims"
+  },
+  "round2_summary": {
+    "total": 25,
+    "same": 1,
+    "related": 2,
+    "different": 22,
+    "system_false_positive_rate": "70% — 7 of 10 high-sim pairs (>=0.5) were judged DIFFERENT by user",
+    "system_false_negative_rate": "0% — no missed connections in zero-sim pairs",
+    "key_finding": "MiniLM similarity is triggered by shared vocabulary (agent, skills, CLI) not shared meaning. 0.72-0.74 scores between completely unrelated claims just because both mention 'agents' or 'skills'."
+  },
+  "round3_summary": {
+    "total": 12,
+    "high_overlap": 1,
+    "shared_themes": 4,
+    "no_overlap": 7,
+    "missed_by_system": 3,
+    "key_finding": "System detected 0 similar claims between 'Building Effective Agentic Systems' and 3 other articles user rated as 'shared themes'. Thematic overlap (both about agent patterns/best practices) exists at abstraction level above individual claims."
+  }
+}
