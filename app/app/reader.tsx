@@ -29,8 +29,9 @@ import { setFeedbackContext } from '../lib/feedback-context';
 import {
   computeParagraphDimming, classifyArticleClaims,
   markArticleEncountered, markArticleReadUpTo, getArticleParagraphCount,
-  isKnowledgeReady, getArticleNovelty
+  isKnowledgeReady, getArticleNovelty, getSimilarArticles,
 } from '../data/knowledge-engine';
+import type { SimilarArticle } from '../data/knowledge-engine';
 
 const SCROLL_POSITION_SAVE_INTERVAL_MS = 2000;
 
@@ -1719,6 +1720,42 @@ export default function ReaderScreen() {
     return getArticleNovelty(article.id) as ArticleNovelty | null;
   }, [article?.id]);
 
+  // Similar articles the user has already read
+  const readSimilarArticles = useMemo(() => {
+    if (!article || !isKnowledgeReady()) return [];
+    const similar = getSimilarArticles(article.id, 0.52);
+    const results: Array<{ id: string; title: string; score: number }> = [];
+    for (const s of similar) {
+      const state = getReadingState(s.articleId);
+      if (state.status === 'read') {
+        const a = getArticleById(s.articleId);
+        if (a) {
+          results.push({ id: a.id, title: getDisplayTitle(a), score: s.score });
+        }
+      }
+    }
+    return results.slice(0, 3);
+  }, [article?.id]);
+
+  // Verdict line based on novelty ratio
+  const verdictLine = useMemo(() => {
+    if (!articleNovelty || articleNovelty.total_claims === 0) return null;
+    const { novelty_ratio, new_claims, extends_claims, known_claims } = articleNovelty;
+    if (novelty_ratio > 0.9) return 'Almost entirely new territory';
+    if (novelty_ratio > 0.7) return `Mostly new \u2014 ${known_claims} familiar anchor${known_claims !== 1 ? 's' : ''}`;
+    if (novelty_ratio >= 0.4) return `Extends what you know \u2014 ${new_claims} new claim${new_claims !== 1 ? 's' : ''}, ${extends_claims} that deepen`;
+    return `Mostly familiar \u2014 ${new_claims} new detail${new_claims !== 1 ? 's' : ''} worth scanning`;
+  }, [articleNovelty]);
+
+  // Skip nudge: show when >70% claims are known
+  const skipNudge = useMemo(() => {
+    if (!articleNovelty || articleNovelty.total_claims === 0) return null;
+    const knownRatio = articleNovelty.known_claims / articleNovelty.total_claims;
+    if (knownRatio <= 0.7) return null;
+    const newCount = articleNovelty.new_claims + articleNovelty.extends_claims;
+    return newCount;
+  }, [articleNovelty]);
+
   // Build full article content — prefer sections if available
   const fullContent = useMemo(() => {
     if (!article) return '';
@@ -2349,6 +2386,9 @@ export default function ReaderScreen() {
               return (
                 <View style={styles.noveltyCard}>
                   <Text style={styles.noveltyTitle}>{'✦ What\u2019s new for you'}</Text>
+                  {verdictLine && (
+                    <Text style={styles.verdictLine}>{verdictLine}</Text>
+                  )}
                   {articleNovelty && (
                     <View style={styles.noveltyStats}>
                       <Text style={styles.noveltyStatText}>
@@ -2359,6 +2399,37 @@ export default function ReaderScreen() {
                   {displayClaims.map((c: ClaimClassification, i: number) => (
                     <AnimatedClaimItem key={i} text={c.text} index={i} />
                   ))}
+                  {readSimilarArticles.length > 0 && (
+                    <View style={styles.similarSection}>
+                      <Text style={styles.similarLabel}>Similar to:</Text>
+                      {readSimilarArticles.map((sa) => (
+                        <Pressable
+                          key={sa.id}
+                          onPress={() => {
+                            logEvent('briefing_similar_tap', { article_id: article.id, similar_id: sa.id });
+                            router.push({ pathname: '/reader', params: { id: sa.id } });
+                          }}
+                        >
+                          <Text style={styles.similarArticle}>
+                            {sa.title} ({Math.round(sa.score * 100)}%)
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  {skipNudge !== null && (
+                    <Pressable
+                      onPress={() => {
+                        logEvent('briefing_skip_tap', { article_id: article.id, new_claims: skipNudge });
+                        setReadingMode('new_only');
+                      }}
+                    >
+                      <Text style={styles.skipNudge}>
+                        Most of this covers ground you{'\u2019'}ve seen.{' '}
+                        <Text style={styles.skipNudgeLink}>Read {skipNudge} new claim{skipNudge !== 1 ? 's' : ''} only {'\u2192'}</Text>
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
               );
             })() : article.novelty_claims && article.novelty_claims.length > 0 ? (
@@ -2428,6 +2499,9 @@ export default function ReaderScreen() {
               return (
                 <View style={styles.noveltyCard}>
                   <Text style={styles.noveltyTitle}>{'✦ What\u2019s new for you'}</Text>
+                  {verdictLine && (
+                    <Text style={styles.verdictLine}>{verdictLine}</Text>
+                  )}
                   {articleNovelty && (
                     <View style={styles.noveltyStats}>
                       <Text style={styles.noveltyStatText}>
@@ -2438,6 +2512,37 @@ export default function ReaderScreen() {
                   {displayClaims.map((c: ClaimClassification, i: number) => (
                     <AnimatedClaimItem key={i} text={c.text} index={i} />
                   ))}
+                  {readSimilarArticles.length > 0 && (
+                    <View style={styles.similarSection}>
+                      <Text style={styles.similarLabel}>Similar to:</Text>
+                      {readSimilarArticles.map((sa) => (
+                        <Pressable
+                          key={sa.id}
+                          onPress={() => {
+                            logEvent('briefing_similar_tap', { article_id: article.id, similar_id: sa.id });
+                            router.push({ pathname: '/reader', params: { id: sa.id } });
+                          }}
+                        >
+                          <Text style={styles.similarArticle}>
+                            {sa.title} ({Math.round(sa.score * 100)}%)
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  {skipNudge !== null && (
+                    <Pressable
+                      onPress={() => {
+                        logEvent('briefing_skip_tap', { article_id: article.id, new_claims: skipNudge });
+                        setReadingMode('new_only');
+                      }}
+                    >
+                      <Text style={styles.skipNudge}>
+                        Most of this covers ground you{'\u2019'}ve seen.{' '}
+                        <Text style={styles.skipNudgeLink}>Read {skipNudge} new claim{skipNudge !== 1 ? 's' : ''} only {'\u2192'}</Text>
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
               );
             })() : article.novelty_claims && article.novelty_claims.length > 0 ? (
@@ -2859,6 +2964,44 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.textBody,
     flex: 1,
+  },
+  verdictLine: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textSecondary,
+    marginBottom: 6,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  similarSection: {
+    marginTop: 10,
+  },
+  similarLabel: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: colors.textMuted,
+    letterSpacing: 0.3,
+    marginBottom: 3,
+  },
+  similarArticle: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginBottom: 2,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  skipNudge: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textMuted,
+    marginTop: 10,
+  },
+  skipNudgeLink: {
+    color: colors.rubric,
+    fontFamily: fonts.uiMedium,
+    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
   },
 
   // Reading mode toggle
