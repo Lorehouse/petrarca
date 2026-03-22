@@ -828,5 +828,15 @@ def main():
                     print(f"      - {t}")
 
 
+    # Sync to SQLite (dual-write alongside JSON)
+    try:
+        from db import init_db, sync_syntheses
+        init_db()
+        sync_syntheses(output)
+        log("SQLite: syntheses synced")
+    except Exception as e:
+        log(f"SQLite sync failed (non-fatal): {e}")
+
+
 if __name__ == "__main__":
     main()

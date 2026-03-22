@@ -712,6 +712,16 @@ def main():
     else:
         log("Dry run — not writing output")
 
+    # Sync to SQLite (dual-write alongside JSON)
+    if not args.dry_run:
+        try:
+            from db import init_db, sync_clusters
+            init_db()
+            sync_clusters(output)
+            log("SQLite: clusters synced")
+        except Exception as e:
+            log(f"SQLite sync failed (non-fatal): {e}")
+
     log("Done.")
 
 

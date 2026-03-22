@@ -773,6 +773,15 @@ def main():
                 print(f"      -> {st_name} ({st_report['claim_count']} claims)")
         print()
 
+    # Sync to SQLite (dual-write alongside JSON)
+    try:
+        from db import init_db, sync_knowledge_index
+        init_db()
+        sync_knowledge_index(output)
+        log("SQLite: knowledge index synced")
+    except Exception as e:
+        log(f"SQLite sync failed (non-fatal): {e}")
+
     log("Done.")
 
 

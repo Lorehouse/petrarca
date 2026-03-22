@@ -123,7 +123,16 @@ python3 "$SCRIPT_DIR/generate_syntheses.py" --all --min-articles 2 \
     && pipeline_log "pipeline_generate_syntheses" \
     || log "Step 4c FAILED: generate_syntheses.py (continuing)"
 
-# Step 4d: Update manifest with cluster and synthesis hashes
+# Step 4d: Verify SQLite export matches JSON (non-fatal, dual-write validation)
+log "Step 4d: Verifying SQLite ↔ JSON parity..."
+mkdir -p "$PROJECT_DIR/data/exported"
+python3 "$SCRIPT_DIR/export_content_json.py" --output-dir "$PROJECT_DIR/data/exported" \
+    && python3 "$SCRIPT_DIR/verify_migration.py" --warn-only \
+    && pipeline_log "pipeline_sqlite_verify" \
+    || log "Step 4d: SQLite verification skipped or had warnings (non-fatal)"
+rm -rf "$PROJECT_DIR/data/exported"
+
+# Step 4e: Update manifest with cluster and synthesis hashes
 log "Step 4d: Updating manifest with cluster/synthesis hashes..."
 python3 -c "
 import json, hashlib, pathlib
