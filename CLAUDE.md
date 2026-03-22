@@ -37,9 +37,9 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 ### Key Files (Knowledge System)
 | File | Role |
 |------|------|
-| `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring |
+| `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring, article similarity lookup |
 | `app/data/queue.ts` | Reading queue with AsyncStorage persistence |
-| `scripts/build_knowledge_index.py` | Server pipeline — embeddings → similarity matrix → delta reports → knowledge_index.json |
+| `scripts/build_knowledge_index.py` | Server pipeline — embeddings → claim similarity → article similarity (via amygdala document_similarity) → delta reports → knowledge_index.json |
 | `scripts/build_claim_embeddings.py` | Generate claim embeddings via amygdala (was Gemini API, migrated 2026-03-19) |
 | `scripts/deploy_knowledge_index.sh` | Deploy knowledge_index.json to nginx + update manifest |
 
@@ -71,8 +71,12 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 
 ### Algorithm Parameters (experiment-validated)
 - KNOWN threshold: ≥ 0.82 cosine (MiniLM 384d), EXTENDS: ≥ 0.74, NLI cascade for 0.74–0.82 zone (59% accurate — consider disabling), FORGOTTEN: R < 0.3
+- **Article-level similarity**: weighted 0.5×summary + 0.5×claims cosine via amygdala `find_similar_documents()`. Calibrated on 18 human + 300 LLM-rated pairs: AUROC=0.930, 94% accuracy, ρ=0.818.
+  - Briefing card threshold: 0.52 (P=80%, R=78%). Feed ranking: 0.49. Dedup: 0.64.
+  - See `scripts/ground-truth/threshold_config.json` for full config, `scripts/ground-truth/experiment-report.html` for visual report
 - **Curriculum-article mapping**: ≥ 0.65 cosine (claim→node, lower than claim-claim because node descriptions are broader)
 - **Active book feed boost**: +0.15 score for articles matching active book topics
+- **Pipeline model**: gemini-3.1-flash-lite-preview for extraction + atomic claims (5% factual rate vs 60% with old prompt)
 - FSRS stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
 - Curiosity peak: 70% novelty, Gaussian σ=0.15
 - Reader: 3 modes (Full / Guided / New Only), familiar paragraph opacity=0.55
@@ -203,11 +207,11 @@ All research lives in `research/` directory:
 - **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
 - **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
 - **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **`amygdala`**: Shared embedding/clustering/novelty library (`pip install -e ~/src/amygdala`). Server: `/opt/amygdala` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/amygdala` (private).
-  - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
-  - Thresholds calibrated via human feedback (2026-03-20): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate
-  - See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md` for calibration methodology
-  - ⬜ Other experiment scripts: `experiment_curiosity_zone.py`, `experiment_knowledge_map.py`, etc. — still reference old `claim_embeddings_nomic.npz`
+- **`amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/amygdala`). Server: `/opt/amygdala` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/amygdala` (private).
+  - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs, **Document, find_similar_documents**), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
+  - **Document similarity** (session 35): `find_similar_documents()` with weighted multi-field embeddings. 94% accuracy, AUROC=0.930. See `~/src/amygdala/experiments/calibration_document_similarity.md`
+  - **Claim thresholds** (session 33): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate. See `~/src/amygdala/experiments/calibration_petrarca_thresholds.md`
+  - Ground truth datasets in `scripts/ground-truth/` — 300 LLM-rated pairs, 50 synthetic pairs, 11 embedding strategies tested
 
 ### 7. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
