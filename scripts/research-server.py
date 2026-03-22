@@ -56,6 +56,7 @@ KINDLE_SYNC_LOG_PATH = Path(os.environ.get('KINDLE_SYNC_LOG_PATH', '/opt/petrarc
 FEEDBACK_DIR = Path(os.environ.get('FEEDBACK_DIR', '/opt/petrarca/data/feedback'))
 PROJECTS_PATH = Path(os.environ.get('PROJECTS_PATH', '/opt/petrarca/data/projects.json'))
 PROJECTS_MEDIA_DIR = Path(os.environ.get('PROJECTS_MEDIA_DIR', '/opt/petrarca/data/projects'))
+PHOTO_OCR_QUEUE_PATH = Path(os.environ.get('PHOTO_OCR_QUEUE_PATH', '/opt/petrarca/data/photo_ocr_queue.json'))
 
 from server_log import log_server_event
 from curriculum import (
@@ -91,6 +92,89 @@ from db import get_connection, init_db
 def _gen_id(prefix: str) -> str:
     suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
     return f'{prefix}_{int(time.time())}_{suffix}'
+
+
+# ---------------------------------------------------------------------------
+# Background photo OCR queue
+# ---------------------------------------------------------------------------
+
+_ocr_queue_lock = threading.Lock()
+_ocr_results: dict[str, dict] = {}  # capture_id -> OCR result (kept in memory for polling)
+_ocr_results_lock = threading.Lock()
+
+
+def _load_ocr_queue() -> list[dict]:
+    """Load pending OCR items from disk."""
+    if not PHOTO_OCR_QUEUE_PATH.exists():
+        return []
+    try:
+        return json.loads(PHOTO_OCR_QUEUE_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _save_ocr_queue(queue: list[dict]):
+    """Save OCR queue to disk."""
+    PHOTO_OCR_QUEUE_PATH.write_text(json.dumps(queue, indent=2))
+
+
+def _enqueue_photo_ocr(item: dict):
+    """Add a photo to the OCR processing queue."""
+    with _ocr_queue_lock:
+        queue = _load_ocr_queue()
+        queue.append(item)
+        _save_ocr_queue(queue)
+    print(f'[ocr-queue] Enqueued {item["capture_id"]} ({len(queue)} in queue)', flush=True)
+
+
+def _ocr_worker():
+    """Background thread that processes the OCR queue."""
+    while True:
+        item = None
+        with _ocr_queue_lock:
+            queue = _load_ocr_queue()
+            if queue:
+                item = queue.pop(0)
+                _save_ocr_queue(queue)
+
+        if not item:
+            time.sleep(2)
+            continue
+
+        capture_id = item['capture_id']
+        photo_path = Path(item['photo_path'])
+        print(f'[ocr-queue] Processing {capture_id}: {photo_path.name}', flush=True)
+
+        try:
+            result = process_book_ocr_page(
+                photo_path,
+                item.get('book_title', ''),
+                item.get('page_number'),
+                item.get('chapter'),
+            )
+            result['capture_id'] = capture_id
+            result['status'] = 'completed'
+            print(f'[ocr-queue] Completed {capture_id}', flush=True)
+        except Exception as e:
+            print(f'[ocr-queue] Error processing {capture_id}: {e}', flush=True)
+            result = {
+                'capture_id': capture_id,
+                'status': 'failed',
+                'error': str(e),
+                'text': '', 'extracted_ideas': [], 'topics': [],
+            }
+
+        with _ocr_results_lock:
+            _ocr_results[capture_id] = result
+
+        # Also persist result to disk so it survives restarts
+        results_path = BOOK_UPLOADS_DIR / f'ocr_result_{capture_id}.json'
+        results_path.write_text(json.dumps(result))
+
+
+# Start the OCR worker thread
+_ocr_thread = threading.Thread(target=_ocr_worker, daemon=True)
+_ocr_thread.start()
 
 
 # ---------------------------------------------------------------------------
@@ -2739,6 +2823,83 @@ class ResearchHandler(BaseHTTPRequestHandler):
             print(f'[book/ocr-page] Error: {e}', flush=True)
             self._send_json_response(500, {'error': str(e)})
 
+    def _handle_book_upload_photo(self):
+        """Fast photo upload — save to disk and queue for async OCR processing."""
+        form, err = self._parse_multipart_form()
+        if err:
+            return
+
+        capture_id = form.getvalue('capture_id', '')
+        if not capture_id:
+            self._send_json_response(400, {'error': 'Missing capture_id'})
+            return
+
+        photo_path = self._save_upload_photo(form, 'photo', f'page_{capture_id}')
+        if not photo_path:
+            self._send_json_response(400, {'error': 'Missing photo field'})
+            return
+
+        book_id = form.getvalue('book_id', '')
+        book_title = form.getvalue('book_title', '')
+        page_str = form.getvalue('page_number', '')
+        chapter = form.getvalue('chapter', '')
+        page_number = int(page_str) if page_str and page_str.isdigit() else None
+
+        print(f'[book/upload-photo] Saved {capture_id}: {photo_path.name} ({photo_path.stat().st_size} bytes)', flush=True)
+
+        # Queue for background OCR processing
+        _enqueue_photo_ocr({
+            'capture_id': capture_id,
+            'photo_path': str(photo_path),
+            'book_id': book_id,
+            'book_title': book_title,
+            'page_number': page_number,
+            'chapter': chapter,
+        })
+
+        self._send_json_response(200, {'status': 'queued', 'capture_id': capture_id})
+
+    def _handle_book_photo_results(self):
+        """Return completed OCR results for given capture_ids."""
+        raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+        try:
+            body = json.loads(raw)
+        except json.JSONDecodeError:
+            self._send_json_response(400, {'error': 'Invalid JSON'})
+            return
+
+        capture_ids = body.get('capture_ids', [])
+        results = {}
+
+        with _ocr_results_lock:
+            for cid in capture_ids:
+                if cid in _ocr_results:
+                    results[cid] = _ocr_results.pop(cid)
+
+        # Also check disk for results (in case server restarted)
+        for cid in capture_ids:
+            if cid in results:
+                continue
+            result_path = BOOK_UPLOADS_DIR / f'ocr_result_{cid}.json'
+            if result_path.exists():
+                try:
+                    results[cid] = json.loads(result_path.read_text())
+                    result_path.unlink()  # Clean up after reading
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        # Check how many are still pending in the queue
+        with _ocr_queue_lock:
+            queue = _load_ocr_queue()
+            pending_ids = {item['capture_id'] for item in queue}
+
+        pending = [cid for cid in capture_ids if cid not in results and cid in pending_ids]
+
+        self._send_json_response(200, {
+            'results': results,
+            'pending': pending,
+        })
+
     def _handle_book_voice_note(self):
         """Receive a voice note about a physical book, transcribe and extract ideas."""
         form, err = self._parse_multipart_form()
@@ -3880,6 +4041,10 @@ JSON array only:"""
             return self._handle_book_ocr_toc()
         if self.path == '/book/ocr-page':
             return self._handle_book_ocr_page()
+        if self.path == '/book/upload-photo':
+            return self._handle_book_upload_photo()
+        if self.path == '/book/photo-results':
+            return self._handle_book_photo_results()
         if self.path == '/book/voice-note':
             return self._handle_book_voice_note()
         if self.path == '/book/research':
