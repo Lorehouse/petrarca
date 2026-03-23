@@ -481,7 +481,9 @@ def sync_articles(articles: list[dict], conn=None):
         for field in ARTICLE_JSON_FIELDS:
             if field in a:
                 values[field] = json.dumps(a[field], ensure_ascii=False)
-            elif field == 'similar_articles':
+            elif field in ('similar_articles', 'entities', 'follow_up_questions',
+                           'interest_topics', 'novelty_claims'):
+                # Truly optional — store NULL if absent so export skips them
                 values[field] = None
             else:
                 values[field] = '[]'

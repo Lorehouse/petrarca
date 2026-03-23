@@ -131,11 +131,15 @@ def export_articles(conn) -> list[dict]:
             for cr in claim_rows
         ]
 
-        # Remaining always-present fields
-        a['entities'] = entities
-        a['follow_up_questions'] = follow_up_questions
-        a['interest_topics'] = interest_topics
-        a['novelty_claims'] = novelty_claims
+        # Optional JSON array fields — only include if non-NULL in DB
+        if row['entities'] is not None:
+            a['entities'] = entities
+        if row['follow_up_questions'] is not None:
+            a['follow_up_questions'] = follow_up_questions
+        if row['interest_topics'] is not None:
+            a['interest_topics'] = interest_topics
+        if row['novelty_claims'] is not None:
+            a['novelty_claims'] = novelty_claims
 
         articles.append(a)
 

@@ -82,12 +82,12 @@ def migrate_articles(conn, articles_path: Path):
             'word_count': a.get('word_count', 0),
         }
 
-        # JSON array fields
+        # JSON array fields — store NULL if absent (not '[]') so export skips them
         for field in ARTICLE_JSON_FIELDS:
             if field in a:
                 values[field] = json.dumps(a[field], ensure_ascii=False)
-            elif field in ('similar_articles',):
-                # truly optional — store NULL if absent
+            elif field in ('similar_articles', 'entities', 'follow_up_questions',
+                           'interest_topics', 'novelty_claims'):
                 values[field] = None
             else:
                 values[field] = '[]'
