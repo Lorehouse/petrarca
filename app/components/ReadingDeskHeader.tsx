@@ -23,7 +23,7 @@ export default function ReadingDeskHeader({ onDrawerOpen }: Props) {
   const { article, state, excerpt } = desk;
   const title = getDisplayTitle(article);
   const source = article.source_url?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || '';
-  const contentLength = article.content_markdown?.length || 5000;
+  const contentLength = (article.word_count || 800) * 6; // ~6 chars per word
   const progress = state.scroll_position_y
     ? Math.min(99, Math.round((state.scroll_position_y / (contentLength / 50)) * 100))
     : 0;

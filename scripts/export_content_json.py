@@ -146,6 +146,139 @@ def export_articles(conn) -> list[dict]:
     return articles
 
 
+def export_articles_meta(conn, since: str | None = None) -> list[dict]:
+    """Export article metadata WITHOUT content_markdown or sections.
+
+    If `since` is an ISO date string, only articles with ingested_at >= since are returned.
+    """
+    articles = []
+
+    if since:
+        rows = conn.execute(
+            "SELECT * FROM articles WHERE ingested_at >= ? ORDER BY rowid", (since,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM articles ORDER BY rowid").fetchall()
+
+    for row in rows:
+        row = dict(row)
+        article_id = row['id']
+
+        a = {
+            'id': row['id'],
+            'title': row['title'],
+            'author': row['author'],
+            'source_url': row['source_url'],
+            'hostname': row['hostname'],
+            'date': row['date'],
+            'one_line_summary': row['one_line_summary'],
+            'full_summary': row['full_summary'],
+            'key_claims': _json_col(row['key_claims'], []),
+            'topics': _json_col(row['topics'], []),
+            'estimated_read_minutes': row['estimated_read_minutes'],
+            'content_type': row['content_type'],
+            'word_count': row['word_count'],
+            'sources': _json_col(row['sources'], []),
+        }
+
+        # Optional fields
+        for field in ('exploration_tag', 'parent_id', 'exploration_tier',
+                      'exploration_order', 'fetch_method', 'ingested_at'):
+            if row[field] is not None:
+                a[field] = row[field]
+        if row['similar_articles'] is not None:
+            a['similar_articles'] = _json_col(row['similar_articles'], [])
+
+        # Atomic claims
+        claim_rows = conn.execute(
+            "SELECT id, normalized_text, original_text, claim_type, source_paragraphs, topics "
+            "FROM atomic_claims WHERE article_id = ? ORDER BY rowid",
+            (article_id,),
+        ).fetchall()
+        a['atomic_claims'] = [
+            {
+                'normalized_text': cr['normalized_text'],
+                'original_text': cr['original_text'],
+                'claim_type': cr['claim_type'],
+                'source_paragraphs': _json_col(cr['source_paragraphs'], []),
+                'topics': _json_col(cr['topics'], []),
+                'id': cr['id'],
+            }
+            for cr in claim_rows
+        ]
+
+        # Optional JSON arrays
+        for field in ('entities', 'follow_up_questions', 'interest_topics', 'novelty_claims'):
+            if row[field] is not None:
+                a[field] = _json_col(row[field], [])
+
+        articles.append(a)
+
+    return articles
+
+
+def export_article_content(conn, article_id: str) -> dict | None:
+    """Export a single article's content_markdown + sections."""
+    row = conn.execute(
+        "SELECT content_markdown FROM articles WHERE id = ?", (article_id,)
+    ).fetchone()
+    if not row:
+        return None
+
+    sec_rows = conn.execute(
+        "SELECT heading, content, summary, key_claims "
+        "FROM article_sections WHERE article_id = ? ORDER BY section_index",
+        (article_id,),
+    ).fetchall()
+    sections = []
+    for sr in sec_rows:
+        sec = {
+            'heading': sr['heading'],
+            'content': sr['content'],
+            'summary': sr['summary'] or '',
+            'key_claims': _json_col(sr['key_claims'], []),
+        }
+        sections.append(sec)
+
+    return {
+        'id': article_id,
+        'content_markdown': row['content_markdown'],
+        'sections': sections,
+    }
+
+
+def compute_manifest(conn) -> dict:
+    """Compute a lightweight manifest for change detection."""
+    # Articles: count + max rowid as version string
+    r = conn.execute("SELECT count(*), max(rowid) FROM articles").fetchone()
+    article_count = r[0] or 0
+    article_version = f"{r[0] or 0}_{r[1] or 0}"
+
+    # Knowledge index generated_at
+    ki_gen = conn.execute(
+        "SELECT value FROM pipeline_meta WHERE key = 'knowledge_index_generated_at'"
+    ).fetchone()
+
+    # Syntheses generated_at
+    synth_gen = conn.execute(
+        "SELECT value FROM pipeline_meta WHERE key = 'syntheses_generated_at'"
+    ).fetchone()
+
+    # Clusters: count from cluster_meta
+    cluster_gen = conn.execute(
+        "SELECT value FROM cluster_meta WHERE key = 'generated_at'"
+    ).fetchone()
+
+    return {
+        'articles_hash': hashlib.sha256(article_version.encode()).hexdigest()[:16],
+        'knowledge_index_hash': (ki_gen[0] if ki_gen else '') or '',
+        'clusters_hash': (cluster_gen[0] if cluster_gen else '') or '',
+        'syntheses_hash': (synth_gen[0] if synth_gen else '') or '',
+        'article_count': article_count,
+        'last_updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    }
+
+
 def _normalize_topic(topic: str) -> str:
     """Normalize topic: hyphens to spaces, lowercase, collapse whitespace."""
     import re

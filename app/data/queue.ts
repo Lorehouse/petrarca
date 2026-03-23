@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logEvent } from './logger';
+import { prefetchArticleContent } from './article-content';
 
 const QUEUE_KEY = '@petrarca/reading_queue';
 
@@ -31,6 +32,7 @@ export async function addToQueue(articleId: string): Promise<void> {
   if (queuedIds.includes(articleId)) return;
   queuedIds.push(articleId);
   await saveQueue();
+  prefetchArticleContent([articleId]);
   logEvent('queue_add', { article_id: articleId });
 }
 
@@ -39,6 +41,7 @@ export async function addToQueueFront(articleId: string): Promise<void> {
   queuedIds = queuedIds.filter(id => id !== articleId);
   queuedIds.unshift(articleId);
   await saveQueue();
+  prefetchArticleContent([articleId]);
   logEvent('queue_add_front', { article_id: articleId });
 }
 

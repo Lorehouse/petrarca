@@ -1,4 +1,4 @@
-import { Article, ReadingState, UserSignal, Highlight, TopicSynthesis } from './types';
+import { Article, ArticleMeta, ReadingState, UserSignal, Highlight, TopicSynthesis } from './types';
 import type { ClaimClassification, ParagraphDimming, ArticleNovelty, DeltaReport } from './types';
 import { logEvent } from './logger';
 import { loadSignals, saveSignals, loadReadingStates, saveReadingStates, loadHighlights, saveHighlights } from './persistence';
@@ -22,9 +22,10 @@ import type { CrossArticleConnection } from './knowledge-engine';
 import { loadQueue, getQueuedArticleIds, isQueued } from './queue';
 import { loadBookmarks } from './bookmarks';
 import { initBookStore, getPhysicalBooks } from './book-store';
+import { prefetchArticleContent } from './article-content';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-let articles: Article[] = [];
+let articles: ArticleMeta[] = [];
 let syntheses: TopicSynthesis[] = [];
 let conceptClusters: any = null;
 let readingStates = new Map<string, ReadingState>();
@@ -104,6 +105,13 @@ export async function initStore(): Promise<void> {
     await initKnowledgeEngine(cachedKnowledgeIndex);
 
     initialized = true;
+
+    // Prefetch content for queued and in-progress articles (offline readiness)
+    const queuedIds = getQueuedArticleIds();
+    const inProgressIds = [...readingStates.entries()]
+      .filter(([_, s]) => s.status === 'reading')
+      .map(([id]) => id);
+    prefetchArticleContent([...queuedIds, ...inProgressIds]);
 
     logEvent('store_initialized', {
       total_articles: articles.length,
@@ -204,11 +212,11 @@ export async function refreshContent(): Promise<boolean> {
 
 // --- Article access ---
 
-export function getArticles(): Article[] {
+export function getArticles(): ArticleMeta[] {
   return articles;
 }
 
-export function getArticleById(id: string): Article | undefined {
+export function getArticleById(id: string): ArticleMeta | undefined {
   return articles.find(a => a.id === id);
 }
 
@@ -216,7 +224,7 @@ export function getArticleById(id: string): Article | undefined {
  * Get feed articles: not dismissed, not read. Ranked by interest model.
  * Cold start (~< 20 signals): falls back to date sort.
  */
-export function getRankedFeedArticles(): Article[] {
+export function getRankedFeedArticles(): ArticleMeta[] {
   const candidates = articles.filter(a => {
     if (dismissedArticles.has(a.id)) return false;
     const state = readingStates.get(a.id);
@@ -269,7 +277,7 @@ export function getRankedFeedArticles(): Article[] {
 }
 
 // Cap chunked articles to 3 per base source URL (keeps top-ranked chunks)
-function _capPerSource(sorted: Article[], max: number = 3): Article[] {
+function _capPerSource(sorted: ArticleMeta[], max: number = 3): ArticleMeta[] {
   const counts = new Map<string, number>();
   return sorted.filter(a => {
     const url = _baseSourceUrl(a.source_url);
@@ -309,7 +317,7 @@ function _getActiveBookTopics(): Set<string> {
   return topics;
 }
 
-function _getActiveBookTopicBoost(article: Article): number {
+function _getActiveBookTopicBoost(article: ArticleMeta): number {
   // When actively reading books on a topic, articles on that SAME topic
   // are less urgent (you're getting the knowledge from books instead).
   // Only boost articles that share ONE topic with books but cover OTHER topics too
@@ -362,7 +370,7 @@ export function getArticleBookConnections(articleId: string): string[] {
 /**
  * Get read articles for the bottom section of the feed.
  */
-export function getReadArticles(): Article[] {
+export function getReadArticles(): ArticleMeta[] {
   return articles
     .filter(a => {
       const state = readingStates.get(a.id);
@@ -426,8 +434,8 @@ export function getSignals(): UserSignal[] {
 
 // --- Topic grouping ---
 
-export function getByTopic(): Map<string, Article[]> {
-  const topicMap = new Map<string, Article[]>();
+export function getByTopic(): Map<string, ArticleMeta[]> {
+  const topicMap = new Map<string, ArticleMeta[]>();
   for (const a of articles) {
     for (const t of a.topics) {
       if (!topicMap.has(t)) topicMap.set(t, []);
@@ -604,7 +612,7 @@ export type FeedLens = 'latest' | 'best' | 'topics' | 'quick';
  * Get the single top-recommended article (highest curiosity × interest score),
  * excluding articles that are queued or in-progress.
  */
-export function getTopRecommendedArticle(): Article | null {
+export function getTopRecommendedArticle(): ArticleMeta | null {
   const ranked = getRankedFeedArticles();
   const queuedSet = new Set(getQueuedArticleIds());
   for (const a of ranked) {
@@ -620,7 +628,7 @@ export function getTopRecommendedArticle(): Article | null {
  * Get articles organized by the active lens.
  * For 'topics' lens, use getArticlesGroupedByTopic() instead.
  */
-export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article[] {
+export function getArticlesByLens(lens: FeedLens, topicFilter?: string): ArticleMeta[] {
   let candidates = articles.filter(a => {
     if (dismissedArticles.has(a.id)) return false;
     const state = readingStates.get(a.id);
@@ -657,7 +665,7 @@ export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article
         const queuedSet = new Set(queuedIds);
         const queued = queuedIds
           .map(id => ranked.find(a => a.id === id))
-          .filter((a): a is Article => !!a);
+          .filter((a): a is ArticleMeta => !!a);
         const rest = ranked.filter(a => !queuedSet.has(a.id));
         ranked = [...queued, ...rest];
       }
@@ -705,7 +713,7 @@ export function getAdjacentArticleId(
  * Get articles grouped by broad topic for the Topics lens.
  * Returns groups sorted by topic interest score.
  */
-export function getArticlesGroupedByTopic(): Array<{ topic: string; articles: Article[] }> {
+export function getArticlesGroupedByTopic(): Array<{ topic: string; articles: ArticleMeta[] }> {
   const candidates = articles.filter(a => {
     if (dismissedArticles.has(a.id)) return false;
     const state = readingStates.get(a.id);
@@ -713,7 +721,7 @@ export function getArticlesGroupedByTopic(): Array<{ topic: string; articles: Ar
     return true;
   });
 
-  const groups = new Map<string, Article[]>();
+  const groups = new Map<string, ArticleMeta[]>();
   for (const a of candidates) {
     const topics = (a.interest_topics || []).map(t => t.broad);
     const fallback = topics.length > 0 ? topics : a.topics.slice(0, 2);
@@ -731,7 +739,7 @@ export function getArticlesGroupedByTopic(): Array<{ topic: string; articles: Ar
 /**
  * Get in-progress articles (status === 'reading'), sorted by last_read_at descending.
  */
-export function getInProgressArticles(): Article[] {
+export function getInProgressArticles(): ArticleMeta[] {
   return articles
     .filter(a => {
       const state = readingStates.get(a.id);

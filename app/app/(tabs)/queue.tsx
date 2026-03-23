@@ -5,7 +5,7 @@ import {
 import { useRouter } from 'expo-router';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getArticleById, recordInterestSignal } from '../../data/store';
-import { Article } from '../../data/types';
+import { ArticleMeta } from '../../data/types';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import { getDisplayTitle } from '../../lib/display-utils';
@@ -17,7 +17,7 @@ import { useKeyboardShortcuts, type ShortcutMap } from '../../hooks/useKeyboardS
 // --- Web Hover Card Wrapper ---
 
 function WebHoverCard({ article, onRemove, onPress, focused }: {
-  article: Article;
+  article: ArticleMeta;
   onRemove: () => void;
   onPress: () => void;
   focused?: boolean;
@@ -90,7 +90,7 @@ function WebHoverCard({ article, onRemove, onPress, focused }: {
 // --- Queue Article Card (mobile) ---
 
 function QueueArticleCard({ article, onRemove }: {
-  article: Article;
+  article: ArticleMeta;
   onRemove: () => void;
 }) {
   const router = useRouter();
@@ -187,7 +187,7 @@ export default function QueueScreen() {
   const queuedIds = getQueuedArticleIds();
   const queuedArticles = queuedIds
     .map(id => getArticleById(id))
-    .filter((a): a is Article => a != null);
+    .filter((a): a is ArticleMeta => a != null);
 
   // Clamp focusedIndex when queue shrinks
   useEffect(() => {

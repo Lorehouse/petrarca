@@ -88,6 +88,10 @@ PROJECTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 
 from db import get_connection, init_db
+from export_content_json import (
+    export_articles_meta, export_article_content, compute_manifest,
+    export_knowledge_index, export_clusters, export_syntheses,
+)
 
 def _gen_id(prefix: str) -> str:
     suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -4555,7 +4559,77 @@ JSON array only:"""
 
         self._send_json_response(200, {'events': timeline})
 
+    # ------------------------------------------------------------------
+    # Content API endpoints (SQLite Phase 4)
+    # ------------------------------------------------------------------
+
+    def _handle_content_api(self):
+        """Dispatch /api/* routes to SQLite-backed content endpoints."""
+        parsed = urlparse(self.path)
+        path = parsed.path
+        qs = parse_qs(parsed.query)
+
+        if path == '/api/manifest':
+            conn = get_connection(readonly=True)
+            try:
+                data = compute_manifest(conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
+
+        if path == '/api/articles-meta':
+            since = qs.get('since', [None])[0]
+            conn = get_connection(readonly=True)
+            try:
+                articles = export_articles_meta(conn, since=since)
+            finally:
+                conn.close()
+            return self._send_json_response(200, {'articles': articles})
+
+        # /api/articles/<id>/content
+        if path.startswith('/api/articles/') and path.endswith('/content'):
+            article_id = path.split('/api/articles/')[1].rsplit('/content', 1)[0]
+            article_id = unquote(article_id)
+            conn = get_connection(readonly=True)
+            try:
+                data = export_article_content(conn, article_id)
+            finally:
+                conn.close()
+            if data is None:
+                return self._send_json_response(404, {'error': 'Article not found'})
+            return self._send_json_response(200, data)
+
+        if path == '/api/knowledge-index':
+            conn = get_connection(readonly=True)
+            try:
+                data = export_knowledge_index(conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
+
+        if path == '/api/syntheses':
+            conn = get_connection(readonly=True)
+            try:
+                data = export_syntheses(conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
+
+        if path == '/api/clusters':
+            conn = get_connection(readonly=True)
+            try:
+                data = export_clusters(conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
+
+        return self._send_json_response(404, {'error': 'Unknown API endpoint'})
+
     def do_GET(self):
+        # Content API endpoints (SQLite Phase 4)
+        if self.path.startswith('/api/'):
+            return self._handle_content_api()
+
         if self.path.startswith('/book/research/'):
             return self._handle_book_research_get()
         if self.path == '/book/sync':

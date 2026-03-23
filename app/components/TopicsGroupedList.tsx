@@ -8,7 +8,7 @@ import {
   isSynthesisCompleted, isDismissed, recordInterestSignal,
 } from '../data/store';
 import { getDisplayTitle, displayTopic } from '../lib/display-utils';
-import { Article, TopicSynthesis } from '../data/types';
+import { ArticleMeta, TopicSynthesis } from '../data/types';
 
 interface TopicsGroupedListProps {
   topicFilter?: string;
@@ -112,8 +112,8 @@ export default function TopicsGroupedList({ topicFilter }: TopicsGroupedListProp
   );
 }
 
-function groupByTopic(articles: Article[]): Array<{ topic: string; articles: Article[] }> {
-  const groups = new Map<string, Article[]>();
+function groupByTopic(articles: ArticleMeta[]): Array<{ topic: string; articles: ArticleMeta[] }> {
+  const groups = new Map<string, ArticleMeta[]>();
   for (const a of articles) {
     const topics = (a.interest_topics || []).map(t => t.broad);
     const fallback = topics.length > 0 ? topics : a.topics.slice(0, 2);
@@ -219,7 +219,7 @@ function RichSynthesisCard({ synthesis }: { synthesis: TopicSynthesis }) {
 
 // --- Topic Group (for uncovered articles) ---
 
-function TopicGroup({ topic, articles }: { topic: string; articles: Article[] }) {
+function TopicGroup({ topic, articles }: { topic: string; articles: ArticleMeta[] }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const visibleCount = expanded ? articles.length : Math.min(3, articles.length);

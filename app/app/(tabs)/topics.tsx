@@ -5,7 +5,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { getArticles, getArticleById, getReadingState, getSyntheses, isSynthesisCompleted } from '../../data/store';
-import { Article, TopicSynthesis } from '../../data/types';
+import { ArticleMeta, TopicSynthesis } from '../../data/types';
 import { logEvent } from '../../data/logger';
 import { getDisplayTitle, normalizeTopic, displayTopic } from '../../lib/display-utils';
 import { colors, fonts, type, layout } from '../../design/tokens';
@@ -112,7 +112,7 @@ function SynthesisCard({ synthesis, compact }: { synthesis: TopicSynthesis; comp
 
 // --- Uncovered Topic Row (expandable) ---
 
-function UncoveredTopicRow({ topic, articles }: { topic: string; articles: Article[] }) {
+function UncoveredTopicRow({ topic, articles }: { topic: string; articles: ArticleMeta[] }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const label = displayTopic(topic);
@@ -196,7 +196,7 @@ export default function TopicsScreen() {
     }
 
     const articles = getArticles();
-    const groups = new Map<string, Article[]>();
+    const groups = new Map<string, ArticleMeta[]>();
     for (const a of articles) {
       if (coveredIds.has(a.id)) continue;
       const topics = a.interest_topics || [];

@@ -11,10 +11,10 @@ import {
 import { addToQueue } from '../data/queue';
 import { isKnowledgeReady, getArticleNovelty } from '../data/knowledge-engine';
 import { getDisplayTitle } from '../lib/display-utils';
-import type { Article } from '../data/types';
+import type { ArticleMeta } from '../data/types';
 
 interface ArticleRowProps {
-  article: Article;
+  article: ArticleMeta;
   onDismiss: () => void;
   onQueue: () => void;
   isFocused?: boolean;
@@ -39,7 +39,7 @@ function NoveltyBadge({ noveltyRatio }: { noveltyRatio: number }) {
   );
 }
 
-function isResearchArticle(article: Article): boolean {
+function isResearchArticle(article: ArticleMeta): boolean {
   return (article.sources || []).some(s => s.type?.startsWith('research:'));
 }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Article } from '../data/types';
+import { ArticleMeta } from '../data/types';
 import { getArticles, getReadingState } from '../data/store';
 import { getKnowledgeIndex } from '../data/knowledge-engine';
 import { isQueued, addToQueue } from '../data/queue';
@@ -15,7 +15,7 @@ const MAX_PER_GROUP = 3;
 interface RelatedGroup {
   key: string;
   label: string;
-  articles: Article[];
+  articles: ArticleMeta[];
 }
 
 function extractHostname(url: string): string {
@@ -26,14 +26,14 @@ function extractHostname(url: string): string {
   }
 }
 
-function findSameTopicArticles(article: Article, allArticles: Article[]): Article[] {
+function findSameTopicArticles(article: ArticleMeta, allArticles: ArticleMeta[]): ArticleMeta[] {
   const topics = article.interest_topics || [];
   if (topics.length === 0) return [];
 
   const topicSet = new Set(topics.map(t => t.specific));
   const broadSet = new Set(topics.map(t => t.broad));
 
-  const scored: { article: Article; overlap: number }[] = [];
+  const scored: { article: ArticleMeta; overlap: number }[] = [];
   for (const other of allArticles) {
     if (other.id === article.id) continue;
     const otherTopics = other.interest_topics || [];
@@ -51,7 +51,7 @@ function findSameTopicArticles(article: Article, allArticles: Article[]): Articl
   return scored.slice(0, MAX_PER_GROUP).map(s => s.article);
 }
 
-function findSharedConceptArticles(article: Article, allArticles: Article[]): Article[] {
+function findSharedConceptArticles(article: ArticleMeta, allArticles: ArticleMeta[]): ArticleMeta[] {
   const ki = getKnowledgeIndex();
   if (!ki) return [];
 
@@ -59,7 +59,7 @@ function findSharedConceptArticles(article: Article, allArticles: Article[]): Ar
   if (!matrix) return [];
 
   const articleMap = new Map(allArticles.map(a => [a.id, a]));
-  const scored: { article: Article; sharedClaims: number }[] = [];
+  const scored: { article: ArticleMeta; sharedClaims: number }[] = [];
 
   for (const [otherId, counts] of Object.entries(matrix)) {
     if (otherId === article.id) continue;
@@ -74,11 +74,11 @@ function findSharedConceptArticles(article: Article, allArticles: Article[]): Ar
   return scored.slice(0, MAX_PER_GROUP).map(s => s.article);
 }
 
-function findSameSourceArticles(article: Article, allArticles: Article[]): Article[] {
+function findSameSourceArticles(article: ArticleMeta, allArticles: ArticleMeta[]): ArticleMeta[] {
   const hostname = article.hostname || extractHostname(article.source_url);
   if (!hostname) return [];
 
-  const results: Article[] = [];
+  const results: ArticleMeta[] = [];
   for (const other of allArticles) {
     if (other.id === article.id) continue;
     const otherHostname = other.hostname || extractHostname(other.source_url);
@@ -91,7 +91,7 @@ function findSameSourceArticles(article: Article, allArticles: Article[]): Artic
 }
 
 function ArticleRow({ article, group, sourceArticleId }: {
-  article: Article;
+  article: ArticleMeta;
   group: string;
   sourceArticleId: string;
 }) {
@@ -142,7 +142,7 @@ function ArticleRow({ article, group, sourceArticleId }: {
   );
 }
 
-export default function RelatedArticles({ article, excludeIds }: { article: Article; excludeIds?: Set<string> }) {
+export default function RelatedArticles({ article, excludeIds }: { article: ArticleMeta; excludeIds?: Set<string> }) {
   const allArticles = useMemo(() => {
     // Filter out already-read articles and any IDs shown elsewhere (e.g. Connected Reading)
     return getArticles().filter(a => {

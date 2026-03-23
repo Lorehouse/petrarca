@@ -1,4 +1,4 @@
-import { Article, ReadingState } from '../data/types';
+import { ArticleMeta, ReadingState } from '../data/types';
 import {
   getArticles, getReadingState, getArticleById, getReadArticles,
   getInProgressArticles, getArticlesGroupedByTopic, getArticleNovelty,
@@ -284,25 +284,17 @@ export function getCrossThreadBridges(maxBridges: number = 3): CrossThreadBridge
 
 // --- Desk data (for feed header) ---
 
-export function getDeskArticle(): { article: Article; state: ReadingState; excerpt?: string } | null {
+export function getDeskArticle(): { article: ArticleMeta; state: ReadingState; excerpt?: string } | null {
   const inProgress = getInProgressArticles();
   if (inProgress.length === 0) return null;
 
   const article = inProgress[0];
   const state = getReadingState(article.id);
 
-  // Try to get a text excerpt near where they stopped
+  // Use summary as excerpt (content_markdown not available in metadata)
   let excerpt: string | undefined;
-  if (article.content_markdown && state.scroll_position_y) {
-    const paragraphs = article.content_markdown.split(/\n\n+/).filter(p => p.trim().length > 20 && !p.startsWith('#'));
-    const estimatedPara = Math.min(
-      Math.floor(state.scroll_position_y / 200),
-      paragraphs.length - 1
-    );
-    const para = paragraphs[Math.max(0, estimatedPara)];
-    if (para) {
-      excerpt = para.slice(0, 150).trim() + (para.length > 150 ? '...' : '');
-    }
+  if (article.full_summary) {
+    excerpt = article.full_summary.slice(0, 150).trim() + (article.full_summary.length > 150 ? '...' : '');
   }
 
   return { article, state, excerpt };

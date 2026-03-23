@@ -12,7 +12,7 @@ import {
   getArticleById, getSyntheses,
 } from '../../data/store';
 import type { FeedLens } from '../../data/store';
-import { Article } from '../../data/types';
+import { ArticleMeta } from '../../data/types';
 import { logEvent } from '../../data/logger';
 import { colors, fonts, type, layout } from '../../design/tokens';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -28,9 +28,9 @@ import { useKeyboardShortcuts, type ShortcutMap } from '../../hooks/useKeyboardS
 // --- Feed Screen ---
 
 type ListItem =
-  | { type: 'article'; article: Article }
+  | { type: 'article'; article: ArticleMeta }
   | { type: 'separator' }
-  | { type: 'read'; article: Article }
+  | { type: 'read'; article: ArticleMeta }
   | { type: 'queue_header' };
 
 export default function FeedScreen() {

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Article, InterestTopic } from './types';
+import { ArticleMeta, InterestTopic } from './types';
 import { logEvent } from './logger';
 
 const INTEREST_PROFILE_KEY = '@petrarca/interest_profile';
@@ -95,7 +95,7 @@ function ensureTopic(key: string, level: 'broad' | 'specific' | 'entity', parent
   return profile.topics[key];
 }
 
-export function recordSignal(action: SignalAction, article: Article): void {
+export function recordSignal(action: SignalAction, article: ArticleMeta): void {
   const config = SIGNAL_WEIGHTS[action];
   const topics = article.interest_topics || [];
 
@@ -171,7 +171,7 @@ function applySignal(entry: TopicInterest, positive: boolean, weight: number): v
   entry.interest_score = computeScore(entry);
 }
 
-export function markArticleSeen(article: Article): void {
+export function markArticleSeen(article: ArticleMeta): void {
   const topics = article.interest_topics || [];
   for (const topic of topics) {
     const entry = ensureTopic(topic.specific, 'specific', topic.broad);
@@ -204,7 +204,7 @@ function computeScore(entry: TopicInterest): number {
 
 // --- Feed ranking ---
 
-export function scoreArticle(article: Article, recentTopics: string[]): number {
+export function scoreArticle(article: ArticleMeta, recentTopics: string[]): number {
   const interestMatch = computeInterestMatch(article);
   const freshness = computeFreshness(article);
   const discoveryBonus = computeDiscoveryBonus(article);
@@ -218,7 +218,7 @@ export function scoreArticle(article: Article, recentTopics: string[]): number {
   );
 }
 
-function computeInterestMatch(article: Article): number {
+function computeInterestMatch(article: ArticleMeta): number {
   const topics = article.interest_topics || [];
   if (topics.length === 0) {
     // Fall back to article.topics string array
@@ -242,7 +242,7 @@ function computeInterestMatch(article: Article): number {
   return Math.max(...scores);
 }
 
-function computeFreshness(article: Article): number {
+function computeFreshness(article: ArticleMeta): number {
   if (!article.date) return 0.5;
   const ageMs = Date.now() - new Date(article.date).getTime();
   const ageDays = ageMs / (1000 * 60 * 60 * 24);
@@ -250,7 +250,7 @@ function computeFreshness(article: Article): number {
   return 1 / (1 + Math.pow(ageDays / 7, 2));
 }
 
-function computeDiscoveryBonus(article: Article): number {
+function computeDiscoveryBonus(article: ArticleMeta): number {
   const topics = article.interest_topics || [];
   if (topics.length === 0) return 0.5;
 
@@ -262,7 +262,7 @@ function computeDiscoveryBonus(article: Article): number {
   return unknownCount / topics.length;
 }
 
-function computeVarietyPenalty(article: Article, recentTopics: string[]): number {
+function computeVarietyPenalty(article: ArticleMeta, recentTopics: string[]): number {
   if (recentTopics.length === 0) return 1.0;
 
   const articleTopics = (article.interest_topics || []).map(t => t.specific);

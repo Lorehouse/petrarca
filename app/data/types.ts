@@ -40,6 +40,16 @@ export interface Article {
   ingested_at?: string;
 }
 
+/** Article without heavy content fields — used for feed/ranking/store. */
+export type ArticleMeta = Omit<Article, 'content_markdown' | 'sections'>;
+
+/** The heavy content fields loaded on demand when reading. */
+export interface ArticleContent {
+  id: string;
+  content_markdown: string;
+  sections: ArticleSection[];
+}
+
 export interface ArticleSection {
   heading: string;
   content: string;

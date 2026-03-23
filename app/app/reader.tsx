@@ -12,7 +12,8 @@ import { addToQueue, addToQueueFront } from '../data/queue';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, recordTopicInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
 import type { FeedLens } from '../data/store';
-import { Article, ArticleEntity, FollowUpQuestion, InterestTopic } from '../data/types';
+import { Article, ArticleMeta, ArticleContent, ArticleEntity, FollowUpQuestion, InterestTopic } from '../data/types';
+import { getArticleContent } from '../data/article-content';
 import type { CrossArticleConnection } from '../data/knowledge-engine';
 import * as Haptics from 'expo-haptics';
 import { logEvent } from '../data/logger';
@@ -1252,7 +1253,7 @@ function ReaderLeftMargin({
   hasDimming,
   shortcuts,
 }: {
-  article: Article;
+  article: ArticleMeta;
   novelty: ArticleNovelty | null;
   readingMode: ReadingMode;
   onModeChange: (mode: ReadingMode) => void;
@@ -1383,8 +1384,8 @@ function ReaderRightMargin({
   onNavigateArticle,
   onUpNext,
 }: {
-  article: Article;
-  nextArticle: Article | null;
+  article: ArticleMeta;
+  nextArticle: ArticleMeta | null;
   connections: CrossArticleConnection[];
   followUpQuestions: FollowUpQuestion[];
   onNavigateArticle: (id: string) => void;
@@ -1423,7 +1424,7 @@ function ReaderRightMargin({
     const topicSet = new Set(topics.map(t => t.specific));
     const broadSet = new Set(topics.map(t => t.broad));
     const connIds = new Set(connections.map(c => c.articleId));
-    const scored: { article: Article; overlap: number }[] = [];
+    const scored: { article: ArticleMeta; overlap: number }[] = [];
     for (const other of allArticles) {
       if (other.id === article.id || connIds.has(other.id)) continue;
       const otherTopics = other.interest_topics || [];
@@ -1523,7 +1524,26 @@ export default function ReaderScreen() {
   const { id, lens, autoAdvanceFrom } = useLocalSearchParams<{ id: string; lens?: string; autoAdvanceFrom?: string }>();
   const router = useRouter();
   const feedLens = (lens || 'best') as FeedLens;
-  const article = getArticleById(id || '');
+  const articleMeta = getArticleById(id || '');
+  const [articleContent, setArticleContent] = useState<ArticleContent | null>(null);
+  const [contentLoading, setContentLoading] = useState(true);
+
+  // Lazy-load article content
+  useEffect(() => {
+    if (!id) return;
+    setContentLoading(true);
+    getArticleContent(id).then(content => {
+      setArticleContent(content);
+      setContentLoading(false);
+    });
+  }, [id]);
+
+  // Composite article object for compatibility with existing code
+  const article = useMemo(() => {
+    if (!articleMeta) return undefined;
+    if (!articleContent) return { ...articleMeta, content_markdown: '', sections: [] } as Article;
+    return { ...articleMeta, ...articleContent } as Article;
+  }, [articleMeta, articleContent]);
 
   const scrollRef = useRef<ScrollView>(null);
   const enterTime = useRef(Date.now());
@@ -2086,7 +2106,7 @@ export default function ReaderScreen() {
     router.push({ pathname: '/reader', params: { id: targetId } });
   }, [article, router]);
 
-  if (!article) {
+  if (!articleMeta || !article) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Article not found</Text>
