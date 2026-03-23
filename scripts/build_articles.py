@@ -2379,14 +2379,11 @@ def main():
     print(f"  Concepts: {CONCEPTS_PATH}", file=sys.stderr)
     print(f"  App data: {APP_DATA_DIR / 'articles.json'}", file=sys.stderr)
 
-    # Sync to SQLite (dual-write alongside JSON)
-    try:
-        from db import init_db, sync_articles
-        init_db()
-        n = sync_articles(articles)
-        print(f"  SQLite: {n} articles synced", file=sys.stderr)
-    except Exception as e:
-        print(f"  SQLite sync failed (non-fatal): {e}", file=sys.stderr)
+    # Sync to SQLite (canonical store)
+    from db import init_db, sync_articles
+    init_db()
+    n = sync_articles(articles)
+    print(f"  SQLite: {n} articles synced", file=sys.stderr)
 
 
 if __name__ == "__main__":

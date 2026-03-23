@@ -439,16 +439,22 @@ def main():
         h_syntheses = write_with_hash(syntheses, output_dir / 'syntheses.json', indent=2)
         log(f"syntheses.json: {len(syntheses.get('syntheses', []))} syntheses (hash={h_syntheses})")
 
-        # Manifest
-        manifest = {
+        # Manifest — merge with existing (preserves books_hash, concept_count, etc.)
+        manifest_path = output_dir / 'manifest.json'
+        manifest = {}
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        manifest.update({
             'articles_hash': h_articles,
             'knowledge_index_hash': h_ki,
             'clusters_hash': h_clusters,
             'syntheses_hash': h_syntheses,
-        }
-        (output_dir / 'manifest.json').write_text(
-            json.dumps(manifest, indent=2), encoding='utf-8'
-        )
+            'article_count': len(articles),
+        })
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
         log(f"manifest.json written")
 
     finally:

@@ -123,29 +123,11 @@ python3 "$SCRIPT_DIR/generate_syntheses.py" --all --min-articles 2 \
     && pipeline_log "pipeline_generate_syntheses" \
     || log "Step 4c FAILED: generate_syntheses.py (continuing)"
 
-# Step 4d: Verify SQLite export matches JSON (non-fatal, dual-write validation)
-log "Step 4d: Verifying SQLite ↔ JSON parity..."
-mkdir -p "$PROJECT_DIR/data/exported"
-python3 "$SCRIPT_DIR/export_content_json.py" --output-dir "$PROJECT_DIR/data/exported" \
-    && python3 "$SCRIPT_DIR/verify_migration.py" --warn-only \
-    && pipeline_log "pipeline_sqlite_verify" \
-    || log "Step 4d: SQLite verification skipped or had warnings (non-fatal)"
-rm -rf "$PROJECT_DIR/data/exported"
-
-# Step 4e: Update manifest with cluster and synthesis hashes
-log "Step 4d: Updating manifest with cluster/synthesis hashes..."
-python3 -c "
-import json, hashlib, pathlib
-data_dir = pathlib.Path('$PROJECT_DIR/data')
-manifest_path = data_dir / 'manifest.json'
-manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-for name, key in [('concept_clusters.json', 'clusters_hash'), ('syntheses.json', 'syntheses_hash')]:
-    fpath = data_dir / name
-    if fpath.exists() and fpath.stat().st_size > 0:
-        manifest[key] = hashlib.sha256(fpath.read_bytes()).hexdigest()[:16]
-        print(f'  {key}={manifest[key]}')
-manifest_path.write_text(json.dumps(manifest, indent=2))
-" || log "Step 4d FAILED: manifest hash update"
+# Step 4d: Export canonical JSON from SQLite (overwrites pipeline JSON)
+log "Step 4d: Exporting SQLite → JSON (canonical output)..."
+python3 "$SCRIPT_DIR/export_content_json.py" \
+    && pipeline_log "pipeline_sqlite_export" \
+    || log "Step 4d FAILED: export_content_json.py"
 
 # Step 5: Generate books manifest from individual book meta files
 BOOKS_DIR="$PROJECT_DIR/data/books"
