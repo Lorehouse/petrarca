@@ -215,14 +215,14 @@ All research lives in `research/` directory:
 
 ### 7. SQLite Content Pipeline
 - **`petrarca.db`** at `/opt/petrarca/data/petrarca.db` (configurable via `PETRARCA_DB` env) — stores all content pipeline data alongside books/projects/kindle tables
-- **Dual-write**: Pipeline scripts write JSON + SQLite. SQLite sync is non-fatal (wrapped in try/except).
+- **Pipeline flow**: Scripts write JSON (intermediate, for inter-script compat) + SQLite (canonical). `export_content_json.py` overwrites served JSON from SQLite at end of pipeline. SQLite sync is mandatory (errors propagate).
 - **Sync helpers** in `db.py`: `sync_articles()`, `sync_knowledge_index()`, `sync_clusters()`, `sync_syntheses()` — each runs in one transaction
 - **Export**: `scripts/export_content_json.py` reconstructs JSON from SQLite (matching original format)
 - **Verify**: `scripts/verify_migration.py` does deep semantic comparison (values, not key ordering)
 - **Gotcha — knowledge_index claims are derived**: Topics are normalized (hyphens→spaces, lowercase), and only articles with embeddings (in paragraph_claim_map) are included. Don't naively dump from atomic_claims table.
 - **Gotcha — duplicate claim IDs**: One claim ID can appear in multiple articles. `atomic_claims` uses composite PK `(article_id, id)`.
 - **Gotcha — JSON formatting**: articles.json uses `indent=2`, knowledge_index.json uses compact (no indent). Export must match.
-- **Phase status**: Phase 1+2 complete (schema, migration, export, verify, dual-write). Phase 3 (SQLite-primary) and Phase 4 (API endpoints) are future work.
+- **Phase status**: Phase 1-3 complete and deployed. SQLite is canonical; `export_content_json.py` overwrites pipeline JSON. Phase 4 (API endpoints + client migration) is future work.
 
 ### 9. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
