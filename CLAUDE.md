@@ -38,7 +38,8 @@ Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices
 | File | Role |
 |------|------|
 | `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring, article similarity lookup |
-| `app/data/queue.ts` | Reading queue with AsyncStorage persistence |
+| `app/data/article-content.ts` | Lazy article content loading — in-memory + disk cache, prefetch for offline |
+| `app/data/queue.ts` | Reading queue with AsyncStorage persistence + content prefetch |
 | `scripts/build_knowledge_index.py` | Server pipeline — embeddings → claim similarity → article similarity (via limbic.amygdala document_similarity) → delta reports → knowledge_index.json |
 | `scripts/build_claim_embeddings.py` | Generate claim embeddings via limbic.amygdala (was Gemini API, migrated 2026-03-19) |
 | `scripts/deploy_knowledge_index.sh` | Deploy knowledge_index.json to nginx + update manifest |
@@ -222,7 +223,10 @@ All research lives in `research/` directory:
 - **Gotcha — knowledge_index claims are derived**: Topics are normalized (hyphens→spaces, lowercase), and only articles with embeddings (in paragraph_claim_map) are included. Don't naively dump from atomic_claims table.
 - **Gotcha — duplicate claim IDs**: One claim ID can appear in multiple articles. `atomic_claims` uses composite PK `(article_id, id)`.
 - **Gotcha — JSON formatting**: articles.json uses `indent=2`, knowledge_index.json uses compact (no indent). Export must match.
-- **Phase status**: Phase 1-3 complete and deployed. SQLite is canonical; `export_content_json.py` overwrites pipeline JSON. Phase 4 (API endpoints + client migration) is future work.
+- **Phase status**: Phase 1-4 complete and deployed. SQLite is canonical; API endpoints serve directly from DB.
+- **Phase 4 — API + Lazy Loading**: 6 `/api/*` endpoints on research-server.py. Client uses `ArticleMeta` (no content_markdown/sections) for feed/store, loads content lazily in reader via `article-content.ts`. Bandwidth: 13.6→4.7 MB. Fallback to nginx JSON if API down.
+- **Key types**: `ArticleMeta` = feed/ranking metadata, `ArticleContent` = lazy-loaded reader content, `Article` = full composite (used only in reader)
+- **Phase 4c (future cleanup)**: Remove `export_content_json.py` from pipeline cron once stable
 
 ### 9. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
