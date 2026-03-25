@@ -1785,7 +1785,7 @@ export default function ReaderScreen() {
           .map(s => `## ${s.heading}\n\n${s.content}`)
           .join('\n\n')
       : stripLeadingTitle(article.content_markdown, article.title);
-  }, [article?.id]);
+  }, [article?.id, articleContent]);
 
   // Map paragraph-level dimming to block-level dimming
   const blockDimming = useMemo(() => {
