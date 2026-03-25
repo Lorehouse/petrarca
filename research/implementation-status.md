@@ -1,6 +1,34 @@
 # Knowledge System Implementation Status
 
-**Date**: March 22, 2026 (last updated — session 35: claim calibration, article similarity, prompt overhaul)
+**Date**: March 25, 2026 (last updated — session 36: SQLite migration Phases 1–4, lazy content loading)
+
+## Session 36: SQLite Migration — Phases 1–4 (March 22–25, 2026)
+
+### SQLite as Canonical Store
+- **`petrarca.db`** at `/opt/petrarca/data/petrarca.db` — stores articles, atomic_claims, knowledge_index, clusters, syntheses alongside existing books/projects/kindle tables
+- **Phase 1**: Schema + `db.py` with sync helpers (`sync_articles()`, `sync_knowledge_index()`, `sync_clusters()`, `sync_syntheses()`), each in one transaction
+- **Phase 2**: Pipeline scripts (`build_articles.py`, `build_knowledge_index.py`, `build_concept_clusters.py`, `generate_syntheses.py`) dual-write JSON + SQLite
+- **Phase 3**: SQLite is canonical — `export_content_json.py` reconstructs served JSON from SQLite, replacing hand-written JSON
+- **Phase 4**: 6 `/api/*` endpoints on research-server.py serve directly from SQLite: `manifest`, `articles-meta`, `articles/<id>/content`, `knowledge-index`, `syntheses`, `clusters`
+
+### Client Lazy Content Loading
+- **`ArticleMeta`** type (no `content_markdown`/`sections`) used for feed and store — reduces initial payload from 13.6 → 4.7 MB
+- **`ArticleContent`** type loaded lazily in reader via `article-content.ts` — in-memory + disk cache, prefetch for offline
+- **Fallback**: Client falls back to nginx JSON if API is down
+
+### Bug Fixes
+- **Reader content not displaying** (March 25): `fullContent` useMemo in reader.tsx depended only on `article?.id`, which doesn't change when lazy-loaded content arrives. Added `articleContent` to dependency array.
+- **Optional JSON fields**: Store NULL when absent in SQLite, skip in export (don't emit `null` keys in JSON)
+
+### Gotchas Documented
+- `knowledge_index` claims are derived (topics normalized, only articles with embeddings included)
+- Duplicate claim IDs: composite PK `(article_id, id)` in `atomic_claims`
+- JSON formatting: `articles.json` uses `indent=2`, `knowledge_index.json` uses compact
+
+### Next Priorities
+- Phase 4c cleanup: remove `export_content_json.py` from pipeline cron once stable
+- Incremental article sync via `?since=` param
+- Knowledge model simplification (drop FSRS → binary seen/unseen)
 
 ## Session 35: Claim Calibration + Article Similarity + Prompt Overhaul (March 21–22, 2026)
 
@@ -45,11 +73,10 @@
 - `scripts/readwise_triage.py` — clusters 11K+ Readwise docs for ingestion prioritization
 - `canonical_synthesis.py` — replaced hand-rolled similarity with amygdala's `pairwise_cosine`
 
-### Next Priorities
-- SQLite migration (replace JSON knowledge index + articles with server-side SQLite + API endpoints)
+### Next Priorities (at time of session 35)
+- ~~SQLite migration~~ → Done (session 36, Phases 1–4)
 - Atomic claims re-extraction with new prompt (separate from article-level backfill already done)
 - Knowledge index rebuild after atomic claims update
-- Web deploy with briefing card changes
 
 ## Session 34: Overlapping Curricula + Article-Curriculum Bridge (March 21–22, 2026)
 
