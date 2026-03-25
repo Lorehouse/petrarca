@@ -216,17 +216,18 @@ All research lives in `research/` directory:
 
 ### 7. SQLite Content Pipeline
 - **`petrarca.db`** at `/opt/petrarca/data/petrarca.db` (configurable via `PETRARCA_DB` env) — stores all content pipeline data alongside books/projects/kindle tables
-- **Pipeline flow**: Scripts write JSON (intermediate, for inter-script compat) + SQLite (canonical). `export_content_json.py` overwrites served JSON from SQLite at end of pipeline. SQLite sync is mandatory (errors propagate).
+- **Pipeline flow**: Scripts dual-write JSON + SQLite. SQLite is canonical; API serves directly from DB. JSON kept for nginx fallback.
 - **Sync helpers** in `db.py`: `sync_articles()`, `sync_knowledge_index()`, `sync_clusters()`, `sync_syntheses()` — each runs in one transaction
-- **Export**: `scripts/export_content_json.py` reconstructs JSON from SQLite (matching original format)
+- **Export**: `scripts/export_content_json.py` available for manual use (removed from pipeline cron in Phase 4c)
 - **Verify**: `scripts/verify_migration.py` does deep semantic comparison (values, not key ordering)
 - **Gotcha — knowledge_index claims are derived**: Topics are normalized (hyphens→spaces, lowercase), and only articles with embeddings (in paragraph_claim_map) are included. Don't naively dump from atomic_claims table.
 - **Gotcha — duplicate claim IDs**: One claim ID can appear in multiple articles. `atomic_claims` uses composite PK `(article_id, id)`.
 - **Gotcha — JSON formatting**: articles.json uses `indent=2`, knowledge_index.json uses compact (no indent). Export must match.
-- **Phase status**: Phase 1-4 complete and deployed. SQLite is canonical; API endpoints serve directly from DB.
-- **Phase 4 — API + Lazy Loading**: 6 `/api/*` endpoints on research-server.py. Client uses `ArticleMeta` (no content_markdown/sections) for feed/store, loads content lazily in reader via `article-content.ts`. Bandwidth: 13.6→4.7 MB. Fallback to nginx JSON if API down.
+- **Phase status**: Phase 1-4 + 4c complete and deployed. SQLite is canonical; API endpoints serve directly from DB.
+- **Phase 4 — API + Lazy Loading**: 6 `/api/*` endpoints on research-server.py. Client uses `ArticleMeta` (no content_markdown/sections) for feed/store, loads content lazily in reader via `article-content.ts`. Fallback to nginx JSON if API down.
+- **Phase 4c — Pipeline cleanup**: `export_content_json.py` removed from cron. Pipeline scripts still dual-write JSON for fallback.
+- **Incremental sync**: `content-sync.ts` compares manifest hashes, fetches only new articles via `?since=`, skips unchanged knowledge_index/clusters/syntheses. Falls back to full download on count mismatch.
 - **Key types**: `ArticleMeta` = feed/ranking metadata, `ArticleContent` = lazy-loaded reader content, `Article` = full composite (used only in reader)
-- **Phase 4c (future cleanup)**: Remove `export_content_json.py` from pipeline cron once stable
 
 ### 9. Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param

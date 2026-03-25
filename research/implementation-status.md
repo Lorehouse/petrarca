@@ -1,6 +1,6 @@
 # Knowledge System Implementation Status
 
-**Date**: March 25, 2026 (last updated — session 36: SQLite migration Phases 1–4, lazy content loading)
+**Date**: March 25, 2026 (last updated — session 37: Phase 4c cleanup + incremental sync)
 
 ## Session 36: SQLite Migration — Phases 1–4 (March 22–25, 2026)
 
@@ -25,10 +25,24 @@
 - Duplicate claim IDs: composite PK `(article_id, id)` in `atomic_claims`
 - JSON formatting: `articles.json` uses `indent=2`, `knowledge_index.json` uses compact
 
+### Phase 4c: Pipeline Cleanup (March 25)
+- **Removed `export_content_json.py`** from `content-refresh.sh` pipeline cron — SQLite API serves content directly
+- Pipeline scripts still dual-write JSON (for nginx fallback compatibility)
+- `export_content_json.py` can still be run manually if needed
+
+### Incremental Article Sync (March 25)
+- **`content-sync.ts` rewritten** to use manifest-driven smart sync:
+  - Fetches manifest first, compares hashes per resource (articles, knowledge_index, clusters, syntheses)
+  - **Articles**: if changed and cached data exists, fetches `?since=<last_sync_time>` for only new articles, merges by ID. Falls back to full download on count mismatch.
+  - **Knowledge index / clusters / syntheses**: skipped entirely when hash unchanged, loaded from cache
+  - **First launch**: still does full download
+- **Bandwidth**: typical refresh after 4h cron = manifest (~1 KB) + 0–10 new articles (~20 KB each) vs previous 4.7 MB full article list
+- **Logging**: `sync_mode` field in `content_downloaded` event tracks which path was taken (`incremental`, `cached`, `full`, `full_after_mismatch`)
+
 ### Next Priorities
-- Phase 4c cleanup: remove `export_content_json.py` from pipeline cron once stable
-- Incremental article sync via `?since=` param
 - Knowledge model simplification (drop FSRS → binary seen/unseen)
+- Cross-book review generation with temporal hooks
+- Map old books (Kindle → curriculum → Amygdala probes)
 
 ## Session 35: Claim Calibration + Article Similarity + Prompt Overhaul (March 21–22, 2026)
 
