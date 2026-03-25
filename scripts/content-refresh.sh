@@ -123,11 +123,9 @@ python3 "$SCRIPT_DIR/generate_syntheses.py" --all --min-articles 2 \
     && pipeline_log "pipeline_generate_syntheses" \
     || log "Step 4c FAILED: generate_syntheses.py (continuing)"
 
-# Step 4d: Export canonical JSON from SQLite (overwrites pipeline JSON)
-log "Step 4d: Exporting SQLite → JSON (canonical output)..."
-python3 "$SCRIPT_DIR/export_content_json.py" \
-    && pipeline_log "pipeline_sqlite_export" \
-    || log "Step 4d FAILED: export_content_json.py"
+# Step 4d: REMOVED — SQLite API serves content directly (Phase 4c cleanup).
+# Pipeline scripts still dual-write JSON for nginx fallback compatibility.
+# export_content_json.py can be run manually if needed.
 
 # Step 5: Generate books manifest from individual book meta files
 BOOKS_DIR="$PROJECT_DIR/data/books"

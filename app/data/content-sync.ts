@@ -127,32 +127,92 @@ export interface DownloadedContent {
   syntheses: any | null;
 }
 
+/** Try incremental article sync, fall back to full download. */
 export async function downloadContent(): Promise<DownloadedContent | null> {
   try {
     if (Platform.OS !== 'web') ensureContentDir();
 
-    const [articlesResp, manifestResp, knowledgeResp, clustersResp, synthesesResp] = await Promise.all([
-      fetch(`${API_BASE}/api/articles-meta`),
-      fetch(`${API_BASE}/api/manifest`),
-      fetch(`${API_BASE}/api/knowledge-index`).catch(() => null),
-      fetch(`${API_BASE}/api/clusters`).catch(() => null),
-      fetch(`${API_BASE}/api/syntheses`).catch(() => null),
-    ]);
+    // Check if we can do an incremental sync for articles
+    const localManifest = getLocalManifest();
+    const cachedArticlesRaw = cacheRead('articles_meta.json');
+    const canIncremental = localManifest?.last_updated && cachedArticlesRaw;
 
-    if (!articlesResp.ok) {
-      // Fallback to old nginx JSON if API unavailable
-      return downloadContentFallback();
+    // Fetch manifest first to know what changed
+    const manifestResp = await fetch(`${API_BASE}/api/manifest`, { cache: 'no-store' });
+    if (!manifestResp.ok) return downloadContentFallback();
+    const manifestText = await manifestResp.text();
+    const remoteManifest: Manifest = JSON.parse(manifestText);
+
+    const articlesChanged = !localManifest || remoteManifest.articles_hash !== localManifest.articles_hash;
+    const knowledgeChanged = !localManifest || remoteManifest.knowledge_index_hash !== localManifest.knowledge_index_hash;
+    const clustersChanged = !localManifest || remoteManifest.clusters_hash !== localManifest.clusters_hash;
+    const synthesesChanged = !localManifest || remoteManifest.syntheses_hash !== localManifest.syntheses_hash;
+
+    // --- Articles: incremental or full ---
+    let articles: ArticleMeta[];
+    let syncMode: string;
+
+    if (!articlesChanged && cachedArticlesRaw) {
+      // No change — use cache
+      articles = JSON.parse(cachedArticlesRaw);
+      syncMode = 'cached';
+    } else if (canIncremental && articlesChanged) {
+      // Try incremental: fetch only articles since last sync
+      const since = localManifest!.last_updated;
+      const incResp = await fetch(`${API_BASE}/api/articles-meta?since=${encodeURIComponent(since)}`);
+      if (incResp.ok) {
+        const incData = await incResp.json();
+        const newArticles: ArticleMeta[] = incData.articles || incData;
+        const cached: ArticleMeta[] = JSON.parse(cachedArticlesRaw!);
+
+        // Merge: index cached by ID, overlay with new
+        const byId = new Map(cached.map(a => [a.id, a]));
+        for (const a of newArticles) byId.set(a.id, a);
+        articles = Array.from(byId.values());
+
+        if (articles.length === remoteManifest.article_count) {
+          syncMode = 'incremental';
+        } else {
+          // Count mismatch (deletions or missed articles) — full download
+          const fullResp = await fetch(`${API_BASE}/api/articles-meta`);
+          if (!fullResp.ok) return downloadContentFallback();
+          const fullData = await fullResp.json();
+          articles = fullData.articles || fullData;
+          syncMode = 'full_after_mismatch';
+        }
+      } else {
+        // Incremental endpoint failed — full download
+        const fullResp = await fetch(`${API_BASE}/api/articles-meta`);
+        if (!fullResp.ok) return downloadContentFallback();
+        const fullData = await fullResp.json();
+        articles = fullData.articles || fullData;
+        syncMode = 'full';
+      }
+    } else {
+      // No cache or first launch — full download
+      const fullResp = await fetch(`${API_BASE}/api/articles-meta`);
+      if (!fullResp.ok) return downloadContentFallback();
+      const fullData = await fullResp.json();
+      articles = fullData.articles || fullData;
+      syncMode = 'full';
     }
 
-    const articlesData = await articlesResp.json();
-    const articles: ArticleMeta[] = articlesData.articles || articlesData;
-    const manifestText = await manifestResp.text();
+    // --- Knowledge index, clusters, syntheses: fetch only if changed ---
+    const [knowledgeResp, clustersResp, synthesesResp] = await Promise.all([
+      knowledgeChanged ? fetch(`${API_BASE}/api/knowledge-index`).catch(() => null) : null,
+      clustersChanged ? fetch(`${API_BASE}/api/clusters`).catch(() => null) : null,
+      synthesesChanged ? fetch(`${API_BASE}/api/syntheses`).catch(() => null) : null,
+    ]);
 
     let knowledgeIndex: KnowledgeIndex | null = null;
     if (knowledgeResp && knowledgeResp.ok) {
       const knowledgeText = await knowledgeResp.text();
       knowledgeIndex = JSON.parse(knowledgeText);
       cacheWrite('knowledge_index.json', knowledgeText);
+    } else if (!knowledgeChanged) {
+      // Use cache
+      const raw = cacheRead('knowledge_index.json');
+      if (raw) knowledgeIndex = JSON.parse(raw);
     }
 
     let conceptClusters: any = null;
@@ -160,6 +220,9 @@ export async function downloadContent(): Promise<DownloadedContent | null> {
       const clustersText = await clustersResp.text();
       conceptClusters = JSON.parse(clustersText);
       cacheWrite('concept_clusters.json', clustersText);
+    } else if (!clustersChanged) {
+      const raw = cacheRead('concept_clusters.json');
+      if (raw) conceptClusters = JSON.parse(raw);
     }
 
     let syntheses: any = null;
@@ -167,8 +230,15 @@ export async function downloadContent(): Promise<DownloadedContent | null> {
       const synthesesData = JSON.parse(await synthesesResp.text());
       syntheses = Array.isArray(synthesesData) ? synthesesData : synthesesData?.syntheses ?? null;
       cacheWrite('syntheses.json', JSON.stringify(synthesesData));
+    } else if (!synthesesChanged) {
+      const raw = cacheRead('syntheses.json');
+      if (raw) {
+        const data = JSON.parse(raw);
+        syntheses = Array.isArray(data) ? data : data?.syntheses ?? null;
+      }
     }
 
+    // Persist articles + manifest
     cacheWrite('articles_meta.json', JSON.stringify(articles));
     cacheWrite('manifest.json', manifestText);
 
@@ -178,11 +248,11 @@ export async function downloadContent(): Promise<DownloadedContent | null> {
       clusters: !!conceptClusters,
       syntheses: !!syntheses,
       source: 'api',
+      sync_mode: syncMode,
     });
     return { articles, knowledgeIndex, conceptClusters, syntheses };
   } catch (e) {
     logEvent('content_download_error', { error: String(e) });
-    // Try fallback
     return downloadContentFallback();
   }
 }
