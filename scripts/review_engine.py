@@ -118,7 +118,7 @@ Chapter {chapter_number}: {chapter_title}
 Context:
 {chapter_context}
 
-Curriculum nodes (Sicily: History, Culture & Legacy) — level 2-3 only:
+Curriculum nodes ({curriculum_title}) — level 2-3 only:
 {nodes_list}
 
 Which 3-6 nodes does this chapter directly cover (not just passing mentions)?
@@ -173,7 +173,8 @@ Output JSON only:
 QUESTION_GEN_PROMPT = """Generate a knowledge review question.
 
 Concept: {node_title}
-Source text: {source_text}
+Curriculum definition: {node_description}
+Chapter evidence: {source_text}
 Review #{review_count}
 
 {difficulty_instruction}
@@ -181,7 +182,7 @@ Review #{review_count}
 {known_nodes_context}
 {temporal_context}
 
-Use the {lens} lens:
+The learner already knows the basic facts (who/when/what). Now push deeper using the {lens} lens:
 - CAUSAL: causes/sequences/why this happened
 - COMPARATIVE: compare to another period, ruler, or place
 - SIGNIFICANCE: historical importance, what it changed
@@ -258,12 +259,15 @@ def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
 
     chapter_context = _get_chapter_context(book_id, chapter_number, chapter_title)
 
+    curriculum_title = curriculum.get('title', curriculum.get('name', domain_id.replace('_', ' ').title()))
+
     prompt = MAP_CHAPTER_PROMPT.format(
         book_title=book_title,
         chapter_number=chapter_number,
         chapter_title=chapter_title,
         chapter_context=chapter_context,
         nodes_list='\n'.join(node_lines),
+        curriculum_title=curriculum_title,
     )
 
     raw = call_llm(prompt, max_tokens=65536,
@@ -428,6 +432,7 @@ def generate_question(item_id: str, conn) -> dict:
 
         prompt = QUESTION_GEN_PROMPT.format(
             node_title=node_title,
+            node_description=node_description,
             source_text=item.get('source_text', '')[:400],
             review_count=review_count,
             lens=lens,
