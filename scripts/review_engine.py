@@ -133,27 +133,28 @@ Output JSON array only:
 [{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","temporal_hook":"..."}}]"""
 
 
-QUESTION_GEN_PROMPT = """Generate a personalized knowledge review question.
+QUESTION_GEN_PROMPT = """Generate a knowledge review question.
 
 Concept: {node_title}
-Description: {node_description}
-Source text from book: {source_text}
-Review #{review_count} (harder on repeat reviews)
+Source text: {source_text}
+Review #{review_count}
 Lens: {lens}
+
+{difficulty_instruction}
 
 {known_nodes_context}
 {temporal_context}
 
 Use the {lens} lens:
 - CAUSAL: causes/sequences/why
-- COMPARATIVE: compare to a known concept (use known nodes if available)
+- COMPARATIVE: compare to another concept
 - SIGNIFICANCE: historical importance, what it changed
 - TEMPORAL: simultaneous events or chronological relationships
-- PATTERN: recurring dynamics in Sicilian/Mediterranean history
+- PATTERN: recurring dynamics
 - CONSEQUENCE: long-term effects
 
-Output JSON only:
-{{"question":"...","answer_guidance":"3-5 sentences on what a good answer covers","temporal_hook":"...","curriculum_context":"..."}}"""
+Output JSON only — keep question under 20 words:
+{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
@@ -325,7 +326,7 @@ def generate_question(item_id: str, conn) -> dict:
     node = next((n for n in (curriculum or {}).get('nodes', [])
                  if n['id'] == item.get('curriculum_node_id')), None)
     node_title = node['title'] if node else item.get('curriculum_node_title', '')
-    node_desc = (node['description'][:300] if node else '')
+
 
     known = [n['title'] for n in (curriculum or {}).get('nodes', [])
              if knowledge_state.get(n['id'], {}).get('knowledge') in ('engaged', 'anchored')
@@ -334,22 +335,30 @@ def generate_question(item_id: str, conn) -> dict:
     known_ctx = ''
     if known[:3]:
         known_ctx = ('Other concepts the learner knows:\n'
-                     + '\n'.join(f'- {t}' for t in known[:3])
-                     + '\nReference these for COMPARATIVE questions.')
+                     + '\n'.join(f'- {t}' for t in known[:3]))
 
     temporal_ctx = ''
     if item.get('temporal_hook'):
-        temporal_ctx = f"Pre-computed temporal hook: {item['temporal_hook']}"
+        temporal_ctx = f"Temporal hook: {item['temporal_hook']}"
+
+    review_count = item.get('review_count', 0) + 1
+    if review_count == 1:
+        difficulty = 'First review — ask a simple, direct recall question. One clear thing to remember.'
+    elif review_count == 2:
+        difficulty = 'Second review — ask for a connection or reason, not just recall.'
+    else:
+        difficulty = f'Review #{review_count} — push for deeper understanding, comparisons, or implications.'
 
     prompt = QUESTION_GEN_PROMPT.format(
-        node_title=node_title, node_description=node_desc,
-        source_text=item.get('source_text', '')[:500],
-        review_count=item.get('review_count', 0) + 1,
+        node_title=node_title,
+        source_text=item.get('source_text', '')[:400],
+        review_count=review_count,
         lens=item.get('lens', 'SIGNIFICANCE'),
+        difficulty_instruction=difficulty,
         known_nodes_context=known_ctx, temporal_context=temporal_ctx,
     )
 
-    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=65536, response_mime_type='application/json')
+    raw = call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
     result = _parse_json(raw) if raw else None
 
     if isinstance(result, dict) and 'question' in result:
