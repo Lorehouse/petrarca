@@ -139,14 +139,21 @@ QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual recall question for a knowle
 Concept: {node_title}
 Source text: {source_text}
 
-Ask one simple factual question — who, when, or what. Examples of good questions:
-- "Who was Belisarius?"
-- "When did the Byzantines occupy Sicily?"
-- "What was Dionysius I known for?"
-- "Which power controlled Syracuse after the Athenian defeat?"
+Ask one direct factual question. Ask it the way a knowledgeable friend would over coffee — not the way an academic writes a quiz. Name the exact thing to recall: a person, a date, a ruler, an event.
 
-No analysis, no comparisons, no implications. Just the core fact the learner must recall.
-Keep question under 15 words.
+Good examples:
+- "Who was Belisarius?"
+- "When did the Arabs take Sicily from the Byzantines?"
+- "What was Dionysius I known for?"
+- "Which empire controlled Syracuse between Rome and the Arab conquest?"
+- "What century did the Normans arrive in Sicily?"
+
+Bad examples (too oblique, hide the fact behind fancy framing):
+- "Which powers oversaw the architectural transformation into a palimpsest?" — bad: metaphor obscures the simple question "who ruled it?"
+- "What dynamics shaped the urban fabric during this transitional period?" — bad: vague, not testable
+- "How did successive powers leave their mark on the city?" — bad: too open-ended
+
+The question must be answerable with a specific name, date, or one-sentence fact. No metaphors in the question itself.
 
 {temporal_context}
 
