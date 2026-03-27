@@ -55,8 +55,13 @@ export function MarkdownLink({
     href: url,
     hrefAttrs: { target: '_blank', rel: 'noopener noreferrer' },
     onClick: (e: any) => {
-      // Cmd+click (Mac) / Ctrl+click (Win/Linux): let browser open in new tab natively
+      // Cmd+click (Mac) / Ctrl+click (Win/Linux): open in new tab.
+      // Must call window.open explicitly — RNW mediates default anchor behavior
+      // through window.open internally, which browsers block as a popup when not
+      // triggered directly inside a user-gesture handler.
       if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        window.open(url, '_blank', 'noopener,noreferrer');
         logEvent(logEventName, { url, link_text: text?.slice(0, 80), action: 'open_external' });
         return;
       }
@@ -65,6 +70,8 @@ export function MarkdownLink({
         onIngest!(url);
         e.preventDefault();
       } else {
+        e.preventDefault();
+        window.open(url, '_blank', 'noopener,noreferrer');
         logEvent(logEventName, { url, link_text: text?.slice(0, 80) });
       }
     },
