@@ -227,7 +227,7 @@ def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
         nodes_list='\n'.join(node_lines),
     )
 
-    raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=2048,
+    raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=8192,
                    response_mime_type='application/json')
     if not raw:
         return []
@@ -349,7 +349,7 @@ def generate_question(item_id: str, conn) -> dict:
         known_nodes_context=known_ctx, temporal_context=temporal_ctx,
     )
 
-    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
+    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=4096, response_mime_type='application/json')
     result = _parse_json(raw) if raw else None
 
     if isinstance(result, dict) and 'question' in result:
@@ -444,7 +444,7 @@ def create_exploration_items(item_id: str, conn) -> list:
         score=item.get('last_score', 'partly'),
     )
 
-    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
+    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=4096, response_mime_type='application/json')
     questions = _parse_json(raw) if raw else None
     if not isinstance(questions, list):
         return []
