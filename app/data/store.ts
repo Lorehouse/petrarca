@@ -432,6 +432,75 @@ export function getSignals(): UserSignal[] {
   return [...signals];
 }
 
+// --- Source type helpers ---
+
+export type SourceCategory = 'twitter' | 'newsletter' | 'research' | 'exploration' | 'other';
+
+export function getArticleSourceCategory(a: ArticleMeta): SourceCategory {
+  const src = (a.sources || [])[0];
+  if (!src) return 'other';
+  if (src.type === 'twitter_bookmark') return 'twitter';
+  if (src.type === 'readwise') return 'newsletter';
+  if (src.type?.startsWith('research:')) return 'research';
+  if (src.type === 'exploration') return 'exploration';
+  return 'other';
+}
+
+export function getResearchQuery(a: ArticleMeta): string | null {
+  for (const s of (a.sources || [])) {
+    if (s.type?.startsWith('research:')) return s.type.slice('research:'.length);
+  }
+  return null;
+}
+
+/** Get research articles from the feed, grouped by query. */
+export function getResearchArticles(): Array<{ query: string; articles: ArticleMeta[] }> {
+  const feedArticles = articles.filter(a => {
+    if (dismissedArticles.has(a.id)) return false;
+    const state = readingStates.get(a.id);
+    if (state && state.status === 'read') return false;
+    return (a.sources || []).some(s => s.type?.startsWith('research:'));
+  });
+  const groups = new Map<string, ArticleMeta[]>();
+  for (const a of feedArticles) {
+    const query = getResearchQuery(a) || 'Research';
+    if (!groups.has(query)) groups.set(query, []);
+    groups.get(query)!.push(a);
+  }
+  return [...groups.entries()].map(([query, arts]) => ({ query, articles: arts }));
+}
+
+/** Get topic and source distribution for a set of articles. */
+export function getFeedDistribution(feedArticles: ArticleMeta[]): {
+  topics: Array<{ topic: string; count: number }>;
+  sources: Array<{ source: SourceCategory; label: string; count: number }>;
+} {
+  const topicCounts = new Map<string, number>();
+  const sourceCounts = new Map<SourceCategory, number>();
+  for (const a of feedArticles) {
+    const broad = (a.interest_topics || []).map(t => t.broad);
+    const topicList = broad.length > 0 ? broad : a.topics.slice(0, 2);
+    for (const t of topicList) {
+      topicCounts.set(t, (topicCounts.get(t) || 0) + 1);
+    }
+    const src = getArticleSourceCategory(a);
+    sourceCounts.set(src, (sourceCounts.get(src) || 0) + 1);
+  }
+  const sourceLabels: Record<SourceCategory, string> = {
+    twitter: 'Twitter', newsletter: 'Newsletter', research: 'AI Research',
+    exploration: 'Wikipedia', other: 'Other',
+  };
+  return {
+    topics: [...topicCounts.entries()]
+      .map(([topic, count]) => ({ topic, count }))
+      .sort((a, b) => b.count - a.count),
+    sources: [...sourceCounts.entries()]
+      .map(([source, count]) => ({ source, label: sourceLabels[source], count }))
+      .filter(s => s.count > 0)
+      .sort((a, b) => b.count - a.count),
+  };
+}
+
 // --- Topic grouping ---
 
 export function getByTopic(): Map<string, ArticleMeta[]> {
@@ -628,7 +697,7 @@ export function getTopRecommendedArticle(): ArticleMeta | null {
  * Get articles organized by the active lens.
  * For 'topics' lens, use getArticlesGroupedByTopic() instead.
  */
-export function getArticlesByLens(lens: FeedLens, topicFilter?: string): ArticleMeta[] {
+export function getArticlesByLens(lens: FeedLens, topicFilter?: string, sourceFilter?: SourceCategory): ArticleMeta[] {
   let candidates = articles.filter(a => {
     if (dismissedArticles.has(a.id)) return false;
     const state = readingStates.get(a.id);
@@ -646,6 +715,10 @@ export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article
     });
   }
 
+  if (sourceFilter) {
+    candidates = candidates.filter(a => getArticleSourceCategory(a) === sourceFilter);
+  }
+
   switch (lens) {
     case 'latest':
       return candidates.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -656,6 +729,9 @@ export function getArticlesByLens(lens: FeedLens, topicFilter?: string): Article
           const topics = (a.interest_topics || []).map(t => t.broad);
           const fallback = topics.length > 0 ? topics : a.topics;
           return fallback.some(t => t.toLowerCase().includes(topicFilter.toLowerCase()));
+        }
+        if (sourceFilter) {
+          return getArticleSourceCategory(a) === sourceFilter;
         }
         return true;
       });

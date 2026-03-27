@@ -4,6 +4,7 @@ import {
   NativeSyntheticEvent, NativeScrollEvent,
   Platform, Clipboard, Animated,
 } from 'react-native';
+import { MarkdownLink } from '../components/MarkdownLink';
 import AskAI from '../components/AskAI';
 import VoiceFeedback from '../components/VoiceFeedback';
 import DoubleRule from '../components/DoubleRule';
@@ -427,41 +428,24 @@ function renderInlineMarkdown(
 
         const canIngest = linkHandler && isIngestableUrl(seg.url);
         const ingestState = canIngest ? linkHandler.ingestStates[seg.url] : undefined;
-        const linkStyle = canIngest ? styles.markdownLinkIngest : styles.markdownLinkExternal;
-        const suffixChar = canIngest ? ' \u2295' : ' \u2197';
 
         return (
-          <Text key={`link-${i}`}>
-            <Text
-              style={linkStyle}
-              onPress={() => {
-                if (canIngest && !ingestState) {
-                  logEvent('reader_link_ingest', { url: seg.url, link_text: seg.text?.slice(0, 80) });
-                  linkHandler.onIngest(seg.url);
-                } else {
-                  logEvent('reader_link_tap', { url: seg.url, link_text: seg.text?.slice(0, 80) });
-                  Linking.openURL(seg.url);
-                }
-              }}
-              onLongPress={() => {
-                logEvent('reader_link_open', { url: seg.url });
-                Linking.openURL(seg.url);
-              }}
-              {...(Platform.OS === 'web' ? { accessibilityRole: 'link', href: seg.url, hrefAttrs: { target: '_blank', rel: 'noopener noreferrer' } } as any : {})}
-            >
-              {seg.text}
-            </Text>
-            <Text style={styles.linkSuffix}>{suffixChar}</Text>
-            {ingestState?.status === 'processing' && (
-              <Text style={styles.ingestBadgeProcessing}>{' processing\u2026'}</Text>
-            )}
-            {ingestState?.status === 'queued' && (
-              <Text style={styles.ingestBadgeQueued}>{' queued \u2713'}</Text>
-            )}
-            {ingestState?.status === 'failed' && (
-              <Text style={styles.ingestBadgeFailed}>{' failed'}</Text>
-            )}
-          </Text>
+          <MarkdownLink
+            key={`link-${i}`}
+            url={seg.url}
+            text={seg.text}
+            style={canIngest ? styles.markdownLinkIngest : styles.markdownLinkExternal}
+            suffix={canIngest ? ' \u2295' : ' \u2197'}
+            suffixStyle={styles.linkSuffix}
+            logEventName={canIngest ? 'reader_link_ingest' : 'reader_link_tap'}
+            onIngest={canIngest ? linkHandler!.onIngest : undefined}
+            ingestState={ingestState}
+            ingestBadgeStyles={{
+              processing: styles.ingestBadgeProcessing,
+              queued: styles.ingestBadgeQueued,
+              failed: styles.ingestBadgeFailed,
+            }}
+          />
         );
       }
       case 'bold':
@@ -1014,6 +998,10 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
     const block = parseMarkdownBlock(raw);
     const isHighlighted = highlightedBlocks?.has(i);
     const dimming = blockDimming?.get(i);
+    // On web, long-press isn't a natural interaction — use View instead of Pressable
+    // to avoid capturing click events that should reach child links
+    const isWeb = Platform.OS === 'web';
+    const BlockWrapper = isWeb ? View : Pressable;
 
     // In guided mode, apply opacity from the dimming map
     const blockOpacity = readingMode === 'guided' && dimming ? dimming.opacity : opacityOverride ?? 1;
@@ -1044,9 +1032,9 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
       case 'ul':
         return (
           <AnimatedHighlightWrap key={i} isHighlighted={!!isHighlighted}>
-            <Pressable
+            <BlockWrapper
               style={[styles.markdownList, opacityStyle, novelMarkerStyle]}
-              onLongPress={onBlockLongPress ? () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } : undefined}
+              {...(!isWeb && onBlockLongPress ? { onLongPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } } : {})}
             >
               {(block.items || []).map((item, j) => (
                 <View key={j} style={styles.markdownListItem}>
@@ -1054,16 +1042,16 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
                   <Text style={styles.markdownText}>{renderInlineMarkdown(item, linkHandler)}</Text>
                 </View>
               ))}
-            </Pressable>
+            </BlockWrapper>
           </AnimatedHighlightWrap>
         );
 
       case 'ol':
         return (
           <AnimatedHighlightWrap key={i} isHighlighted={!!isHighlighted}>
-            <Pressable
+            <BlockWrapper
               style={[styles.markdownList, opacityStyle, novelMarkerStyle]}
-              onLongPress={onBlockLongPress ? () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } : undefined}
+              {...(!isWeb && onBlockLongPress ? { onLongPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } } : {})}
             >
               {(block.items || []).map((item, j) => (
                 <View key={j} style={styles.markdownListItem}>
@@ -1071,7 +1059,7 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
                   <Text style={styles.markdownText}>{renderInlineMarkdown(item, linkHandler)}</Text>
                 </View>
               ))}
-            </Pressable>
+            </BlockWrapper>
           </AnimatedHighlightWrap>
         );
 
@@ -1087,12 +1075,12 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
       case 'blockquote':
         return (
           <AnimatedHighlightWrap key={i} isHighlighted={!!isHighlighted}>
-            <Pressable
-              onLongPress={onBlockLongPress ? () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } : undefined}
+            <BlockWrapper
+              {...(!isWeb && onBlockLongPress ? { onLongPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, raw); } } : {})}
               style={[styles.markdownBlockquote, opacityStyle, novelMarkerStyle]}
             >
               <Text style={styles.markdownBlockquoteText}>{renderInlineMarkdown(block.content, linkHandler)}</Text>
-            </Pressable>
+            </BlockWrapper>
           </AnimatedHighlightWrap>
         );
 
@@ -1134,8 +1122,8 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
           : [];
         return (
           <AnimatedHighlightWrap key={i} isHighlighted={!!isHighlighted}>
-            <Pressable
-              onLongPress={onBlockLongPress ? () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, block.content); } : undefined}
+            <BlockWrapper
+              {...(!isWeb && onBlockLongPress ? { onLongPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onBlockLongPress(i, block.content); } } : {})}
               style={[opacityStyle, novelMarkerStyle]}
             >
               <Text style={styles.markdownText}>
@@ -1145,7 +1133,7 @@ function MarkdownText({ content, highlightedBlocks, onBlockLongPress, blockDimmi
                   </EntityHighlightText>
                 ) : inlineContent}
               </Text>
-            </Pressable>
+            </BlockWrapper>
             {uniqueConnections.map(conn => (
               <InlineCrossArticleAnnotation
                 key={conn.articleId}

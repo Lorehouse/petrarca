@@ -9,6 +9,7 @@ import {
   markSynthesisCompleted, isSynthesisCompleted, bumpFeedVersion,
 } from '../data/store';
 import { logEvent } from '../data/logger';
+import { MarkdownLink } from '../components/MarkdownLink';
 import { getDisplayTitle } from '../lib/display-utils';
 import {
   splitMarkdownBlocks, parseMarkdownBlock, parseInlineMarkdown,
@@ -134,17 +135,13 @@ function renderInlineMarkdown(text: string, router?: any): (string | React.React
           );
         }
         return (
-          <Text
+          <MarkdownLink
             key={`link-${i}`}
+            url={seg.url}
+            text={seg.text}
             style={s.markdownLink}
-            onPress={() => {
-              logEvent('synthesis_link_tap', { url: seg.url });
-              Linking.openURL(seg.url);
-            }}
-            {...(Platform.OS === 'web' ? { accessibilityRole: 'link', href: seg.url, hrefAttrs: { target: '_blank', rel: 'noopener noreferrer' } } as any : {})}
-          >
-            {seg.text}
-          </Text>
+            logEventName="synthesis_link_tap"
+          />
         );
       case 'bold':
         return <Text key={`bold-${i}`} style={s.markdownBold}>{seg.text}</Text>;

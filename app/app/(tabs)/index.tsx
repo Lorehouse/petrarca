@@ -9,9 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getArticlesByLens, getReadArticles, recordInterestSignal, refreshContent,
   bumpFeedVersion, getFeedVersion, getInProgressArticles,
-  getArticleById, getSyntheses,
+  getArticleById, getSyntheses, getFeedDistribution,
 } from '../../data/store';
-import type { FeedLens } from '../../data/store';
+import type { FeedLens, SourceCategory } from '../../data/store';
 import { ArticleMeta } from '../../data/types';
 import { logEvent } from '../../data/logger';
 import { colors, fonts, type, layout } from '../../design/tokens';
@@ -23,6 +23,9 @@ import ArticleRow from '../../components/ArticleRow';
 import DoubleRule from '../../components/DoubleRule';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import KeyboardHintBar from '../../components/KeyboardHintBar';
+import FeedFilterPills from '../../components/FeedFilterPills';
+import ResearchSection from '../../components/ResearchSection';
+import FeedSidebar from '../../components/FeedSidebar';
 import { useKeyboardShortcuts, type ShortcutMap } from '../../hooks/useKeyboardShortcuts';
 
 // --- Feed Screen ---
@@ -39,6 +42,8 @@ export default function FeedScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(Platform.OS === 'web' ? 0 : -1);
+  const [topicFilter, setTopicFilter] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<SourceCategory | null>(null);
   const spinAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
 
@@ -114,7 +119,12 @@ export default function FeedScreen() {
 
   const feedVersion = getFeedVersion();
 
-  const articles = useMemo(() => getArticlesByLens('best').slice(0, 30), [feedVersion]);
+  // Unfiltered articles for distribution counts, filtered for display
+  const allFeedArticles = useMemo(() => getArticlesByLens('best').slice(0, 30), [feedVersion]);
+  const articles = useMemo(() =>
+    getArticlesByLens('best', topicFilter || undefined, sourceFilter || undefined).slice(0, 30),
+    [feedVersion, topicFilter, sourceFilter]);
+  const distribution = useMemo(() => getFeedDistribution(allFeedArticles), [allFeedArticles]);
 
   const handleDismiss = useCallback(() => { bumpFeedVersion(); forceUpdate(n => n + 1); }, []);
   const handleQueue = useCallback(() => { bumpFeedVersion(); forceUpdate(n => n + 1); }, []);
@@ -178,22 +188,29 @@ export default function FeedScreen() {
 
   useKeyboardShortcuts(feedShortcuts, !drawerOpen);
 
-  // --- Header (shared between web and mobile) ---
-  const headerContent = useMemo(() => (
+  // --- Shared content pieces ---
+  const refreshOrnament = refreshing ? (
+    <View style={s.refreshOrnament}>
+      <Animated.Text style={[s.refreshStar, {
+        transform: [{ rotate: spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
+      }]}>{'\u2726'}</Animated.Text>
+    </View>
+  ) : null;
+
+  const filterLabel = topicFilter || sourceFilter
+    ? `${'\u2726'} For You${topicFilter ? ` \u00b7 ${topicFilter.replace(/-/g, ' ')}` : ''}${sourceFilter ? ` \u00b7 ${sourceFilter}` : ''}`
+    : `${'\u2726'} For You`;
+
+  // --- Mobile header ---
+  const mobileHeaderContent = useMemo(() => (
     <>
-      {refreshing && (
-        <View style={s.refreshOrnament}>
-          <Animated.Text style={[s.refreshStar, {
-            transform: [{ rotate: spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
-          }]}>{'\u2726'}</Animated.Text>
-        </View>
-      )}
+      {refreshOrnament}
       <ContinueBar />
       <View style={s.headerRow}>
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>Feed</Text>
           <Text style={s.headerSubtitle}>
-            {articles.length} articles {'\u00b7'} {getSyntheses().length} syntheses
+            {allFeedArticles.length} articles {'\u00b7'} {getSyntheses().length} syntheses
           </Text>
         </View>
         <Pressable style={s.drawerButton} onPress={() => {
@@ -212,69 +229,109 @@ export default function FeedScreen() {
         <View style={{ height: 1, backgroundColor: colors.ink }} />
         <View style={{ height: 1, backgroundColor: colors.ink, marginTop: 5 }} />
       </View>
+      <View style={{ paddingHorizontal: layout.screenPadding }}>
+        <ResearchSection />
+      </View>
+      <FeedFilterPills
+        topics={distribution.topics}
+        sources={distribution.sources}
+        activeTopic={topicFilter}
+        activeSource={sourceFilter}
+        onTopicPress={setTopicFilter}
+        onSourcePress={setSourceFilter}
+      />
       <View style={s.forYouHeader}>
         <Text style={s.sectionLabel}>
-          <Text style={{ color: colors.rubric }}>{'\u2726'} </Text>For You
+          <Text style={{ color: colors.rubric }}>{filterLabel}</Text>
         </Text>
       </View>
     </>
-  ), [refreshing, spinAnim, articles.length]);
+  ), [refreshing, spinAnim, allFeedArticles.length, distribution, topicFilter, sourceFilter]);
 
   const focusedArticleId = focusedIndex >= 0 && focusedIndex < articles.length
     ? articles[focusedIndex].id : null;
 
   const queuedSet = useMemo(() => new Set(getQueuedArticleIds()), [feedVersion]);
 
-  // --- Web layout ---
+  // --- Web layout (sidebar + feed) ---
   if (Platform.OS === 'web') {
     const webReadArticles = getReadArticles();
 
     return (
       <GestureHandlerRootView style={s.container}>
         <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          <View style={s.webContainer}>
-            {headerContent}
-            {articles.length === 0 ? (
-              <View style={s.empty}>
-                <Text style={s.emptyTitle}>No articles yet</Text>
-                <Text style={s.emptySubtitle}>Content will appear here once synced</Text>
+          <View style={s.webSidebarLayout}>
+            {/* Left sidebar */}
+            <FeedSidebar
+              topics={distribution.topics}
+              sources={distribution.sources}
+              activeTopic={topicFilter}
+              activeSource={sourceFilter}
+              totalCount={allFeedArticles.length}
+              onTopicPress={setTopicFilter}
+              onSourcePress={setSourceFilter}
+              onDrawerOpen={() => { logEvent('drawer_open', { source: 'feed' }); setDrawerOpen(true); }}
+            />
+            {/* Feed column */}
+            <View style={s.webFeedColumn}>
+              {refreshOrnament}
+              <ContinueBar />
+              <View style={{ paddingHorizontal: 0 }}>
+                <View style={{ height: 2, backgroundColor: colors.ink }} />
+                <View style={{ height: 1, backgroundColor: colors.ink, marginTop: 5 }} />
               </View>
-            ) : (
-              articles.map((article, i) => {
-                const showQueueHeader = i === 0 && queuedSet.has(article.id);
-                return (
-                  <View key={article.id} nativeID={`article-${article.id}`}>
-                    {showQueueHeader && (
-                      <View style={s.queueHeader}>
-                        <Text style={s.queueHeaderText}>
-                          <Text style={{ color: colors.rubric }}>{'\u2726'} </Text>UP NEXT
-                        </Text>
-                      </View>
-                    )}
-                    <ArticleRow
-                      article={article}
-                      onDismiss={handleDismiss}
-                      onQueue={handleQueue}
-                      isFocused={article.id === focusedArticleId}
-                    />
-                  </View>
-                );
-              })
-            )}
-            {webReadArticles.length > 0 && (
-              <>
-                <View style={s.readSeparator}>
-                  <View style={s.readSeparatorLine} />
-                  <Text style={s.readSeparatorText}>Read</Text>
-                  <View style={s.readSeparatorLine} />
+              <SynthesisScroll />
+              <View style={{ marginTop: 4 }}>
+                <View style={{ height: 1, backgroundColor: colors.ink }} />
+                <View style={{ height: 1, backgroundColor: colors.ink, marginTop: 5 }} />
+              </View>
+              <View style={s.forYouHeader}>
+                <Text style={s.sectionLabel}>
+                  <Text style={{ color: colors.rubric }}>{filterLabel}</Text>
+                </Text>
+              </View>
+              {articles.length === 0 ? (
+                <View style={s.empty}>
+                  <Text style={s.emptyTitle}>No articles match</Text>
+                  <Text style={s.emptySubtitle}>Try a different filter</Text>
                 </View>
-                {webReadArticles.map(article => (
-                  <View key={article.id}>
-                    <ArticleRow article={article} onDismiss={handleDismiss} onQueue={handleQueue} />
+              ) : (
+                articles.map((article, i) => {
+                  const showQueueHeader = i === 0 && queuedSet.has(article.id);
+                  return (
+                    <View key={article.id} nativeID={`article-${article.id}`}>
+                      {showQueueHeader && (
+                        <View style={s.queueHeader}>
+                          <Text style={s.queueHeaderText}>
+                            <Text style={{ color: colors.rubric }}>{'\u2726'} </Text>UP NEXT
+                          </Text>
+                        </View>
+                      )}
+                      <ArticleRow
+                        article={article}
+                        onDismiss={handleDismiss}
+                        onQueue={handleQueue}
+                        isFocused={article.id === focusedArticleId}
+                      />
+                    </View>
+                  );
+                })
+              )}
+              {webReadArticles.length > 0 && (
+                <>
+                  <View style={s.readSeparator}>
+                    <View style={s.readSeparatorLine} />
+                    <Text style={s.readSeparatorText}>Read</Text>
+                    <View style={s.readSeparatorLine} />
                   </View>
-                ))}
-              </>
-            )}
+                  {webReadArticles.map(article => (
+                    <View key={article.id}>
+                      <ArticleRow article={article} onDismiss={handleDismiss} onQueue={handleQueue} />
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
           </View>
         </ScrollView>
         <KeyboardHintBar shortcuts={feedShortcuts} />
@@ -365,7 +422,7 @@ export default function FeedScreen() {
         ref={flatListRef}
         data={mobileListData}
         keyExtractor={mobileKeyExtractor}
-        ListHeaderComponent={() => <View>{headerContent}</View>}
+        ListHeaderComponent={() => <View>{mobileHeaderContent}</View>}
         renderItem={mobileRenderItem}
         refreshControl={
           <RefreshControl
@@ -397,6 +454,18 @@ export default function FeedScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.parchment },
   webContainer: { maxWidth: layout.webFeedMaxWidth, width: '100%', alignSelf: 'center' as const },
+  webSidebarLayout: {
+    flexDirection: 'row',
+    maxWidth: 920,
+    width: '100%',
+    alignSelf: 'center' as const,
+    gap: 24,
+    paddingRight: 16,
+  } as any,
+  webFeedColumn: {
+    flex: 1,
+    maxWidth: 680,
+  },
 
   headerRow: {
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
