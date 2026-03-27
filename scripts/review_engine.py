@@ -342,18 +342,24 @@ def generate_question(item_id: str, conn) -> dict:
         temporal_ctx = f"Temporal hook: {item['temporal_hook']}"
 
     review_count = item.get('review_count', 0) + 1
+    lens = item.get('lens', 'SIGNIFICANCE')
+    # PATTERN and COMPARATIVE require synthesis across multiple things —
+    # too hard for first review. Use SIGNIFICANCE instead.
+    if review_count == 1 and lens in ('PATTERN', 'COMPARATIVE'):
+        lens = 'SIGNIFICANCE'
+
     if review_count == 1:
-        difficulty = 'First review — ask a simple, direct recall question. One clear thing to remember.'
+        difficulty = 'First review — one simple, direct question. Name or describe one specific thing.'
     elif review_count == 2:
-        difficulty = 'Second review — ask for a connection or reason, not just recall.'
+        difficulty = 'Second review — ask why or how, not just what.'
     else:
-        difficulty = f'Review #{review_count} — push for deeper understanding, comparisons, or implications.'
+        difficulty = f'Review #{review_count} — push for comparisons, patterns, or long-term implications.'
 
     prompt = QUESTION_GEN_PROMPT.format(
         node_title=node_title,
         source_text=item.get('source_text', '')[:400],
         review_count=review_count,
-        lens=item.get('lens', 'SIGNIFICANCE'),
+        lens=lens,
         difficulty_instruction=difficulty,
         known_nodes_context=known_ctx, temporal_context=temporal_ctx,
     )

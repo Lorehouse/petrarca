@@ -42,6 +42,8 @@ export default function ReviewSession() {
   const [scores, setScores] = useState<Array<{ id: string; score: string }>>([]);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingItem, setRecordingItem] = useState<string | null>(null);
+  const [processingVoice, setProcessingVoice] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [exploreItems, setExploreItems] = useState<string[]>([]);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAt = useRef<number>(0);
@@ -58,37 +60,33 @@ export default function ReviewSession() {
   async function loadSession() {
     setState('loading');
     try {
-      const { items } = await getReviewQueue(20);
+      const { items } = await getReviewQueue(10);
       if (items.length === 0) {
         setState('done');
         return;
       }
-      const lensBreakdown = items.reduce((acc, it) => {
-        const l = it.lens || 'UNKNOWN';
-        acc[l] = (acc[l] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
       logEvent('review_session_loaded', {
         items_total: items.length,
-        lens_breakdown: lensBreakdown,
+        lens_breakdown: items.reduce((acc, it) => {
+          const l = it.lens || 'UNKNOWN'; acc[l] = (acc[l] || 0) + 1; return acc;
+        }, {} as Record<string, number>),
         sources: [...new Set(items.map(i => i.item_type))],
       });
-      const firstQ = await generateQuestion(items[0].id);
-      const session: SessionCard[] = [{ item: items[0], question: firstQ }];
+      // Show first card immediately — question loads async like all others
+      const session: SessionCard[] = items.map(item => ({ item, question: null }));
       setCards(session);
       cardShownAt.current = Date.now();
       setState('question');
-      for (let i = 1; i < items.length; i++) {
-        const idx = i;
-        setCards(prev => [...prev, { item: items[idx], question: null }]);
-        generateQuestion(items[idx].id).then(q => {
+      // Fire all question generations in parallel
+      items.forEach((item, idx) => {
+        generateQuestion(item.id).then(q => {
           setCards(prev => {
             const updated = [...prev];
             if (updated[idx]) updated[idx] = { ...updated[idx], question: q };
             return updated;
           });
         });
-      }
+      });
     } catch (e) {
       console.error('Session load failed:', e);
       setState('done');
@@ -96,7 +94,7 @@ export default function ReviewSession() {
   }
 
   function reveal() {
-    if (state !== 'question') return;
+    if (state !== 'question' || !cards[current]?.question) return;
     revealedAt.current = Date.now();
     setState('revealed');
     const card = cards[current];
@@ -165,21 +163,28 @@ export default function ReviewSession() {
     });
   }
 
-  async function handleExplore() {
+  function toggleExpanded(itemId: string) {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) { next.delete(itemId); } else { next.add(itemId); }
+      return next;
+    });
+    logEvent('review_source_expanded', { item_id: itemId });
+  }
+
+  async function handleExploreQueue() {
     const card = cards[current];
     if (!card) return;
     const lastScore = scores.find(s => s.id === card.item.id)?.score;
     logEvent('review_explore_tapped', {
-      item_id: card.item.id,
-      lens: card.item.lens,
-      curriculum_node_id: card.item.curriculum_node_id,
-      after_score: lastScore,
+      item_id: card.item.id, lens: card.item.lens,
+      curriculum_node_id: card.item.curriculum_node_id, after_score: lastScore,
     });
     try {
       const { items_created } = await createExplorationItems(card.item.id);
       const count = items_created?.length || 0;
       setExploreItems(prev => [...prev, card.item.id]);
-      Alert.alert('✦ Added to queue', `${count} follow-up question${count !== 1 ? 's' : ''} added for next session`);
+      Alert.alert('✦ Added to queue', `${count} follow-up question${count !== 1 ? 's' : ''} queued for next session`);
     } catch (e) {
       console.error('Explore failed:', e);
     }
@@ -195,26 +200,30 @@ export default function ReviewSession() {
         setRecording(null);
         setRecordingItem(null);
         if (uri) {
+          setProcessingVoice(true);
           logEvent('review_voice_memo_sent', {
-            item_id: card.item.id,
-            lens: card.item.lens,
+            item_id: card.item.id, lens: card.item.lens,
             curriculum_node_id: card.item.curriculum_node_id,
           });
           const result = await sendVoiceMemo(card.item.id, uri).catch(() => null);
+          setProcessingVoice(false);
           if (result?.suggested_score) {
             Alert.alert(
               '◎ Voice memo processed',
-              `${result.follow_ups_created?.length || 0} follow-up question${result.follow_ups_created?.length !== 1 ? 's' : ''} added.\nSuggested score: ${result.suggested_score}`,
+              `Suggested: ${result.suggested_score}${result.follow_ups_created?.length ? ` · ${result.follow_ups_created.length} follow-ups added` : ''}`,
               [
-                { text: 'Use suggested score', onPress: () => score(result.suggested_score as any) },
+                { text: `Use "${result.suggested_score}"`, onPress: () => score(result.suggested_score as any) },
                 { text: 'Score manually' },
               ]
             );
+          } else {
+            Alert.alert('◎ Voice memo saved', 'Recorded and saved.');
           }
         }
       } catch (e) {
         setRecording(null);
         setRecordingItem(null);
+        setProcessingVoice(false);
       }
     } else {
       try {
@@ -226,9 +235,7 @@ export default function ReviewSession() {
         setRecording(rec);
         setRecordingItem(card.item.id);
         logEvent('review_voice_memo_start', {
-          item_id: card.item.id,
-          lens: card.item.lens,
-          state_at_record: state,
+          item_id: card.item.id, lens: card.item.lens, state_at_record: state,
         });
       } catch (e) {
         console.error('Recording failed:', e);
@@ -334,12 +341,12 @@ export default function ReviewSession() {
 
           {/* Question */}
           <Pressable onPress={reveal} style={styles.questionArea}>
-            {state === 'loading' ? (
+            {!card.question ? (
               <ActivityIndicator color={colors.textMuted} style={{ marginTop: 20 }} />
             ) : (
-              <Text style={styles.questionText}>{card.question?.question}</Text>
+              <Text style={styles.questionText}>{card.question.question}</Text>
             )}
-            {state === 'question' && (
+            {state === 'question' && card.question && (
               <Text style={styles.tapHint}>tap to reveal</Text>
             )}
           </Pressable>
@@ -373,23 +380,44 @@ export default function ReviewSession() {
                 </Pressable>
               </View>
 
-              {/* Secondary actions */}
+              {/* Source expansion */}
+              {card.item.source_text ? (
+                <>
+                  <Pressable style={styles.sourceToggle} onPress={() => toggleExpanded(card.item.id)}>
+                    <Text style={styles.sourceToggleText}>
+                      {expandedItems.has(card.item.id) ? '▲ Hide source' : '▼ From the book'}
+                    </Text>
+                  </Pressable>
+                  {expandedItems.has(card.item.id) && (
+                    <View style={styles.sourceExpanded}>
+                      <Text style={styles.sourceText}>{card.item.source_text}</Text>
+                      <Pressable
+                        style={[styles.secondaryBtn, exploreItems.includes(card.item.id) && styles.secondaryBtnDone]}
+                        onPress={handleExploreQueue}
+                        disabled={exploreItems.includes(card.item.id)}
+                      >
+                        <Text style={styles.secondaryBtnText}>
+                          {exploreItems.includes(card.item.id) ? '✦ Follow-ups queued' : '✦ Queue follow-up questions'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              ) : null}
+
+              {/* Voice memo */}
               <View style={styles.secondaryRow}>
                 <Pressable
-                  style={[styles.secondaryBtn, exploreItems.includes(card.item.id) && styles.secondaryBtnDone]}
-                  onPress={handleExplore}
-                  disabled={exploreItems.includes(card.item.id)}
-                >
-                  <Text style={styles.secondaryBtnText}>
-                    {exploreItems.includes(card.item.id) ? '✦ Added to queue' : 'Read more →'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.secondaryBtn, recording && recordingItem === card.item.id && styles.secondaryBtnRecording]}
+                  style={[styles.secondaryBtn, styles.secondaryBtnFull,
+                    (recording && recordingItem === card.item.id) && styles.secondaryBtnRecording,
+                    processingVoice && styles.secondaryBtnProcessing]}
                   onPress={toggleRecording}
+                  disabled={processingVoice}
                 >
                   <Text style={styles.secondaryBtnText}>
-                    {recording && recordingItem === card.item.id ? '◎ Stop recording' : '◎ Voice memo'}
+                    {processingVoice ? '◎ Processing…'
+                      : recording && recordingItem === card.item.id ? '◎ Tap to stop recording'
+                      : '◎ Voice memo'}
                   </Text>
                 </Pressable>
               </View>
@@ -469,13 +497,30 @@ const styles = StyleSheet.create({
     fontSize: 13, fontWeight: '500',
   },
 
-  secondaryRow: { flexDirection: 'row', gap: 8 },
-  secondaryBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 3,
-    borderWidth: 1, borderColor: colors.rule, alignItems: 'center',
+  sourceToggle: { paddingVertical: 8, marginTop: 4 },
+  sourceToggleText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 11, color: colors.textMuted, letterSpacing: 0.04,
   },
+  sourceExpanded: {
+    borderLeftWidth: 2, borderLeftColor: colors.rule,
+    paddingLeft: 12, marginBottom: 12,
+  },
+  sourceText: {
+    fontFamily: Platform.select({ web: "'Crimson Pro', Georgia, serif", default: 'CrimsonPro_400Regular' }),
+    fontSize: 14, lineHeight: 21, color: colors.textSecondary, marginBottom: 10,
+  },
+
+  secondaryRow: { marginTop: 4 },
+  secondaryBtn: {
+    paddingVertical: 8, borderRadius: 3,
+    borderWidth: 1, borderColor: colors.rule, alignItems: 'center',
+    marginBottom: 6,
+  },
+  secondaryBtnFull: { width: '100%' },
   secondaryBtnDone: { borderColor: colors.rubric },
   secondaryBtnRecording: { borderColor: '#cc4444', backgroundColor: '#fff5f5' },
+  secondaryBtnProcessing: { borderColor: colors.textMuted, backgroundColor: colors.parchment },
   secondaryBtnText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
     fontSize: 12, color: colors.textSecondary,
