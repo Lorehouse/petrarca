@@ -119,6 +119,8 @@ const s = StyleSheet.create({
     top: 16,
     alignSelf: 'flex-start' as const,
     paddingLeft: 16,
+    width: 200,
+    flexShrink: 0,
   },
   title: {
     fontFamily: fonts.displaySemiBold,
