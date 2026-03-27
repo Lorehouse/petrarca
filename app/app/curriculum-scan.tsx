@@ -49,10 +49,11 @@ export default function CurriculumScanScreen() {
     fetch(`${RESEARCH_BASE}/curriculum/${domainId}`)
       .then(r => r.json())
       .then(data => {
-        setNodes(data.nodes || []);
+        const allNodes = (data.nodes || []).filter((n: Node) => n.level >= 2);
+        setNodes(allNodes);
         setDomainTitle(data.title || domainId);
-        // Sort: level first, then obscurity closest to 2.5
-        const sorted = [...(data.nodes || [])].sort((a: Node, b: Node) => {
+        // Sort: level 2 first (major topics), then level 3, then by obscurity
+        const sorted = [...allNodes].sort((a: Node, b: Node) => {
           if (a.level !== b.level) return a.level - b.level;
           return Math.abs(a.obscurity - 2.5) - Math.abs(b.obscurity - 2.5);
         });
