@@ -445,15 +445,26 @@ CREATE TABLE IF NOT EXISTS review_items (
   last_reviewed_at INTEGER,
   last_score TEXT,                    -- knew | partly | missed
   review_count INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  cached_question TEXT                -- JSON: pre-generated question, cleared after answer
 );
 """
 
+MIGRATIONS = [
+    # Add cached_question column if not present (idempotent)
+    "ALTER TABLE review_items ADD COLUMN cached_question TEXT",
+]
+
 
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist, apply migrations."""
     conn = get_connection()
     conn.executescript(SCHEMA)
+    for migration in MIGRATIONS:
+        try:
+            conn.execute(migration)
+        except Exception:
+            pass  # column already exists
     conn.commit()
     conn.close()
     print(f'[db] Initialized database at {DB_PATH}', flush=True)

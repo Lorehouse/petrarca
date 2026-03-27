@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -278,6 +279,28 @@ def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: 
 
     conn.commit()
     print(f'[review] Ch{chapter_number} mapped: {created} items → {node_titles}', flush=True)
+
+    # Pre-generate questions in background — items will be ready before user opens review
+    new_ids = conn.execute(
+        'SELECT id FROM review_items WHERE source_book_id=? AND source_chapter_number=? AND cached_question IS NULL',
+        (book_id, chapter_number)
+    ).fetchall()
+    if new_ids:
+        def _pregen():
+            from db import get_connection as _conn
+            c = _conn()
+            for (iid,) in new_ids:
+                try:
+                    q = generate_question(iid, c)
+                    c.execute('UPDATE review_items SET cached_question=? WHERE id=?',
+                              (json.dumps(q), iid))
+                    c.commit()
+                except Exception as e:
+                    print(f'[review] pre-gen failed {iid}: {e}', flush=True)
+            c.close()
+            print(f'[review] pre-generated {len(new_ids)} questions for ch{chapter_number}', flush=True)
+        threading.Thread(target=_pregen, daemon=True).start()
+
     return {
         'nodes_covered': node_titles,
         'items_created': created,
@@ -318,6 +341,13 @@ def generate_question(item_id: str, conn) -> dict:
     if not row:
         return {}
     item = dict(row)
+
+    # Serve from cache if available
+    if item.get('cached_question'):
+        try:
+            return json.loads(item['cached_question'])
+        except Exception:
+            pass
 
     domain_id = item.get('curriculum_domain', 'sicily_history_culture_and_legacy')
     curriculum = load_curriculum(domain_id)
@@ -395,9 +425,10 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
     next_due = now + int(new_stability * 24 * 60 * 60 * 1000)
 
+    # Clear cached question — knowledge state has changed, regenerate for next session
     conn.execute("""
         UPDATE review_items SET stability_days=?, due_at=?, last_reviewed_at=?,
-          last_score=?, review_count=review_count+1
+          last_score=?, review_count=review_count+1, cached_question=NULL
         WHERE id=?
     """, (new_stability, next_due, now, score, item_id))
 
@@ -420,6 +451,22 @@ def record_answer(item_id: str, score: str, conn) -> dict:
                 )
 
     conn.commit()
+
+    # Background re-generation — pre-cache question for next session
+    def _regen():
+        try:
+            from db import get_connection as _conn
+            c = _conn()
+            q = generate_question(item_id, c)
+            c.execute('UPDATE review_items SET cached_question=? WHERE id=?',
+                      (json.dumps(q), item_id))
+            c.commit()
+            c.close()
+            print(f'[review] re-generated question for item {item_id}', flush=True)
+        except Exception as e:
+            print(f'[review] re-gen failed for item {item_id}: {e}', flush=True)
+    threading.Thread(target=_regen, daemon=True).start()
+
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
 
 
