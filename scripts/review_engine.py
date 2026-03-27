@@ -624,12 +624,36 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> 
             domains.add(r['curriculum_domain'])
 
     curriculum_cache: dict = {}
-    node_depths: dict = {}
+    node_meta: dict = {}  # node_id -> {area_order, date_start}
     for domain in domains:
         curriculum = load_curriculum(domain)
         curriculum_cache[domain] = curriculum
         if curriculum:
-            node_depths.update(compute_node_depths(curriculum))
+            # Build area order from Level 1 nodes (their position in the list = priority)
+            area_order = {}
+            area_pos = 0
+            for n in curriculum.get('nodes', []):
+                if n.get('level') == 1:
+                    area_order[n['id']] = area_pos
+                    area_pos += 1
+            # Assign each node its area's position
+            parent_map = {n['id']: n.get('parent_id') for n in curriculum.get('nodes', [])}
+            for n in curriculum.get('nodes', []):
+                parent = parent_map.get(n['id'])
+                grandparent = parent_map.get(parent) if parent else None
+                area_id = grandparent or parent or n['id']
+                node_meta[n['id']] = {
+                    'area_order': area_order.get(area_id, 99),
+                    'date_start': n.get('date_start'),
+                }
+
+    def _sort_key(item):
+        nid = item.get('curriculum_node_id', '')
+        meta = node_meta.get(nid, {})
+        area = meta.get('area_order', 99)
+        ds = meta.get('date_start')
+        date_sort = ds if ds is not None else 5000
+        return (area, date_sort, item.get('due_at', 0))
 
     # Build unified item list
     items = []
@@ -638,7 +662,7 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> 
     for r in ri_rows:
         items.append(dict(r))
 
-    items.sort(key=lambda i: (node_depths.get(i.get('curriculum_node_id', ''), 999), i.get('due_at', 0)))
+    items.sort(key=_sort_key)
     return items[:limit]
 
 
