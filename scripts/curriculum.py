@@ -32,13 +32,13 @@ def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str 
     if anthropic_key:
         try:
             import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-            msg = client.messages.create(
+            client = anthropic.Anthropic(api_key=anthropic_key, timeout=600.0)
+            with client.messages.stream(
                 model='claude-opus-4-6',
                 max_tokens=max_tokens,
                 messages=[{'role': 'user', 'content': prompt}],
-            )
-            return msg.content[0].text
+            ) as stream:
+                return stream.get_final_text()
         except Exception as e:
             print(f'[curriculum] Anthropic SDK failed: {e}', flush=True)
 
