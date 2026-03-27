@@ -64,6 +64,7 @@ from curriculum import (
     load_knowledge_states, update_knowledge, get_coverage_report,
     map_book_to_curriculum, start_elicitation, continue_elicitation,
     import_assessment_answers, get_book_curriculum_context,
+    get_curriculum_graph_data,
 )
 from review_engine import (
     create_review_items_for_chapter, get_review_queue, generate_question,
@@ -4156,6 +4157,19 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _serve_curriculum_graph_html(self):
+        """GET /curriculum/graph — serve the interactive curriculum graph page."""
+        html_path = Path(__file__).parent / 'curriculum_graph.html'
+        if not html_path.exists():
+            self._send_json_response(404, {'error': 'curriculum_graph.html not found'})
+            return
+        content = html_path.read_bytes()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
     def do_POST(self):
         if self.path == '/chat':
             return self._handle_chat()
@@ -4820,6 +4834,13 @@ JSON array only:"""
         # Curriculum GET endpoints
         if self.path == '/curriculum/list':
             return self._send_json_response(200, {'curricula': list_curricula()})
+        if self.path == '/curriculum/graph-data':
+            conn = get_connection()
+            data = get_curriculum_graph_data(conn)
+            conn.close()
+            return self._send_json_response(200, data)
+        if self.path == '/curriculum/graph':
+            return self._serve_curriculum_graph_html()
         if self.path.startswith('/curriculum/book-context/'):
             book_id = self.path.split('/curriculum/book-context/')[1].split('?')[0]
             context = get_book_curriculum_context(book_id)
@@ -4830,7 +4851,7 @@ JSON array only:"""
             if report:
                 return self._send_json_response(200, report)
             return self._send_json_response(404, {'error': 'Curriculum not found'})
-        if self.path.startswith('/curriculum/') and not self.path.startswith('/curriculum/elicit') and not self.path.startswith('/curriculum/knowledge') and not self.path.startswith('/curriculum/map') and not self.path.startswith('/curriculum/list'):
+        if self.path.startswith('/curriculum/') and not self.path.startswith('/curriculum/elicit') and not self.path.startswith('/curriculum/knowledge') and not self.path.startswith('/curriculum/map') and not self.path.startswith('/curriculum/list') and not self.path.startswith('/curriculum/graph'):
             domain_id = self.path.split('/curriculum/')[1].split('?')[0]
             curriculum = load_curriculum(domain_id)
             if curriculum:

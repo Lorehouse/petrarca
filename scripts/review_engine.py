@@ -280,96 +280,279 @@ def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
     return [m for m in (mappings or []) if isinstance(m, dict) and m.get('node_id') in valid_ids]
 
 
-def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: list,
-                                     chapter_number: int, chapter_title: str, conn) -> dict:
-    """Map chapter to curriculum nodes and create review_items. Returns summary."""
-    mappings = map_chapter_to_nodes(book_id, book_title, book_topics, chapter_number, chapter_title)
-    if not mappings:
-        return {'nodes_covered': [], 'items_created': 0, 'domain': detect_curriculum(book_title, book_topics)}
+def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int) -> int:
+    """Create lightweight knowledge_items for prerequisites and same-period siblings.
 
-    now = int(time.time() * 1000)
-    created = 0
-    node_titles = []
+    Only creates items for Level 2+ nodes that don't already exist in knowledge_items.
+    Uses the curriculum node description as the sole source (book_id=None).
+    Returns count of gap-fill items created.
+    """
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return 0
 
-    for m in mappings:
+    nodes_by_id = {n['id']: n for n in curriculum['nodes']}
+    gaps_created = 0
+
+    candidate_ids: set = set()
+
+    for node_id in mapped_node_ids:
+        node = nodes_by_id.get(node_id, {})
+        # Prerequisites of mapped nodes
+        for prereq_id in node.get('prerequisites', []):
+            prereq = nodes_by_id.get(prereq_id, {})
+            if prereq.get('level', 1) >= 2:
+                candidate_ids.add(prereq_id)
+        # Siblings: same parent, same rough time period (within 200 years)
+        parent_id = node.get('parent_id')
+        node_start = node.get('date_start')
+        if parent_id and node_start is not None:
+            for sibling in curriculum['nodes']:
+                if (sibling.get('parent_id') == parent_id
+                        and sibling['id'] != node_id
+                        and sibling.get('level', 1) >= 2):
+                    sib_start = sibling.get('date_start')
+                    if sib_start is not None and abs(sib_start - node_start) <= 200:
+                        candidate_ids.add(sibling['id'])
+
+    for cand_id in candidate_ids:
+        if cand_id in mapped_node_ids:
+            continue
+        item_id = f"{domain_id}:{cand_id}"
         existing = conn.execute(
-            'SELECT id FROM review_items WHERE source_book_id=? AND source_chapter_number=? AND curriculum_node_id=?',
-            (book_id, chapter_number, m['node_id'])
+            'SELECT id FROM knowledge_items WHERE id=?', (item_id,)
         ).fetchone()
         if existing:
             continue
 
-        item_id = f"ri_{book_id}_{chapter_number}_{m['node_id'].replace(' ', '_')[:20]}_{now}"
-        conn.execute("""
-            INSERT INTO review_items
-              (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
-               source_book_id, source_chapter_number, source_chapter_title,
-               source_text, temporal_hook, lens, stability_days, due_at, review_count, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            item_id, 'book_chapter',
-            detect_curriculum(book_title, book_topics),
-            m['node_id'], m.get('node_title', ''),
-            book_id, chapter_number, chapter_title,
-            m.get('source_text', ''), m.get('temporal_hook', ''),
-            m.get('lens', 'SIGNIFICANCE'),
-            INITIAL_STABILITY_DAYS, now, 0, now,
-        ))
-        created += 1
+        node = nodes_by_id.get(cand_id, {})
+        source = {
+            'book_id': None,
+            'chapter_number': None,
+            'chapter_title': 'Curriculum context — not yet in a book',
+            'source_text': node.get('description', '')[:400],
+            'lens': 'SIGNIFICANCE',
+            'temporal_hook': '',
+            'added_at': now,
+        }
+        try:
+            conn.execute('''
+                INSERT INTO knowledge_items
+                (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                 sources, question_history, created_at)
+                VALUES (?,?,?,?,?,?,?,?)
+            ''', (
+                item_id, cand_id, domain_id,
+                INITIAL_STABILITY_DAYS, now,
+                json.dumps([source]), '[]', now,
+            ))
+            gaps_created += 1
+        except Exception as e:
+            print(f'[review] gap-fill skip {item_id}: {e}', flush=True)
+
+    return gaps_created
+
+
+def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: list,
+                                     chapter_number: int, chapter_title: str, conn) -> dict:
+    """Map chapter to curriculum nodes and upsert into knowledge_items. Returns summary."""
+    mappings = map_chapter_to_nodes(book_id, book_title, book_topics, chapter_number, chapter_title)
+    domain_id = detect_curriculum(book_title, book_topics)
+    if not mappings:
+        return {'nodes_covered': [], 'items_created': 0, 'items_updated': 0,
+                'gaps_filled': 0, 'domain': domain_id}
+
+    now = int(time.time() * 1000)
+    created = 0
+    updated = 0
+    node_titles = []
+    mapped_node_ids = []
+
+    for m in mappings:
+        item_id = f"{domain_id}:{m['node_id']}"
+        mapped_node_ids.append(m['node_id'])
+
+        new_source = {
+            'book_id': book_id,
+            'chapter_number': chapter_number,
+            'chapter_title': chapter_title,
+            'source_text': m.get('source_text', ''),
+            'lens': m.get('lens', 'SIGNIFICANCE'),
+            'temporal_hook': m.get('temporal_hook', ''),
+            'added_at': now,
+        }
+
+        existing = conn.execute(
+            'SELECT id, sources FROM knowledge_items WHERE id=?', (item_id,)
+        ).fetchone()
+
+        if existing:
+            # Merge new source into existing sources array (skip if same book+chapter already there)
+            try:
+                sources = json.loads(existing['sources'] or '[]')
+            except Exception:
+                sources = []
+            already = any(
+                s.get('book_id') == book_id and s.get('chapter_number') == chapter_number
+                for s in sources
+            )
+            if not already:
+                sources.append(new_source)
+                conn.execute(
+                    'UPDATE knowledge_items SET sources=?, cached_question=NULL WHERE id=?',
+                    (json.dumps(sources), item_id)
+                )
+                updated += 1
+        else:
+            conn.execute('''
+                INSERT INTO knowledge_items
+                (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                 sources, question_history, created_at)
+                VALUES (?,?,?,?,?,?,?,?)
+            ''', (
+                item_id, m['node_id'], domain_id,
+                INITIAL_STABILITY_DAYS, now,
+                json.dumps([new_source]), '[]', now,
+            ))
+            created += 1
+
         node_titles.append(m.get('node_title', m['node_id']))
 
+    gaps_filled = fill_prerequisite_gaps(domain_id, mapped_node_ids, conn, now)
     conn.commit()
-    print(f'[review] Ch{chapter_number} mapped: {created} items → {node_titles}', flush=True)
+    print(f'[review] Ch{chapter_number} mapped: {created} created, {updated} updated, '
+          f'{gaps_filled} gaps → {node_titles}', flush=True)
 
-    # Pre-generate questions in background — items will be ready before user opens review
-    new_ids = conn.execute(
-        'SELECT id FROM review_items WHERE source_book_id=? AND source_chapter_number=? AND cached_question IS NULL',
-        (book_id, chapter_number)
+    # Pre-generate questions in background for items with no cached_question
+    items_needing_questions = conn.execute(
+        '''SELECT id FROM knowledge_items
+           WHERE curriculum_domain=? AND cached_question IS NULL
+             AND id IN ({})'''.format(','.join('?' * len(mapped_node_ids))),
+        [domain_id] + [f"{domain_id}:{nid}" for nid in mapped_node_ids]
     ).fetchall()
-    if new_ids:
+    if items_needing_questions:
+        ids_to_gen = [r['id'] for r in items_needing_questions]
         def _pregen():
             from db import get_connection as _conn
             c = _conn()
-            for (iid,) in new_ids:
+            for iid in ids_to_gen:
                 try:
                     q = generate_question(iid, c)
-                    c.execute('UPDATE review_items SET cached_question=? WHERE id=?',
+                    c.execute('UPDATE knowledge_items SET cached_question=? WHERE id=?',
                               (json.dumps(q), iid))
                     c.commit()
                 except Exception as e:
                     print(f'[review] pre-gen failed {iid}: {e}', flush=True)
             c.close()
-            print(f'[review] pre-generated {len(new_ids)} questions for ch{chapter_number}', flush=True)
+            print(f'[review] pre-generated {len(ids_to_gen)} questions for ch{chapter_number}', flush=True)
         threading.Thread(target=_pregen, daemon=True).start()
 
     return {
         'nodes_covered': node_titles,
         'items_created': created,
-        'domain': detect_curriculum(book_title, book_topics),
+        'items_updated': updated,
+        'gaps_filled': gaps_filled,
+        'domain': domain_id,
     }
 
 
 # ── Review queue ──────────────────────────────────────────────────────────────
 
-def get_review_queue(limit: int = 20, book_id: str | None = None, conn = None) -> list:
+def _knowledge_item_to_queue_row(ki: dict, curriculum_cache: dict) -> dict:
+    """Convert a knowledge_items row to the ReviewItem shape the client expects."""
+    domain = ki.get('curriculum_domain', '')
+    curriculum = curriculum_cache.get(domain)
+    node_id = ki.get('curriculum_node_id', '')
+
+    # Resolve node title from curriculum
+    node_title = ''
+    if curriculum:
+        node = next((n for n in curriculum.get('nodes', []) if n['id'] == node_id), None)
+        node_title = node['title'] if node else node_id
+
+    # Pick best source: most recently added (last in array), falling back to first
+    try:
+        sources = json.loads(ki.get('sources') or '[]')
+    except Exception:
+        sources = []
+
+    # Determine item_type: gap_fill if all sources have book_id=None, else book_chapter
+    item_type = 'gap_fill' if sources and all(s.get('book_id') is None for s in sources) else 'book_chapter'
+
+    # Best source for display: prefer a real book source; within those, most recently added
+    book_sources = [s for s in sources if s.get('book_id') is not None]
+    best = book_sources[-1] if book_sources else (sources[-1] if sources else {})
+
+    return {
+        'id': ki['id'],
+        'item_type': item_type,
+        'curriculum_domain': domain,
+        'curriculum_node_id': node_id,
+        'curriculum_node_title': node_title,
+        'source_book_id': best.get('book_id'),
+        'source_chapter_number': best.get('chapter_number'),
+        'source_chapter_title': best.get('chapter_title', ''),
+        'source_text': best.get('source_text', ''),
+        'lens': best.get('lens', 'SIGNIFICANCE'),
+        'temporal_hook': best.get('temporal_hook', ''),
+        'stability_days': ki.get('stability_days', 1.0),
+        'due_at': ki.get('due_at', 0),
+        'last_reviewed_at': ki.get('last_reviewed_at'),
+        'last_score': ki.get('last_score'),
+        'review_count': ki.get('review_count', 0),
+        'sources': sources,
+        'cached_question': ki.get('cached_question'),
+    }
+
+
+def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> list:
     now = int(time.time() * 1000)
     soon = now + 24 * 60 * 60 * 1000
 
-    query = 'SELECT * FROM review_items WHERE due_at <= ?'
-    params = [soon]
+    # knowledge_items: core curriculum nodes (book_chapter + gap_fill)
+    ki_query = 'SELECT * FROM knowledge_items WHERE due_at <= ?'
+    ki_params = [soon]
     if book_id:
-        query += ' AND source_book_id = ?'
-        params.append(book_id)
+        # Filter to items that have at least one source from this book
+        # (SQLite JSON: simpler to post-filter in Python)
+        ki_rows = conn.execute(ki_query, ki_params).fetchall()
+        ki_rows = [r for r in ki_rows
+                   if any(s.get('book_id') == book_id
+                          for s in (json.loads(r['sources'] or '[]') if r['sources'] else []))]
+    else:
+        ki_rows = conn.execute(ki_query, ki_params).fetchall()
 
-    rows = conn.execute(query, params).fetchall()
-    items = [dict(r) for r in rows]
+    # exploration + voice_followup items still live in review_items
+    ri_query = "SELECT * FROM review_items WHERE due_at <= ? AND item_type != 'book_chapter'"
+    ri_params = [soon]
+    if book_id:
+        ri_query += ' AND source_book_id = ?'
+        ri_params.append(book_id)
+    ri_rows = conn.execute(ri_query, ri_params).fetchall()
 
-    domains = {i['curriculum_domain'] for i in items if i.get('curriculum_domain')}
+    # Pre-load curricula for depth ordering
+    domains: set = set()
+    for r in ki_rows:
+        if r['curriculum_domain']:
+            domains.add(r['curriculum_domain'])
+    for r in ri_rows:
+        if r['curriculum_domain']:
+            domains.add(r['curriculum_domain'])
+
+    curriculum_cache: dict = {}
     node_depths: dict = {}
     for domain in domains:
         curriculum = load_curriculum(domain)
+        curriculum_cache[domain] = curriculum
         if curriculum:
             node_depths.update(compute_node_depths(curriculum))
+
+    # Build unified item list
+    items = []
+    for r in ki_rows:
+        items.append(_knowledge_item_to_queue_row(dict(r), curriculum_cache))
+    for r in ri_rows:
+        items.append(dict(r))
 
     items.sort(key=lambda i: (node_depths.get(i.get('curriculum_node_id', ''), 999), i.get('due_at', 0)))
     return items[:limit]
@@ -377,8 +560,25 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn = None) -
 
 # ── Question generation ───────────────────────────────────────────────────────
 
+def _best_source_for_question(sources: list) -> dict:
+    """Pick the most useful source for question generation.
+
+    Prefer real book sources (book_id not None). Among those, prefer the most
+    recently added (last) since it tends to have the freshest context.
+    Falls back to curriculum gap-fill source if no book sources exist.
+    """
+    book_sources = [s for s in sources if s.get('book_id') is not None]
+    if book_sources:
+        # Most recently added = last in the list
+        return book_sources[-1]
+    return sources[-1] if sources else {}
+
+
 def generate_question(item_id: str, conn) -> dict:
-    row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
+    # First try knowledge_items (node-centric); fall back to review_items (exploration/voice)
+    row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
+    if row is None:
+        row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
     if not row:
         return {}
     item = dict(row)
@@ -396,9 +596,23 @@ def generate_question(item_id: str, conn) -> dict:
 
     node = next((n for n in (curriculum or {}).get('nodes', [])
                  if n['id'] == item.get('curriculum_node_id')), None)
-    node_title = node['title'] if node else item.get('curriculum_node_title', '')
+    node_title = node['title'] if node else item.get('curriculum_node_title', item.get('curriculum_node_id', ''))
     node_description = node.get('description', '') if node else ''
 
+    # Resolve source_text and temporal_hook from sources array (knowledge_items) or direct fields (review_items)
+    if 'sources' in item and item['sources']:
+        try:
+            sources = json.loads(item['sources'])
+        except Exception:
+            sources = []
+        best = _best_source_for_question(sources)
+        source_text = best.get('source_text', '')
+        temporal_hook = best.get('temporal_hook', '')
+        lens = best.get('lens', 'SIGNIFICANCE')
+    else:
+        source_text = item.get('source_text', '')
+        temporal_hook = item.get('temporal_hook', '')
+        lens = item.get('lens', 'SIGNIFICANCE')
 
     known = [n['title'] for n in (curriculum or {}).get('nodes', [])
              if knowledge_state.get(n['id'], {}).get('knowledge') in ('engaged', 'anchored')
@@ -410,18 +624,17 @@ def generate_question(item_id: str, conn) -> dict:
                      + '\n'.join(f'- {t}' for t in known[:3]))
 
     temporal_ctx = ''
-    if item.get('temporal_hook'):
-        temporal_ctx = f"Temporal hook: {item['temporal_hook']}"
+    if temporal_hook:
+        temporal_ctx = f"Temporal hook: {temporal_hook}"
 
     review_count = item.get('review_count', 0) + 1
-    lens = item.get('lens', 'SIGNIFICANCE')
 
     # Reviews 1-2: pure factual recall — who/when/what, no analysis
     if review_count <= 2:
         prompt = QUESTION_GEN_PROMPT_FACTUAL.format(
             node_title=node_title,
             node_description=node_description,
-            source_text=item.get('source_text', '')[:400],
+            source_text=source_text[:400],
             temporal_context=temporal_ctx,
         )
     else:
@@ -433,7 +646,7 @@ def generate_question(item_id: str, conn) -> dict:
         prompt = QUESTION_GEN_PROMPT.format(
             node_title=node_title,
             node_description=node_description,
-            source_text=item.get('source_text', '')[:400],
+            source_text=source_text[:400],
             review_count=review_count,
             lens=lens,
             difficulty_instruction=difficulty,
@@ -444,13 +657,13 @@ def generate_question(item_id: str, conn) -> dict:
     result = _parse_json(raw) if raw else None
 
     if isinstance(result, dict) and 'question' in result:
-        result.setdefault('temporal_hook', item.get('temporal_hook', ''))
+        result.setdefault('temporal_hook', temporal_hook)
         return result
 
     return {
         'question': f'What was historically significant about {node_title}?',
-        'answer_guidance': item.get('source_text', ''),
-        'temporal_hook': item.get('temporal_hook', ''),
+        'answer_guidance': source_text,
+        'temporal_hook': temporal_hook,
         'curriculum_context': '',
     }
 
@@ -458,7 +671,12 @@ def generate_question(item_id: str, conn) -> dict:
 # ── Record answer ─────────────────────────────────────────────────────────────
 
 def record_answer(item_id: str, score: str, conn) -> dict:
-    row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
+    # Look up in knowledge_items first; fall back to review_items (exploration/voice)
+    row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
+    table = 'knowledge_items'
+    if row is None:
+        row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
+        table = 'review_items'
     if not row:
         return {}
     item = dict(row)
@@ -472,17 +690,29 @@ def record_answer(item_id: str, score: str, conn) -> dict:
     next_due = now + int(new_stability * 24 * 60 * 60 * 1000)
 
     # Clear cached question — knowledge state has changed, regenerate for next session
-    conn.execute("""
-        UPDATE review_items SET stability_days=?, due_at=?, last_reviewed_at=?,
+    conn.execute(f"""
+        UPDATE {table} SET stability_days=?, due_at=?, last_reviewed_at=?,
           last_score=?, review_count=review_count+1, cached_question=NULL
         WHERE id=?
     """, (new_stability, next_due, now, score, item_id))
 
     if item.get('curriculum_domain') and item.get('curriculum_node_id'):
         knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
+        # Determine source book/chapter for the curriculum update note
+        if table == 'knowledge_items':
+            try:
+                sources = json.loads(item.get('sources') or '[]')
+                best = _best_source_for_question(sources)
+                src_book = best.get('book_id', '')
+                src_chapter = best.get('chapter_number', '')
+            except Exception:
+                src_book, src_chapter = '', ''
+        else:
+            src_book = item.get('source_book_id', '')
+            src_chapter = item.get('source_chapter_number', '')
         update_knowledge(item['curriculum_domain'], item['curriculum_node_id'],
                          knowledge=knowledge_val, confidence=confidence_val,
-                         source=f"review:{item.get('source_book_id','')}:{item.get('source_chapter_number','')}")
+                         source=f"review:{src_book}:{src_chapter}")
 
     if score == 'missed' and item.get('curriculum_domain') and item.get('curriculum_node_id'):
         curriculum = load_curriculum(item['curriculum_domain'])
@@ -491,6 +721,11 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             if dep_ids:
                 soon = now + 24 * 60 * 60 * 1000
                 ph = ','.join('?' * len(dep_ids))
+                # Reschedule dependents in both tables
+                conn.execute(
+                    f"UPDATE knowledge_items SET stability_days=1.0, due_at=? WHERE curriculum_node_id IN ({ph}) AND (last_score IS NULL OR last_score != 'knew')",
+                    [soon] + dep_ids,
+                )
                 conn.execute(
                     f"UPDATE review_items SET stability_days=1.0, due_at=? WHERE curriculum_node_id IN ({ph}) AND (last_score IS NULL OR last_score != 'knew')",
                     [soon] + dep_ids,
@@ -504,13 +739,13 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             from db import get_connection as _conn
             c = _conn()
             q = generate_question(item_id, c)
-            c.execute('UPDATE review_items SET cached_question=? WHERE id=?',
+            c.execute(f'UPDATE {table} SET cached_question=? WHERE id=?',
                       (json.dumps(q), item_id))
             c.commit()
             c.close()
-            print(f'[review] re-generated question for item {item_id}', flush=True)
+            print(f'[review] re-generated question for {table} item {item_id}', flush=True)
         except Exception as e:
-            print(f'[review] re-gen failed for item {item_id}: {e}', flush=True)
+            print(f'[review] re-gen failed for {table} item {item_id}: {e}', flush=True)
     threading.Thread(target=_regen, daemon=True).start()
 
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
@@ -523,28 +758,86 @@ def get_review_stats(conn) -> dict:
     end_today = now + 24 * 60 * 60 * 1000
     end_week = now + 7 * 24 * 60 * 60 * 1000
 
-    due_today = conn.execute('SELECT COUNT(*) FROM review_items WHERE due_at <= ?', (end_today,)).fetchone()[0]
-    due_week = conn.execute('SELECT COUNT(*) FROM review_items WHERE due_at <= ?', (end_week,)).fetchone()[0]
-    total = conn.execute('SELECT COUNT(*) FROM review_items').fetchone()[0]
-    by_book = conn.execute(
-        'SELECT source_book_id, COUNT(*) FROM review_items WHERE due_at<=? GROUP BY source_book_id', (end_today,)
+    # Core nodes from knowledge_items
+    ki_due_today = conn.execute(
+        'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?', (end_today,)
+    ).fetchone()[0]
+    ki_due_week = conn.execute(
+        'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?', (end_week,)
+    ).fetchone()[0]
+    ki_total = conn.execute('SELECT COUNT(*) FROM knowledge_items').fetchone()[0]
+
+    # Exploration / voice items from review_items
+    ri_due_today = conn.execute(
+        "SELECT COUNT(*) FROM review_items WHERE due_at <= ? AND item_type != 'book_chapter'", (end_today,)
+    ).fetchone()[0]
+    ri_due_week = conn.execute(
+        "SELECT COUNT(*) FROM review_items WHERE due_at <= ? AND item_type != 'book_chapter'", (end_week,)
+    ).fetchone()[0]
+    ri_total = conn.execute(
+        "SELECT COUNT(*) FROM review_items WHERE item_type != 'book_chapter'"
+    ).fetchone()[0]
+
+    # Per-book breakdown: iterate knowledge_items sources arrays
+    by_book: dict = {}
+    ki_rows = conn.execute(
+        'SELECT sources FROM knowledge_items WHERE due_at <= ?', (end_today,)
     ).fetchall()
+    for r in ki_rows:
+        try:
+            sources = json.loads(r['sources'] or '[]')
+            book_sources = [s for s in sources if s.get('book_id')]
+            if book_sources:
+                bid = book_sources[-1]['book_id']
+                by_book[bid] = by_book.get(bid, 0) + 1
+        except Exception:
+            pass
 
     return {
-        'due_today': due_today,
-        'due_this_week': due_week,
-        'total': total,
-        'by_source': {r[0]: r[1] for r in by_book if r[0]},
+        'due_today': ki_due_today + ri_due_today,
+        'due_this_week': ki_due_week + ri_due_week,
+        'total': ki_total + ri_total,
+        'knowledge_items_total': ki_total,
+        'by_source': by_book,
     }
 
 
 # ── Exploration items ──────────────────────────────────────────────────────────
 
-def create_exploration_items(item_id: str, conn) -> list:
+def _load_item_for_child(item_id: str, conn) -> dict | None:
+    """Load parent item from knowledge_items or review_items, normalising field names."""
+    row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
+    if row:
+        item = dict(row)
+        # Derive flat fields from sources array for use in child items
+        try:
+            sources = json.loads(item.get('sources') or '[]')
+            best = _best_source_for_question(sources)
+        except Exception:
+            best = {}
+        item['source_book_id'] = best.get('book_id')
+        item['source_chapter_number'] = best.get('chapter_number')
+        item['source_chapter_title'] = best.get('chapter_title', '')
+        item['source_text'] = best.get('source_text', '')
+        # Resolve curriculum_node_title from curriculum
+        domain = item.get('curriculum_domain', '')
+        curriculum = load_curriculum(domain)
+        node_id = item.get('curriculum_node_id', '')
+        if curriculum:
+            node = next((n for n in curriculum.get('nodes', []) if n['id'] == node_id), None)
+            item['curriculum_node_title'] = node['title'] if node else node_id
+        else:
+            item['curriculum_node_title'] = node_id
+        return item
+
     row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
-    if not row:
+    return dict(row) if row else None
+
+
+def create_exploration_items(item_id: str, conn) -> list:
+    item = _load_item_for_child(item_id, conn)
+    if not item:
         return []
-    item = dict(row)
 
     prompt = EXPLORE_PROMPT.format(
         node_title=item.get('curriculum_node_title', ''),
@@ -587,10 +880,9 @@ def create_exploration_items(item_id: str, conn) -> list:
 
 def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> dict:
     """transcribe_fn: callable(Path) -> str  (e.g. transcribe_on_server)"""
-    row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
-    if not row:
+    item = _load_item_for_child(item_id, conn)
+    if not item:
         return {}
-    item = dict(row)
 
     transcript = transcribe_fn(audio_path)
     if not transcript:

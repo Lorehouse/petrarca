@@ -1,0 +1,149 @@
+{
+  "score": 0.9814814814814815,
+  "results": [
+    {
+      "id": "f01",
+      "node_title": "The Western Greeks: Why They Came",
+      "question": "Which city founded the colony of Syracuse in 733 BC?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear, conversational, and targets a precise historical fact without any significant issues."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f02",
+      "node_title": "Syracuse: Corinth's Greatest Colony",
+      "question": "On which island did Corinthian settlers found Syracuse?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear, conversational, and targets a single specific geographical fact."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f03",
+      "node_title": "The Age of Tyrants",
+      "question": "What did the term 'tyrannos' originally mean?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear and well-structured, although the source text provided does not actually contain the answer regarding the etymology of 'tyrannos'."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f04",
+      "node_title": "Gelon and the Battle of Himera, 480 BC",
+      "question": "Which tyrant defeated the Carthaginians at Himera in 480 BC?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear, conversational, and targets a singular historical fact."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f05",
+      "node_title": "Greeks versus Carthage: The Struggle for Sicily",
+      "question": "What year did the Battle of Himera occur?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is excellent for factual recall, though it relies on information not explicitly provided in the short source text snippet."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f06",
+      "node_title": "Dionysius I: Empire Builder of Syracuse",
+      "question": "Which fortress did Dionysius I build in Syracuse?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear and well-structured, although the provided source text does not actually contain the answer."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f07",
+      "node_title": "Dionysius I: Empire Builder of Syracuse",
+      "question": "Which fortress did Dionysius I build in Syracuse?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear and direct, though it relies on external historical knowledge not contained within the provided source text."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f08",
+      "node_title": "Late Antiquity and Byzantine Sicily",
+      "question": "Which emperor moved the imperial capital to Syracuse?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 1,
+        "note": "The question is factually inaccurate based on the provided source text, as no emperor moved the imperial capital to Syracuse."
+      },
+      "normalized": 0.7777777777777778
+    },
+    {
+      "id": "f09",
+      "node_title": "The Norman Conquest of Sicily",
+      "question": "What year did Roger I complete the conquest of Sicily?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear, conversational, and targets a precise historical fact."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f10",
+      "node_title": "The Athenian Expedition, 415-413 BC",
+      "question": "Where were surviving Athenian soldiers forced to labor?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is clear and factual, though it requires information beyond the provided source text."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f11",
+      "node_title": "Roman Sicily \u2014 The First Province",
+      "question": "In what year did Syracuse fall to Rome?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is excellent, precise, and meets all criteria for factual recall."
+      },
+      "normalized": 1.0
+    },
+    {
+      "id": "f12",
+      "node_title": "Archimedes of Syracuse",
+      "question": "What device did Archimedes invent to raise water?",
+      "scores": {
+        "direct": 3,
+        "natural": 3,
+        "specific": 3,
+        "note": "The question is excellent, though it requires knowledge outside of the provided source text."
+      },
+      "normalized": 1.0
+    }
+  ]
+}

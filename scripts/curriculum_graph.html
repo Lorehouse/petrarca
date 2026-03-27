@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curriculum Graph — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --claim-new: #2a7a4a;
+  --gold: #c9a84c;
+
+  /* Curriculum palette */
+  --c-sicily: #8b4513;
+  --c-ancient: #1e5799;
+  --c-roman: #6b3a8d;
+  --c-entity: #c9a84c;
+  --c-unknown: #999;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--parchment);
+  color: var(--ink);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+header {
+  padding: 14px 20px 10px;
+  border-bottom: 2px solid var(--ink);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+header::after {
+  content: '';
+  position: absolute;
+  top: 54px;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--ink);
+}
+h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+}
+h1 span {
+  color: var(--rubric);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.search-box {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  width: 200px;
+  outline: none;
+}
+.search-box:focus { border-color: var(--rubric); }
+
+/* Curriculum filter toggles */
+.filter-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.filter-pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-family: 'EB Garamond', serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border: 1.5px solid;
+  transition: all 0.15s;
+  user-select: none;
+}
+.filter-pill.active { color: white; }
+.filter-pill:not(.active) { background: transparent; }
+
+/* Knowledge state legend */
+.legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Main layout */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Graph canvas */
+#graph-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+#graph-container svg {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+#graph-container svg:active { cursor: grabbing; }
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  background: var(--ink);
+  color: var(--parchment);
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  padding: 5px 9px;
+  border-radius: 3px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  max-width: 240px;
+  line-height: 1.4;
+  z-index: 100;
+}
+
+/* Detail panel */
+#detail-panel {
+  width: 320px;
+  border-left: 1px solid var(--rule);
+  background: var(--parchment-dark);
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: width 0.2s;
+  padding: 20px;
+}
+#detail-panel.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  text-align: center;
+}
+
+.detail-curriculum-tag {
+  font-size: 10px;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: white;
+  padding: 2px 7px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+.detail-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.detail-dates {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 12px;
+}
+.detail-desc {
+  font-family: 'Crimson Pro', 'EB Garamond', serif;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin-bottom: 16px;
+  border-left: 2px solid var(--rule);
+  padding-left: 10px;
+}
+
+.detail-section-head {
+  font-size: 9px;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+.detail-row strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.knowledge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 12px;
+}
+
+.prereq-list, .book-list, .entity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.prereq-list li, .book-list li, .entity-list li {
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.1s;
+}
+.prereq-list li:hover, .entity-list li:hover {
+  color: var(--rubric);
+}
+.prereq-list li::before {
+  content: '← ';
+  color: var(--text-muted);
+}
+
+/* Entity specific styles */
+.entity-panel-lens {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  display: block;
+}
+
+/* SVG node styles */
+.node circle {
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: stroke-width 0.1s;
+}
+.node:hover circle { stroke-width: 2.5; }
+.node.selected circle { stroke-width: 3; }
+
+.node polygon {
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+.node:hover polygon { stroke-width: 2.5; }
+.node.selected polygon { stroke-width: 3; }
+
+.node text {
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  fill: var(--ink);
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+/* Links */
+.link {
+  fill: none;
+  stroke-opacity: 0.35;
+}
+.link.prerequisite { stroke: #888; stroke-width: 1; }
+.link.hierarchy { stroke: #bbb; stroke-width: 0.5; stroke-dasharray: 3,3; }
+.link.entity { stroke-width: 1.5; stroke-dasharray: 5,3; stroke-opacity: 0.5; }
+.link.highlighted { stroke-opacity: 0.9; stroke-width: 2; }
+
+/* Arrow markers */
+marker path { fill: #888; }
+
+/* Cluster labels */
+.cluster-label {
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  font-style: italic;
+  fill: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Empty state */
+.empty-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  pointer-events: none;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✦ Curriculum <span>Graph</span></h1>
+  <div class="controls">
+    <input class="search-box" type="text" placeholder="Search nodes…" id="search-input">
+    <div class="filter-group" id="curriculum-filters">
+      <!-- filled by JS -->
+    </div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--text-secondary)">
+      <input type="checkbox" id="show-entities" checked> Nexus entities
+    </label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--text-secondary)">
+      <input type="checkbox" id="show-prereqs" checked> Prerequisites
+    </label>
+  </div>
+  <div class="legend" id="legend">
+    <span style="font-size:11px;color:var(--text-muted);font-family:'EB Garamond',serif;font-style:italic">Knowledge:</span>
+    <div class="legend-item"><div class="legend-dot" style="background:#2a7a4a"></div> anchored</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6aad8a"></div> engaged</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#b0d4be"></div> mentioned</div>
+    <div class="legend-item"><div class="legend-dot" style="background:white;border:1.5px solid #999"></div> unknown</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div> nexus</div>
+  </div>
+</header>
+
+<div class="main">
+  <div id="graph-container">
+    <svg id="graph-svg"></svg>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="empty-hint">Click a node to see details · Scroll to zoom · Drag to pan</div>
+  </div>
+  <div id="detail-panel" class="empty">
+    <span>Select a node<br>to explore</span>
+  </div>
+</div>
+
+<script>
+// ─── Config ──────────────────────────────────────────────
+const CURRICULUM_COLORS = {
+  'sicily': '#8b4513',
+  'ancient': '#1e5799',
+  'roman': '#6b3a8d',
+  'byzantine': '#2a7a4a',
+  'islamic': '#b07a1e',
+  'medieval': '#6a5a3a',
+};
+const ENTITY_COLOR = '#c9a84c';
+
+const KNOWLEDGE_FILL = {
+  'anchored':  '#2a7a4a',
+  'engaged':   '#6aad8a',
+  'mentioned': '#b0d4be',
+  'unknown':   '#f7f4ec',
+};
+
+function curriculumColor(domainId) {
+  if (!domainId) return ENTITY_COLOR;
+  const key = Object.keys(CURRICULUM_COLORS).find(k => domainId.startsWith(k));
+  return key ? CURRICULUM_COLORS[key] : '#888';
+}
+
+function nodeRadius(node) {
+  if (node.is_entity) return 16;
+  const r = { 1: 18, 2: 12, 3: 8 };
+  return r[node.level] || 10;
+}
+
+function formatDate(year) {
+  if (year == null) return null;
+  return year < 0 ? `${Math.abs(year)} BC` : `AD ${year}`;
+}
+
+// ─── State ──────────────────────────────────────────────
+let allNodes = [], allLinks = [], curricula = [], entities = [];
+let activeCurricula = new Set();
+let showEntities = true;
+let showPrereqs = true;
+let selectedNodeId = null;
+let searchQuery = '';
+
+// ─── D3 setup ───────────────────────────────────────────
+const svg = d3.select('#graph-svg');
+const container = document.getElementById('graph-container');
+const tooltip = document.getElementById('tooltip');
+const detailPanel = document.getElementById('detail-panel');
+
+let width = container.offsetWidth;
+let height = container.offsetHeight;
+
+const g = svg.append('g').attr('class', 'zoom-layer');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.1, 4])
+  .on('zoom', e => g.attr('transform', e.transform));
+svg.call(zoom);
+
+// Arrow marker
+svg.append('defs').append('marker')
+  .attr('id', 'arrow')
+  .attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20)
+  .attr('refY', 0)
+  .attr('markerWidth', 6)
+  .attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path')
+  .attr('d', 'M0,-5L10,0L0,5')
+  .attr('fill', '#999');
+
+// Link and node layers
+const linkLayer = g.append('g').attr('class', 'links');
+const nodeLayer = g.append('g').attr('class', 'nodes');
+
+// Simulation
+let simulation = d3.forceSimulation()
+  .force('link', d3.forceLink().id(d => d.id).distance(d => {
+    if (d.type === 'entity') return 80;
+    if (d.type === 'hierarchy') return 50;
+    return 90;
+  }).strength(d => d.type === 'hierarchy' ? 0.5 : 0.3))
+  .force('charge', d3.forceManyBody().strength(d => {
+    if (d.is_entity) return -300;
+    return [-200, -120, -60][d.level - 1] || -80;
+  }))
+  .force('collision', d3.forceCollide(d => nodeRadius(d) + 4))
+  .force('x', d3.forceX(d => clusterX(d)).strength(0.06))
+  .force('y', d3.forceY(height / 2).strength(0.04));
+
+// ─── Cluster X positions ─────────────────────────────────
+function clusterX(node) {
+  if (node.is_entity) return width / 2;
+  const idx = curricula.findIndex(c => c.id === node.curriculum);
+  if (idx < 0) return width / 2;
+  const spacing = width / (curricula.length + 1);
+  return spacing * (idx + 1);
+}
+
+// ─── Data loading ────────────────────────────────────────
+async function loadData() {
+  const resp = await fetch('/curriculum/graph-data');
+  if (!resp.ok) { console.error('Failed to load graph data'); return; }
+  const data = await resp.json();
+
+  allNodes = data.nodes;
+  allLinks = data.links;
+  curricula = data.curricula;
+  entities = data.entities;
+
+  activeCurricula = new Set(curricula.map(c => c.id));
+
+  buildFilters();
+  render();
+}
+
+// ─── Filters UI ─────────────────────────────────────────
+function buildFilters() {
+  const container = document.getElementById('curriculum-filters');
+  curricula.forEach(c => {
+    const color = curriculumColor(c.id);
+    const pill = document.createElement('div');
+    pill.className = 'filter-pill active';
+    pill.textContent = c.short_name || c.id.split('_')[0];
+    pill.style.borderColor = color;
+    pill.style.backgroundColor = color;
+    pill.style.color = 'white';
+    pill.dataset.id = c.id;
+    pill.dataset.color = color;
+
+    pill.addEventListener('click', () => {
+      if (activeCurricula.has(c.id)) {
+        activeCurricula.delete(c.id);
+        pill.classList.remove('active');
+        pill.style.backgroundColor = 'transparent';
+        pill.style.color = color;
+      } else {
+        activeCurricula.add(c.id);
+        pill.classList.add('active');
+        pill.style.backgroundColor = color;
+        pill.style.color = 'white';
+      }
+      render();
+    });
+    container.appendChild(pill);
+  });
+
+  document.getElementById('show-entities').addEventListener('change', e => {
+    showEntities = e.target.checked;
+    render();
+  });
+  document.getElementById('show-prereqs').addEventListener('change', e => {
+    showPrereqs = e.target.checked;
+    render();
+  });
+
+  document.getElementById('search-input').addEventListener('input', e => {
+    searchQuery = e.target.value.toLowerCase();
+    render();
+  });
+}
+
+// ─── Render ──────────────────────────────────────────────
+function render() {
+  width = container.offsetWidth;
+  height = container.offsetHeight;
+
+  simulation.force('x', d3.forceX(d => clusterX(d)).strength(0.06));
+  simulation.force('y', d3.forceY(height / 2).strength(0.04));
+
+  // Filter visible nodes
+  const visibleNodes = allNodes.filter(n => {
+    if (n.is_entity) return showEntities;
+    return activeCurricula.has(n.curriculum);
+  }).filter(n => {
+    if (!searchQuery) return true;
+    return n.title.toLowerCase().includes(searchQuery) ||
+           (n.description || '').toLowerCase().includes(searchQuery);
+  });
+
+  const visibleIds = new Set(visibleNodes.map(n => n.id));
+
+  // Filter links
+  const visibleLinks = allLinks.filter(l => {
+    if (!visibleIds.has(l.source.id || l.source) || !visibleIds.has(l.target.id || l.target)) return false;
+    if (l.type === 'prerequisite' && !showPrereqs) return false;
+    if (l.type === 'entity' && !showEntities) return false;
+    return true;
+  });
+
+  // Update simulation
+  simulation.nodes(visibleNodes);
+  simulation.force('link').links(visibleLinks);
+  simulation.alpha(0.3).restart();
+
+  // Draw links
+  const link = linkLayer.selectAll('.link').data(visibleLinks, d => `${d.source.id||d.source}-${d.target.id||d.target}-${d.type}`);
+  link.exit().remove();
+  const linkEnter = link.enter().append('line').attr('class', d => `link ${d.type}`);
+  const linkMerge = linkEnter.merge(link);
+  linkMerge
+    .attr('stroke', d => {
+      if (d.type === 'entity') return ENTITY_COLOR;
+      return null;
+    })
+    .attr('marker-end', d => d.type === 'prerequisite' ? 'url(#arrow)' : null);
+
+  // Draw nodes
+  const node = nodeLayer.selectAll('.node').data(visibleNodes, d => d.id);
+  node.exit().remove();
+
+  const nodeEnter = node.enter().append('g')
+    .attr('class', d => `node${selectedNodeId === d.id ? ' selected' : ''}`)
+    .call(d3.drag()
+      .on('start', dragstart)
+      .on('drag', dragged)
+      .on('end', dragend))
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      selectNode(d.id);
+    })
+    .on('mouseover', (event, d) => showTooltip(event, d))
+    .on('mousemove', (event) => moveTooltip(event))
+    .on('mouseout', hideTooltip);
+
+  // Entity nodes = diamond; others = circle
+  nodeEnter.each(function(d) {
+    const g = d3.select(this);
+    if (d.is_entity) {
+      const r = nodeRadius(d);
+      g.append('polygon')
+        .attr('points', `0,${-r} ${r},0 0,${r} ${-r},0`);
+    } else {
+      g.append('circle').attr('r', nodeRadius(d));
+    }
+    g.append('text').attr('dy', d => nodeRadius(d) + 11);
+  });
+
+  const nodeMerge = nodeEnter.merge(node);
+
+  nodeMerge.classed('selected', d => d.id === selectedNodeId);
+
+  nodeMerge.select('circle, polygon')
+    .attr('fill', d => {
+      if (d.is_entity) return ENTITY_COLOR;
+      const km = KNOWLEDGE_FILL[d.knowledge] || KNOWLEDGE_FILL.unknown;
+      return km;
+    })
+    .attr('stroke', d => {
+      if (d.is_entity) return '#a07820';
+      return curriculumColor(d.curriculum);
+    })
+    .attr('opacity', d => {
+      if (searchQuery && !d.title.toLowerCase().includes(searchQuery)) return 0.2;
+      return 1;
+    });
+
+  nodeMerge.select('text')
+    .text(d => {
+      if (d.level === 1 || d.is_entity) return d.title.length > 18 ? d.title.slice(0, 16) + '…' : d.title;
+      return d.level === 2 ? (d.title.length > 22 ? d.title.slice(0, 20) + '…' : d.title) : '';
+    })
+    .attr('opacity', d => {
+      if (searchQuery && !d.title.toLowerCase().includes(searchQuery)) return 0.2;
+      return 1;
+    });
+
+  // Tick
+  simulation.on('tick', () => {
+    linkMerge
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    nodeMerge.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+// Click on background to deselect
+svg.on('click', () => selectNode(null));
+
+// ─── Node selection + detail panel ──────────────────────
+function selectNode(id) {
+  selectedNodeId = id;
+  nodeLayer.selectAll('.node').classed('selected', d => d.id === id);
+
+  if (!id) {
+    detailPanel.className = 'empty';
+    detailPanel.innerHTML = '<span>Select a node<br>to explore</span>';
+    // Dim entity links
+    linkLayer.selectAll('.link.entity').classed('highlighted', false);
+    return;
+  }
+
+  const node = allNodes.find(n => n.id === id);
+  if (!node) return;
+
+  detailPanel.className = '';
+  renderDetailPanel(node);
+
+  // Highlight connected entity links
+  linkLayer.selectAll('.link').classed('highlighted', d => {
+    return (d.source.id || d.source) === id || (d.target.id || d.target) === id;
+  });
+}
+
+function renderDetailPanel(node) {
+  const color = node.is_entity ? ENTITY_COLOR : curriculumColor(node.curriculum);
+  const currLabel = node.is_entity
+    ? 'Cross-curriculum Entity'
+    : (curricula.find(c => c.id === node.curriculum) || {}).title || node.curriculum;
+
+  const dateStr = node.date_start != null
+    ? `${formatDate(node.date_start)}${node.date_end ? ' – ' + formatDate(node.date_end) : ''}`
+    : node.date_range
+    ? `${formatDate(node.date_range[0])} – ${formatDate(node.date_range[1])}`
+    : null;
+
+  const knowledgeColor = { anchored: '#2a7a4a', engaged: '#6aad8a', mentioned: '#b0d4be', unknown: '#999' };
+  const kb = !node.is_entity ? `
+    <div class="knowledge-badge" style="background:${knowledgeColor[node.knowledge] || '#ddd'}20;border:1px solid ${knowledgeColor[node.knowledge] || '#ddd'};color:${knowledgeColor[node.knowledge] || '#999'}">
+      ${node.knowledge || 'unknown'}
+      ${node.interest && node.interest !== 'none' ? ` · ${node.interest} interest` : ''}
+    </div>` : '';
+
+  // Prerequisite list
+  const prereqs = (node.prerequisites || []);
+  const prereqHtml = prereqs.length ? `
+    <div class="detail-section-head">Prerequisites</div>
+    <ul class="prereq-list">
+      ${prereqs.map(pid => {
+        const p = allNodes.find(n => n.id === pid);
+        return `<li onclick="selectNode('${pid}')">${p ? p.title : pid}</li>`;
+      }).join('')}
+    </ul>` : '';
+
+  // Books
+  const books = node.books || [];
+  const booksHtml = books.length ? `
+    <div class="detail-section-head">Linked Books</div>
+    <ul class="book-list">
+      ${books.map(b => `<li>📖 ${b.title}</li>`).join('')}
+    </ul>` : '';
+
+  // Entity: curricula appearances
+  let entityHtml = '';
+  if (node.is_entity) {
+    const entity = entities.find(e => e.entity_name === node.title);
+    if (entity) {
+      entityHtml = `
+        <div class="detail-section-head">Appears in ${entity.nodes.length} curriculum nodes</div>
+        <ul class="entity-list">
+          ${entity.nodes.map(ref => {
+            const n = allNodes.find(n => n.id === ref.node_id);
+            const c = curricula.find(c => c.id?.startsWith(ref.curriculum));
+            const nodeTitle = n ? n.title : ref.node_id;
+            const cColor = curriculumColor(ref.curriculum);
+            return `<li onclick="selectNode('${ref.node_id}')">
+              <strong style="color:${cColor}">${nodeTitle}</strong>
+              <span class="entity-panel-lens">${ref.lens || ''}</span>
+            </li>`;
+          }).join('')}
+        </ul>`;
+    }
+  }
+
+  // Review stats
+  const reviewHtml = node.review_count > 0 ? `
+    <div class="detail-section-head">Review</div>
+    <div class="detail-row"><span>Reviews</span><strong>${node.review_count}</strong></div>
+    <div class="detail-row"><span>Stability</span><strong>${node.stability_days ? node.stability_days.toFixed(1) + 'd' : '—'}</strong></div>
+    ${node.due_soon ? '<div class="detail-row"><span style="color:var(--rubric)">⚡ Due for review</span></div>' : ''}
+  ` : '';
+
+  detailPanel.innerHTML = `
+    <div>
+      <div class="detail-curriculum-tag" style="background:${color}">${currLabel}</div>
+      <div class="detail-title">${node.title}</div>
+      ${dateStr ? `<div class="detail-dates">${dateStr}</div>` : ''}
+      ${kb}
+      <div class="detail-desc">${node.description || ''}</div>
+      ${reviewHtml}
+      ${prereqHtml}
+      ${booksHtml}
+      ${entityHtml}
+    </div>
+  `;
+}
+
+// ─── Tooltip ─────────────────────────────────────────────
+function showTooltip(event, d) {
+  tooltip.style.opacity = '1';
+  tooltip.innerHTML = `<strong>${d.title}</strong>`;
+  if (d.knowledge && !d.is_entity) tooltip.innerHTML += `<br><span style="opacity:0.7">${d.knowledge}</span>`;
+  if (d.review_count > 0) tooltip.innerHTML += ` · reviewed ${d.review_count}×`;
+  moveTooltip(event);
+}
+function moveTooltip(event) {
+  const rect = container.getBoundingClientRect();
+  const x = event.clientX - rect.left + 12;
+  const y = event.clientY - rect.top - 10;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+function hideTooltip() { tooltip.style.opacity = '0'; }
+
+// ─── Drag ────────────────────────────────────────────────
+function dragstart(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event, d) {
+  d.fx = event.x; d.fy = event.y;
+}
+function dragend(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ─── Resize ──────────────────────────────────────────────
+window.addEventListener('resize', () => { width = container.offsetWidth; height = container.offsetHeight; });
+
+// ─── Init ────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+iter	score	delta	status	description
+0	0.8056	0.0000	baseline	Source-text-only prompt — 8/12 good, fails on abstract sources, slips into why/how framing
+1	0.8704	+0.0648	kept	Step extraction + constrained starters (Who/When/Which/What year only)
+2	0.9537	+0.0833	kept	Hard 6-10 word limit + ban vague "known for" + context→answer_guidance
+3	0.9537	+0.0000	kept	"What replaced"/"Which power" patterns — f05/f06 improved, f01/f07 regressed, net 0
+4	0.9815	+0.0278	kept	Curriculum node description as primary source — questions now test canonical concept
+	 	 	 	f03 "What did tyrannos originally mean?", f10 "Where were Athenians forced to labor?"
+	 	 	 	Note: f08 judge hallucinated (Constans II moving capital IS historical fact) — real score ~1.0
+ceiling	~1.00	—	—	Remaining gap is judge error, not question quality. Architecture is correct.

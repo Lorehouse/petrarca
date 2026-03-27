@@ -661,6 +661,159 @@ def get_coverage_report(domain_id: str) -> dict | None:
 
 
 # ─────────────────────────────────────────────
+# Curriculum graph data
+# ─────────────────────────────────────────────
+
+def get_curriculum_graph_data(conn=None) -> dict:
+    """Build combined graph data across all curricula for visualization.
+
+    Returns nodes (curriculum nodes + entity nexus nodes), directed links
+    (prerequisites, hierarchy, entity connections), book mappings per node,
+    and review counts per node if a DB connection is provided.
+    """
+    nodes = []
+    links = []
+    curricula_meta = {}
+    node_id_set = set()  # deduplicate
+
+    # Load review counts from knowledge_items if DB available
+    review_counts = {}
+    if conn:
+        try:
+            rows = conn.execute(
+                'SELECT curriculum_node_id, review_count, stability_days, due_at FROM knowledge_items'
+            ).fetchall()
+            for row in rows:
+                review_counts[row[0]] = {
+                    'review_count': row[1],
+                    'stability_days': row[2],
+                    'due_at': row[3],
+                }
+        except Exception:
+            pass
+
+    for meta in list_curricula():
+        domain_id = meta['id']
+        curriculum = load_curriculum(domain_id)
+        if not curriculum:
+            continue
+
+        states = load_knowledge_states(domain_id)
+        short_name = domain_id.split('_')[0]  # 'sicily', 'ancient', 'roman', ...
+        curricula_meta[domain_id] = {
+            'id': domain_id,
+            'short_name': short_name,
+            'title': curriculum.get('title', domain_id),
+            'node_count': len(curriculum.get('nodes', [])),
+        }
+
+        for node in curriculum.get('nodes', []):
+            node_id = node['id']
+            if node_id in node_id_set:
+                continue
+            node_id_set.add(node_id)
+
+            state = states.get(node_id, {})
+            ri = review_counts.get(node_id, {})
+            import time as _time
+            now = int(_time.time())
+
+            graph_node = {
+                'id': node_id,
+                'title': node['title'],
+                'description': node.get('description', '')[:400],
+                'curriculum': domain_id,
+                'level': node.get('level', 2),
+                'parent_id': node.get('parent_id'),
+                'prerequisites': node.get('prerequisites', []),
+                'knowledge': state.get('knowledge', 'unknown'),
+                'interest': state.get('interest', 'none'),
+                'confidence': state.get('confidence', 0.0),
+                'date_start': node.get('date_start'),
+                'date_end': node.get('date_end'),
+                'obscurity': node.get('obscurity', 2),
+                'review_count': ri.get('review_count', 0),
+                'stability_days': ri.get('stability_days', 0),
+                'due_soon': ri.get('due_at', 0) > 0 and ri.get('due_at', 0) <= now + 86400,
+                'books': [],
+            }
+            nodes.append(graph_node)
+
+            # Prerequisite links
+            for prereq_id in node.get('prerequisites', []):
+                links.append({'source': prereq_id, 'target': node_id, 'type': 'prerequisite'})
+
+            # Hierarchy link
+            if node.get('parent_id'):
+                links.append({'source': node['parent_id'], 'target': node_id, 'type': 'hierarchy'})
+
+    # Index nodes for annotation
+    node_index = {n['id']: n for n in nodes}
+
+    # Book mappings: scan mappings_*.json files
+    for mf in sorted(DATA_DIR.glob('mappings_*.json')):
+        try:
+            data = json.loads(mf.read_text())
+            book_id = data.get('book_id', mf.stem)
+            book_title = data.get('book_title', book_id)
+            for mapping in data.get('mappings', []):
+                for nid in mapping.get('node_ids', []):
+                    if nid in node_index:
+                        book_entry = {'id': book_id, 'title': book_title}
+                        existing = node_index[nid]['books']
+                        if not any(b['id'] == book_id for b in existing):
+                            existing.append(book_entry)
+        except Exception:
+            continue
+
+    # Cross-curriculum entity nodes
+    entities_path = DATA_DIR / 'cross_curriculum_entities.json'
+    entities = []
+    if entities_path.exists():
+        try:
+            entities = json.loads(entities_path.read_text())
+        except Exception:
+            pass
+
+    for entity in entities:
+        entity_node_id = f"entity:{entity['entity_name']}"
+        curricula_covered = list({ref['curriculum'] for ref in entity.get('nodes', [])})
+        nodes.append({
+            'id': entity_node_id,
+            'title': entity['entity_name'],
+            'description': f"{entity.get('entity_type', 'entity').title()} — appears in {len(entity.get('nodes', []))} curriculum nodes across {len(curricula_covered)} curricula",
+            'curriculum': None,
+            'is_entity': True,
+            'entity_type': entity.get('entity_type'),
+            'date_range': entity.get('date_range'),
+            'level': 0,
+            'knowledge': 'unknown',
+            'interest': 'none',
+            'curricula_covered': curricula_covered,
+        })
+        for ref in entity.get('nodes', []):
+            nid = ref.get('node_id')
+            if nid:
+                links.append({
+                    'source': entity_node_id,
+                    'target': nid,
+                    'type': 'entity',
+                    'lens': ref.get('lens', ''),
+                })
+
+    # Remove links pointing to unknown nodes
+    known_ids = {n['id'] for n in nodes}
+    links = [l for l in links if l['source'] in known_ids and l['target'] in known_ids]
+
+    return {
+        'nodes': nodes,
+        'links': links,
+        'curricula': list(curricula_meta.values()),
+        'entities': entities,
+    }
+
+
+# ─────────────────────────────────────────────
 # 20 Questions knowledge elicitation
 # ─────────────────────────────────────────────
 

@@ -448,11 +448,30 @@ CREATE TABLE IF NOT EXISTS review_items (
   created_at INTEGER NOT NULL,
   cached_question TEXT                -- JSON: pre-generated question, cleared after answer
 );
+
+-- Node-centric knowledge items — one row per curriculum node, sources array accumulates all books/chapters
+CREATE TABLE IF NOT EXISTS knowledge_items (
+    id TEXT PRIMARY KEY,
+    curriculum_node_id TEXT NOT NULL,
+    curriculum_domain TEXT NOT NULL,
+    stability_days REAL NOT NULL DEFAULT 1.0,
+    due_at INTEGER NOT NULL DEFAULT 0,
+    last_reviewed_at INTEGER,
+    last_score TEXT,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    sources TEXT NOT NULL DEFAULT '[]',
+    question_history TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL,
+    cached_question TEXT,
+    UNIQUE(curriculum_domain, curriculum_node_id)
+);
 """
 
 MIGRATIONS = [
     # Add cached_question column if not present (idempotent)
     "ALTER TABLE review_items ADD COLUMN cached_question TEXT",
+    # knowledge_items table is created via SCHEMA (CREATE TABLE IF NOT EXISTS),
+    # so no ALTER needed — but add future column migrations here.
 ]
 
 
@@ -773,6 +792,74 @@ def migrate_projects():
     print(f'[db] Migrated {proj_count} projects, {note_count} notes', flush=True)
 
 
+def migrate_review_items_to_knowledge_items(conn) -> int:
+    """Collapse review_items (one per book×chapter×node) into knowledge_items (one per node).
+
+    For each distinct (curriculum_domain, curriculum_node_id) pair in review_items, picks
+    the best scheduling state (max stability, max review_count) and accumulates all
+    book/chapter sources into a JSON array.  Uses INSERT OR IGNORE so running twice is safe.
+    Returns count of rows inserted.
+    """
+    import json as _json
+
+    groups = conn.execute('''
+        SELECT curriculum_domain, curriculum_node_id,
+               MAX(stability_days) as stability_days,
+               MAX(due_at) as due_at,
+               MAX(review_count) as review_count,
+               MIN(created_at) as created_at,
+               last_score
+        FROM review_items
+        WHERE curriculum_node_id IS NOT NULL AND curriculum_domain IS NOT NULL
+        GROUP BY curriculum_domain, curriculum_node_id
+    ''').fetchall()
+
+    count = 0
+    for g in groups:
+        item_id = f"{g['curriculum_domain']}:{g['curriculum_node_id']}"
+
+        rows = conn.execute('''
+            SELECT source_book_id, source_chapter_number, source_chapter_title,
+                   source_text, lens, temporal_hook, created_at
+            FROM review_items
+            WHERE curriculum_domain=? AND curriculum_node_id=?
+        ''', (g['curriculum_domain'], g['curriculum_node_id'])).fetchall()
+
+        sources = []
+        seen = set()
+        for r in rows:
+            key = (r['source_book_id'], r['source_chapter_number'])
+            if key not in seen:
+                seen.add(key)
+                sources.append({
+                    'book_id': r['source_book_id'],
+                    'chapter_number': r['source_chapter_number'],
+                    'chapter_title': r['source_chapter_title'],
+                    'source_text': r['source_text'] or '',
+                    'lens': r['lens'] or 'SIGNIFICANCE',
+                    'temporal_hook': r['temporal_hook'] or '',
+                    'added_at': r['created_at'],
+                })
+
+        try:
+            conn.execute('''
+                INSERT OR IGNORE INTO knowledge_items
+                (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                 last_score, review_count, sources, question_history, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ''', (
+                item_id, g['curriculum_node_id'], g['curriculum_domain'],
+                g['stability_days'], g['due_at'], g['last_score'],
+                g['review_count'], _json.dumps(sources), '[]', g['created_at'],
+            ))
+            count += 1
+        except Exception as e:
+            print(f'[migrate] skip {item_id}: {e}', flush=True)
+
+    conn.commit()
+    return count
+
+
 if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
@@ -787,5 +874,10 @@ if __name__ == '__main__':
         data_type = sys.argv[2] if len(sys.argv) > 2 else 'all'
         if data_type in ('projects', 'all'):
             migrate_projects()
+        if data_type in ('knowledge_items', 'all'):
+            conn = get_connection()
+            n = migrate_review_items_to_knowledge_items(conn)
+            conn.close()
+            print(f'[db] Migrated {n} knowledge_items from review_items', flush=True)
     else:
         print(f'Unknown command: {cmd}')
