@@ -142,7 +142,7 @@ Source text: {source_text}
 Step 1 — find the most testable fact in the source text: a person's name, a year, a battle, a ruler, a city, a specific event. If the text is abstract, pick the most concrete noun or name mentioned.
 
 Step 2 — write one question that starts with one of these words ONLY:
-  Who / When / Which / What year / What did [X] do / Which [X] [verb]
+  Who / When / Which / What year / What did [X] do / Which [X] [verb] / What replaced / What was [X] called
 
 Do NOT start with: Why / How / What factors / What role / What dynamics / What internal / What kind of / What was [X] known for (too vague — be specific about what aspect)
 
@@ -151,12 +151,15 @@ Good:
 - "When did the Arabs take Syracuse?" (7 words)
 - "Which city founded Syracuse?" (4 words)
 - "What year did the Athenian expedition end?" (8 words)
-- "What did Archimedes build to defend Syracuse?" (8 words, specific aspect)
+- "What did Archimedes build to defend Syracuse?" (8 words)
+- "What replaced oligarchy in Syracuse?" (if text discusses transition — specific term as answer)
+- "Which power threatened Greek cities in Sicily?" (if text mentions Carthage)
 
 Bad:
-- "Who was the tyrant known for providing unified military leadership during the Battle of Himera in 480 BC?" — bad: 20 words, most context belongs in answer_guidance
-- "What was Gelon known for?" — bad: too vague, specify the aspect
+- "Who was the tyrant known for providing unified military leadership during the Battle of Himera in 480 BC?" — bad: 20 words, context belongs in answer_guidance
+- "What was Gelon known for?" — bad: too vague
 - "How did successive powers shape the city?" — bad: starts with How
+- "Which city-state's tyrants rose to power against threats?" — bad: abstract and convoluted
 
 Keep the question SHORT — 6-10 words. If you feel the urge to add context ("in 480 BC", "under leaders like X"), put it in answer_guidance instead.
 
