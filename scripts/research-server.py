@@ -65,6 +65,10 @@ from curriculum import (
     map_book_to_curriculum, start_elicitation, continue_elicitation,
     import_assessment_answers, get_book_curriculum_context,
 )
+from review_engine import (
+    create_review_items_for_chapter, get_review_queue, generate_question,
+    record_answer, get_review_stats, create_exploration_items, process_voice_memo,
+)
 
 SONIOX_API_KEY = os.environ.get('SONIOX_API_KEY', '557c7c5a86a2f5b8fa734ddbbe179f0f21fd342c762768c9af4f4ffff8c58e1f')
 SONIOX_BASE_URL = 'https://api.soniox.com/v1'
@@ -4010,6 +4014,148 @@ JSON array only:"""
         )
         self._send_json_response(200, {'state': state})
 
+    # ── Review handlers ────────────────────────────────────────────────────────
+
+    def _handle_review_chapter_complete(self):
+        """POST /review/chapter-complete — map chapter to curriculum nodes, create review items."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id')
+        chapter_number = body.get('chapter_number')
+        chapter_title = body.get('chapter_title', '')
+        if not book_id or chapter_number is None:
+            self._send_json_response(400, {'error': 'Missing book_id or chapter_number'})
+            return
+
+        from db import get_connection
+        conn = get_connection()
+        try:
+            row = conn.execute('SELECT title, topics FROM physical_books WHERE id=?', (book_id,)).fetchone()
+            if not row:
+                self._send_json_response(404, {'error': 'Book not found'})
+                return
+            book_title = row['title']
+            book_topics = json.loads(row['topics'] or '[]')
+
+            result = create_review_items_for_chapter(
+                book_id, book_title, book_topics,
+                chapter_number, chapter_title, conn,
+            )
+            stats = get_review_stats(conn)
+            result['due_today'] = stats['due_today']
+            self._send_json_response(200, result)
+        finally:
+            conn.close()
+
+    def _handle_review_generate_question(self):
+        """POST /review/generate-question — personalized question for a review item."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        item_id = body.get('item_id')
+        if not item_id:
+            self._send_json_response(400, {'error': 'Missing item_id'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            result = generate_question(item_id, conn)
+            self._send_json_response(200, result)
+        finally:
+            conn.close()
+
+    def _handle_review_answer(self):
+        """POST /review/answer — record answer score, update FSRS."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        item_id = body.get('item_id')
+        score = body.get('score')
+        if not item_id or score not in ('knew', 'partly', 'missed'):
+            self._send_json_response(400, {'error': 'Missing item_id or invalid score'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            result = record_answer(item_id, score, conn)
+            self._send_json_response(200, result)
+        finally:
+            conn.close()
+
+    def _handle_review_explore(self):
+        """POST /review/explore — generate follow-up exploration items."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        item_id = body.get('item_id')
+        if not item_id:
+            self._send_json_response(400, {'error': 'Missing item_id'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            created = create_exploration_items(item_id, conn)
+            self._send_json_response(200, {'items_created': created})
+        finally:
+            conn.close()
+
+    def _handle_review_voice_memo(self):
+        """POST /review/voice-memo — transcribe + extract signals."""
+        import cgi
+        content_type = self.headers.get('Content-Type', '')
+        if 'multipart' not in content_type:
+            self._send_json_response(400, {'error': 'Expected multipart'})
+            return
+        length = int(self.headers.get('Content-Length', 0))
+        data = self.rfile.read(length)
+        environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
+        import io
+        fs = cgi.FieldStorage(fp=io.BytesIO(data), environ=environ, keep_blank_values=True)
+        item_id = fs.getvalue('item_id', '')
+        audio_field = fs['audio'] if 'audio' in fs else None
+        if not item_id or not audio_field:
+            self._send_json_response(400, {'error': 'Missing item_id or audio'})
+            return
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
+            tmp.write(audio_field.file.read())
+            audio_path = Path(tmp.name)
+        try:
+            from db import get_connection
+            conn = get_connection()
+            try:
+                result = process_voice_memo(item_id, audio_path, conn, transcribe_on_server)
+                self._send_json_response(200, result)
+            finally:
+                conn.close()
+        finally:
+            audio_path.unlink(missing_ok=True)
+
+    def _handle_review_queue(self):
+        """GET /review/queue — due items in dependency order."""
+        from urllib.parse import parse_qs, urlparse
+        params = parse_qs(urlparse(self.path).query)
+        limit = int(params.get('limit', ['20'])[0])
+        book_id = params.get('book_id', [None])[0]
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            items = get_review_queue(limit=limit, book_id=book_id, conn=conn)
+            self._send_json_response(200, {'items': items, 'count': len(items)})
+        finally:
+            conn.close()
+
+    def _handle_review_stats(self):
+        """GET /review/stats — queue statistics."""
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            stats = get_review_stats(conn)
+            self._send_json_response(200, stats)
+        finally:
+            conn.close()
+
     def do_POST(self):
         if self.path == '/chat':
             return self._handle_chat()
@@ -4099,6 +4245,18 @@ JSON array only:"""
             return self._handle_knowledge_update()
         if self.path == '/curriculum/knowledge/import-assessment':
             return self._handle_knowledge_import_assessment()
+
+        # Review endpoints
+        if self.path == '/review/chapter-complete':
+            return self._handle_review_chapter_complete()
+        if self.path == '/review/generate-question':
+            return self._handle_review_generate_question()
+        if self.path == '/review/answer':
+            return self._handle_review_answer()
+        if self.path == '/review/explore':
+            return self._handle_review_explore()
+        if self.path == '/review/voice-memo':
+            return self._handle_review_voice_memo()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()
@@ -4634,6 +4792,10 @@ JSON array only:"""
             return self._handle_book_research_get()
         if self.path == '/book/sync':
             return self._handle_book_sync_load()
+        if self.path.startswith('/review/queue'):
+            return self._handle_review_queue()
+        if self.path == '/review/stats':
+            return self._handle_review_stats()
         if self.path == '/media/log':
             media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
             try:

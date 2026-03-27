@@ -16,6 +16,7 @@ import {
 } from '../data/book-store';
 import { useBookStoreVersion } from '../data/use-book-store';
 import { uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
+import { notifyChapterComplete } from '../lib/review-api';
 import { enqueuePhotoUpload, pollPhotoResults, getUploadQueueStatus, initUploadQueue } from '../lib/upload-queue';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
@@ -178,6 +179,7 @@ export default function BookDetailScreen() {
   const [storySoFar, setStorySoFar] = useState<StorySoFarBriefing | null>(null);
   const [showStorySoFar, setShowStorySoFar] = useState(false);
   const [chapterCompleteText, setChapterCompleteText] = useState<string | null>(null);
+  const [reviewDueCount, setReviewDueCount] = useState(0);
 
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
@@ -313,6 +315,18 @@ export default function BookDetailScreen() {
       // Show brief chapter-complete acknowledgment
       setChapterCompleteText(`Finished ${previousChapter}`);
       setTimeout(() => setChapterCompleteText(null), 3000);
+
+      // Trigger review item creation in background
+      const prevChapterNum = parseInt(previousChapter.replace(/^Ch (\d+):.*/, '$1'), 10);
+      if (!isNaN(prevChapterNum)) {
+        notifyChapterComplete(book.id, prevChapterNum, previousChapter.replace(/^Ch \d+:\s*/, ''))
+          .then(result => {
+            if (result.items_created > 0) {
+              setReviewDueCount(c => c + result.items_created);
+            }
+          })
+          .catch(() => {});
+      }
     }
     setRefreshKey(k => k + 1);
   };
@@ -544,6 +558,13 @@ export default function BookDetailScreen() {
               {'\u2726'} {chapterCompleteText}
             </Text>
           </View>
+        )}
+        {reviewDueCount > 0 && (
+          <Pressable onPress={() => router.push('/review-session')} style={styles.reviewBadge}>
+            <Text style={styles.reviewBadgeText}>
+              {'\u2726'} {reviewDueCount} review item{reviewDueCount !== 1 ? 's' : ''} due
+            </Text>
+          </Pressable>
         )}
         <View style={styles.positionRow}>
           <Text style={styles.fieldLabel}>Page</Text>
@@ -798,4 +819,6 @@ const styles = StyleSheet.create({
   storySoFarPreview: { fontFamily: fonts.readingItalic, fontSize: 13, lineHeight: 19, color: colors.textMuted, marginBottom: 16, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   storySoFarDismiss: { backgroundColor: colors.ink, paddingVertical: 12, borderRadius: 4, alignItems: 'center' },
   storySoFarDismissText: { fontFamily: fonts.body, fontSize: 14, color: colors.parchment },
+  reviewBadge: { borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 10, paddingVertical: 8, marginTop: 4 },
+  reviewBadgeText: { fontFamily: fonts.ui, fontSize: 13, color: colors.rubric },
 });

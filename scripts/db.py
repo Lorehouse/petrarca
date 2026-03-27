@@ -424,6 +424,29 @@ CREATE TABLE IF NOT EXISTS cluster_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Knowledge Review Items (spaced retrieval practice)
+CREATE TABLE IF NOT EXISTS review_items (
+  id TEXT PRIMARY KEY,
+  item_type TEXT NOT NULL DEFAULT 'book_chapter',  -- book_chapter | exploration | voice_followup
+  curriculum_domain TEXT,
+  curriculum_node_id TEXT,
+  curriculum_node_title TEXT,
+  source_book_id TEXT,
+  source_chapter_number INTEGER,
+  source_chapter_title TEXT,
+  source_article_id TEXT,
+  source_text TEXT NOT NULL DEFAULT '',
+  temporal_hook TEXT DEFAULT '',
+  lens TEXT,                          -- CAUSAL | COMPARATIVE | SIGNIFICANCE | TEMPORAL | PATTERN | CONSEQUENCE
+  parent_item_id TEXT,                -- for follow-up chains
+  stability_days REAL NOT NULL DEFAULT 1.0,
+  due_at INTEGER NOT NULL,            -- unix ms timestamp
+  last_reviewed_at INTEGER,
+  last_score TEXT,                    -- knew | partly | missed
+  review_count INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
 """
 
 

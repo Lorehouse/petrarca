@@ -550,3 +550,47 @@ export interface ResurfacingSession {
   resonance_count: number;
   dialogue_count: number;
 }
+
+// ─── Knowledge Review ────────────────────────────────────────────────────────
+
+export interface ReviewItem {
+  id: string;
+  item_type: 'book_chapter' | 'exploration' | 'voice_followup';
+  curriculum_domain?: string;
+  curriculum_node_id?: string;
+  curriculum_node_title?: string;
+  source_book_id?: string;
+  source_chapter_number?: number;
+  source_chapter_title?: string;
+  source_text: string;
+  temporal_hook?: string;
+  lens?: string;
+  parent_item_id?: string;
+  stability_days: number;
+  due_at: number;
+  last_reviewed_at?: number;
+  last_score?: 'knew' | 'partly' | 'missed';
+  review_count: number;
+  created_at: number;
+}
+
+export interface ReviewQuestion {
+  question: string;
+  answer_guidance: string;
+  temporal_hook: string;
+  curriculum_context: string;
+}
+
+export interface ReviewStats {
+  due_today: number;
+  due_this_week: number;
+  total: number;
+  by_source: Record<string, number>;
+}
+
+export interface ChapterCompleteResult {
+  nodes_covered: string[];
+  items_created: number;
+  domain: string;
+  due_today: number;
+}

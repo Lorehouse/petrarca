@@ -194,6 +194,15 @@ if [ -d "/opt/petrarca/data" ]; then
     log "Copied to /opt/petrarca/data/ (HTTP serving)"
 fi
 
+# Pull latest code and restart research server if changed
+BEFORE_HEAD=$(cd "$PROJECT_DIR" && git rev-parse HEAD)
+(cd "$PROJECT_DIR" && git pull --ff-only 2>/dev/null) || true
+AFTER_HEAD=$(cd "$PROJECT_DIR" && git rev-parse HEAD)
+if [ "$BEFORE_HEAD" != "$AFTER_HEAD" ]; then
+    log "Code updated ($BEFORE_HEAD -> $AFTER_HEAD), restarting research server..."
+    systemctl restart petrarca-research 2>/dev/null || true
+fi
+
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 pipeline_log "pipeline_complete" "\"elapsed_seconds\":$ELAPSED"
