@@ -79,6 +79,9 @@ TWIKIT_COOKIES_PATH = TWIKIT_COOKIES_DIR / 'cookies.json'
 
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 INGEST_DIR.mkdir(parents=True, exist_ok=True)
+
+# In-memory job tracking for background curriculum generation
+_curriculum_jobs: dict = {}  # job_id → {status, domain, domain_id?, node_count?, error?}
 EMAILS_DIR.mkdir(parents=True, exist_ok=True)
 CHAT_DIR.mkdir(parents=True, exist_ok=True)
 NOTES_DIR.mkdir(parents=True, exist_ok=True)
@@ -3920,7 +3923,13 @@ JSON array only:"""
     # ── Curriculum endpoints ────────────────────────────────
 
     def _handle_curriculum_generate(self):
-        """POST /curriculum/generate — Generate a curriculum for a domain."""
+        """POST /curriculum/generate — Generate a curriculum for a domain (background).
+
+        Accepts {domain, depth?, background?}.
+        If background=true (default), returns immediately with a job_id and generates
+        asynchronously. Poll GET /curriculum/generate/status?id=<job_id>.
+        If background=false, blocks until complete (for local scripts).
+        """
         body = self._read_json_body()
         if body is None:
             return
@@ -3929,12 +3938,38 @@ JSON array only:"""
             self._send_json_response(400, {'error': 'Missing domain field'})
             return
         depth = body.get('depth', 'introductory')
-        print(f"[curriculum] Generating curriculum for: {domain} ({depth})", flush=True)
-        result = generate_curriculum(domain, depth)
-        if result:
-            self._send_json_response(200, result)
-        else:
-            self._send_json_response(500, {'error': 'Failed to generate curriculum'})
+        run_background = body.get('background', True)
+
+        if not run_background:
+            print(f"[curriculum] Generating curriculum (sync): {domain}", flush=True)
+            result = generate_curriculum(domain, depth)
+            if result:
+                self._send_json_response(200, result)
+            else:
+                self._send_json_response(500, {'error': 'Failed to generate curriculum'})
+            return
+
+        import uuid as _uuid
+        job_id = _uuid.uuid4().hex[:12]
+        _curriculum_jobs[job_id] = {'status': 'running', 'domain': domain, 'started_at': time.time()}
+
+        def _gen():
+            try:
+                result = generate_curriculum(domain, depth)
+                if result:
+                    _curriculum_jobs[job_id] = {
+                        'status': 'done', 'domain': domain,
+                        'domain_id': result['id'], 'node_count': result['node_count'],
+                    }
+                    print(f"[curriculum] Generated '{domain}': {result['node_count']} nodes", flush=True)
+                else:
+                    _curriculum_jobs[job_id] = {'status': 'failed', 'domain': domain}
+            except Exception as e:
+                _curriculum_jobs[job_id] = {'status': 'failed', 'domain': domain, 'error': str(e)}
+
+        import threading as _threading
+        _threading.Thread(target=_gen, daemon=True).start()
+        self._send_json_response(202, {'job_id': job_id, 'status': 'running', 'domain': domain})
 
     def _handle_curriculum_map_book(self):
         """POST /curriculum/map-book — Map a book against a curriculum."""
@@ -4841,6 +4876,11 @@ JSON array only:"""
             return self._send_json_response(200, data)
         if self.path == '/curriculum/graph':
             return self._serve_curriculum_graph_html()
+        if self.path.startswith('/curriculum/generate/status'):
+            from urllib.parse import urlparse, parse_qs
+            job_id = parse_qs(urlparse(self.path).query).get('id', [''])[0]
+            job = _curriculum_jobs.get(job_id, {'status': 'not_found'})
+            return self._send_json_response(200, job)
         if self.path.startswith('/curriculum/book-context/'):
             book_id = self.path.split('/curriculum/book-context/')[1].split('?')[0]
             context = get_book_curriculum_context(book_id)

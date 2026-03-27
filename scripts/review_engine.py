@@ -38,18 +38,95 @@ SCORE_TO_KNOWLEDGE = {
 
 # ── Curriculum auto-detection ─────────────────────────────────────────────────
 
-CURRICULUM_KEYWORDS = {
-    'sicily_history_culture_and_legacy': ['sicily', 'sicilian', 'syracuse', 'palermo', 'agrigento', 'norman sicily'],
-    'ancient_greece_800300_bc_political_military_cultural_and': ['greece', 'greek', 'athens', 'sparta', 'alexander', 'hellenistic'],
-    'roman_republic_and_empire': ['rome', 'roman', 'caesar', 'republic', 'augustus'],
-}
-
 def detect_curriculum(book_title: str, book_topics: list) -> str:
+    """Find the best-matching curriculum for a book using embedding similarity.
+
+    Embeds the book's title + topics and compares against the title + description
+    of every available curriculum. Falls back to Sicily if nothing scores above 0.35.
+    Returns the single best-matching domain_id.
+    """
+    from curriculum import list_curricula, load_curriculum
+    curricula = list_curricula()
+    if not curricula:
+        return 'sicily_history_culture_and_legacy'
+
+    book_text = f"{book_title}. Topics: {', '.join(book_topics)}"
+
+    try:
+        from limbic.amygdala import EmbeddingModel
+        model = EmbeddingModel()
+        book_vec = model.embed([book_text])[0]
+
+        best_id, best_score = curricula[0]['id'], -1.0
+        for meta in curricula:
+            c = load_curriculum(meta['id'])
+            if not c:
+                continue
+            c_text = f"{c.get('title', '')}. {c.get('description', '')} {' '.join(n['title'] for n in c.get('nodes', [])[:10])}"
+            c_vec = model.embed([c_text])[0]
+            import numpy as np
+            score = float(np.dot(book_vec, c_vec) / (np.linalg.norm(book_vec) * np.linalg.norm(c_vec) + 1e-9))
+            if score > best_score:
+                best_score, best_id = score, meta['id']
+
+        if best_score >= 0.35:
+            return best_id
+    except Exception:
+        pass
+
+    # Keyword fallback
     text = ' '.join([book_title] + book_topics).lower()
-    for domain_id, keywords in CURRICULUM_KEYWORDS.items():
+    keyword_map = {
+        'sicily_history_culture_and_legacy': ['sicily', 'sicilian', 'syracuse', 'palermo'],
+        'ancient_greece_800300_bc_political_military_cultural_and': ['greece', 'greek', 'athens', 'sparta'],
+        'roman_republic_and_empire': ['rome', 'roman', 'caesar', 'republic'],
+        'byzantine': ['byzantine', 'byzantium', 'constantinople', 'justinian', 'belisarius'],
+        'islamic': ['islamic', 'islam', 'arab', 'caliphate', 'muslim', 'ottoman'],
+    }
+    for domain_id, keywords in keyword_map.items():
         if any(kw in text for kw in keywords):
-            return domain_id
-    return 'sicily_history_culture_and_legacy'
+            # Check if a curriculum with this prefix actually exists
+            for meta in curricula:
+                if meta['id'].startswith(domain_id) or meta['id'] == domain_id:
+                    return meta['id']
+
+    return curricula[0]['id']  # default to first available
+
+
+def suggest_curricula_for_book(book_title: str, book_topics: list) -> list[dict]:
+    """Return curricula sorted by relevance to a book, with scores.
+
+    Used to suggest which curriculum(a) to map a new book against,
+    and to surface gaps where no curriculum exists yet.
+    """
+    from curriculum import list_curricula, load_curriculum
+    curricula = list_curricula()
+    if not curricula:
+        return []
+
+    book_text = f"{book_title}. Topics: {', '.join(book_topics)}"
+    results = []
+
+    try:
+        from limbic.amygdala import EmbeddingModel
+        import numpy as np
+        model = EmbeddingModel()
+        book_vec = model.embed([book_text])[0]
+
+        for meta in curricula:
+            c = load_curriculum(meta['id'])
+            if not c:
+                continue
+            c_text = f"{c.get('title', '')}. {' '.join(n['title'] for n in c.get('nodes', [])[:15])}"
+            c_vec = model.embed([c_text])[0]
+            score = float(np.dot(book_vec, c_vec) / (np.linalg.norm(book_vec) * np.linalg.norm(c_vec) + 1e-9))
+            results.append({'id': meta['id'], 'title': meta['title'], 'score': round(score, 3)})
+
+        results.sort(key=lambda x: -x['score'])
+    except Exception:
+        results = [{'id': m['id'], 'title': m['title'], 'score': 0.0} for m in curricula]
+
+    return results
 
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────

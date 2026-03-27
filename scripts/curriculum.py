@@ -11,11 +11,50 @@ import json
 import os
 import math
 import random
+import re
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
 from gemini_llm import call_llm
+
+
+def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str | None:
+    """Call Claude Opus for high-quality generation.
+
+    Tries Anthropic SDK first (if ANTHROPIC_KEY set — works on server),
+    then falls back to `claude -p` CLI (works locally with Max plan).
+    Returns the raw text response, or None on failure.
+    """
+    anthropic_key = os.environ.get('ANTHROPIC_KEY') or os.environ.get('ANTHROPIC_API_KEY')
+
+    if anthropic_key:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_key)
+            msg = client.messages.create(
+                model='claude-opus-4-6',
+                max_tokens=max_tokens,
+                messages=[{'role': 'user', 'content': prompt}],
+            )
+            return msg.content[0].text
+        except Exception as e:
+            print(f'[curriculum] Anthropic SDK failed: {e}', flush=True)
+
+    # Fallback: claude -p CLI (free with Max plan, local only)
+    try:
+        cmd = ['claude', '-p', '--tools', '', '--output-format', 'json',
+               '--model', 'opus', '--no-session-persistence']
+        proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
+        if proc.returncode == 0 and proc.stdout.strip():
+            resp = json.loads(proc.stdout)
+            if not resp.get('is_error'):
+                return resp.get('result', '')
+    except Exception as e:
+        print(f'[curriculum] claude CLI failed: {e}', flush=True)
+
+    return None
 
 DATA_DIR = Path(os.environ.get('CURRICULUM_DIR', '/opt/petrarca/data/curricula'))
 PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
@@ -77,9 +116,12 @@ GUIDELINES:
 Output as a JSON array of node objects. No markdown, just the JSON array."""
 
 
-def generate_curriculum(domain: str, depth: str = "introductory", model: str = "gemini-2.5-flash") -> dict | None:
-    """Generate a curriculum for a domain. Returns the full curriculum dict or None."""
+def generate_curriculum(domain: str, depth: str = "introductory", model: str = "opus") -> dict | None:
+    """Generate a curriculum for a domain. Returns the full curriculum dict or None.
 
+    Always uses Claude Opus by default — Gemini Flash produces poor quality curricula
+    (vague titles, shallow descriptions). Use model='gemini-2.5-flash' only for testing.
+    """
     prompt = CURRICULUM_GENERATION_PROMPT.format(domain=domain)
 
     if depth == "intermediate":
@@ -87,8 +129,11 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
     elif depth == "advanced":
         prompt += "\n\nThis is an ADVANCED level curriculum. Aim for 250-300+ nodes with specialist detail."
 
-    raw = call_llm(prompt, model=model, max_tokens=32768,
-                   response_mime_type="application/json")
+    if model == 'opus' or model.startswith('claude'):
+        raw = _call_opus(prompt)
+    else:
+        raw = call_llm(prompt, model=model, max_tokens=32768,
+                       response_mime_type="application/json")
     if not raw:
         return None
 
