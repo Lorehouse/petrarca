@@ -139,21 +139,26 @@ QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual recall question for a knowle
 Concept: {node_title}
 Source text: {source_text}
 
-Ask one direct factual question. Ask it the way a knowledgeable friend would over coffee — not the way an academic writes a quiz. Name the exact thing to recall: a person, a date, a ruler, an event.
+Step 1 — find the most testable fact in the source text: a person's name, a year, a battle, a ruler, a city, a specific event. If the text is abstract, pick the most concrete noun or name mentioned.
 
-Good examples:
+Step 2 — write one question that starts with one of these words ONLY:
+  Who / When / Which / What year / What was [X] known for / What did [X] do / Which [X] [verb]
+
+Do NOT start with: Why / How / What factors / What role / What dynamics / What internal / What kind of
+
+Good:
 - "Who was Belisarius?"
-- "When did the Arabs take Sicily from the Byzantines?"
-- "What was Dionysius I known for?"
-- "Which empire controlled Syracuse between Rome and the Arab conquest?"
-- "What century did the Normans arrive in Sicily?"
+- "When did the Arabs take Syracuse?"
+- "Which city founded Syracuse?"
+- "What was Gelon known for?"
+- "What year did the Athenian expedition end?"
 
-Bad examples (too oblique, hide the fact behind fancy framing):
-- "Which powers oversaw the architectural transformation into a palimpsest?" — bad: metaphor obscures the simple question "who ruled it?"
-- "What dynamics shaped the urban fabric during this transitional period?" — bad: vague, not testable
-- "How did successive powers leave their mark on the city?" — bad: too open-ended
+Bad (don't do these):
+- "Why did Syracuse turn to tyrants?" — starts with Why
+- "What internal factor enabled the transition?" — abstract, not a name/date/event
+- "How did successive powers shape the city?" — process, not a fact
 
-The question must be answerable with a specific name, date, or one-sentence fact. No metaphors in the question itself.
+The answer must be a specific name, year, or brief factual statement — not an essay.
 
 {temporal_context}
 
