@@ -211,47 +211,51 @@ Output JSON array only:
 [{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","temporal_hook":"..."}}]"""
 
 
-QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual recall question for a knowledge review.
+QUESTION_GEN_PROMPT_FACTUAL = """Generate a concept-check question for a knowledge review.
+
+This is FIRST ENCOUNTER with this concept. The goal is NOT to test a specific fact — it is to check
+whether the learner can explain what this node represents in history: what happened, who was involved,
+why it mattered, or what characterized this period/event/person.
 
 Concept: {node_title}
 Curriculum definition: {node_description}
-Chapter evidence: {source_text}
 
-The curriculum definition is the AUTHORITATIVE source for what this concept IS and what facts matter.
-The chapter evidence shows what this particular book said about it.
+The curriculum definition IS the answer. Write a question whose correct answer IS the substance of that definition.
+The question should be answerable by someone who read and understood the definition — not by someone who memorized a name or date.
 
-Step 1 — from the curriculum definition, pick the single most memorable and testable fact:
-a specific person's name, a year, a battle, an achievement, a distinctive detail.
-Priority: vivid and surprising facts over generic ones.
-Good targets: "Gelon crushed Carthage on the same day as Salamis", "Constans II moved the capital to Syracuse", "Archimedes held off Rome for two years with war machines", "tyrannos just meant 'sole ruler'".
+Step 1 — identify the CORE CONCEPT the definition conveys:
+- What was the central dynamic or conflict?
+- What characterized this period/event/figure?
+- What caused or resulted from this?
+- What makes this significant or distinctive in Sicilian history?
 
-Step 2 — write one question starting with one of: Who / When / Which / What year / What did [X] / What replaced / Which [X]
-Do NOT start with: Why / How / What factors / What was [X] known for
+Step 2 — write a SHORT question (6-12 words) that asks for that core concept.
+Start with: What / Why / How / Who was / What characterized / What drove / What resulted
 
-Keep it SHORT — 6-10 words max. Any context or clarification goes in answer_guidance, not the question.
+Good questions (test understanding of the concept):
+- "What drove Greek colonization of Sicily?" → tests the Why-they-came concept
+- "What was the central military conflict of Sicilian history for 300 years?" → tests Greeks-vs-Carthage
+- "Why did Sicilian Greek cities produce more tyrants than mainland Greece?" → tests the Age of Tyrants insight
+- "What made the Norman kingdom of Sicily culturally distinctive?" → tests Arab-Norman synthesis
+- "What happened to Syracuse in 212 BC and why does it matter?" → tests Siege of Syracuse
 
-Good:
-- "Who led Carthage's invasion at Himera?" → specific name
-- "What year did Belisarius take Sicily for Byzantium?" → specific date
-- "What did 'tyrannos' originally mean?" → surprising vocabulary fact
-- "What did Archimedes build to hold off Rome?" → vivid achievement
+Bad questions (test isolated facts the curriculum doesn't emphasize):
+- "Which city founded Naxos?" → a minor detail, not the concept
+- "What year did Belisarius arrive?" → a date, not the concept
+- "Who was the leader of the Carthaginian army?" → a name, not the concept
 
-Bad:
-- "Which city experienced the transition to autocratic rule?" — abstract, no specific fact
-- "Who was the most powerful tyrant in Greek history, controlling most of Sicily?" — 16 words
-- "What was Gelon known for?" — too vague
+The answer_guidance should be 2-3 sentences drawn from the curriculum definition — what a good answer should cover.
 
 {temporal_context}
 
 Output JSON only:
-{{"question":"...","answer_guidance":"1-2 sentences: the specific fact(s) a correct answer should include","temporal_hook":"...","curriculum_context":"..."}}"""
+{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
 
 
-QUESTION_GEN_PROMPT = """Generate a knowledge review question.
+QUESTION_GEN_PROMPT = """Generate an analytical review question.
 
 Concept: {node_title}
 Curriculum definition: {node_description}
-Chapter evidence: {source_text}
 Review #{review_count}
 
 {difficulty_instruction}
@@ -259,13 +263,16 @@ Review #{review_count}
 {known_nodes_context}
 {temporal_context}
 
-The learner already knows the basic facts (who/when/what). Now push deeper using the {lens} lens:
-- CAUSAL: causes/sequences/why this happened
-- COMPARATIVE: compare to another period, ruler, or place
-- SIGNIFICANCE: historical importance, what it changed
-- TEMPORAL: simultaneous events or chronological anchor
-- PATTERN: recurring dynamics across periods
-- CONSEQUENCE: long-term effects
+The learner already understands what this concept IS. Now push deeper with the {lens} lens.
+The question should connect, compare, or explain — not test an isolated name or date.
+
+Lens options:
+- CAUSAL: What caused this? What sequence of events led here?
+- COMPARATIVE: How does this compare to another period or polity the learner knows?
+- SIGNIFICANCE: What did this change? Why does it matter for what came next?
+- TEMPORAL: What else was happening simultaneously? What's the chronological anchor?
+- PATTERN: What recurring dynamic does this exemplify across Sicilian/Mediterranean history?
+- CONSEQUENCE: What long-term effects did this produce?
 
 Keep question under 20 words.
 
