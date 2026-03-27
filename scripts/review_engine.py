@@ -134,12 +134,31 @@ Output JSON array only:
 [{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","temporal_hook":"..."}}]"""
 
 
+QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual recall question for a knowledge review.
+
+Concept: {node_title}
+Source text: {source_text}
+
+Ask one simple factual question — who, when, or what. Examples of good questions:
+- "Who was Belisarius?"
+- "When did the Byzantines occupy Sicily?"
+- "What was Dionysius I known for?"
+- "Which power controlled Syracuse after the Athenian defeat?"
+
+No analysis, no comparisons, no implications. Just the core fact the learner must recall.
+Keep question under 15 words.
+
+{temporal_context}
+
+Output JSON only:
+{{"question":"...","answer_guidance":"1-2 sentences: the specific fact(s) a correct answer should include","temporal_hook":"...","curriculum_context":"..."}}"""
+
+
 QUESTION_GEN_PROMPT = """Generate a knowledge review question.
 
 Concept: {node_title}
 Source text: {source_text}
 Review #{review_count}
-Lens: {lens}
 
 {difficulty_instruction}
 
@@ -147,14 +166,16 @@ Lens: {lens}
 {temporal_context}
 
 Use the {lens} lens:
-- CAUSAL: causes/sequences/why
-- COMPARATIVE: compare to another concept
+- CAUSAL: causes/sequences/why this happened
+- COMPARATIVE: compare to another period, ruler, or place
 - SIGNIFICANCE: historical importance, what it changed
-- TEMPORAL: simultaneous events or chronological relationships
-- PATTERN: recurring dynamics
+- TEMPORAL: simultaneous events or chronological anchor
+- PATTERN: recurring dynamics across periods
 - CONSEQUENCE: long-term effects
 
-Output JSON only — keep question under 20 words:
+Keep question under 20 words.
+
+Output JSON only:
 {{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
@@ -373,26 +394,28 @@ def generate_question(item_id: str, conn) -> dict:
 
     review_count = item.get('review_count', 0) + 1
     lens = item.get('lens', 'SIGNIFICANCE')
-    # PATTERN and COMPARATIVE require synthesis across multiple things —
-    # too hard for first review. Use SIGNIFICANCE instead.
-    if review_count == 1 and lens in ('PATTERN', 'COMPARATIVE'):
-        lens = 'SIGNIFICANCE'
 
-    if review_count == 1:
-        difficulty = 'First review — one simple, direct question. Name or describe one specific thing.'
-    elif review_count == 2:
-        difficulty = 'Second review — ask why or how, not just what.'
+    # Reviews 1-2: pure factual recall — who/when/what, no analysis
+    if review_count <= 2:
+        prompt = QUESTION_GEN_PROMPT_FACTUAL.format(
+            node_title=node_title,
+            source_text=item.get('source_text', '')[:400],
+            temporal_context=temporal_ctx,
+        )
     else:
-        difficulty = f'Review #{review_count} — push for comparisons, patterns, or long-term implications.'
+        if review_count == 3:
+            difficulty = f'Review #{review_count} — now that the fact is solid, ask why it mattered or what caused it.'
+        else:
+            difficulty = f'Review #{review_count} — push for comparisons, patterns, or long-term implications.'
 
-    prompt = QUESTION_GEN_PROMPT.format(
-        node_title=node_title,
-        source_text=item.get('source_text', '')[:400],
-        review_count=review_count,
-        lens=lens,
-        difficulty_instruction=difficulty,
-        known_nodes_context=known_ctx, temporal_context=temporal_ctx,
-    )
+        prompt = QUESTION_GEN_PROMPT.format(
+            node_title=node_title,
+            source_text=item.get('source_text', '')[:400],
+            review_count=review_count,
+            lens=lens,
+            difficulty_instruction=difficulty,
+            known_nodes_context=known_ctx, temporal_context=temporal_ctx,
+        )
 
     raw = call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
     result = _parse_json(raw) if raw else None
