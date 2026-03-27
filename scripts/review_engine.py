@@ -126,7 +126,7 @@ Which 3-6 nodes does this chapter directly cover (not just passing mentions)?
 For each matched node:
 - "node_id": exact ID from the list
 - "node_title": node title
-- "source_text": 1-2 sentences capturing what the chapter says about this node
+- "source_text": 1-2 sentences of SPECIFIC FACTS from the chapter — exact names, dates, events, numbers. Do NOT write abstract summaries like "the chapter discusses the importance of X" — instead write "Gelon defeated the Carthaginians at Himera in 480 BC" or "Syracuse fell to the Arabs in 878 AD after a 75-year siege". If the chapter is thin on specifics, name the most concrete nouns it mentions.
 - "lens": best retrieval lens — CAUSAL | COMPARATIVE | SIGNIFICANCE | TEMPORAL | PATTERN | CONSEQUENCE
 - "temporal_hook": optional 1-sentence cross-period anchor (e.g. "Simultaneous with Rome's Second Punic War")
 
@@ -137,33 +137,32 @@ Output JSON array only:
 QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual recall question for a knowledge review.
 
 Concept: {node_title}
-Source text: {source_text}
+Curriculum definition: {node_description}
+Chapter evidence: {source_text}
 
-Step 1 — find the most testable fact in the source text: a person's name, a year, a battle, a ruler, a city, a specific event. If the text is abstract, pick the most concrete noun or name mentioned.
+The curriculum definition is the AUTHORITATIVE source for what this concept IS and what facts matter.
+The chapter evidence shows what this particular book said about it.
 
-Step 2 — write one question that starts with one of these words ONLY:
-  Who / When / Which / What year / What did [X] do / Which [X] [verb] / What replaced / What was [X] called
+Step 1 — from the curriculum definition, pick the single most memorable and testable fact:
+a specific person's name, a year, a battle, an achievement, a distinctive detail.
+Priority: vivid and surprising facts over generic ones.
+Good targets: "Gelon crushed Carthage on the same day as Salamis", "Constans II moved the capital to Syracuse", "Archimedes held off Rome for two years with war machines", "tyrannos just meant 'sole ruler'".
 
-Do NOT start with: Why / How / What factors / What role / What dynamics / What internal / What kind of / What was [X] known for (too vague — be specific about what aspect)
+Step 2 — write one question starting with one of: Who / When / Which / What year / What did [X] / What replaced / Which [X]
+Do NOT start with: Why / How / What factors / What was [X] known for
+
+Keep it SHORT — 6-10 words max. Any context or clarification goes in answer_guidance, not the question.
 
 Good:
-- "Who was Belisarius?" (7 words)
-- "When did the Arabs take Syracuse?" (7 words)
-- "Which city founded Syracuse?" (4 words)
-- "What year did the Athenian expedition end?" (8 words)
-- "What did Archimedes build to defend Syracuse?" (8 words)
-- "What replaced oligarchy in Syracuse?" (if text discusses transition — specific term as answer)
-- "Which power threatened Greek cities in Sicily?" (if text mentions Carthage)
+- "Who led Carthage's invasion at Himera?" → specific name
+- "What year did Belisarius take Sicily for Byzantium?" → specific date
+- "What did 'tyrannos' originally mean?" → surprising vocabulary fact
+- "What did Archimedes build to hold off Rome?" → vivid achievement
 
 Bad:
-- "Who was the tyrant known for providing unified military leadership during the Battle of Himera in 480 BC?" — bad: 20 words, context belongs in answer_guidance
-- "What was Gelon known for?" — bad: too vague
-- "How did successive powers shape the city?" — bad: starts with How
-- "Which city-state's tyrants rose to power against threats?" — bad: abstract and convoluted
-
-Keep the question SHORT — 6-10 words. If you feel the urge to add context ("in 480 BC", "under leaders like X"), put it in answer_guidance instead.
-
-The answer must be a specific name, year, or one brief factual statement.
+- "Which city experienced the transition to autocratic rule?" — abstract, no specific fact
+- "Who was the most powerful tyrant in Greek history, controlling most of Sicily?" — 16 words
+- "What was Gelon known for?" — too vague
 
 {temporal_context}
 
@@ -394,6 +393,7 @@ def generate_question(item_id: str, conn) -> dict:
     node = next((n for n in (curriculum or {}).get('nodes', [])
                  if n['id'] == item.get('curriculum_node_id')), None)
     node_title = node['title'] if node else item.get('curriculum_node_title', '')
+    node_description = node.get('description', '') if node else ''
 
 
     known = [n['title'] for n in (curriculum or {}).get('nodes', [])
@@ -416,6 +416,7 @@ def generate_question(item_id: str, conn) -> dict:
     if review_count <= 2:
         prompt = QUESTION_GEN_PROMPT_FACTUAL.format(
             node_title=node_title,
+            node_description=node_description,
             source_text=item.get('source_text', '')[:400],
             temporal_context=temporal_ctx,
         )
