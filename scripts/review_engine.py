@@ -923,6 +923,15 @@ def create_exploration_items(item_id: str, conn) -> list:
     if not item:
         return []
 
+    # Don't create duplicates if unexpired exploration items already exist for this parent
+    now = int(time.time() * 1000)
+    existing = conn.execute(
+        "SELECT count(*) FROM review_items WHERE parent_item_id=? AND item_type='exploration' AND due_at > ?",
+        (item_id, now - 7 * 24 * 60 * 60 * 1000)  # within last week
+    ).fetchone()[0]
+    if existing > 0:
+        return []
+
     prompt = EXPLORE_PROMPT.format(
         node_title=item.get('curriculum_node_title', ''),
         source_text=item.get('source_text', '')[:400],
@@ -934,7 +943,6 @@ def create_exploration_items(item_id: str, conn) -> list:
     if not isinstance(questions, list):
         return []
 
-    now = int(time.time() * 1000)
     tomorrow = now + 24 * 60 * 60 * 1000
     created = []
 
