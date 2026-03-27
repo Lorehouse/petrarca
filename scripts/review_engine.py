@@ -20,7 +20,8 @@ from curriculum import (
 )
 
 DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
-BOOK_RESEARCH_DIR = DATA_DIR / 'book_research'
+SCRIPT_DIR = Path(__file__).parent
+BOOK_RESEARCH_DIR = SCRIPT_DIR / 'data' / 'book_research'
 
 # ── FSRS (simplified) ─────────────────────────────────────────────────────────
 
