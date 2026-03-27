@@ -1,6 +1,22 @@
 # Knowledge System Implementation Status
 
-**Date**: March 25, 2026 (last updated — session 37: Phase 4c cleanup + incremental sync)
+**Date**: March 27, 2026 (last updated — session 38: feed overview + web link fix)
+
+## Session 38: Feed Overview + Web Link Fix (March 27, 2026)
+
+### Web Reader Links Fixed
+- **Root cause**: React Native Web's `<Text onPress + href>` calls `preventDefault` on the anchor, then `Linking.openURL`/`window.open()` gets blocked as popup. Also, parent `<Pressable onLongPress>` on paragraphs captured pointer events.
+- **Fix**: New `MarkdownLink` component (`app/components/MarkdownLink.tsx`) — web uses native `<a href target="_blank">`, native uses `onPress` + `Linking.openURL`. Paragraph wrappers use `View` on web instead of `Pressable`.
+- **Cmd+click**: Opens ingestable links externally on web (skips ingestion)
+- **CLAUDE.md**: Documented RNW link gotcha to prevent recurrence
+
+### Feed Overview — Sidebar (Web) + Filter Pills (Mobile)
+- **Web**: Grid layout with 180px sticky left sidebar containing topic list (clickable filters with counts), source filters with colored dots, and "Your Research" box showing AI-generated articles with original queries
+- **Mobile**: Research section (rubric left border, queries grouped with article titles) + combined topic/source filter pills in one scrollable row above feed
+- **Filter pills**: Topic pills (EB Garamond, ink active state) + source pills (DM Sans uppercase, separated by divider) — both filter the feed
+- **Data layer** (`store.ts`): `getArticleSourceCategory()` (twitter/newsletter/research/exploration/other), `getResearchArticles()` (grouped by query), `getFeedDistribution()`, `sourceFilter` param added to `getArticlesByLens()`
+- **Research queries**: Extracted from `sources[].type` prefix `research:` — e.g. `research:How does compound engineering...`
+- **New components**: `FeedFilterPills.tsx`, `FeedSidebar.tsx`, `ResearchSection.tsx`
 
 ## Session 36: SQLite Migration — Phases 1–4 (March 22–25, 2026)
 
