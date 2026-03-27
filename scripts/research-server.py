@@ -64,7 +64,8 @@ from curriculum import (
     load_knowledge_states, update_knowledge, get_coverage_report,
     map_book_to_curriculum, start_elicitation, continue_elicitation,
     import_assessment_answers, get_book_curriculum_context,
-    get_curriculum_graph_data,
+    get_curriculum_graph_data, get_entity_index, build_entity_index,
+    tag_curriculum_entities,
 )
 from review_engine import (
     create_review_items_for_chapter, get_review_queue, generate_question,
@@ -3957,11 +3958,20 @@ JSON array only:"""
             try:
                 result = generate_curriculum(domain, depth)
                 if result:
+                    domain_id = result['id']
+                    _curriculum_jobs[job_id] = {
+                        'status': 'tagging', 'domain': domain,
+                        'domain_id': domain_id, 'node_count': result['node_count'],
+                    }
+                    print(f"[curriculum] Generated '{domain}': {result['node_count']} nodes — tagging entities", flush=True)
+                    tagged = tag_curriculum_entities(domain_id)
+                    build_entity_index()
                     _curriculum_jobs[job_id] = {
                         'status': 'done', 'domain': domain,
-                        'domain_id': result['id'], 'node_count': result['node_count'],
+                        'domain_id': domain_id, 'node_count': result['node_count'],
+                        'tagged': tagged,
                     }
-                    print(f"[curriculum] Generated '{domain}': {result['node_count']} nodes", flush=True)
+                    print(f"[curriculum] Entity index rebuilt after '{domain}'", flush=True)
                 else:
                     _curriculum_jobs[job_id] = {'status': 'failed', 'domain': domain}
             except Exception as e:
@@ -4192,11 +4202,10 @@ JSON array only:"""
         finally:
             conn.close()
 
-    def _serve_curriculum_graph_html(self):
-        """GET /curriculum/graph — serve the interactive curriculum graph page."""
-        html_path = Path(__file__).parent / 'curriculum_graph.html'
+    def _serve_html_file(self, filename: str):
+        html_path = Path(__file__).parent / filename
         if not html_path.exists():
-            self._send_json_response(404, {'error': 'curriculum_graph.html not found'})
+            self._send_json_response(404, {'error': f'{filename} not found'})
             return
         content = html_path.read_bytes()
         self.send_response(200)
@@ -4204,6 +4213,12 @@ JSON array only:"""
         self.send_header('Content-Length', str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _serve_curriculum_graph_html(self):
+        self._serve_html_file('curriculum_graph.html')
+
+    def _serve_curriculum_timeline_html(self):
+        self._serve_html_file('curriculum_timeline.html')
 
     def do_POST(self):
         if self.path == '/chat':
@@ -4876,6 +4891,10 @@ JSON array only:"""
             return self._send_json_response(200, data)
         if self.path == '/curriculum/graph':
             return self._serve_curriculum_graph_html()
+        if self.path == '/curriculum/timeline':
+            return self._serve_curriculum_timeline_html()
+        if self.path == '/curriculum/entity-index':
+            return self._send_json_response(200, get_entity_index())
         if self.path.startswith('/curriculum/generate/status'):
             from urllib.parse import urlparse, parse_qs
             job_id = parse_qs(urlparse(self.path).query).get('id', [''])[0]
@@ -4891,7 +4910,7 @@ JSON array only:"""
             if report:
                 return self._send_json_response(200, report)
             return self._send_json_response(404, {'error': 'Curriculum not found'})
-        if self.path.startswith('/curriculum/') and not self.path.startswith('/curriculum/elicit') and not self.path.startswith('/curriculum/knowledge') and not self.path.startswith('/curriculum/map') and not self.path.startswith('/curriculum/list') and not self.path.startswith('/curriculum/graph'):
+        if self.path.startswith('/curriculum/') and not self.path.startswith('/curriculum/elicit') and not self.path.startswith('/curriculum/knowledge') and not self.path.startswith('/curriculum/map') and not self.path.startswith('/curriculum/list') and not self.path.startswith('/curriculum/graph') and not self.path.startswith('/curriculum/timeline') and not self.path.startswith('/curriculum/entity') and not self.path.startswith('/curriculum/generate'):
             domain_id = self.path.split('/curriculum/')[1].split('?')[0]
             curriculum = load_curriculum(domain_id)
             if curriculum:

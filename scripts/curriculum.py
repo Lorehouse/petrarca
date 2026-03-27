@@ -716,6 +716,254 @@ def get_coverage_report(domain_id: str) -> dict | None:
 
 
 # ─────────────────────────────────────────────
+# Entity tagging & index
+# ─────────────────────────────────────────────
+
+_ENTITY_TAG_PROMPT = """Extract structured entities from these curriculum nodes.
+For each node return: persons (named historical individuals), places (cities, regions, empires, islands),
+events (named battles, conquests, treaties, councils), and time_span [start_year, end_year] as integers
+(negative = BCE). Use existing date_start/date_end if provided and reasonable; infer from context otherwise.
+Omit fields that are empty rather than returning empty arrays.
+
+Nodes (JSON):
+{nodes_json}
+
+Return a JSON array with one object per node, in the same order:
+[{{"id":"...","persons":[],"places":[],"events":[],"time_span":[-480,-480]}}, ...]
+Only output JSON, no prose."""
+
+
+def tag_curriculum_entities(domain_id: str, force: bool = False) -> int:
+    """Tag all nodes in a curriculum with persons/places/events/time_span.
+
+    Skips nodes that already have an 'entities' field unless force=True.
+    Uses Gemini Flash in batches of 12 nodes. Returns count of nodes tagged.
+    """
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return 0
+
+    nodes = curriculum['nodes']
+    to_tag = [n for n in nodes if force or 'entities' not in n]
+    if not to_tag:
+        return 0
+
+    tagged = 0
+    batch_size = 12
+
+    for i in range(0, len(to_tag), batch_size):
+        batch = to_tag[i:i + batch_size]
+        batch_input = [
+            {
+                'id': n['id'],
+                'title': n['title'],
+                'description': n.get('description', '')[:300],
+                'date_start': n.get('date_start'),
+                'date_end': n.get('date_end'),
+            }
+            for n in batch
+        ]
+        prompt = _ENTITY_TAG_PROMPT.format(nodes_json=json.dumps(batch_input, indent=2))
+        raw = call_llm(prompt, max_tokens=4096, response_mime_type='application/json')
+        if not raw:
+            continue
+
+        try:
+            text = raw.strip()
+            if text.startswith('```'):
+                text = re.sub(r'^```(?:json)?\s*', '', text)
+                text = re.sub(r'\s*```$', '', text.strip())
+            m = re.search(r'\[[\s\S]*\]', text)
+            results = json.loads(m.group() if m else text)
+        except Exception as e:
+            print(f'[curriculum] entity tag parse error: {e}', flush=True)
+            continue
+
+        result_by_id = {r['id']: r for r in results if isinstance(r, dict)}
+        for node in batch:
+            r = result_by_id.get(node['id'], {})
+            entities = {}
+            if r.get('persons'):
+                entities['persons'] = r['persons']
+            if r.get('places'):
+                entities['places'] = r['places']
+            if r.get('events'):
+                entities['events'] = r['events']
+            # time_span: prefer existing date_start/date_end, fall back to LLM
+            ts = node.get('date_start'), node.get('date_end')
+            if ts[0] is not None:
+                entities['time_span'] = [ts[0], ts[1] if ts[1] is not None else ts[0]]
+            elif r.get('time_span') and len(r['time_span']) == 2:
+                entities['time_span'] = r['time_span']
+            node['entities'] = entities
+            tagged += 1
+
+    # Save updated curriculum
+    path = DATA_DIR / f'{domain_id}.json'
+    with open(path, 'w') as f:
+        json.dump(curriculum, f, indent=2)
+
+    print(f'[curriculum] Tagged {tagged} nodes in {domain_id}', flush=True)
+    return tagged
+
+
+_PLACE_HIERARCHY_PROMPT = """Build a place hierarchy for these historical place names.
+For each place, assign:
+- "parent": the broader polity/region it belongs to (e.g. Athens → Ancient Greece, Syracuse → Sicily)
+- "type": one of "city", "city-state", "island", "region", "empire", "caliphate", "kingdom", "peninsula"
+
+Use historically accurate groupings, not modern countries (e.g. use "Ancient Greece" not "Greece",
+"Byzantine Empire" not "Turkey"). Top-level nodes (Sicily, Ancient Greece, Byzantine Empire, etc.)
+should have parent "Mediterranean" or "Middle East" as appropriate.
+
+Places: {places_json}
+
+Return JSON object: {{"Athens": {{"parent": "Ancient Greece", "type": "city"}}, ...}}
+Only output JSON."""
+
+
+def build_place_hierarchy(places: list[str]) -> dict:
+    """Ask Opus to build a parent hierarchy for a list of place names."""
+    if not places:
+        return {}
+    prompt = _PLACE_HIERARCHY_PROMPT.format(places_json=json.dumps(sorted(set(places))))
+    raw = _call_opus(prompt, max_tokens=4096)
+    if not raw:
+        return {}
+    try:
+        text = raw.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text.strip())
+        m = re.search(r'\{[\s\S]*\}', text)
+        return json.loads(m.group() if m else text)
+    except Exception as e:
+        print(f'[curriculum] place hierarchy parse error: {e}', flush=True)
+        return {}
+
+
+def build_entity_index() -> dict:
+    """Build an inverted index over all entity-tagged curriculum nodes.
+
+    Returns:
+        {
+          nodes: [...all nodes with entities],
+          persons_index: {name: [node_id, ...]},
+          places_index: {name: [node_id, ...]},
+          events_index: {name: [node_id, ...]},
+          place_hierarchy: {place: {parent, type}},
+          curricula: [...],
+        }
+    Saves to DATA_DIR/entity_index.json and returns the dict.
+    """
+    curricula_list = list_curricula()
+    all_nodes = []
+    curricula_meta = []
+    persons_idx: dict[str, list] = {}
+    places_idx: dict[str, list] = {}
+    events_idx: dict[str, list] = {}
+    all_places: list[str] = []
+
+    for meta in curricula_list:
+        domain_id = meta['id']
+        curriculum = load_curriculum(domain_id)
+        if not curriculum:
+            continue
+        states = load_knowledge_states(domain_id)
+        short_name = domain_id.split('_')[0]
+        curricula_meta.append({
+            'id': domain_id,
+            'short_name': short_name,
+            'title': curriculum.get('title', domain_id),
+        })
+
+        for node in curriculum.get('nodes', []):
+            state = states.get(node['id'], {})
+            entities = node.get('entities', {})
+
+            flat = {
+                'id': node['id'],
+                'title': node['title'],
+                'description': node.get('description', '')[:300],
+                'curriculum': domain_id,
+                'level': node.get('level', 2),
+                'time_span': entities.get('time_span') or (
+                    [node['date_start'], node.get('date_end', node['date_start'])]
+                    if node.get('date_start') is not None else None
+                ),
+                'entities': entities,
+                'knowledge': state.get('knowledge', 'unknown'),
+                'interest': state.get('interest', 'none'),
+                'review_count': 0,
+            }
+            all_nodes.append(flat)
+
+            nid = node['id']
+            for person in entities.get('persons', []):
+                persons_idx.setdefault(person, []).append(nid)
+            for place in entities.get('places', []):
+                places_idx.setdefault(place, []).append(nid)
+                all_places.append(place)
+            for event in entities.get('events', []):
+                events_idx.setdefault(event, []).append(nid)
+
+    # Build / load place hierarchy
+    hierarchy_path = DATA_DIR / 'place_hierarchy.json'
+    if hierarchy_path.exists():
+        place_hierarchy = json.loads(hierarchy_path.read_text())
+        # Add any new places not yet in hierarchy
+        new_places = [p for p in set(all_places) if p not in place_hierarchy]
+        if new_places:
+            new_hier = build_place_hierarchy(new_places)
+            place_hierarchy.update(new_hier)
+            hierarchy_path.write_text(json.dumps(place_hierarchy, indent=2))
+    else:
+        place_hierarchy = build_place_hierarchy(list(set(all_places)))
+        hierarchy_path.write_text(json.dumps(place_hierarchy, indent=2))
+
+    # Expand places_index: if you look up "Ancient Greece", also return nodes tagged
+    # with child places (Athens, Sparta, etc.)
+    def get_children(parent: str) -> list[str]:
+        return [p for p, v in place_hierarchy.items() if v.get('parent') == parent]
+
+    expanded_places_idx: dict[str, list] = {}
+    for place, node_ids in places_idx.items():
+        expanded_places_idx[place] = list(node_ids)
+    # Add parent-level entries
+    for place, meta in place_hierarchy.items():
+        parent = meta.get('parent')
+        if parent and place in places_idx:
+            expanded_places_idx.setdefault(parent, [])
+            for nid in places_idx[place]:
+                if nid not in expanded_places_idx[parent]:
+                    expanded_places_idx[parent].append(nid)
+
+    index = {
+        'nodes': all_nodes,
+        'persons_index': persons_idx,
+        'places_index': expanded_places_idx,
+        'events_index': events_idx,
+        'place_hierarchy': place_hierarchy,
+        'curricula': curricula_meta,
+    }
+
+    index_path = DATA_DIR / 'entity_index.json'
+    index_path.write_text(json.dumps(index))
+    print(f'[curriculum] Entity index: {len(all_nodes)} nodes, '
+          f'{len(persons_idx)} persons, {len(expanded_places_idx)} places, '
+          f'{len(events_idx)} events', flush=True)
+    return index
+
+
+def get_entity_index() -> dict:
+    """Load entity index from cache, or build if missing."""
+    path = DATA_DIR / 'entity_index.json'
+    if path.exists():
+        return json.loads(path.read_text())
+    return build_entity_index()
+
+
+# ─────────────────────────────────────────────
 # Curriculum graph data
 # ─────────────────────────────────────────────
 
