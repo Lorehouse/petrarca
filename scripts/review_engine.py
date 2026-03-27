@@ -142,23 +142,25 @@ Source text: {source_text}
 Step 1 — find the most testable fact in the source text: a person's name, a year, a battle, a ruler, a city, a specific event. If the text is abstract, pick the most concrete noun or name mentioned.
 
 Step 2 — write one question that starts with one of these words ONLY:
-  Who / When / Which / What year / What was [X] known for / What did [X] do / Which [X] [verb]
+  Who / When / Which / What year / What did [X] do / Which [X] [verb]
 
-Do NOT start with: Why / How / What factors / What role / What dynamics / What internal / What kind of
+Do NOT start with: Why / How / What factors / What role / What dynamics / What internal / What kind of / What was [X] known for (too vague — be specific about what aspect)
 
 Good:
-- "Who was Belisarius?"
-- "When did the Arabs take Syracuse?"
-- "Which city founded Syracuse?"
-- "What was Gelon known for?"
-- "What year did the Athenian expedition end?"
+- "Who was Belisarius?" (7 words)
+- "When did the Arabs take Syracuse?" (7 words)
+- "Which city founded Syracuse?" (4 words)
+- "What year did the Athenian expedition end?" (8 words)
+- "What did Archimedes build to defend Syracuse?" (8 words, specific aspect)
 
-Bad (don't do these):
-- "Why did Syracuse turn to tyrants?" — starts with Why
-- "What internal factor enabled the transition?" — abstract, not a name/date/event
-- "How did successive powers shape the city?" — process, not a fact
+Bad:
+- "Who was the tyrant known for providing unified military leadership during the Battle of Himera in 480 BC?" — bad: 20 words, most context belongs in answer_guidance
+- "What was Gelon known for?" — bad: too vague, specify the aspect
+- "How did successive powers shape the city?" — bad: starts with How
 
-The answer must be a specific name, year, or brief factual statement — not an essay.
+Keep the question SHORT — 6-10 words. If you feel the urge to add context ("in 480 BC", "under leaders like X"), put it in answer_guidance instead.
+
+The answer must be a specific name, year, or one brief factual statement.
 
 {temporal_context}
 
