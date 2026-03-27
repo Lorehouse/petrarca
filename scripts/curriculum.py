@@ -137,6 +137,16 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
     if not raw:
         return None
 
+    # Strip markdown fences if present (Opus sometimes wraps JSON in ```json ... ```)
+    raw = raw.strip()
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw.strip())
+    # Extract JSON array if embedded in prose
+    m = re.search(r'\[[\s\S]*\]', raw)
+    if m:
+        raw = m.group()
+
     try:
         nodes_raw = json.loads(raw)
     except json.JSONDecodeError:
