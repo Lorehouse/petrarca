@@ -62,29 +62,39 @@ export default function AddBookScreen() {
     await addPhysicalBook(placeholder);
     router.back();
 
-    // Background: identify and update
-    try {
-      const result = await identifyBookCover(uri);
-      await updatePhysicalBook(bookId, {
-        title: result.title || 'Unknown Book',
-        author: result.author || '',
-        cover_url: result.cover_url,
-        isbn: result.isbn || undefined,
-        publisher: result.publisher || undefined,
-        year: result.year || undefined,
-        page_count: result.page_count || undefined,
-        topics: result.topics || [],
-        chapters: result.chapters || [],
-        processing_status: 'ready',
-      });
-      logEvent('book_add_identified', { book_id: bookId, title: result.title });
-    } catch (e: any) {
-      // Mark as ready even on failure — user can edit manually
+    // Background: identify with retry (server may be temporarily down)
+    const MAX_RETRIES = 3;
+    let lastError: any;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 3000 * attempt));
+        const result = await identifyBookCover(uri);
+        await updatePhysicalBook(bookId, {
+          title: result.title || 'Unknown Book',
+          author: result.author || '',
+          cover_url: result.cover_url,
+          isbn: result.isbn || undefined,
+          publisher: result.publisher || undefined,
+          year: result.year || undefined,
+          page_count: result.page_count || undefined,
+          topics: result.topics || [],
+          chapters: result.chapters || [],
+          processing_status: 'ready',
+        });
+        logEvent('book_add_identified', { book_id: bookId, title: result.title, attempts: attempt + 1 });
+        lastError = null;
+        break;
+      } catch (e: any) {
+        lastError = e;
+        logEvent('book_add_identify_retry', { book_id: bookId, attempt: attempt + 1, error: e.message });
+      }
+    }
+    if (lastError) {
       await updatePhysicalBook(bookId, {
         title: 'Unidentified Book',
         processing_status: 'ready',
       });
-      logEvent('book_add_identify_failed', { book_id: bookId, error: e.message });
+      logEvent('book_add_identify_failed', { book_id: bookId, error: lastError.message });
     }
   }, [takePhoto, pickFromLibrary, router]);
 

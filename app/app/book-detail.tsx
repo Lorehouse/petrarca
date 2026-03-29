@@ -15,7 +15,7 @@ import {
   addBookCapture, generateCaptureId, updatePhysicalBook, updateBookCapture,
 } from '../data/book-store';
 import { useBookStoreVersion } from '../data/use-book-store';
-import { uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar } from '../lib/book-api';
+import { uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar, identifyBookCover } from '../lib/book-api';
 import { notifyChapterComplete } from '../lib/review-api';
 import { enqueuePhotoUpload, pollPhotoResults, getUploadQueueStatus, initUploadQueue } from '../lib/upload-queue';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
@@ -455,6 +455,56 @@ export default function BookDetailScreen() {
 
   const fmtDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
+  const needsIdentify = book.title === 'Unidentified Book' || book.title === 'Identifying...';
+  const [identifying, setIdentifying] = useState(false);
+
+  const handleReidentify = useCallback(async () => {
+    if (!book) return;
+    // Try existing photo first
+    let uri = book.cover_image_uri;
+    if (uri && Platform.OS !== 'web') {
+      try {
+        const info = await getInfoAsync(uri);
+        if (!info.exists) uri = undefined;
+      } catch { uri = undefined; }
+    }
+    // Fall back to camera/picker
+    if (!uri) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Camera permission needed');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+      if (result.canceled || !result.assets[0]) return;
+      uri = result.assets[0].uri;
+      await updatePhysicalBook(book.id, { cover_image_uri: uri });
+    }
+    setIdentifying(true);
+    try {
+      const result = await identifyBookCover(uri);
+      await updatePhysicalBook(book.id, {
+        title: result.title || 'Unknown Book',
+        author: result.author || '',
+        cover_url: result.cover_url,
+        isbn: result.isbn || undefined,
+        publisher: result.publisher || undefined,
+        year: result.year || undefined,
+        page_count: result.page_count || undefined,
+        topics: result.topics || [],
+        chapters: result.chapters || [],
+        processing_status: 'ready',
+      });
+      logEvent('book_reidentify_success', { book_id: book.id, title: result.title });
+    } catch (e: any) {
+      Alert.alert('Identification failed', 'Could not reach the server. Try again later.');
+      logEvent('book_reidentify_failed', { book_id: book.id, error: e.message });
+    } finally {
+      setIdentifying(false);
+      setRefreshKey(k => k + 1);
+    }
+  }, [book]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -471,6 +521,18 @@ export default function BookDetailScreen() {
         <View style={styles.headerInfo}>
           <Text style={styles.bookTitle}>{book.title}</Text>
           <Text style={styles.bookAuthor}>{book.author}</Text>
+          {needsIdentify && (
+            <Pressable
+              style={styles.reidentifyButton}
+              onPress={handleReidentify}
+              disabled={identifying}
+            >
+              {identifying
+                ? <ActivityIndicator size="small" color={colors.rubric} />
+                : <Text style={styles.reidentifyText}>{'\u2726'} Re-identify book</Text>
+              }
+            </Pressable>
+          )}
           {book.topics.length > 0 && (
             <View style={styles.topicRow}>
               {book.topics.map((t: string) => <Text key={t} style={styles.topicTag}>{t}</Text>)}
@@ -735,6 +797,8 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   bookTitle: { fontFamily: fonts.displaySemiBold, fontSize: 22, lineHeight: 27, color: colors.ink, marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   bookAuthor: { fontFamily: fonts.readingItalic, fontSize: 15, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  reidentifyButton: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.rubric, borderRadius: 3, alignSelf: 'flex-start', marginBottom: 8 },
+  reidentifyText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
   topicRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   topicTag: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.rubric, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   progressInfo: { marginTop: 4 },
