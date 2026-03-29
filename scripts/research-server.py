@@ -4216,7 +4216,7 @@ JSON array only:"""
             return
 
         # Load article → curriculum node mappings
-        mappings_file = DATA_DIR / 'curricula' / 'article_curriculum_mappings.json'
+        mappings_file = Path('/opt/petrarca/data/curricula') / 'article_curriculum_mappings.json'
         article_nodes: list[str] = []
         if mappings_file.exists():
             with open(mappings_file) as f:
@@ -4239,13 +4239,14 @@ JSON array only:"""
             for node_id in article_nodes:
                 # Find knowledge_item for this node
                 row = conn.execute(
-                    'SELECT id, stability_days, due_at, curriculum_node_title FROM knowledge_items WHERE curriculum_node_id=?',
+                    'SELECT id, stability_days, due_at FROM knowledge_items WHERE curriculum_node_id=?',
                     (node_id,)
                 ).fetchone()
                 if not row:
                     continue
                 item_id = row['id']
-                node_title = row['curriculum_node_title'] or node_id
+                # item id is "{domain}:{node_id}" — extract readable label from node_id
+                node_title = node_id.replace('_', ' ').title()
                 node_titles.append(node_title)
                 # Only surface items not recently reviewed (due far in future → bring to now + 1h)
                 if row['due_at'] > now_ms + 24 * 60 * 60 * 1000:
