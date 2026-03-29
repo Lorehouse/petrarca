@@ -356,7 +356,7 @@ export default function ReviewSession() {
           <View style={styles.cardMeta}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={styles.cardDomain} numberOfLines={1}>
-                {DOMAIN_LABELS[card.item.curriculum_domain] || card.item.curriculum_domain}
+                {(card.item.curriculum_domain && DOMAIN_LABELS[card.item.curriculum_domain]) || card.item.curriculum_domain || 'Review'}
               </Text>
               {card.item.source_chapter_title ? (
                 <Text style={styles.cardChapter} numberOfLines={1}>
