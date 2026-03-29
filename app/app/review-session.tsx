@@ -14,6 +14,14 @@ import {
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
 
+const DOMAIN_LABELS: Record<string, string> = {
+  sicily_history_culture_and_legacy: 'Sicily',
+  ancient_greece_800300_bc_political_military_cultural_and: 'Ancient Greece',
+  byzantine_empire_history_culture_and_legacy_3301453_ad: 'Byzantine Empire',
+  islamic_civilization_history_expansion_and_intellectual_legacy_5701500: 'Islamic Civilization',
+  roman_republic_and_empire: 'Roman Republic & Empire',
+};
+
 const LENS_COLORS: Record<string, [string, string]> = {
   CAUSAL:       ['#7a3000', '#fff0e8'],
   COMPARATIVE:  ['#1a4a7a', '#e8f0ff'],
@@ -346,9 +354,16 @@ export default function ReviewSession() {
         <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
           {/* Chapter + lens badge */}
           <View style={styles.cardMeta}>
-            <Text style={styles.cardChapter} numberOfLines={1}>
-              {card.item.source_chapter_title || 'Review'}
-            </Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.cardDomain} numberOfLines={1}>
+                {DOMAIN_LABELS[card.item.curriculum_domain] || card.item.curriculum_domain}
+              </Text>
+              {card.item.source_chapter_title ? (
+                <Text style={styles.cardChapter} numberOfLines={1}>
+                  {card.item.source_chapter_title}
+                </Text>
+              ) : null}
+            </View>
             <View style={[styles.lensBadge, { backgroundColor: lensBg }]}>
               <Text style={[styles.lensBadgeText, { color: lensColor }]}>
                 {LENS_LABELS[lens] || lens}
@@ -466,9 +481,13 @@ const styles = StyleSheet.create({
     borderRadius: 4, padding: 20, marginBottom: 12,
   },
   cardMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+  cardDomain: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 11, color: colors.rubric, textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: '500',
+  },
   cardChapter: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.06, flex: 1,
+    fontSize: 11, color: colors.textMuted, letterSpacing: 0.04,
   },
   lensBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 2 },
   lensBadgeText: {

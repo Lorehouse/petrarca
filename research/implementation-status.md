@@ -1,6 +1,57 @@
 # Knowledge System Implementation Status
 
-**Date**: March 27, 2026 (last updated — session 38: feed overview + web link fix)
+**Date**: March 29, 2026 (last updated — sessions 39–40: curriculum viz, review quality, multi-curriculum queue)
+
+## Sessions 39–40: Curriculum Review System + Multi-Curriculum Queue (March 27–29, 2026)
+
+### Curriculum Visualization (Session 39)
+- **`curriculum_graph.html`**: Force-directed D3 graph of all curricula — nexus entity nodes, domain color lanes, Graph↔Timeline tabs
+- **`curriculum_timeline.html`**: Horizontal D3 timeline — 5 curriculum lanes, 220px collapsible entity filter panel (persons/places/events), hierarchical place expansion, D3 brush for zoom, "Undated" column, detail sidebar. Served at `/curriculum/timeline`.
+
+### Review Question Quality (Session 39)
+- **Root cause**: Questions tested source-text trivia ("Which city founded Naxos?") instead of curriculum concepts
+- **Fix**: `QUESTION_GEN_PROMPT_FACTUAL` redesigned — node description IS the answer guide. Questions test conceptual understanding ("What drove Greek colonization of Sicily?"), not random facts. Examples updated to be curriculum-agnostic.
+- **Curriculum scan**: Level 1 container nodes filtered out (never assessable). Queue ordering: history areas before culture areas, chronological by `date_start` within area.
+- **Dedup guard**: `create_exploration_items()` checks for unexpired items before creating new ones.
+- **Node rename**: "Architecture as Palimpsest" → "Sicily's Architecture: Layers of Conquest" in curriculum JSON.
+
+### Multi-Curriculum Knowledge Items + Review Queue (Session 40)
+
+#### Byzantine + Islamic self-assessments → review queue
+- User completed curriculum-scan for Byzantine (49 nodes: 16 engaged, 33 unknown) and Islamic (40 nodes: 11 engaged, 29 unknown)
+- **Bridge script**: Creates `knowledge_items` from `knowledge_*.json` state files. Stability based on assessed level: unknown=1d/due-now, engaged=14d, anchored=60d. Sources: `[{type: 'self_assessment', ...}]`.
+- **Date enrichment**: LLM-assigned `date_start`/`date_end` to all 78 Level 2+ Byzantine/Islamic nodes (none had dates). Specific events: Nika Revolt 532–532, Justinian 527–565, Arab sieges 632–718, etc.
+- **Questions pre-generated**: 89 concept-based questions, 0 failures.
+
+#### Ancient Greece book mapping
+- 4 Iggulden novels (Gates of Athens, Protector, The Lion, Falcon of Sparta) + Matyszak "A Year in the Life" mapped to Ancient Greece curriculum via LLM
+- 47 knowledge_items created with actual book sources (chapter evidence + temporal hooks)
+- 8 additional self-assessment gap items created for nodes not covered by books
+
+#### Roman Republic + other gaps
+- Roman Republic: 38 knowledge_items from self-assessment (curriculum already had dates 509 BC–476 AD)
+- Ancient Greece: 8 self-assessment gap items filled
+- Total: **206 knowledge_items across 5 curricula** (was 24 Sicily-only)
+
+#### Review queue ordering
+- Sort key: `(area_order, date_start, due_at)` — history areas before culture areas, chronological within area
+- Result: All 5 curricula interleave historically (~800 BC polis → ~480 BC Persian Wars → ~330 AD Constantinople → ~570 AD Islam)
+
+### Review UX: 10-Card Batches + Continue Button
+- Session already capped at 10 cards via `getReviewQueue(10)`.
+- **Done screen**: "✦ Continue · N more due" rubric button when items remain; reloads next batch. Session state fully reset on continue.
+- Stats endpoint called after queue load to get remaining count.
+
+### Article Reading → Review Queue (#9)
+- `POST /review/article-read` endpoint: looks up `article_curriculum_nodes` for an article, bumps matching `knowledge_items` due in 1h (if currently far-future).
+- Reader `handleDone` fires this fire-and-forget.
+- **Effect**: reading an article that covers curriculum topics you don't know well will surface those review cards in your next session.
+
+### Prompt + Code Fixes
+- `MAP_CHAPTER_PROMPT`: Examples changed from Sicily-specific to curriculum-agnostic (Themistocles, Byzantine dynasty, Muhammad).
+- `QUESTION_GEN_PROMPT_FACTUAL`: "Sicilian history" wording removed; examples now span all curricula.
+- Hardcoded `domain_id = ... 'sicily_history_culture_and_legacy'` fallback changed to `or` pattern.
+- Review card: now shows curriculum domain in rubric color above chapter title for orientation.
 
 ## Session 38: Feed Overview + Web Link Fix (March 27, 2026)
 

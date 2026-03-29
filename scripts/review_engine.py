@@ -203,9 +203,9 @@ Which 3-6 nodes does this chapter directly cover (not just passing mentions)?
 For each matched node:
 - "node_id": exact ID from the list
 - "node_title": node title
-- "source_text": 1-2 sentences of SPECIFIC FACTS from the chapter — exact names, dates, events, numbers. Do NOT write abstract summaries like "the chapter discusses the importance of X" — instead write "Gelon defeated the Carthaginians at Himera in 480 BC" or "Syracuse fell to the Arabs in 878 AD after a 75-year siege". If the chapter is thin on specifics, name the most concrete nouns it mentions.
+- "source_text": 1-2 sentences of SPECIFIC FACTS from the chapter — exact names, dates, events, numbers. Do NOT write abstract summaries like "the chapter discusses the importance of X" — instead write concrete facts: "Themistocles persuaded Athens to build 200 triremes before Salamis" or "The Macedonian dynasty ruled 867–1056 AD, Byzantium's cultural golden age". If the chapter is thin on specifics, name the most concrete nouns it mentions.
 - "lens": best retrieval lens — CAUSAL | COMPARATIVE | SIGNIFICANCE | TEMPORAL | PATTERN | CONSEQUENCE
-- "temporal_hook": optional 1-sentence cross-period anchor (e.g. "Simultaneous with Rome's Second Punic War")
+- "temporal_hook": optional 1-sentence cross-period anchor (e.g. "Simultaneous with the Roman conquest of Carthage" or "Two centuries before the rise of Islam")
 
 Output JSON array only:
 [{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","temporal_hook":"..."}}]"""
@@ -227,17 +227,17 @@ Step 1 — identify the CORE CONCEPT the definition conveys:
 - What was the central dynamic or conflict?
 - What characterized this period/event/figure?
 - What caused or resulted from this?
-- What makes this significant or distinctive in Sicilian history?
+- What makes this historically significant or distinctive?
 
 Step 2 — write a SHORT question (6-12 words) that asks for that core concept.
 Start with: What / Why / How / Who was / What characterized / What drove / What resulted
 
 Good questions (test understanding of the concept):
 - "What drove Greek colonization of Sicily?" → tests the Why-they-came concept
-- "What was the central military conflict of Sicilian history for 300 years?" → tests Greeks-vs-Carthage
-- "Why did Sicilian Greek cities produce more tyrants than mainland Greece?" → tests the Age of Tyrants insight
-- "What made the Norman kingdom of Sicily culturally distinctive?" → tests Arab-Norman synthesis
-- "What happened to Syracuse in 212 BC and why does it matter?" → tests Siege of Syracuse
+- "Why did the theme system transform Byzantine military power?" → tests the Theme System concept
+- "What made Justinian's reign the high-water mark of Byzantine power?" → tests the Age of Justinian
+- "What characterized Muhammad's early community in Medina?" → tests the Hijra concept
+- "What caused the fall of the Roman Republic?" → tests Late Republic dynamics
 
 Bad questions (test isolated facts the curriculum doesn't emphasize):
 - "Which city founded Naxos?" → a minor detail, not the concept
@@ -698,7 +698,7 @@ def generate_question(item_id: str, conn) -> dict:
         except Exception:
             pass
 
-    domain_id = item.get('curriculum_domain', 'sicily_history_culture_and_legacy')
+    domain_id = item.get('curriculum_domain') or 'sicily_history_culture_and_legacy'
     curriculum = load_curriculum(domain_id)
     knowledge_state = load_knowledge_states(domain_id)
 

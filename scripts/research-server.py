@@ -4202,6 +4202,67 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_review_article_read(self):
+        """POST /review/article-read — record article reading, surface related curriculum nodes.
+
+        Takes article_id, looks up which curriculum nodes the article covers, finds
+        knowledge_items for those nodes, and bumps their due_at to now so they appear
+        in the next review session (passive exposure → active recall).
+        """
+        body = self._read_json_body()
+        article_id = (body or {}).get('article_id', '')
+        if not article_id:
+            self._send_json_response(400, {'error': 'article_id required'})
+            return
+
+        # Load article → curriculum node mappings
+        mappings_file = DATA_DIR / 'curricula' / 'article_curriculum_mappings.json'
+        article_nodes: list[str] = []
+        if mappings_file.exists():
+            with open(mappings_file) as f:
+                all_mappings = json.load(f)
+            entry = all_mappings.get('article_nodes', {}).get(article_id, [])
+            article_nodes = [n if isinstance(n, str) else n.get('node_id', '') for n in entry]
+            article_nodes = [n for n in article_nodes if n]
+
+        if not article_nodes:
+            self._send_json_response(200, {'nodes_found': 0, 'items_surfaced': 0, 'nodes': []})
+            return
+
+        from db import get_connection
+        import time as time_mod
+        now_ms = int(time_mod.time() * 1000)
+        conn = get_connection()
+        try:
+            surfaced = []
+            node_titles = []
+            for node_id in article_nodes:
+                # Find knowledge_item for this node
+                row = conn.execute(
+                    'SELECT id, stability_days, due_at, curriculum_node_title FROM knowledge_items WHERE curriculum_node_id=?',
+                    (node_id,)
+                ).fetchone()
+                if not row:
+                    continue
+                item_id = row['id']
+                node_title = row['curriculum_node_title'] or node_id
+                node_titles.append(node_title)
+                # Only surface items not recently reviewed (due far in future → bring to now + 1h)
+                if row['due_at'] > now_ms + 24 * 60 * 60 * 1000:
+                    conn.execute(
+                        'UPDATE knowledge_items SET due_at=? WHERE id=?',
+                        (now_ms + 60 * 60 * 1000, item_id)  # due in 1 hour
+                    )
+                    surfaced.append(item_id)
+            conn.commit()
+            self._send_json_response(200, {
+                'nodes_found': len(article_nodes),
+                'items_surfaced': len(surfaced),
+                'nodes': node_titles[:5],
+            })
+        finally:
+            conn.close()
+
     def _serve_html_file(self, filename: str):
         html_path = Path(__file__).parent / filename
         if not html_path.exists():
@@ -4321,6 +4382,8 @@ JSON array only:"""
             return self._handle_review_explore()
         if self.path == '/review/voice-memo':
             return self._handle_review_voice_memo()
+        if self.path == '/review/article-read':
+            return self._handle_review_article_read()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()

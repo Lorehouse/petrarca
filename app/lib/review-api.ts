@@ -50,6 +50,12 @@ export async function createExplorationItems(
   return post('/review/explore', { item_id: itemId });
 }
 
+export async function notifyArticleRead(
+  articleId: string
+): Promise<{ nodes_found: number; items_surfaced: number; nodes: string[] }> {
+  return post('/review/article-read', { article_id: articleId });
+}
+
 export async function sendVoiceMemo(itemId: string, audioUri: string): Promise<{
   transcript: string;
   suggested_score: string;

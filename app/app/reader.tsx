@@ -9,6 +9,7 @@ import AskAI from '../components/AskAI';
 import VoiceFeedback from '../components/VoiceFeedback';
 import DoubleRule from '../components/DoubleRule';
 import { spawnTopicResearch, ingestUrl, getIngestStatus, reportBadScrape, generateMoreQuestions } from '../lib/chat-api';
+import { notifyArticleRead } from '../lib/review-api';
 import { addToQueue, addToQueueFront } from '../data/queue';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, recordTopicInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
@@ -2028,6 +2029,7 @@ export default function ReaderScreen() {
     markArticleEncountered(article.id, 'read');
     recordInterestSignal('tap_done', article.id);
     logEvent('reader_done', { article_id: article.id });
+    notifyArticleRead(article.id).catch(() => {});
 
     // Brief completion flash, then advance
     completionFlash.setValue(0);
