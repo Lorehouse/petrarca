@@ -9,7 +9,7 @@ import { colors } from '../design/tokens';
 import { ReviewItem, ReviewQuestion } from '../data/types';
 import {
   getReviewQueue, generateQuestion, recordAnswer,
-  createExplorationItems, sendVoiceMemo,
+  createExplorationItems, sendVoiceMemo, getReviewStats,
 } from '../lib/review-api';
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
@@ -45,6 +45,7 @@ export default function ReviewSession() {
   const [processingVoice, setProcessingVoice] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [exploreItems, setExploreItems] = useState<string[]>([]);
+  const [remainingDue, setRemainingDue] = useState<number>(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAt = useRef<number>(0);
   const revealedAt = useRef<number>(0);
@@ -59,12 +60,19 @@ export default function ReviewSession() {
 
   async function loadSession() {
     setState('loading');
+    setScores([]);
+    setCurrent(0);
+    setExpandedItems(new Set());
+    setExploreItems([]);
+    sessionCompleteLogged.current = false;
+    sessionStartAt.current = Date.now();
     try {
       const { items } = await getReviewQueue(10);
       if (items.length === 0) {
         setState('done');
         return;
       }
+      getReviewStats().then(stats => setRemainingDue(stats.due_today ?? 0)).catch(() => {});
       logEvent('review_session_loaded', {
         items_total: items.length,
         lens_breakdown: items.reduce((acc, it) => {
@@ -304,9 +312,18 @@ export default function ReviewSession() {
             );
           })}
         </ScrollView>
-        <Pressable style={styles.doneBtn} onPress={() => router.back()}>
-          <Text style={styles.doneBtnText}>Done</Text>
-        </Pressable>
+        <View style={styles.doneActions}>
+          {remainingDue > scores.length && (
+            <Pressable style={styles.continueBtn} onPress={loadSession}>
+              <Text style={styles.continueBtnText}>
+                ✦ Continue · {remainingDue - scores.length} more due
+              </Text>
+            </Pressable>
+          )}
+          <Pressable style={styles.doneBtn} onPress={() => router.back()}>
+            <Text style={styles.doneBtnText}>Done</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -557,12 +574,21 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ web: "'EB Garamond', Georgia, serif", default: 'EBGaramond' }),
     fontSize: 15, color: colors.textBody, flex: 1,
   },
+  doneActions: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  continueBtn: {
+    paddingVertical: 13, borderRadius: 3,
+    backgroundColor: colors.rubric, alignItems: 'center',
+  },
+  continueBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 14, color: 'white', fontWeight: '500',
+  },
   doneBtn: {
-    margin: 16, paddingVertical: 12, borderRadius: 3,
-    borderWidth: 1, borderColor: colors.rubric, alignItems: 'center',
+    paddingVertical: 12, borderRadius: 3,
+    borderWidth: 1, borderColor: colors.rule, alignItems: 'center',
   },
   doneBtnText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 14, color: colors.rubric, fontWeight: '500',
+    fontSize: 14, color: colors.textMuted, fontWeight: '500',
   },
 });
