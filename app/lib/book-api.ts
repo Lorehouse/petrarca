@@ -48,16 +48,11 @@ export interface PageOCRResultEnhanced extends PageOCRResult {
 
 // --- Helper: create FormData with image ---
 
-function appendImage(formData: FormData, fieldName: string, imageUri: string): void {
-  if (Platform.OS === 'web' && imageUri.startsWith('data:')) {
-    // Web: convert data URI to blob
-    fetch(imageUri)
-      .then(r => r.blob())
-      .then(blob => formData.append(fieldName, blob, 'photo.jpg'));
-  } else if (Platform.OS === 'web' && imageUri.startsWith('blob:')) {
-    fetch(imageUri)
-      .then(r => r.blob())
-      .then(blob => formData.append(fieldName, blob, 'photo.jpg'));
+async function appendImage(formData: FormData, fieldName: string, imageUri: string): Promise<void> {
+  if (Platform.OS === 'web' && (imageUri.startsWith('data:') || imageUri.startsWith('blob:'))) {
+    const r = await fetch(imageUri);
+    const blob = await r.blob();
+    formData.append(fieldName, blob, 'photo.jpg');
   } else {
     // Native: use URI object
     const ext = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
@@ -76,7 +71,7 @@ export async function identifyBookCover(
   photoUri: string,
 ): Promise<BookIdentifyResult> {
   const formData = new FormData();
-  appendImage(formData, 'photo', photoUri);
+  await appendImage(formData, 'photo', photoUri);
 
   const resp = await fetch(`${RESEARCH_BASE}/book/identify`, {
     method: 'POST',
@@ -94,7 +89,7 @@ export async function ocrTableOfContents(
   bookId: string,
 ): Promise<TOCParseResult> {
   const formData = new FormData();
-  appendImage(formData, 'photo', photoUri);
+  await appendImage(formData, 'photo', photoUri);
   formData.append('book_id', bookId);
 
   const resp = await fetch(`${RESEARCH_BASE}/book/ocr-toc`, {
@@ -116,7 +111,7 @@ export async function ocrPage(
   chapter?: string,
 ): Promise<PageOCRResult> {
   const formData = new FormData();
-  appendImage(formData, 'photo', photoUri);
+  await appendImage(formData, 'photo', photoUri);
   formData.append('book_id', bookId);
   formData.append('book_title', bookTitle);
   if (pageNumber !== undefined) formData.append('page_number', String(pageNumber));
