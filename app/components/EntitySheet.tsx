@@ -71,7 +71,7 @@ export default function EntitySheet({ entityId, onClose }: Props) {
 
   // Best knowledge state across linked nodes
   const bestKnowledge = entity?.curriculum_links?.reduce((best, link) => {
-    const rank = { anchored: 3, engaged: 2, mentioned: 1, unknown: 0 };
+    const rank: Record<string, number> = { anchored: 3, engaged: 2, mentioned: 1, unknown: 0 };
     return (rank[link.knowledge || 'unknown'] || 0) > (rank[best] || 0)
       ? (link.knowledge || 'unknown') : best;
   }, 'unknown' as string) || 'unknown';
