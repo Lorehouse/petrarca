@@ -125,10 +125,12 @@ const bookStyles = StyleSheet.create({
   position: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
   topicRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   topic: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.rubric, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
-  sidebar: { width: 56, alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 },
+  sidebar: { width: 56, alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2, marginLeft: 14 },
   sideNumber: { fontFamily: fonts.displaySemiBold, fontSize: 22, color: colors.ink, lineHeight: 26, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   sideLabel: { fontFamily: fonts.uiMedium, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textMuted, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   timeAgo: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, marginTop: 6 },
+  removeButton: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.parchmentDark, alignItems: 'center', justifyContent: 'center' },
+  removeButtonText: { fontFamily: fonts.ui, fontSize: 16, color: colors.textMuted, lineHeight: 18 },
 });
 
 type FilterMode = 'active' | 'all' | 'archived';
