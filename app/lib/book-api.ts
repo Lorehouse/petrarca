@@ -385,7 +385,7 @@ export async function generateCurriculumReview(
 
 export async function recordReviewResult(
   questionId: string,
-  result: 'correct' | 'partial' | 'wrong',
+  result: string,
 ): Promise<void> {
   await fetch(`${RESEARCH_BASE}/curriculum/review/result`, {
     method: 'POST',

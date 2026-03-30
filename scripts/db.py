@@ -620,8 +620,14 @@ CREATE TABLE IF NOT EXISTS elicitation_sessions (
 MIGRATIONS = [
     # Add cached_question column if not present (idempotent)
     "ALTER TABLE review_items ADD COLUMN cached_question TEXT",
-    # knowledge_items table is created via SCHEMA (CREATE TABLE IF NOT EXISTS),
-    # so no ALTER needed — but add future column migrations here.
+    # v2 question system: richer question metadata
+    "ALTER TABLE retrieval_questions ADD COLUMN answer_type TEXT DEFAULT 'concept'",
+    "ALTER TABLE retrieval_questions ADD COLUMN level INTEGER DEFAULT 1",
+    "ALTER TABLE retrieval_questions ADD COLUMN anchors TEXT DEFAULT '[]'",
+    "ALTER TABLE retrieval_questions ADD COLUMN memory_hook TEXT",
+    "ALTER TABLE retrieval_questions ADD COLUMN prerequisite_questions TEXT DEFAULT '[]'",
+    "ALTER TABLE retrieval_questions ADD COLUMN grading_options TEXT DEFAULT '[]'",
+    "ALTER TABLE retrieval_questions ADD COLUMN rich_answer TEXT",
 ]
 
 

@@ -187,21 +187,39 @@ function RetrievalCard({
   onResult,
 }: {
   item: ResurfacingItem;
-  onResult: (result: 'correct' | 'partial' | 'wrong') => void;
+  onResult: (result: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
 
-  const isOrdering = item.type === 'temporal_ordering';
-  const typeLabel = isOrdering
-    ? 'Timeline'
-    : item.question_type === 'date' ? 'Date'
-    : item.question_type === 'person' ? 'Person'
-    : item.question_type === 'significance' ? 'Significance'
-    : item.question_type === 'sequence' ? 'Sequence'
+  const answerType = item.answer_type || item.question_type || 'concept';
+  const typeLabel = answerType === 'date' ? 'Date'
+    : answerType === 'name' ? 'Identity'
+    : answerType === 'sequence' ? 'Timeline'
+    : answerType === 'concept' ? 'Concept'
+    : item.type === 'temporal_ordering' ? 'Timeline'
     : 'Event';
 
-  const handleGrade = (result: 'correct' | 'partial' | 'wrong') => {
+  // Grading options based on answer type
+  const gradingButtons = answerType === 'date' ? [
+    { value: 'exact_year', label: 'Exact year', style: 'correct' as const },
+    { value: 'right_decade', label: 'Right decade', style: 'partial' as const },
+    { value: 'right_century', label: 'Right century', style: 'weak' as const },
+    { value: 'missed', label: 'Missed', style: 'wrong' as const },
+  ] : answerType === 'name' ? [
+    { value: 'correct', label: 'Knew it', style: 'correct' as const },
+    { value: 'wrong', label: 'Didn\'t know', style: 'wrong' as const },
+  ] : answerType === 'sequence' ? [
+    { value: 'all_correct', label: 'All correct', style: 'correct' as const },
+    { value: 'mostly_right', label: 'Mostly right', style: 'partial' as const },
+    { value: 'wrong', label: 'Wrong order', style: 'wrong' as const },
+  ] : [
+    { value: 'correct', label: 'Knew it', style: 'correct' as const },
+    { value: 'partial', label: 'Partially', style: 'partial' as const },
+    { value: 'missed', label: 'Didn\'t know', style: 'wrong' as const },
+  ];
+
+  const handleGrade = (result: string) => {
     onResult(result);
     setGraded(true);
   };
@@ -214,9 +232,12 @@ function RetrievalCard({
     );
   }
 
+  const displayAnswer = item.rich_answer || item.answer || '';
+  const anchors = item.anchors || [];
+
   return (
     <View style={cardStyles.card}>
-      {/* Type badge + domain */}
+      {/* Type badge + node */}
       <View style={retrievalStyles.headerRow}>
         <View style={retrievalStyles.typeBadge}>
           <Text style={retrievalStyles.typeBadgeText}>{typeLabel}</Text>
@@ -238,30 +259,50 @@ function RetrievalCard({
         </Pressable>
       ) : (
         <View>
+          {/* Rich answer */}
           <View style={retrievalStyles.answerBox}>
-            <Text style={retrievalStyles.answerText}>{item.answer}</Text>
+            <Text style={retrievalStyles.answerText}>{displayAnswer}</Text>
           </View>
 
-          {/* Self-grade buttons */}
+          {/* Memory hook */}
+          {item.memory_hook ? (
+            <View style={retrievalStyles.hookBox}>
+              <Text style={retrievalStyles.hookLabel}>{'\u2726'} Memory hook</Text>
+              <Text style={retrievalStyles.hookText}>{item.memory_hook}</Text>
+            </View>
+          ) : null}
+
+          {/* Temporal anchors */}
+          {anchors.length > 0 ? (
+            <View style={retrievalStyles.anchorBox}>
+              {anchors.map((a, i) => (
+                <Text key={i} style={retrievalStyles.anchorText}>{'\u2022'} {a}</Text>
+              ))}
+            </View>
+          ) : null}
+
+          {/* Grading buttons */}
           <View style={retrievalStyles.gradeRow}>
-            <Pressable
-              style={[retrievalStyles.gradeButton, retrievalStyles.gradeWrong]}
-              onPress={() => handleGrade('wrong')}
-            >
-              <Text style={retrievalStyles.gradeWrongText}>Didn't know</Text>
-            </Pressable>
-            <Pressable
-              style={[retrievalStyles.gradeButton, retrievalStyles.gradePartial]}
-              onPress={() => handleGrade('partial')}
-            >
-              <Text style={retrievalStyles.gradePartialText}>Partially</Text>
-            </Pressable>
-            <Pressable
-              style={[retrievalStyles.gradeButton, retrievalStyles.gradeCorrect]}
-              onPress={() => handleGrade('correct')}
-            >
-              <Text style={retrievalStyles.gradeCorrectText}>Knew it</Text>
-            </Pressable>
+            {gradingButtons.map(btn => (
+              <Pressable
+                key={btn.value}
+                style={[
+                  retrievalStyles.gradeButton,
+                  btn.style === 'correct' ? retrievalStyles.gradeCorrect
+                    : btn.style === 'partial' ? retrievalStyles.gradePartial
+                    : btn.style === 'weak' ? retrievalStyles.gradeWeak
+                    : retrievalStyles.gradeWrong,
+                ]}
+                onPress={() => handleGrade(btn.value)}
+              >
+                <Text style={[
+                  btn.style === 'correct' ? retrievalStyles.gradeCorrectText
+                    : btn.style === 'partial' ? retrievalStyles.gradePartialText
+                    : btn.style === 'weak' ? retrievalStyles.gradeWeakText
+                    : retrievalStyles.gradeWrongText,
+                ]}>{btn.label}</Text>
+              </Pressable>
+            ))}
           </View>
         </View>
       )}
@@ -326,7 +367,7 @@ export default function ResurfacingScreen() {
     });
   };
 
-  const handleReviewResult = async (item: ResurfacingItem, result: 'correct' | 'partial' | 'wrong') => {
+  const handleReviewResult = async (item: ResurfacingItem, result: string) => {
     if (item.question_id) {
       await recordReviewResult(item.question_id, result);
       logEvent('review_result', {
@@ -488,6 +529,13 @@ const retrievalStyles = StyleSheet.create({
   gradePartialText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary },
   gradeCorrect: { borderColor: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.05)' },
   gradeCorrectText: { fontFamily: fonts.ui, fontSize: 12, color: colors.claimNew },
+  gradeWeak: { borderColor: '#b8860b', backgroundColor: 'rgba(184,134,11,0.06)' },
+  gradeWeakText: { fontFamily: fonts.ui, fontSize: 12, color: '#b8860b' },
+  hookBox: { backgroundColor: 'rgba(139,37,0,0.04)', borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 12, paddingVertical: 8, marginBottom: 12, borderRadius: 2 },
+  hookLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.rubric, letterSpacing: 0.3, marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  hookText: { fontFamily: fonts.readingItalic, fontSize: 14, lineHeight: 20, color: colors.textBody, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  anchorBox: { marginBottom: 14 },
+  anchorText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 2 },
 });
 
 const styles = StyleSheet.create({

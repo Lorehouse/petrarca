@@ -620,6 +620,8 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
         rows = conn.execute(
             f'''SELECT rq.id, rq.domain_id, rq.node_id, rq.question, rq.answer,
                        rq.question_type, rq.node_title, rq.cluster_label,
+                       rq.answer_type, rq.level, rq.anchors, rq.memory_hook,
+                       rq.grading_options, rq.rich_answer,
                        rs.review_count, rs.last_result, rs.due_at, rs.last_reviewed_at,
                        COALESCE(ks.knowledge, 'unknown') as node_knowledge,
                        COALESCE(ks.confidence, 0) as node_confidence
@@ -676,6 +678,16 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
         selected_ordering = [q for _, q in ordering[:ORDERING_PER_SESSION]]
 
         # Build response items
+        def _parse_json_field(val, default=None):
+            if val is None:
+                return default or []
+            if isinstance(val, (list, dict)):
+                return val
+            try:
+                return json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                return default or []
+
         items = []
         for q in selected_retrieval:
             items.append({
@@ -683,9 +695,14 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
                 'question_id': q['id'],
                 'question': q['question'],
                 'answer': q['answer'],
+                'rich_answer': q.get('rich_answer') or q['answer'],
                 'question_type': q['question_type'],
+                'answer_type': q.get('answer_type') or 'concept',
                 'node_title': q['node_title'],
                 'domain': q['domain_id'],
+                'memory_hook': q.get('memory_hook'),
+                'anchors': _parse_json_field(q.get('anchors'), []),
+                'grading_options': _parse_json_field(q.get('grading_options'), []),
             })
         for q in selected_ordering:
             items.append({
@@ -693,8 +710,13 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
                 'question_id': q['id'],
                 'question': q['question'],
                 'answer': q['answer'],
+                'rich_answer': q.get('rich_answer') or q['answer'],
+                'answer_type': 'sequence',
                 'cluster_label': q['cluster_label'],
                 'domain': q['domain_id'],
+                'memory_hook': q.get('memory_hook'),
+                'anchors': _parse_json_field(q.get('anchors'), []),
+                'grading_options': _parse_json_field(q.get('grading_options'), []),
             })
         random.shuffle(items)
 
@@ -742,13 +764,23 @@ def record_review_result(question_id: str, result: str, session_id: str | None =
         if existing:
             count = existing['review_count']
             stability = existing['stability_days']
-            if result == 'correct':
+            # Map graded results to scheduling categories
+            is_strong = result in ('correct', 'exact_year', 'all_correct')
+            is_partial = result in ('partial', 'right_decade', 'mostly_right')
+            is_weak = result in ('right_century',)
+            # is_fail = result in ('wrong', 'missed')
+
+            if is_strong:
                 new_count = count + 1
                 new_stability = min(stability * 2.0, 365)
-            elif result == 'partial':
+            elif is_partial:
                 new_count = count + 1
-                new_stability = stability * 1.2
-            else:  # wrong
+                new_stability = stability * 1.3
+            elif is_weak:
+                # Knows something but fuzzy — short interval to reinforce
+                new_count = count
+                new_stability = max(1.0, stability * 0.7)
+            else:  # wrong/missed
                 new_count = max(1, count - 1)
                 new_stability = max(1.0, stability * 0.4)
 
@@ -761,7 +793,9 @@ def record_review_result(question_id: str, result: str, session_id: str | None =
                 (new_count, now_ms, result, new_stability, due_at, question_id)
             )
         else:
-            stability = 1.0 if result == 'wrong' else (3.0 if result == 'correct' else 1.5)
+            is_strong = result in ('correct', 'exact_year', 'all_correct')
+            is_fail = result in ('wrong', 'missed')
+            stability = 1.0 if is_fail else (3.0 if is_strong else 1.5)
             due_at = now_ms + int(stability * 24 * 3600 * 1000)
             conn.execute(
                 '''INSERT INTO review_schedule
@@ -776,7 +810,13 @@ def record_review_result(question_id: str, result: str, session_id: str | None =
             (question_id,)
         ).fetchone()
         if q_row and q_row['node_id']:
-            confidence_delta = {'correct': 0.05, 'partial': 0.0, 'wrong': -0.1}.get(result, 0)
+            # Graded confidence adjustments — date questions have finer granularity
+            confidence_delta = {
+                'correct': 0.05, 'exact_year': 0.08, 'all_correct': 0.06,
+                'partial': 0.0, 'right_decade': 0.02, 'mostly_right': 0.02,
+                'right_century': -0.02,
+                'wrong': -0.1, 'missed': -0.1,
+            }.get(result, 0)
             ks = conn.execute(
                 'SELECT confidence FROM knowledge_states WHERE domain_id=? AND node_id=?',
                 (q_row['domain_id'], q_row['node_id'])

@@ -546,10 +546,15 @@ export interface ResurfacingItem {
   question_id?: string;
   question?: string;
   answer?: string;
-  question_type?: 'date' | 'person' | 'event' | 'sequence' | 'significance';
+  rich_answer?: string;
+  question_type?: 'date' | 'person' | 'event' | 'sequence' | 'significance' | 'name' | 'concept' | 'temporal_ordering';
+  answer_type?: 'date' | 'name' | 'concept' | 'sequence';
   node_title?: string;
   domain?: string;
   cluster_label?: string;
+  memory_hook?: string;
+  anchors?: string[];
+  grading_options?: string[];
 }
 
 export interface ResurfacingSession {
