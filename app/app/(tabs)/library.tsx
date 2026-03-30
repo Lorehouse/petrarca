@@ -255,18 +255,9 @@ export default function LibraryScreen() {
           <BookRow key={book.id} book={book} captureCount={captureCounts[book.id] || 0}
             onPress={() => { logEvent('library_book_tap', { book_id: book.id }); router.push({ pathname: '/book-detail', params: { id: book.id } } as any); }}
             onDelete={() => {
-              const doArchive = () => {
-                archiveBook(book.id);
-                logEvent('library_book_removed', { book_id: book.id, title: book.title });
-              };
-              if (Platform.OS === 'web') {
-                if (confirm(`Remove "${book.title}" from library?`)) doArchive();
-              } else {
-                Alert.alert('Remove book', `Remove "${book.title}" from your library?`, [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Remove', style: 'destructive', onPress: doArchive },
-                ]);
-              }
+              if (Platform.OS === 'web' && !confirm(`Remove "${book.title}" from library?`)) return;
+              archiveBook(book.id);
+              logEvent('library_book_removed', { book_id: book.id, title: book.title });
             }} />
         ))
       )}
