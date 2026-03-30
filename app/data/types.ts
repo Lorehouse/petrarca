@@ -523,7 +523,7 @@ export interface ChapterInsights {
 // --- Resurfacing types ---
 
 export interface ResurfacingItem {
-  type: 'resonance' | 'dialogue';
+  type: 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
   prompt_type?: string;
   prompt_text?: string;
   // Resonance fields
@@ -541,6 +541,14 @@ export interface ResurfacingItem {
   claim_a?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
   claim_b?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
   tension_prompt?: string;
+  // Curriculum retrieval fields
+  question_id?: string;
+  question?: string;
+  answer?: string;
+  question_type?: 'date' | 'person' | 'event' | 'sequence' | 'significance';
+  node_title?: string;
+  domain?: string;
+  cluster_label?: string;
 }
 
 export interface ResurfacingSession {
@@ -549,6 +557,9 @@ export interface ResurfacingSession {
   generated_at: string;
   resonance_count: number;
   dialogue_count: number;
+  // Curriculum review fields (present when session includes review items)
+  retrieval_count?: number;
+  ordering_count?: number;
 }
 
 // ─── Knowledge Review ────────────────────────────────────────────────────────

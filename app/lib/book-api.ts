@@ -369,6 +369,33 @@ export async function getResurfacingStatus(): Promise<Record<string, unknown>> {
   return resp.json();
 }
 
+// --- Curriculum Review API ---
+
+export async function generateCurriculumReview(
+  domain?: string,
+): Promise<ResurfacingSession> {
+  const resp = await fetch(`${RESEARCH_BASE}/curriculum/review/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain }),
+  });
+  if (!resp.ok) throw new Error(`Review generate failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function recordReviewResult(
+  questionId: string,
+  result: 'correct' | 'partial' | 'wrong',
+): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/curriculum/review/result`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question_id: questionId, result }),
+  });
+}
+
+// --- Kindle Processing API ---
+
 export async function processKindleBooks(max: number = 10): Promise<void> {
   await fetch(`${RESEARCH_BASE}/book/process-kindle`, {
     method: 'POST',

@@ -450,6 +450,7 @@ CREATE TABLE IF NOT EXISTS review_items (
 );
 
 -- Node-centric knowledge items — one row per curriculum node, sources array accumulates all books/chapters
+-- LEGACY: superseded by knowledge_states for curriculum tracking; kept for existing book-chapter review
 CREATE TABLE IF NOT EXISTS knowledge_items (
     id TEXT PRIMARY KEY,
     curriculum_node_id TEXT NOT NULL,
@@ -464,6 +465,155 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
     created_at INTEGER NOT NULL,
     cached_question TEXT,
     UNIQUE(curriculum_domain, curriculum_node_id)
+);
+
+-- ===== Curriculum System (replaces JSON files in data/curricula/) =====
+
+-- Curriculum domains (e.g. "Sicily: History, Culture, and Legacy")
+CREATE TABLE IF NOT EXISTS curriculum_domains (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    depth TEXT DEFAULT 'introductory',
+    generated_at TEXT,
+    generated_by TEXT,
+    node_count INTEGER DEFAULT 0
+);
+
+-- Curriculum nodes — the actual knowledge structure
+CREATE TABLE IF NOT EXISTS curriculum_nodes (
+    id TEXT NOT NULL,
+    domain_id TEXT NOT NULL REFERENCES curriculum_domains(id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    parent_id TEXT,
+    level INTEGER NOT NULL DEFAULT 1,
+    obscurity INTEGER DEFAULT 2,
+    bloom_floor TEXT DEFAULT 'recognize',
+    knowledge_type TEXT DEFAULT 'core',
+    date_start INTEGER,
+    date_end INTEGER,
+    PRIMARY KEY (domain_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_cn_domain ON curriculum_nodes(domain_id);
+CREATE INDEX IF NOT EXISTS idx_cn_parent ON curriculum_nodes(domain_id, parent_id);
+
+-- Prerequisite edges (DAG within a domain)
+CREATE TABLE IF NOT EXISTS curriculum_prerequisites (
+    domain_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    prerequisite_id TEXT NOT NULL,
+    strength TEXT DEFAULT 'hard',
+    PRIMARY KEY (domain_id, node_id, prerequisite_id),
+    FOREIGN KEY (domain_id, node_id) REFERENCES curriculum_nodes(domain_id, id),
+    FOREIGN KEY (domain_id, prerequisite_id) REFERENCES curriculum_nodes(domain_id, id)
+);
+
+-- Knowledge state per node — SINGLE source of truth for "what do I know"
+CREATE TABLE IF NOT EXISTS knowledge_states (
+    domain_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    knowledge TEXT NOT NULL DEFAULT 'unknown',
+    interest TEXT DEFAULT 'none',
+    confidence REAL DEFAULT 0.0,
+    highest_layer INTEGER DEFAULT 0,
+    source_summary TEXT DEFAULT '[]',
+    last_assessed TEXT,
+    last_evidence TEXT,
+    PRIMARY KEY (domain_id, node_id),
+    FOREIGN KEY (domain_id, node_id) REFERENCES curriculum_nodes(domain_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_ks_knowledge ON knowledge_states(knowledge);
+
+-- Book-to-curriculum mappings
+CREATE TABLE IF NOT EXISTS book_curriculum_mappings (
+    book_id TEXT NOT NULL,
+    domain_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    coverage TEXT DEFAULT 'surface',
+    inferred_from TEXT DEFAULT 'llm_inference',
+    PRIMARY KEY (book_id, domain_id, node_id),
+    FOREIGN KEY (domain_id, node_id) REFERENCES curriculum_nodes(domain_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_bcm_book ON book_curriculum_mappings(book_id);
+CREATE INDEX IF NOT EXISTS idx_bcm_node ON book_curriculum_mappings(domain_id, node_id);
+
+-- Retrieval practice questions per curriculum node
+-- node_id can be empty for cross-node questions (e.g. temporal_ordering spanning multiple nodes)
+CREATE TABLE IF NOT EXISTS retrieval_questions (
+    id TEXT PRIMARY KEY,
+    domain_id TEXT NOT NULL,
+    node_id TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    question_type TEXT DEFAULT 'event',
+    node_title TEXT DEFAULT '',
+    cluster_label TEXT,
+    generated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rq_domain ON retrieval_questions(domain_id);
+CREATE INDEX IF NOT EXISTS idx_rq_node ON retrieval_questions(domain_id, node_id);
+
+-- Review scheduling state per question
+CREATE TABLE IF NOT EXISTS review_schedule (
+    question_id TEXT PRIMARY KEY REFERENCES retrieval_questions(id),
+    review_count INTEGER DEFAULT 0,
+    last_reviewed_at INTEGER,
+    last_result TEXT,
+    stability_days REAL DEFAULT 1.0,
+    due_at INTEGER DEFAULT 0
+);
+
+-- Review answer history (append-only log)
+CREATE TABLE IF NOT EXISTS review_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_id TEXT NOT NULL REFERENCES retrieval_questions(id),
+    result TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    session_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rh_question ON review_history(question_id);
+
+-- Timeline entries per domain
+CREATE TABLE IF NOT EXISTS timeline_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    detail TEXT DEFAULT '',
+    node_id TEXT,
+    FOREIGN KEY (domain_id, node_id) REFERENCES curriculum_nodes(domain_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_tl_domain ON timeline_entries(domain_id);
+CREATE INDEX IF NOT EXISTS idx_tl_year ON timeline_entries(year);
+
+-- Cross-curriculum shared entities
+CREATE TABLE IF NOT EXISTS shared_entities (
+    entity_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    dates TEXT,
+    location TEXT,
+    nexus_score INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS entity_curriculum_links (
+    entity_id TEXT NOT NULL REFERENCES shared_entities(entity_id),
+    domain_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    lens_title TEXT,
+    lens_emphasis TEXT,
+    PRIMARY KEY (entity_id, domain_id, node_id)
+);
+
+-- 20Q elicitation session logs
+CREATE TABLE IF NOT EXISTS elicitation_sessions (
+    id TEXT PRIMARY KEY,
+    domain_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    questions_asked INTEGER DEFAULT 0,
+    nodes_assessed INTEGER DEFAULT 0,
+    responses TEXT DEFAULT '[]'
 );
 """
 

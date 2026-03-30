@@ -59,11 +59,19 @@ PROJECTS_MEDIA_DIR = Path(os.environ.get('PROJECTS_MEDIA_DIR', '/opt/petrarca/da
 PHOTO_OCR_QUEUE_PATH = Path(os.environ.get('PHOTO_OCR_QUEUE_PATH', '/opt/petrarca/data/photo_ocr_queue.json'))
 
 from server_log import log_server_event
-from curriculum import (
-    generate_curriculum, load_curriculum, list_curricula,
+# Core curriculum functions from SQLite-backed module
+from curriculum_db import (
+    load_curriculum, list_curricula,
     load_knowledge_states, update_knowledge, get_coverage_report,
-    map_book_to_curriculum, start_elicitation, continue_elicitation,
-    import_assessment_answers, get_book_curriculum_context,
+    map_book_to_curriculum, get_book_curriculum_context,
+    import_assessment_answers,
+    get_retrieval_questions, get_timeline,
+    generate_review_session, record_review_result, get_review_status,
+)
+# Functions not yet migrated to SQLite — still use JSON files
+from curriculum import (
+    generate_curriculum,
+    start_elicitation, continue_elicitation,
     get_curriculum_graph_data, get_entity_index, build_entity_index,
     tag_curriculum_entities,
 )
@@ -3828,6 +3836,40 @@ JSON array only:"""
         from resurfacing_engine import get_status
         self._send_json_response(200, get_status())
 
+    def _handle_curriculum_review_generate(self):
+        """POST /curriculum/review/generate — generate a curriculum retrieval practice session."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = {}
+        if content_length:
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except (json.JSONDecodeError, ValueError):
+                pass
+        domain = body.get('domain')
+        try:
+            session = generate_review_session(domain_filter=domain)
+            self._send_json_response(200, session)
+        except Exception as e:
+            print(f'[curriculum/review] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_curriculum_review_result(self):
+        """POST /curriculum/review/result — record result for a review question."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        question_id = body.get('question_id')
+        result = body.get('result')  # 'correct', 'partial', 'wrong'
+        if not question_id or not result:
+            self._send_json_response(400, {'error': 'question_id and result required'})
+            return
+        record_review_result(question_id, result)
+        self._send_json_response(200, {'status': 'recorded'})
+
+    def _handle_curriculum_review_status(self):
+        """GET /curriculum/review/status — get curriculum review stats."""
+        self._send_json_response(200, get_review_status())
+
     def _handle_process_kindle(self):
         """POST /book/process-kindle — trigger Kindle book processing."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -4337,6 +4379,10 @@ JSON array only:"""
             return self._handle_resurfacing_respond()
         if self.path == '/book/resurfacing/skip':
             return self._handle_resurfacing_skip()
+        if self.path == '/curriculum/review/generate':
+            return self._handle_curriculum_review_generate()
+        if self.path == '/curriculum/review/result':
+            return self._handle_curriculum_review_result()
         if self.path == '/book/process-kindle':
             return self._handle_process_kindle()
         if self.path == '/kindle/sync':
@@ -4934,6 +4980,14 @@ JSON array only:"""
             return
         if self.path == '/book/resurfacing/status':
             return self._handle_resurfacing_status()
+        if self.path == '/curriculum/review/status':
+            return self._handle_curriculum_review_status()
+        if self.path.startswith('/curriculum/review/timeline/'):
+            domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
+            return self._send_json_response(200, {'timeline': get_timeline(domain_id)})
+        if self.path.startswith('/curriculum/review/questions/'):
+            domain_id = self.path.split('/curriculum/review/questions/')[1].split('?')[0]
+            return self._send_json_response(200, {'questions': get_retrieval_questions(domain_id)})
         if self.path.startswith('/kindle/library'):
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):

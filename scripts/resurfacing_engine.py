@@ -1,14 +1,17 @@
 """Resurfacing Engine — schedules and generates prompts for book knowledge revisiting.
 
-Two modes:
+Three modes:
   1. Resonance Resurfacing: resurface individual highlights/captures with reflective prompts
   2. Cross-Book Dialogues: present claim pairs from different books with tension prompts
+  3. Curriculum Review: retrieval practice questions from curriculum nodes (dates, people, events, sequences)
 
 Output: resurfacing sessions as JSON, served via API endpoints.
 
 Usage:
     python3 resurfacing_engine.py generate              # generate next session
     python3 resurfacing_engine.py generate --dialogues   # include cross-book dialogues
+    python3 resurfacing_engine.py review                 # curriculum retrieval practice session
+    python3 resurfacing_engine.py review --domain sicily # specific domain
     python3 resurfacing_engine.py status                 # show resurfacing state
 """
 
@@ -28,6 +31,7 @@ PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/
 BOOK_RESEARCH_DIR = DATA_DIR / "book_research"
 RESURFACING_STATE_PATH = DATA_DIR / "resurfacing_state.json"
 CROSS_MATCHES_PATH = DATA_DIR / "book_article_connections.json"
+CURRICULA_DIR = Path(os.environ.get('CURRICULUM_DIR', '/opt/petrarca/data/curricula'))
 
 # Scheduling parameters
 HIGHLIGHTS_PER_SESSION = 3
@@ -479,17 +483,256 @@ def _now() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Curriculum retrieval practice
+# ---------------------------------------------------------------------------
+
+REVIEW_STATE_PATH = DATA_DIR / "curriculum_review_state.json"
+QUESTIONS_PER_REVIEW = 8
+ORDERING_PER_REVIEW = 2
+
+# Review intervals: same expanding schedule as captures
+REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60, 120]
+
+
+def load_review_state() -> dict:
+    """Load curriculum review state: per-question tracking."""
+    if REVIEW_STATE_PATH.exists():
+        return json.loads(REVIEW_STATE_PATH.read_text())
+    return {'questions': {}, 'sessions': [], 'last_session': None}
+
+
+def save_review_state(state: dict):
+    REVIEW_STATE_PATH.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+
+
+def _find_curricula_with_questions() -> list[dict]:
+    """Find all curricula that have retrieval question files."""
+    results = []
+    if not CURRICULA_DIR.exists():
+        # Try local path for development
+        local = Path(__file__).parent.parent / 'data' / 'curricula'
+        if local.exists():
+            search_dir = local
+        else:
+            return []
+    else:
+        search_dir = CURRICULA_DIR
+
+    for path in search_dir.glob('*_retrieval_questions.json'):
+        domain_slug = path.name.replace('_retrieval_questions.json', '')
+        questions = json.loads(path.read_text())
+        # Check for ordering questions too
+        ordering_path = search_dir / f'{domain_slug}_ordering_questions.json'
+        ordering = json.loads(ordering_path.read_text()) if ordering_path.exists() else []
+        results.append({
+            'domain': domain_slug,
+            'questions': questions,
+            'ordering_questions': ordering,
+            'path': str(path),
+        })
+    return results
+
+
+def generate_curriculum_review(domain_filter: str | None = None) -> dict:
+    """Generate a curriculum retrieval practice session.
+
+    Selects questions that are due for review using expanding intervals.
+    Mixes question types: factual recall + temporal ordering.
+    """
+    state = load_review_state()
+    curricula = _find_curricula_with_questions()
+
+    if domain_filter:
+        curricula = [c for c in curricula if domain_filter.lower() in c['domain'].lower()]
+
+    if not curricula:
+        return {'items': [], 'generated_at': _now(), 'domain': domain_filter or 'all',
+                'message': 'No retrieval questions found. Generate them first.'}
+
+    # Collect all questions across matching curricula
+    all_questions = []
+    all_ordering = []
+    for curr in curricula:
+        for q in curr['questions']:
+            q_id = hashlib.md5(q['question'].encode()).hexdigest()[:12]
+            q['_id'] = q_id
+            q['_domain'] = curr['domain']
+            all_questions.append(q)
+        for o in curr['ordering_questions']:
+            o_id = hashlib.md5(o['question'].encode()).hexdigest()[:12]
+            o['_id'] = o_id
+            o['_domain'] = curr['domain']
+            all_ordering.append(o)
+
+    # Score questions: due for review get positive scores, not-yet-due get negative
+    now_ts = time.time() * 1000
+    scored = []
+    for q in all_questions:
+        q_state = state['questions'].get(q['_id'], {})
+        review_count = q_state.get('review_count', 0)
+        last_reviewed = q_state.get('last_reviewed_at', 0)
+
+        if review_count == 0:
+            # Never reviewed — high priority for new questions
+            score = 10.0 + random.random() * 2.0
+        else:
+            # Check if due
+            interval_idx = min(review_count - 1, len(REVIEW_INTERVALS) - 1)
+            required_days = REVIEW_INTERVALS[interval_idx]
+            days_since = (now_ts - last_reviewed) / (24 * 3600 * 1000)
+            if days_since < required_days:
+                score = -1.0  # Not due
+            else:
+                overdue = days_since - required_days
+                score = 5.0 + min(overdue * 0.3, 5.0) + random.random()
+
+        # Boost questions the user got wrong last time
+        if q_state.get('last_result') == 'wrong':
+            score += 3.0
+
+        scored.append((score, q))
+
+    # Sort by score descending, take top N
+    scored.sort(key=lambda x: x[0], reverse=True)
+    selected = [q for s, q in scored[:QUESTIONS_PER_REVIEW] if s > 0]
+
+    # Add ordering questions (pick from due ones, or random if none due)
+    ordering_scored = []
+    for o in all_ordering:
+        o_state = state['questions'].get(o['_id'], {})
+        review_count = o_state.get('review_count', 0)
+        last_reviewed = o_state.get('last_reviewed_at', 0)
+        if review_count == 0:
+            ordering_scored.append((10.0, o))
+        else:
+            interval_idx = min(review_count - 1, len(REVIEW_INTERVALS) - 1)
+            required_days = REVIEW_INTERVALS[interval_idx]
+            days_since = (now_ts - last_reviewed) / (24 * 3600 * 1000)
+            if days_since >= required_days:
+                ordering_scored.append((5.0 + random.random(), o))
+
+    ordering_scored.sort(key=lambda x: x[0], reverse=True)
+    selected_ordering = [o for s, o in ordering_scored[:ORDERING_PER_REVIEW] if s > 0]
+
+    # Build session items
+    items = []
+    for q in selected:
+        items.append({
+            'type': 'retrieval',
+            'question_id': q['_id'],
+            'question': q['question'],
+            'answer': q['answer'],
+            'question_type': q.get('type', 'unknown'),
+            'node_title': q.get('node_title', ''),
+            'domain': q['_domain'],
+        })
+    for o in selected_ordering:
+        items.append({
+            'type': 'temporal_ordering',
+            'question_id': o['_id'],
+            'question': o['question'],
+            'answer': o['answer'],
+            'cluster_label': o.get('cluster_label', ''),
+            'domain': o['_domain'],
+        })
+
+    # Shuffle to interleave types
+    random.shuffle(items)
+
+    session = {
+        'id': f'cr_{int(time.time())}',
+        'items': items,
+        'generated_at': _now(),
+        'domain': domain_filter or 'all',
+        'retrieval_count': len(selected),
+        'ordering_count': len(selected_ordering),
+        'total_questions_in_pool': len(all_questions),
+        'total_ordering_in_pool': len(all_ordering),
+    }
+
+    state['sessions'].append({
+        'id': session['id'],
+        'generated_at': session['generated_at'],
+        'item_count': len(items),
+    })
+    state['last_session'] = session['generated_at']
+    save_review_state(state)
+
+    log(f"Review session {session['id']}: {len(selected)} retrieval + {len(selected_ordering)} ordering from {len(curricula)} curricula")
+    return session
+
+
+def record_review_result(question_id: str, result: str):
+    """Record result for a curriculum review question.
+
+    Args:
+        question_id: The question's hash ID
+        result: 'correct', 'partial', or 'wrong'
+    """
+    state = load_review_state()
+    if question_id not in state['questions']:
+        state['questions'][question_id] = {}
+
+    q_state = state['questions'][question_id]
+    q_state['review_count'] = q_state.get('review_count', 0) + 1
+    q_state['last_reviewed_at'] = int(time.time() * 1000)
+    q_state['last_result'] = result
+
+    # Track history
+    if 'history' not in q_state:
+        q_state['history'] = []
+    q_state['history'].append({
+        'result': result,
+        'at': _now(),
+    })
+
+    # If wrong, reset interval (drop back to short interval)
+    if result == 'wrong':
+        q_state['review_count'] = max(1, q_state.get('review_count', 1) - 2)
+
+    save_review_state(state)
+    log(f"Review result for {question_id}: {result} (count: {q_state['review_count']})")
+
+
+def get_review_status() -> dict:
+    """Get curriculum review status overview."""
+    state = load_review_state()
+    curricula = _find_curricula_with_questions()
+
+    total_qs = sum(len(c['questions']) for c in curricula)
+    total_ordering = sum(len(c['ordering_questions']) for c in curricula)
+    tracked = state.get('questions', {})
+    reviewed_at_least_once = sum(1 for q in tracked.values() if q.get('review_count', 0) > 0)
+    correct_count = sum(1 for q in tracked.values() if q.get('last_result') == 'correct')
+    wrong_count = sum(1 for q in tracked.values() if q.get('last_result') == 'wrong')
+
+    return {
+        'curricula_with_questions': len(curricula),
+        'domains': [c['domain'] for c in curricula],
+        'total_retrieval_questions': total_qs,
+        'total_ordering_questions': total_ordering,
+        'reviewed_at_least_once': reviewed_at_least_once,
+        'last_correct': correct_count,
+        'last_wrong': wrong_count,
+        'sessions_generated': len(state.get('sessions', [])),
+        'last_session': state.get('last_session'),
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Resurfacing Engine")
-    parser.add_argument("command", choices=['generate', 'status'],
-                        help="generate: create new session; status: show stats")
+    parser.add_argument("command", choices=['generate', 'status', 'review', 'review-status'],
+                        help="generate: book resurfacing; review: curriculum retrieval practice; status/review-status: stats")
     parser.add_argument("--dialogues", action="store_true",
                         help="Include cross-book dialogues in session")
     parser.add_argument("--no-dialogues", action="store_true",
                         help="Skip cross-book dialogues")
+    parser.add_argument("--domain", type=str, default=None,
+                        help="Filter curriculum review to a specific domain (e.g. 'sicily')")
     args = parser.parse_args()
 
     if args.command == 'status':
@@ -499,6 +742,12 @@ def main():
         include_dialogues = not args.no_dialogues
         session = generate_session(include_dialogues=include_dialogues)
         print(json.dumps(session, indent=2))
+    elif args.command == 'review':
+        session = generate_curriculum_review(domain_filter=args.domain)
+        print(json.dumps(session, indent=2))
+    elif args.command == 'review-status':
+        status = get_review_status()
+        print(json.dumps(status, indent=2))
 
 
 if __name__ == '__main__':
