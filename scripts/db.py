@@ -620,6 +620,10 @@ CREATE TABLE IF NOT EXISTS elicitation_sessions (
 MIGRATIONS = [
     # Add cached_question column if not present (idempotent)
     "ALTER TABLE review_items ADD COLUMN cached_question TEXT",
+    # physical_books: add missing fields from JSON sync
+    "ALTER TABLE physical_books ADD COLUMN finished_date TEXT",
+    "ALTER TABLE physical_books ADD COLUMN category TEXT",
+    "ALTER TABLE physical_books ADD COLUMN progress_percent REAL",
     # v2 question system: richer question metadata
     "ALTER TABLE retrieval_questions ADD COLUMN answer_type TEXT DEFAULT 'concept'",
     "ALTER TABLE retrieval_questions ADD COLUMN level INTEGER DEFAULT 1",
@@ -915,6 +919,137 @@ def sync_syntheses(syntheses_data: dict, conn=None):
         conn.close()
 
 
+# --- Book sync helpers (replaces physical_books.json) ---
+
+BOOK_FIELDS = [
+    'id', 'title', 'author', 'cover_image_uri', 'cover_url', 'isbn', 'publisher',
+    'year', 'page_count', 'language', 'topics', 'chapters', 'current_chapter',
+    'current_page', 'reading_status', 'significance', 'added_at', 'last_interaction_at',
+    'metadata_source', 'processing_status', 'kindle_asin', 'kindle_book_id',
+    'finished_date', 'category', 'progress_percent',
+]
+
+BOOK_JSON_FIELDS = {'topics', 'chapters'}
+
+CAPTURE_FIELDS = [
+    'id', 'book_id', 'type', 'created_at', 'audio_uri', 'transcript',
+    'transcription_status', 'photo_uri', 'ocr_text', 'ocr_status', 'text',
+    'page_number', 'chapter', 'extracted_ideas', 'topics', 'key_passage',
+    'elaborative_question', 'server_id', 'upload_status',
+]
+
+CAPTURE_JSON_FIELDS = {'extracted_ideas', 'topics'}
+
+
+def upsert_books(books: list[dict], conn=None):
+    """Upsert books into physical_books table. Client wins for same ID."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    for book in books:
+        values = {}
+        for f in BOOK_FIELDS:
+            v = book.get(f)
+            if f in BOOK_JSON_FIELDS and isinstance(v, (list, dict)):
+                v = json.dumps(v, ensure_ascii=False)
+            values[f] = v
+        if not values.get('id'):
+            continue
+        cols = ', '.join(values.keys())
+        placeholders = ', '.join(['?'] * len(values))
+        updates = ', '.join(f'{k}=excluded.{k}' for k in values if k != 'id')
+        conn.execute(
+            f'INSERT INTO physical_books ({cols}) VALUES ({placeholders}) '
+            f'ON CONFLICT(id) DO UPDATE SET {updates}',
+            list(values.values())
+        )
+    if own:
+        conn.commit()
+        conn.close()
+    return len(books)
+
+
+def upsert_captures(captures: list[dict], conn=None):
+    """Upsert captures into book_captures table. Client wins for same ID."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    for cap in captures:
+        values = {}
+        for f in CAPTURE_FIELDS:
+            v = cap.get(f)
+            if f in CAPTURE_JSON_FIELDS and isinstance(v, (list, dict)):
+                v = json.dumps(v, ensure_ascii=False)
+            values[f] = v
+        if not values.get('id'):
+            continue
+        cols = ', '.join(values.keys())
+        placeholders = ', '.join(['?'] * len(values))
+        updates = ', '.join(f'{k}=excluded.{k}' for k in values if k != 'id')
+        conn.execute(
+            f'INSERT INTO book_captures ({cols}) VALUES ({placeholders}) '
+            f'ON CONFLICT(id) DO UPDATE SET {updates}',
+            list(values.values())
+        )
+    if own:
+        conn.commit()
+        conn.close()
+    return len(captures)
+
+
+def load_all_books_and_captures(conn=None) -> dict:
+    """Load all books and captures from SQLite. Returns {books: [...], captures: [...]}."""
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        books = []
+        for row in conn.execute('SELECT * FROM physical_books ORDER BY last_interaction_at DESC').fetchall():
+            book = dict(row)
+            for f in BOOK_JSON_FIELDS:
+                if isinstance(book.get(f), str):
+                    try:
+                        book[f] = json.loads(book[f])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            books.append(book)
+
+        captures = []
+        for row in conn.execute('SELECT * FROM book_captures ORDER BY created_at DESC').fetchall():
+            cap = dict(row)
+            for f in CAPTURE_JSON_FIELDS:
+                if isinstance(cap.get(f), str):
+                    try:
+                        cap[f] = json.loads(cap[f])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            captures.append(cap)
+
+        return {'books': books, 'captures': captures}
+    finally:
+        if own:
+            conn.close()
+
+
+def migrate_books_json_to_sqlite():
+    """One-time migration: physical_books.json → SQLite tables."""
+    books_path = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
+    if not books_path.exists():
+        print('[db] No physical_books.json found, skipping', flush=True)
+        return
+
+    data = json.loads(books_path.read_text())
+    books = data.get('books', [])
+    captures = data.get('captures', [])
+
+    conn = get_connection()
+    book_count = upsert_books(books, conn)
+    cap_count = upsert_captures(captures, conn)
+    conn.commit()
+    conn.close()
+    print(f'[db] Migrated {book_count} books, {cap_count} captures from JSON → SQLite', flush=True)
+
+
 # --- Migration helpers ---
 
 def migrate_projects():
@@ -1035,5 +1170,7 @@ if __name__ == '__main__':
             n = migrate_review_items_to_knowledge_items(conn)
             conn.close()
             print(f'[db] Migrated {n} knowledge_items from review_items', flush=True)
+        if data_type in ('books', 'all'):
+            migrate_books_json_to_sqlite()
     else:
         print(f'Unknown command: {cmd}')

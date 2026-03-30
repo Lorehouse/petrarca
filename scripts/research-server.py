@@ -3707,7 +3707,9 @@ JSON array only:"""
         self._send_json_response(200, {'status': 'ok', 'resolved': resolved})
 
     def _handle_book_sync_save(self):
-        """POST /book/sync — save books + captures to server (client → server)."""
+        """POST /book/sync — save books + captures to server (client → server).
+        Writes directly to SQLite. Client wins for same ID (UPSERT).
+        """
         content_length = int(self.headers.get('Content-Length', 0))
         if not content_length:
             self._send_json_response(400, {'error': 'Missing request body'})
@@ -3721,52 +3723,27 @@ JSON array only:"""
         books = body.get('books', [])
         captures = body.get('captures', [])
 
-        # Load existing server data and merge (client wins for same ID)
-        existing = {'books': [], 'captures': []}
-        if PHYSICAL_BOOKS_PATH.exists():
-            try:
-                existing = json.loads(PHYSICAL_BOOKS_PATH.read_text())
-            except json.JSONDecodeError:
-                pass
+        from db import get_connection, upsert_books, upsert_captures
+        conn = get_connection()
+        book_count = upsert_books(books, conn)
+        cap_count = upsert_captures(captures, conn)
+        conn.commit()
+        conn.close()
 
-        # Merge books: client version wins for same ID
-        existing_book_ids = {b['id']: i for i, b in enumerate(existing.get('books', []))}
-        merged_books = list(existing.get('books', []))
-        for book in books:
-            if book['id'] in existing_book_ids:
-                merged_books[existing_book_ids[book['id']]] = book
-            else:
-                merged_books.append(book)
-
-        # Merge captures: client version wins for same ID
-        existing_cap_ids = {c['id']: i for i, c in enumerate(existing.get('captures', []))}
-        merged_captures = list(existing.get('captures', []))
-        for cap in captures:
-            if cap['id'] in existing_cap_ids:
-                merged_captures[existing_cap_ids[cap['id']]] = cap
-            else:
-                merged_captures.append(cap)
-
-        result = {'books': merged_books, 'captures': merged_captures}
-        PHYSICAL_BOOKS_PATH.write_text(json.dumps(result, indent=2, ensure_ascii=False))
-
-        print(f'[book/sync] Saved {len(merged_books)} books, {len(merged_captures)} captures', flush=True)
+        print(f'[book/sync] Saved {book_count} books, {cap_count} captures → SQLite', flush=True)
         self._send_json_response(200, {
             'status': 'ok',
-            'books_count': len(merged_books),
-            'captures_count': len(merged_captures),
+            'books_count': book_count,
+            'captures_count': cap_count,
         })
 
     def _handle_book_sync_load(self):
-        """GET /book/sync — load books + captures from server (server → client)."""
-        if PHYSICAL_BOOKS_PATH.exists():
-            try:
-                data = json.loads(PHYSICAL_BOOKS_PATH.read_text())
-                self._send_json_response(200, data)
-            except json.JSONDecodeError:
-                self._send_json_response(200, {'books': [], 'captures': []})
-        else:
-            self._send_json_response(200, {'books': [], 'captures': []})
+        """GET /book/sync — load books + captures from server (server → client).
+        Reads from SQLite.
+        """
+        from db import load_all_books_and_captures
+        data = load_all_books_and_captures()
+        self._send_json_response(200, data)
 
     def _handle_resurfacing_generate(self):
         """POST /book/resurfacing/generate — generate a resurfacing session."""

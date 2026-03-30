@@ -59,10 +59,16 @@ def save_state(state: dict):
 
 
 def load_books_and_captures() -> tuple[list[dict], list[dict]]:
-    if not PHYSICAL_BOOKS_PATH.exists():
-        return [], []
-    data = json.loads(PHYSICAL_BOOKS_PATH.read_text())
-    return data.get('books', []), data.get('captures', [])
+    try:
+        from db import load_all_books_and_captures
+        data = load_all_books_and_captures()
+        return data.get('books', []), data.get('captures', [])
+    except Exception:
+        # Fallback to JSON if DB not available
+        if not PHYSICAL_BOOKS_PATH.exists():
+            return [], []
+        data = json.loads(PHYSICAL_BOOKS_PATH.read_text())
+        return data.get('books', []), data.get('captures', [])
 
 
 def load_research(book_id: str) -> dict | None:
