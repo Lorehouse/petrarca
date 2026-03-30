@@ -552,7 +552,11 @@ export default function BookDetailScreen() {
                 key={s}
                 style={[styles.statusPill, book.reading_status === s && styles.statusPillActive]}
                 onPress={async () => {
-                  await updatePhysicalBook(book.id, { reading_status: s });
+                  const updates: Partial<typeof book> = { reading_status: s };
+                  if (s === 'finished') {
+                    updates.finished_date = new Date().toISOString();
+                  }
+                  await updatePhysicalBook(book.id, updates);
                   logEvent('book_status_changed', { book_id: book.id, status: s });
                   if (s === 'archived') {
                     router.back();
