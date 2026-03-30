@@ -148,6 +148,7 @@ export default function EntitySheet({ entityId, onClose }: Props) {
                     entities={[entity]}
                     center={[entity.latitude, entity.longitude]}
                     zoom={7}
+                    tileLayer="clean"
                     showControls={false}
                     showTimeline={false}
                     showFilters={false}

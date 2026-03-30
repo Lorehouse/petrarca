@@ -305,6 +305,7 @@ function EntityIntroCard({
             }]}
             center={[item.latitude, item.longitude]}
             zoom={7}
+            tileLayer="clean"
             showControls={false}
             showTimeline={false}
             showFilters={false}
