@@ -605,6 +605,82 @@ QUESTIONS_PER_SESSION = 8
 ORDERING_PER_SESSION = 2
 
 
+def _load_entity_index(conn) -> list[dict]:
+    """Load all entities with their names and aliases for text matching."""
+    rows = conn.execute(
+        'SELECT entity_id, name, entity_type, aliases FROM shared_entities'
+    ).fetchall()
+    index = []
+    for r in rows:
+        names = [r['name']]
+        try:
+            aliases = json.loads(r['aliases'] or '[]')
+            if isinstance(aliases, list):
+                names.extend(aliases)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        index.append({
+            'entity_id': r['entity_id'],
+            'name': r['name'],
+            'entity_type': r['entity_type'],
+            'match_names': names,
+        })
+    # Sort by longest name first so "Battle of Himera" matches before "Himera"
+    index.sort(key=lambda e: max(len(n) for n in e['match_names']), reverse=True)
+    return index
+
+
+def annotate_entity_spans(text: str, entity_index: list[dict]) -> list[dict]:
+    """Find entity name mentions in text and return span annotations.
+
+    Returns list of {start, end, entity_id, entity_type, name} dicts,
+    non-overlapping, sorted by position.
+    """
+    if not text or not entity_index:
+        return []
+
+    spans = []
+    taken = set()  # character positions already claimed
+
+    for entity in entity_index:
+        for match_name in entity['match_names']:
+            # Case-insensitive search for whole-word matches
+            pattern = r'\b' + re.escape(match_name) + r'\b'
+            for m in re.finditer(pattern, text, re.IGNORECASE):
+                start, end = m.start(), m.end()
+                # Skip if overlaps with already-claimed span
+                if any(pos in taken for pos in range(start, end)):
+                    continue
+                spans.append({
+                    'start': start,
+                    'end': end,
+                    'entity_id': entity['entity_id'],
+                    'entity_type': entity['entity_type'],
+                    'name': entity['name'],
+                })
+                taken.update(range(start, end))
+
+    spans.sort(key=lambda s: s['start'])
+    return spans
+
+
+def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
+    """Add entity_spans to a review session item."""
+    if not entity_index:
+        return item
+    # Annotate rich_answer, memory_hook, and question
+    all_spans = {}
+    for field in ('rich_answer', 'memory_hook', 'question'):
+        text = item.get(field)
+        if text and isinstance(text, str):
+            spans = annotate_entity_spans(text, entity_index)
+            if spans:
+                all_spans[field] = spans
+    if all_spans:
+        item['entity_spans'] = all_spans
+    return item
+
+
 def generate_review_session(domain_filter: str | None = None, conn=None) -> dict:
     """Generate a curriculum retrieval practice session from the database."""
     own = conn is None
@@ -718,6 +794,11 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
                 'anchors': _parse_json_field(q.get('anchors'), []),
                 'grading_options': _parse_json_field(q.get('grading_options'), []),
             })
+        # Annotate items with entity spans for tappable entities in frontend
+        entity_index = _load_entity_index(conn)
+        if entity_index:
+            items = [_annotate_item_entities(item, entity_index) for item in items]
+
         random.shuffle(items)
 
         count_domain_clause = "AND domain_id LIKE ?" if domain_filter else ""

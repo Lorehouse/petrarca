@@ -394,6 +394,27 @@ export async function recordReviewResult(
   });
 }
 
+// --- Entity API ---
+
+export async function fetchEntityDetails(
+  entityId: string,
+): Promise<import('../data/types').EntityDetails> {
+  const resp = await fetch(`${RESEARCH_BASE}/entity/${entityId}`);
+  if (!resp.ok) throw new Error(`Entity fetch failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function recordEntityTap(
+  entityId: string,
+  action: 'tap' | 'unknown' | 'interested' = 'tap',
+): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/entity/tap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entity_id: entityId, action }),
+  });
+}
+
 // --- Kindle Processing API ---
 
 export async function processKindleBooks(max: number = 10): Promise<void> {

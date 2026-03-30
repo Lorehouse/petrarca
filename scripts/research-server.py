@@ -3847,6 +3847,107 @@ JSON array only:"""
         """GET /curriculum/review/status — get curriculum review stats."""
         self._send_json_response(200, get_review_status())
 
+    def _handle_entity_lookup(self):
+        """GET /entity/{entity_id} — get full entity details."""
+        entity_id = self.path.split('/entity/')[-1]
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            row = conn.execute(
+                'SELECT * FROM shared_entities WHERE entity_id = ?', (entity_id,)
+            ).fetchone()
+            if not row:
+                self._send_json_response(404, {'error': 'Entity not found'})
+                return
+            links = conn.execute(
+                '''SELECT ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
+                          cn.title as node_title, cn.description as node_description,
+                          COALESCE(ks.knowledge, 'unknown') as knowledge
+                   FROM entity_curriculum_links ecl
+                   LEFT JOIN curriculum_nodes cn ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
+                   LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+                   WHERE ecl.entity_id = ?''',
+                (entity_id,)
+            ).fetchall()
+            entity = dict(row)
+            try:
+                entity['aliases'] = json.loads(entity.get('aliases') or '[]')
+            except (json.JSONDecodeError, TypeError):
+                entity['aliases'] = []
+            entity['curriculum_links'] = [dict(l) for l in links]
+            self._send_json_response(200, entity)
+        finally:
+            conn.close()
+
+    def _handle_entity_tap(self):
+        """POST /entity/tap — record entity tap and auto-schedule review."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        entity_id = body.get('entity_id')
+        action = body.get('action', 'tap')  # tap, unknown, interested
+        if not entity_id:
+            self._send_json_response(400, {'error': 'entity_id required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            link = conn.execute(
+                'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ? LIMIT 1',
+                (entity_id,)
+            ).fetchone()
+            if not link:
+                self._send_json_response(200, {'status': 'no_curriculum_link'})
+                return
+            domain_id, node_id = link['domain_id'], link['node_id']
+            now_ms = int(time.time() * 1000)
+            stability = 1.0 if action == 'unknown' else 3.0
+            # Create knowledge_item for review scheduling if missing
+            item_id = f"{domain_id}:{node_id}"
+            existing = conn.execute(
+                'SELECT id FROM knowledge_items WHERE id = ?', (item_id,)
+            ).fetchone()
+            if not existing:
+                node = conn.execute(
+                    'SELECT title, description FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+                    (node_id, domain_id)
+                ).fetchone()
+                source = {
+                    'book_id': None, 'chapter_number': None,
+                    'chapter_title': f'Entity tap: {entity_id}',
+                    'source_text': (node['description'] if node else '')[:400],
+                    'lens': 'SIGNIFICANCE', 'temporal_hook': '', 'added_at': now_ms,
+                }
+                try:
+                    conn.execute('''
+                        INSERT INTO knowledge_items
+                        (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                         sources, question_history, created_at)
+                        VALUES (?,?,?,?,?,?,?,?)
+                    ''', (item_id, node_id, domain_id, stability,
+                          now_ms + int(stability * 24 * 3600 * 1000),
+                          json.dumps([source]), '[]', now_ms))
+                except Exception:
+                    pass
+            # Boost interest in knowledge_states
+            conn.execute('''
+                INSERT INTO knowledge_states (domain_id, node_id, knowledge, interest, confidence, highest_layer, last_updated)
+                VALUES (?, ?, 'unknown', 0.8, 0.0, '', ?)
+                ON CONFLICT(domain_id, node_id) DO UPDATE SET
+                    interest = MAX(interest, 0.8),
+                    last_updated = ?
+            ''', (domain_id, node_id, now_ms, now_ms))
+            conn.commit()
+            self._send_json_response(200, {
+                'status': 'scheduled', 'entity_id': entity_id,
+                'domain_id': domain_id, 'node_id': node_id,
+                'stability_days': stability,
+            })
+        except Exception as e:
+            print(f'[entity/tap] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_process_kindle(self):
         """POST /book/process-kindle — trigger Kindle book processing."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -4360,6 +4461,8 @@ JSON array only:"""
             return self._handle_curriculum_review_generate()
         if self.path == '/curriculum/review/result':
             return self._handle_curriculum_review_result()
+        if self.path == '/entity/tap':
+            return self._handle_entity_tap()
         if self.path == '/book/process-kindle':
             return self._handle_process_kindle()
         if self.path == '/kindle/sync':
@@ -4959,6 +5062,8 @@ JSON array only:"""
             return self._handle_resurfacing_status()
         if self.path == '/curriculum/review/status':
             return self._handle_curriculum_review_status()
+        if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap'):
+            return self._handle_entity_lookup()
         if self.path.startswith('/curriculum/review/timeline/'):
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
             return self._send_json_response(200, {'timeline': get_timeline(domain_id)})

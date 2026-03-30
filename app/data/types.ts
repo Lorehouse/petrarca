@@ -555,6 +555,43 @@ export interface ResurfacingItem {
   memory_hook?: string;
   anchors?: string[];
   grading_options?: string[];
+  // Entity annotation (from server entity matching)
+  entity_spans?: Record<string, EntitySpan[]>;
+}
+
+export interface EntitySpan {
+  start: number;
+  end: number;
+  entity_id: string;
+  entity_type: string;
+  name: string;
+}
+
+export interface EntityDetails {
+  entity_id: string;
+  name: string;
+  description?: string;
+  entity_type?: string;
+  modern_name?: string;
+  wikipedia_url?: string;
+  latitude?: number;
+  longitude?: number;
+  aliases: string[];
+  dates?: string;
+  date_start?: number;
+  date_end?: number;
+  nexus_score: number;
+  curriculum_links: EntityCurriculumLink[];
+}
+
+export interface EntityCurriculumLink {
+  domain_id: string;
+  node_id: string;
+  lens_title: string;
+  lens_emphasis: string;
+  node_title?: string;
+  node_description?: string;
+  knowledge?: string;
 }
 
 export interface ResurfacingSession {

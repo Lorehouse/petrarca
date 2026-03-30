@@ -632,6 +632,16 @@ MIGRATIONS = [
     "ALTER TABLE retrieval_questions ADD COLUMN prerequisite_questions TEXT DEFAULT '[]'",
     "ALTER TABLE retrieval_questions ADD COLUMN grading_options TEXT DEFAULT '[]'",
     "ALTER TABLE retrieval_questions ADD COLUMN rich_answer TEXT",
+    # Entity context system: enrich shared_entities for tappable review card entities
+    "ALTER TABLE shared_entities ADD COLUMN description TEXT",
+    "ALTER TABLE shared_entities ADD COLUMN entity_type TEXT",
+    "ALTER TABLE shared_entities ADD COLUMN modern_name TEXT",
+    "ALTER TABLE shared_entities ADD COLUMN wikipedia_url TEXT",
+    "ALTER TABLE shared_entities ADD COLUMN latitude REAL",
+    "ALTER TABLE shared_entities ADD COLUMN longitude REAL",
+    "ALTER TABLE shared_entities ADD COLUMN aliases TEXT DEFAULT '[]'",
+    "ALTER TABLE shared_entities ADD COLUMN date_start INTEGER",
+    "ALTER TABLE shared_entities ADD COLUMN date_end INTEGER",
 ]
 
 

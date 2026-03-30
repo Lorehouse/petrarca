@@ -52,40 +52,39 @@ function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook
   const coverUri = book.cover_url || book.cover_image_uri;
 
   return (
-    <Pressable
+    <View
       style={[bookStyles.row, hovered && bookStyles.rowHovered]}
-      onPress={onPress}
-      onLongPress={onDelete}
-      delayLongPress={500}
-      {...(Platform.OS === 'web' ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) } : {})}
+      {...(Platform.OS === 'web' ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as any : {})}
     >
-      <View style={bookStyles.coverWrap}>
-        {coverUri ? (
-          <Image source={{ uri: coverUri }} style={bookStyles.cover} />
-        ) : (
-          <View style={bookStyles.coverPlaceholder}>
-            <Text style={bookStyles.coverInitial}>{book.title.charAt(0)}</Text>
-          </View>
-        )}
-      </View>
-      <View style={bookStyles.info}>
-        <Text style={bookStyles.title} numberOfLines={2}>{book.title}</Text>
-        <Text style={bookStyles.author}>{book.author}</Text>
-        <View style={bookStyles.metaRow}>
-          <Text style={bookStyles.status}>{statusLabel}</Text>
-          {positionText && <Text style={bookStyles.position}> · {positionText}</Text>}
+      <Pressable style={bookStyles.rowInner} onPress={onPress}>
+        <View style={bookStyles.coverWrap}>
+          {coverUri ? (
+            <Image source={{ uri: coverUri }} style={bookStyles.cover} />
+          ) : (
+            <View style={bookStyles.coverPlaceholder}>
+              <Text style={bookStyles.coverInitial}>{book.title.charAt(0)}</Text>
+            </View>
+          )}
         </View>
-        {book.topics.length > 0 && (
-          <View style={bookStyles.topicRow}>
-            {book.topics.slice(0, 2).map(t => (
-              <Text key={t} style={bookStyles.topic}>{t}</Text>
-            ))}
+        <View style={bookStyles.info}>
+          <Text style={bookStyles.title} numberOfLines={2}>{book.title}</Text>
+          <Text style={bookStyles.author}>{book.author}</Text>
+          <View style={bookStyles.metaRow}>
+            <Text style={bookStyles.status}>{statusLabel}</Text>
+            {positionText && <Text style={bookStyles.position}> · {positionText}</Text>}
           </View>
-        )}
-        {book.current_page && book.page_count && book.reading_status === 'reading' && (
-          <ProgressBar current={book.current_page} total={book.page_count} />
-        )}
-      </View>
+          {book.topics.length > 0 && (
+            <View style={bookStyles.topicRow}>
+              {book.topics.slice(0, 2).map(t => (
+                <Text key={t} style={bookStyles.topic}>{t}</Text>
+              ))}
+            </View>
+          )}
+          {book.current_page && book.page_count && book.reading_status === 'reading' && (
+            <ProgressBar current={book.current_page} total={book.page_count} />
+          )}
+        </View>
+      </Pressable>
       <View style={bookStyles.sidebar}>
         {isIdentifying ? (
           <ActivityIndicator size="small" color={colors.rubric} />
@@ -97,13 +96,23 @@ function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook
           </>
         )}
       </View>
-    </Pressable>
+      {(hovered || Platform.OS !== 'web') && (
+        <Pressable
+          style={bookStyles.removeButton}
+          onPress={onDelete}
+          hitSlop={8}
+        >
+          <Text style={bookStyles.removeButtonText}>×</Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
 
 const bookStyles = StyleSheet.create({
-  row: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: layout.screenPadding, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule, gap: 14, ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}) },
+  row: { position: 'relative' as const, flexDirection: 'row', paddingVertical: 14, paddingHorizontal: layout.screenPadding, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule, ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}) },
   rowHovered: { backgroundColor: colors.parchmentHover },
+  rowInner: { flexDirection: 'row', flex: 1, gap: 14 },
   coverWrap: { width: 52, height: 72, borderRadius: 2, overflow: 'hidden', backgroundColor: colors.rule },
   cover: { width: 52, height: 72, borderRadius: 2 },
   coverPlaceholder: { width: 52, height: 72, backgroundColor: colors.parchmentDark, borderWidth: 1, borderColor: colors.rule, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },

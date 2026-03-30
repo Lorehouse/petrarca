@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
-import { ResurfacingItem, ResurfacingSession } from '../../data/types';
+import { EntitySpan, ResurfacingItem, ResurfacingSession } from '../../data/types';
 import {
   generateCurriculumReview, recordReviewResult,
 } from '../../lib/book-api';
@@ -13,15 +13,68 @@ import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import DoubleRule from '../../components/DoubleRule';
+import EntitySheet from '../../components/EntitySheet';
+
+// ── Annotated Text (tappable entity spans) ──────────────────────────
+
+function AnnotatedText({
+  text,
+  spans,
+  style,
+  onEntityTap,
+}: {
+  text: string;
+  spans?: EntitySpan[];
+  style: any;
+  onEntityTap: (entityId: string) => void;
+}) {
+  if (!spans || spans.length === 0) {
+    return <Text style={style}>{text}</Text>;
+  }
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const span of spans) {
+    if (span.start > cursor) {
+      parts.push(<Text key={`t-${cursor}`}>{text.slice(cursor, span.start)}</Text>);
+    }
+    parts.push(
+      <Text
+        key={`e-${span.start}`}
+        style={entityStyle.tappable}
+        onPress={() => onEntityTap(span.entity_id)}
+      >
+        {text.slice(span.start, span.end)}
+      </Text>
+    );
+    cursor = span.end;
+  }
+  if (cursor < text.length) {
+    parts.push(<Text key={`t-${cursor}`}>{text.slice(cursor)}</Text>);
+  }
+
+  return <Text style={style}>{parts}</Text>;
+}
+
+const entityStyle = StyleSheet.create({
+  tappable: {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+    textDecorationColor: colors.textMuted,
+  },
+});
 
 // ── Review Card ─────────────────────────────────────────────────────
 
 function ReviewCard({
   item,
   onResult,
+  onEntityTap,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
+  onEntityTap: (entityId: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
@@ -90,14 +143,24 @@ function ReviewCard({
         <View>
           {/* Rich answer */}
           <View style={cs.answerBox}>
-            <Text style={cs.answerText}>{displayAnswer}</Text>
+            <AnnotatedText
+              text={displayAnswer}
+              spans={item.entity_spans?.rich_answer}
+              style={cs.answerText}
+              onEntityTap={onEntityTap}
+            />
           </View>
 
           {/* Memory hook */}
           {item.memory_hook ? (
             <View style={cs.hookBox}>
               <Text style={cs.hookLabel}>{'\u2726'} Memory hook</Text>
-              <Text style={cs.hookText}>{item.memory_hook}</Text>
+              <AnnotatedText
+                text={item.memory_hook}
+                spans={item.entity_spans?.memory_hook}
+                style={cs.hookText}
+                onEntityTap={onEntityTap}
+              />
             </View>
           ) : null}
 
@@ -145,6 +208,7 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -242,6 +306,7 @@ export default function ReviewScreen() {
             key={currentItem.question_id || `q-${currentIndex}`}
             item={currentItem}
             onResult={(result) => handleResult(currentItem, result)}
+            onEntityTap={setActiveEntityId}
           />
         )}
 
@@ -258,6 +323,7 @@ export default function ReviewScreen() {
       </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <EntitySheet entityId={activeEntityId} onClose={() => setActiveEntityId(null)} />
     </View>
   );
 }
