@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import subprocess
 import time
@@ -619,9 +620,12 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
         rows = conn.execute(
             f'''SELECT rq.id, rq.domain_id, rq.node_id, rq.question, rq.answer,
                        rq.question_type, rq.node_title, rq.cluster_label,
-                       rs.review_count, rs.last_result, rs.due_at, rs.last_reviewed_at
+                       rs.review_count, rs.last_result, rs.due_at, rs.last_reviewed_at,
+                       COALESCE(ks.knowledge, 'unknown') as node_knowledge,
+                       COALESCE(ks.confidence, 0) as node_confidence
                 FROM retrieval_questions rq
                 LEFT JOIN review_schedule rs ON rq.id = rs.question_id
+                LEFT JOIN knowledge_states ks ON ks.domain_id = rq.domain_id AND ks.node_id = rq.node_id
                 WHERE 1=1 {domain_clause}
                 ORDER BY
                     CASE WHEN rs.review_count IS NULL OR rs.review_count = 0 THEN 0 ELSE 1 END,
@@ -631,18 +635,30 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
         ).fetchall()
 
         # Filter to due or new questions
+        # Prioritize questions about nodes you've actually studied
         candidates = []
         for r in rows:
             review_count = r['review_count'] or 0
             due_at = r['due_at'] or 0
+            node_knowledge = r['node_knowledge']
+
+            # Skip questions about topics the user hasn't encountered yet
+            # (they can't retrieve what they never learned)
+            if node_knowledge == 'unknown' and r['question_type'] != 'temporal_ordering':
+                continue
+
+            # Knowledge-weighted base score: studied nodes are more valuable to review
+            knowledge_weight = {
+                'anchored': 8.0, 'engaged': 6.0, 'mentioned': 4.0, 'unknown': 1.0
+            }.get(node_knowledge, 2.0)
 
             if review_count == 0:
-                # Never reviewed — high priority
-                candidates.append((10.0, dict(r)))
+                # Never reviewed — high priority, weighted by knowledge
+                candidates.append((knowledge_weight + 2.0 + random.random(), dict(r)))
             elif due_at <= now_ms:
                 # Due for review
                 overdue_days = (now_ms - due_at) / (24 * 3600 * 1000)
-                score = 5.0 + min(overdue_days * 0.3, 5.0)
+                score = knowledge_weight + min(overdue_days * 0.3, 5.0)
                 if r['last_result'] == 'wrong':
                     score += 3.0
                 candidates.append((score, dict(r)))
@@ -660,7 +676,6 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
         selected_ordering = [q for _, q in ordering[:ORDERING_PER_SESSION]]
 
         # Build response items
-        import random
         items = []
         for q in selected_retrieval:
             items.append({
