@@ -170,6 +170,8 @@ export default function ReviewScreen() {
     loadSession();
   }, []));
 
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   const handleResult = async (item: ResurfacingItem, result: string) => {
     if (item.question_id) {
       await recordReviewResult(item.question_id, result);
@@ -180,7 +182,20 @@ export default function ReviewScreen() {
         domain: item.domain,
       });
     }
+    // Advance to next question after a brief delay
+    setTimeout(() => {
+      setCurrentIndex(i => i + 1);
+    }, 600);
   };
+
+  const handleNewSession = () => {
+    setCurrentIndex(0);
+    loadSession();
+  };
+
+  const items = session?.items || [];
+  const currentItem = items[currentIndex];
+  const isDone = session && currentIndex >= items.length && !loading;
 
   return (
     <View style={s.container}>
@@ -196,8 +211,10 @@ export default function ReviewScreen() {
           <DoubleRule />
           {session && (
             <Text style={s.statsLine}>
-              {session.items.length} questions
-              {session.total_questions_in_pool ? ` · ${session.total_questions_in_pool} in pool` : ''}
+              {currentIndex < items.length
+                ? `${currentIndex + 1} / ${items.length}`
+                : `${items.length} / ${items.length}`}
+              {session.total_questions_in_pool ? `  ·  ${session.total_questions_in_pool} in pool` : ''}
             </Text>
           )}
         </View>
@@ -213,28 +230,32 @@ export default function ReviewScreen() {
         {/* Error */}
         {error ? <Text style={s.errorText}>{error}</Text> : null}
 
-        {/* Empty */}
-        {session && session.items.length === 0 && !loading && (
+        {/* Empty session */}
+        {session && items.length === 0 && !loading && (
           <View style={s.emptyState}>
             <Text style={s.emptyTitle}>{'\u2726'} All caught up</Text>
             <Text style={s.emptySubtitle}>No questions due right now. Come back later or read more!</Text>
           </View>
         )}
 
-        {/* Questions */}
-        {session?.items.map((item, i) => (
+        {/* Current question */}
+        {currentItem && (
           <ReviewCard
-            key={item.question_id || `q-${i}`}
-            item={item}
-            onResult={(result) => handleResult(item, result)}
+            key={currentItem.question_id || `q-${currentIndex}`}
+            item={currentItem}
+            onResult={(result) => handleResult(currentItem, result)}
           />
-        ))}
+        )}
 
-        {/* New session button */}
-        {session && session.items.length > 0 && (
-          <Pressable style={s.newSessionBtn} onPress={loadSession}>
-            <Text style={s.newSessionText}>New session</Text>
-          </Pressable>
+        {/* Session complete */}
+        {isDone && (
+          <View style={s.emptyState}>
+            <Text style={s.emptyTitle}>{'\u2726'} Session complete</Text>
+            <Text style={s.emptySubtitle}>{items.length} questions reviewed</Text>
+            <Pressable style={s.newSessionBtn} onPress={handleNewSession}>
+              <Text style={s.newSessionText}>New session</Text>
+            </Pressable>
+          </View>
         )}
       </ScrollView>
 
