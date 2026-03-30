@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import { logEvent } from '../../data/logger';
 import { getPhysicalBooks, getBookCaptures, archiveBook } from '../../data/book-store';
@@ -192,6 +192,7 @@ export default function LibraryScreen() {
   }, [allBooks, refreshKey, storeVersion]);
 
   return (
+    <GestureHandlerRootView style={styles.container}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
@@ -263,6 +264,7 @@ export default function LibraryScreen() {
       )}
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </ScrollView>
+    </GestureHandlerRootView>
   );
 }
 
