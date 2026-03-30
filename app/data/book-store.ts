@@ -134,7 +134,7 @@ export async function updateReadingPosition(
 }
 
 export async function archiveBook(bookId: string): Promise<void> {
-  await updatePhysicalBook(bookId, { reading_status: 'finished' });
+  await updatePhysicalBook(bookId, { reading_status: 'archived' });
   logEvent('book_archived', { book_id: bookId });
 }
 

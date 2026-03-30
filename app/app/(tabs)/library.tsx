@@ -1,12 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform,
-  ActivityIndicator,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import { logEvent } from '../../data/logger';
-import { getPhysicalBooks, getBookCaptures } from '../../data/book-store';
+import { getPhysicalBooks, getBookCaptures, archiveBook } from '../../data/book-store';
 import { useBookStoreVersion } from '../../data/use-book-store';
 import type { PhysicalBook } from '../../data/types';
 import { colors, fonts, type, layout } from '../../design/tokens';
@@ -38,7 +38,7 @@ const progressStyles = StyleSheet.create({
   fill: { height: '100%', backgroundColor: colors.rubric, borderRadius: 1.5 },
 });
 
-function BookRow({ book, captureCount, onPress }: { book: PhysicalBook; captureCount: number; onPress: () => void }) {
+function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook; captureCount: number; onPress: () => void; onDelete: () => void }) {
   const [hovered, setHovered] = useState(false);
   const isIdentifying = book.processing_status === 'identifying';
   const statusLabel = isIdentifying ? 'Identifying...'
@@ -55,6 +55,8 @@ function BookRow({ book, captureCount, onPress }: { book: PhysicalBook; captureC
     <Pressable
       style={[bookStyles.row, hovered && bookStyles.rowHovered]}
       onPress={onPress}
+      onLongPress={onDelete}
+      delayLongPress={500}
       {...(Platform.OS === 'web' ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) } : {})}
     >
       <View style={bookStyles.coverWrap}>
@@ -138,13 +140,14 @@ export default function LibraryScreen() {
   const allBooks = useMemo(() => getPhysicalBooks(), [refreshKey, storeVersion]);
 
   const books = useMemo(() => {
-    let filtered = allBooks;
+    // Always exclude archived (soft-deleted) books
+    const visible = allBooks.filter(b => b.reading_status !== 'archived');
     if (filter === 'active') {
-      filtered = filtered.filter(b => b.reading_status !== 'finished' && b.reading_status !== 'archived');
+      return visible.filter(b => b.reading_status !== 'finished');
     } else if (filter === 'archived') {
-      filtered = filtered.filter(b => b.reading_status === 'finished' || b.reading_status === 'archived');
+      return visible.filter(b => b.reading_status === 'finished');
     }
-    return filtered;
+    return visible;
   }, [allBooks, filter]);
 
   const captureCounts = useMemo(() => {
@@ -217,7 +220,21 @@ export default function LibraryScreen() {
       ) : (
         books.map(book => (
           <BookRow key={book.id} book={book} captureCount={captureCounts[book.id] || 0}
-            onPress={() => { logEvent('library_book_tap', { book_id: book.id }); router.push({ pathname: '/book-detail', params: { id: book.id } } as any); }} />
+            onPress={() => { logEvent('library_book_tap', { book_id: book.id }); router.push({ pathname: '/book-detail', params: { id: book.id } } as any); }}
+            onDelete={() => {
+              const doArchive = () => {
+                archiveBook(book.id);
+                logEvent('library_book_removed', { book_id: book.id, title: book.title });
+              };
+              if (Platform.OS === 'web') {
+                if (confirm(`Remove "${book.title}" from library?`)) doArchive();
+              } else {
+                Alert.alert('Remove book', `Remove "${book.title}" from your library?`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Remove', style: 'destructive', onPress: doArchive },
+                ]);
+              }
+            }} />
         ))
       )}
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
