@@ -109,6 +109,11 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             onPress={() => navigate('knowledge_map', '/knowledge-map')}
           />
           <NavItem
+            title="Ancient Map"
+            subtitle="Places from your curriculum"
+            onPress={() => navigate('map', '/map')}
+          />
+          <NavItem
             title="Projects"
             subtitle="Collect notes around a theme"
             onPress={() => navigate('projects', '/projects')}

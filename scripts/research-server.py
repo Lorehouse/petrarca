@@ -3847,6 +3847,44 @@ JSON array only:"""
         """GET /curriculum/review/status — get curriculum review stats."""
         self._send_json_response(200, get_review_status())
 
+    def _handle_entities_list(self):
+        """GET /entities?type=place — list entities, optionally filtered by type."""
+        from urllib.parse import urlparse, parse_qs
+        from db import get_connection
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        entity_type = params.get('type', [None])[0]
+        conn = get_connection(readonly=True)
+        try:
+            if entity_type:
+                rows = conn.execute(
+                    '''SELECT entity_id, name, description, entity_type, modern_name,
+                              wikipedia_url, latitude, longitude, aliases, dates,
+                              date_start, date_end, nexus_score
+                       FROM shared_entities WHERE entity_type = ? ORDER BY name''',
+                    (entity_type,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    '''SELECT entity_id, name, description, entity_type, modern_name,
+                              wikipedia_url, latitude, longitude, aliases, dates,
+                              date_start, date_end, nexus_score
+                       FROM shared_entities ORDER BY name'''
+                ).fetchall()
+            entities = []
+            for r in rows:
+                e = dict(r)
+                try:
+                    e['aliases'] = json.loads(e.get('aliases') or '[]')
+                except (json.JSONDecodeError, TypeError):
+                    e['aliases'] = []
+                # Map DB fields to what AncientMap expects
+                e['curriculum_links'] = []
+                entities.append(e)
+            self._send_json_response(200, entities)
+        finally:
+            conn.close()
+
     def _handle_entity_lookup(self):
         """GET /entity/{entity_id} — get full entity details."""
         entity_id = self.path.split('/entity/')[-1]
@@ -5062,6 +5100,8 @@ JSON array only:"""
             return self._handle_resurfacing_status()
         if self.path == '/curriculum/review/status':
             return self._handle_curriculum_review_status()
+        if self.path == '/entities' or self.path.startswith('/entities?'):
+            return self._handle_entities_list()
         if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap'):
             return self._handle_entity_lookup()
         if self.path.startswith('/curriculum/review/timeline/'):

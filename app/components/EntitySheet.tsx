@@ -7,6 +7,7 @@ import { colors, fonts, layout } from '../design/tokens';
 import { EntityDetails } from '../data/types';
 import { fetchEntityDetails, recordEntityTap } from '../lib/book-api';
 import { logEvent } from '../data/logger';
+import AncientMap from './AncientMap';
 
 interface Props {
   entityId: string | null;
@@ -125,6 +126,23 @@ export default function EntitySheet({ entityId, onClose }: Props) {
               {/* Description */}
               {entity.description ? (
                 <Text style={es.description}>{entity.description}</Text>
+              ) : null}
+
+              {/* Mini map for places */}
+              {entity.entity_type === 'place' && entity.latitude != null && entity.longitude != null ? (
+                <View style={es.miniMapWrap}>
+                  <AncientMap
+                    entities={[entity]}
+                    center={[entity.latitude, entity.longitude]}
+                    zoom={7}
+                    showControls={false}
+                    showTimeline={false}
+                    showFilters={false}
+                    showLegend={false}
+                    showEntitySheet={false}
+                    style={{ height: 160 }}
+                  />
+                </View>
               ) : null}
 
               {/* Curriculum links */}
@@ -254,6 +272,14 @@ const es = StyleSheet.create({
     lineHeight: 22,
     color: colors.textBody,
     marginBottom: 16,
+  },
+  miniMapWrap: {
+    height: 160,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.rule,
   },
   linksSection: {
     marginBottom: 16,

@@ -46,44 +46,23 @@ def build_extraction_prompt(domain: dict) -> str:
             f"    {n.get('description', '')[:200]}"
         )
 
-    return f"""Extract named entities from this curriculum for a knowledge review app.
+    return f"""Extract named entities from this curriculum. Be CONCISE — short descriptions, no verbose fields.
 
 Curriculum: {domain['title']}
-Description: {domain.get('description', '')}
 
 Nodes:
 {chr(10).join(nodes_block)}
 
-For each important entity mentioned or implied by these nodes, extract:
+For each entity, output ONE compact JSON line. Fields:
+entity_id (slug), name, entity_type (place/person/event/period), description (MAX 20 words),
+modern_name (null if same), wikipedia_url, latitude/longitude (places only, null otherwise),
+aliases (array), date_start/date_end (int, negative=BCE), node_ids (array of node IDs only)
 
-- "entity_id": lowercase slug (e.g., "akragas", "gelon", "battle_of_himera")
-- "name": Display name as it appears in historical text (e.g., "Akragas", "Gelon", "Battle of Himera")
-- "entity_type": one of "place", "person", "event", "period"
-- "description": 1-2 sentences — what a learner needs to know to understand references to this entity
-- "modern_name": modern equivalent if different (e.g., "Agrigento" for Akragas), null if same or N/A
-- "wikipedia_url": English Wikipedia article URL (must be real, use standard article naming)
-- "latitude": decimal degrees (for places only, null for others)
-- "longitude": decimal degrees (for places only, null for others)
-- "aliases": array of alternate names/spellings (e.g., ["Agrigentum"] for Akragas)
-- "date_start": year as integer, negative for BCE (e.g., -580 for 580 BC)
-- "date_end": year as integer, null if still exists or single event
-- "node_links": array of objects linking this entity to curriculum nodes:
-  - "node_id": exact node ID from the list above
-  - "lens_title": how this entity appears in this node's context (2-5 words)
-  - "lens_emphasis": what aspect of the entity matters for this node (1 sentence)
+Extract 40-60 entities. Include every place, person, battle, and period from the nodes.
 
-Guidelines:
-- Extract 30-60 entities per curriculum. Focus on entities that appear in review questions.
-- Every place that a learner might encounter in a review card should be included.
-- Every historically significant person mentioned in node titles/descriptions should be included.
-- Major battles, treaties, and turning-point events get their own entity.
-- Periods (e.g., "Age of Tyrants") are entities too.
-- For coordinates: use the ancient site location, not the modern city center.
-- Deduplicate: if the same entity appears across multiple nodes, produce ONE entity with multiple node_links.
-- Wikipedia URLs must follow the pattern: https://en.wikipedia.org/wiki/Article_Name
+Return ONLY a JSON array. Keep descriptions SHORT — max 20 words each.
 
-Return ONLY valid JSON array:
-[{{"entity_id":"...","name":"...","entity_type":"...","description":"...","modern_name":"...","wikipedia_url":"...","latitude":null,"longitude":null,"aliases":[],"date_start":null,"date_end":null,"node_links":[{{"node_id":"...","lens_title":"...","lens_emphasis":"..."}}]}}]"""
+Example: {{"entity_id":"akragas","name":"Akragas","entity_type":"place","description":"Wealthy Greek colony in southwest Sicily, destroyed by Carthage 406 BC.","modern_name":"Agrigento","wikipedia_url":"https://en.wikipedia.org/wiki/Akragas","latitude":37.31,"longitude":13.58,"aliases":["Agrigentum"],"date_start":-580,"date_end":-406,"node_ids":["sicily_his_greeks_versus_carthage_the_struggle_for"]}}"""
 
 
 def parse_json_response(text: str) -> list | None:
@@ -94,20 +73,33 @@ def parse_json_response(text: str) -> list | None:
     text = text.strip()
     if text.startswith('```'):
         text = re.sub(r'^```\w*\n?', '', text)
-        text = re.sub(r'\n?```$', '', text)
+        text = re.sub(r'\n?```\s*$', '', text)
+        text = text.strip()
     try:
         data = json.loads(text)
         if isinstance(data, list):
             return data
     except json.JSONDecodeError:
         pass
-    # Try extracting array from response
+    # Try extracting complete array
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group())
         except json.JSONDecodeError:
             pass
+    # Handle truncated JSON: find last complete object in array
+    if text.startswith('['):
+        last_complete = text.rfind('},')
+        if last_complete > 0:
+            truncated = text[:last_complete + 1] + ']'
+            try:
+                data = json.loads(truncated)
+                if isinstance(data, list):
+                    print(f'  (parsed truncated response: {len(data)} complete entities)')
+                    return data
+            except json.JSONDecodeError:
+                pass
     return None
 
 
@@ -167,20 +159,27 @@ def insert_entities(entities: list, domain_id: str, conn) -> tuple[int, int]:
             ))
             entities_created += 1
 
-        # Insert curriculum links
-        for link in e.get('node_links', []):
-            node_id = link.get('node_id', '')
+        # Insert curriculum links — supports both node_ids (compact) and node_links (verbose)
+        node_ids = e.get('node_ids', [])
+        node_links = e.get('node_links', [])
+        if node_links and not node_ids:
+            node_ids = [l.get('node_id', '') for l in node_links if l.get('node_id')]
+        for node_id in node_ids:
             if not node_id:
                 continue
+            lens_title = ''
+            lens_emphasis = ''
+            for nl in node_links:
+                if nl.get('node_id') == node_id:
+                    lens_title = nl.get('lens_title', '')
+                    lens_emphasis = nl.get('lens_emphasis', '')
+                    break
             try:
                 conn.execute('''
                     INSERT OR IGNORE INTO entity_curriculum_links
                     (entity_id, domain_id, node_id, lens_title, lens_emphasis)
                     VALUES (?,?,?,?,?)
-                ''', (
-                    eid, domain_id, node_id,
-                    link.get('lens_title', ''), link.get('lens_emphasis', ''),
-                ))
+                ''', (eid, domain_id, node_id, lens_title, lens_emphasis))
                 links_created += 1
             except Exception as ex:
                 print(f'  Link skip {eid}→{node_id}: {ex}', flush=True)
@@ -267,15 +266,16 @@ def main():
             continue
 
         print(f'  Calling LLM ({len(prompt)} chars)...', flush=True)
-        model = args.model or 'gemini-2.5-flash'
-        raw = call_llm(prompt, model=model, max_tokens=8192,
-                       response_mime_type='application/json')
+        model = args.model or 'gemini-2.0-flash'
+        raw = call_llm(prompt, model=model, max_tokens=16384)
 
+        print(f'  Response: {len(raw) if raw else 0} chars', flush=True)
         entities = parse_json_response(raw)
         if not entities:
             print(f'  Failed to parse response')
             if raw:
-                print(f'  Raw: {raw[:500]}')
+                print(f'  First 200: {raw[:200]}')
+                print(f'  Last 200: {raw[-200:]}')
             continue
 
         print(f'  Extracted {len(entities)} entities', flush=True)

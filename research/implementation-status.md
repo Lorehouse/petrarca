@@ -1,6 +1,20 @@
 # Knowledge System Implementation Status
 
-**Date**: March 29, 2026 (last updated — sessions 39–40: curriculum viz, review quality, multi-curriculum queue)
+**Date**: March 30, 2026 (last updated — session 41: book removal from library)
+
+## Session 41: Book Removal from Library (March 30, 2026)
+
+### Book archive/remove feature
+- **Swipe-to-remove on mobile**: `Swipeable` from `react-native-gesture-handler` on book rows in Library tab — swipe left reveals rubric-red "Remove" action. Same pattern as ArticleRow feed dismiss.
+- **Hover × on web**: Absolute-positioned remove button appears on hover, with `confirm()` dialog.
+- **Soft-delete via `archived` status**: Books set to `reading_status: 'archived'` are hidden from all Library filter tabs (Reading, All, Finished). Status syncs to server, survives app restart. Data preserved (reversible).
+- **Bug fix**: `archiveBook()` in `book-store.ts` was incorrectly setting `reading_status: 'finished'` instead of `'archived'` — archived books were appearing in the Finished tab.
+- **GestureHandlerRootView**: Added to Library screen (required for `Swipeable` on native).
+- Book-detail screen already had an "Archive" status pill that correctly sets `'archived'` and navigates back.
+
+### Files changed
+- `app/app/(tabs)/library.tsx` — `GestureHandlerRootView` wrapper, `Swipeable` on native, hover × on web, `archived` filtered from all views
+- `app/data/book-store.ts` — `archiveBook()` fixed to set `'archived'`
 
 ## Sessions 39–40: Curriculum Review System + Multi-Curriculum Queue (March 27–29, 2026)
 

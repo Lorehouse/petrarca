@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Ancient Map Prototype</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  /* ── Phone viewport frame ── */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a18;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    font-family: -apple-system, sans-serif;
+    gap: 32px;
+  }
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow: 0 0 0 8px #2a2420, 0 20px 60px rgba(0,0,0,0.5);
+    position: relative;
+    flex-shrink: 0;
+  }
+  /* API panel next to phone */
+  .api-panel {
+    width: 360px;
+    background: #2a2420;
+    border-radius: 12px;
+    padding: 20px;
+    color: #e8e0d4;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 12px;
+    max-height: 852px;
+    overflow-y: auto;
+  }
+  .api-panel h3 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    color: #f7f4ec;
+    font-size: 16px;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .api-panel h4 {
+    font-family: 'DM Sans', sans-serif;
+    color: #8b2500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 16px 0 6px;
+  }
+  .api-panel pre {
+    background: rgba(0,0,0,0.3);
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    color: #b0a898;
+  }
+  .api-panel .highlight { color: #c49520; }
+  .api-btn {
+    display: block;
+    width: 100%;
+    margin: 6px 0;
+    padding: 8px 12px;
+    background: rgba(139, 37, 0, 0.15);
+    border: 1px solid rgba(139, 37, 0, 0.3);
+    color: #e8e0d4;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 4px;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .api-btn:hover { background: rgba(139, 37, 0, 0.3); }
+  #event-log {
+    background: rgba(0,0,0,0.3);
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    line-height: 1.6;
+    max-height: 200px;
+    overflow-y: auto;
+    color: #706860;
+  }
+  #event-log .event-new { color: #4aad6a; }
+  #event-log .event-tap { color: #c49520; }
+  #event-log .event-filter { color: #8b2500; }
+
+  /* ── App styles inside the phone ── */
+  .app {
+    width: 100%;
+    height: 100%;
+    background: #f7f4ec;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .app-header {
+    padding: 52px 16px 0;
+    background: #f7f4ec;
+    flex-shrink: 0;
+  }
+  .app-title {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: #2a2420;
+    margin: 0;
+  }
+  .app-subtitle {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 12px;
+    color: #b0a898;
+    font-style: italic;
+    margin: 3px 0 10px;
+  }
+  .double-rule {
+    border: none;
+    border-top: 2px solid #2a2420;
+    margin: 0;
+  }
+  .double-rule-inner {
+    border-top: 1px solid #2a2420;
+    margin-top: 5px;
+  }
+
+  /* Filter pills */
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-pill {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 4px 12px;
+    border: 1px solid #e4dfd4;
+    background: transparent;
+    color: #6a6458;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .filter-pill.active {
+    border-color: #8b2500;
+    color: #8b2500;
+    background: rgba(139, 37, 0, 0.04);
+  }
+  .filter-pill .pill-count {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    margin-left: 4px;
+    opacity: 0.6;
+  }
+
+  /* Map container */
+  .map-container {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+  /* Parchment filter on tiles only */
+  .leaflet-tile-pane {
+    filter: sepia(0.2) saturate(0.7) brightness(1.02) hue-rotate(-5deg);
+  }
+  .leaflet-control-zoom { display: none !important; }
+  .leaflet-control-attribution {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 7px !important;
+    background: rgba(247, 244, 236, 0.85) !important;
+    color: #b0a898 !important;
+    padding: 2px 6px !important;
+  }
+  .leaflet-control-attribution a { color: #8b2500 !important; }
+
+  /* Custom marker tooltip */
+  .place-tooltip {
+    font-family: 'EB Garamond', Georgia, serif !important;
+    font-size: 11px;
+    font-style: italic;
+    color: #2a2420;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    text-shadow: 0 0 3px #f7f4ec, 0 0 6px #f7f4ec, 0 0 10px #f7f4ec, 0 0 14px #f7f4ec;
+    pointer-events: none !important;
+  }
+  .place-tooltip::before { display: none !important; }
+
+  /* Region label */
+  .region-label-div {
+    font-family: 'Cormorant Garamond', Georgia, serif !important;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(176, 168, 152, 0.45);
+    white-space: nowrap;
+    pointer-events: none !important;
+    text-shadow: 0 0 6px rgba(247, 244, 236, 0.6);
+  }
+
+  /* Map controls (top-right) */
+  .map-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .map-ctrl-group {
+    display: flex;
+    background: rgba(247, 244, 236, 0.92);
+    backdrop-filter: blur(4px);
+    border: 1px solid #e4dfd4;
+    overflow: hidden;
+  }
+  .map-ctrl-btn {
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6a6458;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .map-ctrl-btn + .map-ctrl-btn {
+    border-left: 1px solid #e4dfd4;
+  }
+  .map-ctrl-btn.active {
+    background: #2a2420;
+    color: #f7f4ec;
+  }
+  .map-ctrl-btn:hover:not(.active) {
+    background: rgba(139, 37, 0, 0.05);
+  }
+  .map-ctrl-toggle {
+    padding: 6px 8px;
+    border: none;
+    background: rgba(247, 244, 236, 0.92);
+    backdrop-filter: blur(4px);
+    border: 1px solid #e4dfd4;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6a6458;
+    transition: all 0.15s;
+    text-align: left;
+  }
+  .map-ctrl-toggle.active {
+    color: #8b2500;
+  }
+  .map-ctrl-toggle .toggle-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 1px solid #b0a898;
+    margin-right: 4px;
+    vertical-align: middle;
+    transition: all 0.15s;
+  }
+  .map-ctrl-toggle.active .toggle-dot {
+    background: #8b2500;
+    border-color: #8b2500;
+  }
+
+  /* Legend overlay on map */
+  .map-legend {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(247, 244, 236, 0.9);
+    backdrop-filter: blur(4px);
+    padding: 8px 10px;
+    border: 1px solid #e4dfd4;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid rgba(42,36,32,0.2);
+  }
+  .legend-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6a6458;
+  }
+
+  /* Time slider */
+  .time-section {
+    padding: 10px 16px 6px;
+    flex-shrink: 0;
+    background: #f7f4ec;
+    border-top: 1px solid #e4dfd4;
+  }
+  .time-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .time-label {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: #8b2500;
+  }
+  .time-label::before { content: '✦ '; }
+  .time-current-value {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 13px;
+    color: #2a2420;
+  }
+  .time-era-value {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 11px;
+    color: #6a6458;
+    font-style: italic;
+  }
+  .time-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .time-bound {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    color: #b0a898;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    background: #e4dfd4;
+    outline: none;
+    border-radius: 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #8b2500;
+    cursor: grab;
+    border: 2px solid #f7f4ec;
+    box-shadow: 0 1px 4px rgba(42,36,32,0.2);
+  }
+
+  /* Entity sheet (bottom panel) */
+  .entity-sheet {
+    background: #f7f4ec;
+    border-top: 2px solid #2a2420;
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    max-height: 0;
+    padding: 0 16px;
+  }
+  .entity-sheet.open {
+    max-height: 280px;
+    padding: 12px 16px 20px;
+  }
+  .entity-sheet-rule {
+    border-top: 1px solid #2a2420;
+    margin-bottom: 10px;
+    margin-top: 5px;
+  }
+  .es-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .es-type {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #b0a898;
+  }
+  .es-name {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #2a2420;
+    margin: 2px 0 0;
+  }
+  .es-modern {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 12px;
+    color: #6a6458;
+    font-style: italic;
+  }
+  .es-right {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .es-dates {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 14px;
+    color: #2a2420;
+    font-weight: 500;
+  }
+  .es-knowledge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin-top: 4px;
+  }
+  .es-knowledge.anchored { background: rgba(42,122,74,0.08); color: #2a6a3a; }
+  .es-knowledge.encountered { background: rgba(146,96,14,0.08); color: #92600e; }
+  .es-knowledge.unknown { background: rgba(176,168,152,0.1); color: #b0a898; }
+  .es-desc {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 13px;
+    color: #333333;
+    line-height: 1.5;
+    margin: 8px 0;
+  }
+  .es-meta {
+    display: flex;
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .es-meta-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #b0a898;
+  }
+  .es-meta-value {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 13px;
+    color: #2a2420;
+    font-weight: 500;
+  }
+  .es-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .es-action {
+    flex: 1;
+    padding: 8px;
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 12px;
+    border: 1.5px solid;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 3px;
+    text-align: center;
+    transition: background 0.15s;
+  }
+  .es-action.action-red { border-color: #e0c0b8; color: #8b2500; }
+  .es-action.action-red:hover { background: rgba(139,37,0,0.04); }
+  .es-action.action-gold { border-color: #e0d8c0; color: #92600e; }
+  .es-action.action-gold:hover { background: rgba(146,96,14,0.04); }
+  .es-action.action-green { border-color: #c0dcc8; color: #2a6a3a; }
+  .es-action.action-green:hover { background: rgba(42,122,74,0.04); }
+  .es-close {
+    background: none;
+    border: none;
+    color: #b0a898;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  /* Responsive: on narrow screens, stack vertically */
+  @media (max-width: 820px) {
+    body { flex-direction: column; align-items: center; }
+    .api-panel { width: 393px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Phone viewport -->
+<div class="phone-frame">
+  <div class="app" id="app">
+    <div class="app-header">
+      <h1 class="app-title">Mediterranean Atlas</h1>
+      <p class="app-subtitle">Places of the Ancient World</p>
+      <hr class="double-rule">
+      <div class="double-rule-inner"></div>
+    </div>
+
+    <div class="filter-row" id="filter-row"></div>
+
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="map-controls">
+        <div class="map-ctrl-group">
+          <button class="map-ctrl-btn active" data-layer="terrain" onclick="ancientMap.setTileLayer('terrain')">Terrain</button>
+          <button class="map-ctrl-btn" data-layer="clean" onclick="ancientMap.setTileLayer('clean')">Clean</button>
+          <button class="map-ctrl-btn" data-layer="satellite" onclick="ancientMap.setTileLayer('satellite')">Satellite</button>
+        </div>
+        <button class="map-ctrl-toggle active" id="toggle-labels" onclick="ancientMap.toggleLabels()">
+          <span class="toggle-dot"></span>Ancient names
+        </button>
+        <button class="map-ctrl-toggle active" id="toggle-routes" onclick="ancientMap.toggleRoutes()">
+          <span class="toggle-dot"></span>Routes
+        </button>
+      </div>
+      <div class="map-legend">
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#b0a898;"></div>
+          <span class="legend-text">Unknown</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#92600e;"></div>
+          <span class="legend-text">Encountered</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#2a7a4a;"></div>
+          <span class="legend-text">Anchored</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="time-section">
+      <div class="time-header">
+        <span class="time-label">Era</span>
+        <span>
+          <span class="time-current-value" id="time-value">All Eras</span>
+          <span class="time-era-value" id="time-era"></span>
+        </span>
+      </div>
+      <div class="time-slider-row">
+        <span class="time-bound">800 BC</span>
+        <input type="range" id="time-slider" min="-800" max="-146" value="-800" step="10">
+        <span class="time-bound">146 BC</span>
+      </div>
+    </div>
+
+    <div class="entity-sheet" id="entity-sheet">
+      <div class="entity-sheet-rule"></div>
+      <div class="es-header">
+        <div>
+          <div class="es-type" id="es-type"></div>
+          <div class="es-name" id="es-name"></div>
+          <div class="es-modern" id="es-modern"></div>
+        </div>
+        <div class="es-right">
+          <div class="es-dates" id="es-dates"></div>
+          <div class="es-knowledge" id="es-knowledge"></div>
+          <button class="es-close" onclick="ancientMap.selectEntity(null)">×</button>
+        </div>
+      </div>
+      <div class="es-desc" id="es-desc"></div>
+      <div class="es-meta" id="es-meta"></div>
+      <div class="es-actions">
+        <button class="es-action action-red" onclick="ancientMap._fireCallback('action',{entityId:ancientMap._selectedId,action:'unknown'})">I don't know this</button>
+        <button class="es-action action-gold" onclick="ancientMap._fireCallback('action',{entityId:ancientMap._selectedId,action:'interested'})">Tell me more</button>
+        <button class="es-action action-green" onclick="ancientMap._fireCallback('action',{entityId:ancientMap._selectedId,action:'got_it'})">Got it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- API control panel -->
+<div class="api-panel">
+  <h3>AncientMap Component API</h3>
+
+  <h4>Configuration</h4>
+  <pre>{
+  <span class="highlight">entities</span>: EntityDetails[],
+  <span class="highlight">filters</span>?: FilterConfig[],
+  <span class="highlight">center</span>?: [lat, lon],
+  <span class="highlight">zoom</span>?: number,
+  <span class="highlight">selectedEntityId</span>?: string,
+  <span class="highlight">highlightEntityIds</span>?: string[],
+  <span class="highlight">showTimeline</span>?: boolean,
+  <span class="highlight">showRoutes</span>?: boolean,
+  <span class="highlight">onEntitySelect</span>?: (entity) => void,
+  <span class="highlight">onEntityAction</span>?: (id, action) => void,
+}</pre>
+
+  <h4>Try API Methods</h4>
+  <button class="api-btn" onclick="ancientMap.focusEntity('syracuse')">
+    focusEntity('syracuse')
+  </button>
+  <button class="api-btn" onclick="ancientMap.focusEntity('athens')">
+    focusEntity('athens')
+  </button>
+  <button class="api-btn" onclick="ancientMap.focusEntity('carthage')">
+    focusEntity('carthage')
+  </button>
+  <button class="api-btn" onclick="ancientMap.setFilter('greek_sicily')">
+    setFilter('greek_sicily')
+  </button>
+  <button class="api-btn" onclick="ancientMap.setFilter('mainland_greece')">
+    setFilter('mainland_greece')
+  </button>
+  <button class="api-btn" onclick="ancientMap.setFilter('phoenician')">
+    setFilter('phoenician')
+  </button>
+  <button class="api-btn" onclick="ancientMap.setFilter(null)">
+    setFilter(null) — show all
+  </button>
+  <button class="api-btn" onclick="ancientMap.highlightEntities(['syracuse','corinth'])">
+    highlightEntities(['syracuse','corinth'])
+  </button>
+  <button class="api-btn" onclick="ancientMap.highlightEntities([])">
+    highlightEntities([]) — clear highlights
+  </button>
+  <button class="api-btn" onclick="ancientMap.fitAll()">
+    fitAll() — zoom to fit all visible
+  </button>
+  <button class="api-btn" onclick="ancientMap.updateKnowledge('akragas','anchored')">
+    updateKnowledge('akragas', 'anchored')
+  </button>
+  <button class="api-btn" onclick="ancientMap.updateKnowledge('akragas','unknown')">
+    updateKnowledge('akragas', 'unknown') — reset
+  </button>
+  <button class="api-btn" onclick="ancientMap.setTileLayer('terrain')">
+    setTileLayer('terrain')
+  </button>
+  <button class="api-btn" onclick="ancientMap.setTileLayer('clean')">
+    setTileLayer('clean') — no modern labels
+  </button>
+  <button class="api-btn" onclick="ancientMap.setTileLayer('satellite')">
+    setTileLayer('satellite')
+  </button>
+  <button class="api-btn" onclick="ancientMap.toggleLabels()">
+    toggleLabels() — ancient names on/off
+  </button>
+  <button class="api-btn" onclick="ancientMap.toggleRoutes()">
+    toggleRoutes() — routes on/off
+  </button>
+
+  <h4>Event Log</h4>
+  <div id="event-log"><em style="color:#706860;">Events will appear here...</em></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════════
+// AncientMap — Reusable Leaflet map component for Petrarca
+// Designed to be embedded in a WebView or used standalone.
+// ════════════════════════════════════════════════════════════════════════════════
+
+class AncientMap {
+  constructor(containerId, config = {}) {
+    this._containerId = containerId;
+    this._entities = config.entities || [];
+    this._filters = config.filters || [];
+    this._callbacks = {
+      onEntitySelect: config.onEntitySelect || null,
+      onEntityAction: config.onEntityAction || null,
+    };
+    this._showTimeline = config.showTimeline !== false;
+    this._showRoutes = config.showRoutes !== false;
+
+    this._markers = new Map();       // entityId → { marker, label }
+    this._routeLines = [];
+    this._regionLabels = [];
+    this._selectedId = null;
+    this._highlightedIds = new Set();
+    this._activeFilter = null;
+    this._timeFilter = null;          // year (negative = BC)
+
+    this._stateColors = {
+      unknown:     '#b0a898',
+      encountered: '#92600e',
+      mentioned:   '#92600e',
+      engaged:     '#92600e',
+      anchored:    '#2a7a4a',
+    };
+
+    this._init(config);
+  }
+
+  // ── Initialization ──────────────────────────────────────────────────────────
+
+  _init(config) {
+    const center = config.center || [37.5, 17.0];
+    const zoom = config.zoom || 6;
+
+    this._map = L.map(this._containerId, {
+      center, zoom,
+      minZoom: 5,
+      maxZoom: 11,
+      zoomControl: false,
+      attributionControl: true,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+    });
+
+    // Tile layer definitions
+    this._tileLayers = {
+      terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom: 17,
+      }),
+      clean: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom: 18,
+        subdomains: 'abcd',
+      }),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri',
+        maxZoom: 18,
+      }),
+    };
+
+    // Sepia filter values per layer (terrain already has warm tones, satellite needs less)
+    this._tileFilters = {
+      terrain:   'sepia(0.2) saturate(0.7) brightness(1.02) hue-rotate(-5deg)',
+      clean:     'sepia(0.15) saturate(0.9) brightness(1.0) contrast(1.15)',
+      satellite: 'sepia(0.15) saturate(0.8) brightness(1.0)',
+    };
+
+    this._activeTileLayer = 'terrain';
+    this._tileLayers.terrain.addTo(this._map);
+    this._labelsVisible = true;
+    this._routesVisible = this._showRoutes;
+
+    this._addRegionLabels();
+    this._addEntities();
+    if (this._showRoutes) this._addRoutes();
+    this._buildFilterPills();
+
+    // If initial selection requested
+    if (config.selectedEntityId) {
+      this.selectEntity(config.selectedEntityId);
+    }
+    if (config.highlightEntityIds) {
+      this.highlightEntities(config.highlightEntityIds);
+    }
+  }
+
+  // ── Entity management ───────────────────────────────────────────────────────
+
+  _addEntities() {
+    this._entities.forEach(entity => {
+      if (entity.latitude == null || entity.longitude == null) return;
+      this._createMarker(entity);
+    });
+  }
+
+  _createMarker(entity) {
+    const knowledge = this._getKnowledge(entity);
+    const color = this._stateColors[knowledge] || this._stateColors.unknown;
+    const isAnchored = knowledge === 'anchored';
+    const size = isAnchored ? 14 : 10;
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="map-marker-dot" data-entity="${entity.entity_id}" style="
+        width: ${size}px; height: ${size}px;
+        border-radius: 50%;
+        background: ${color};
+        border: 2px solid rgba(247,244,236,0.9);
+        box-shadow: 0 1px 4px rgba(42,36,32,0.3);
+        transition: all 0.2s ease;
+        cursor: pointer;
+      "></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+
+    const marker = L.marker([entity.latitude, entity.longitude], { icon })
+      .addTo(this._map);
+
+    const label = marker.bindTooltip(entity.name, {
+      permanent: true,
+      direction: 'top',
+      offset: [0, -8],
+      className: 'place-tooltip',
+    });
+
+    marker.on('click', () => this.selectEntity(entity.entity_id));
+
+    this._markers.set(entity.entity_id, { marker, entity });
+  }
+
+  _getKnowledge(entity) {
+    if (entity._overrideKnowledge) return entity._overrideKnowledge;
+    if (!entity.curriculum_links?.length) return 'unknown';
+    const rank = { anchored: 3, engaged: 2, mentioned: 1, unknown: 0 };
+    return entity.curriculum_links.reduce((best, link) => {
+      const k = link.knowledge || 'unknown';
+      return (rank[k] || 0) > (rank[best] || 0) ? k : best;
+    }, 'unknown');
+  }
+
+  _refreshMarker(entityId) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    const { marker, entity } = data;
+    const knowledge = this._getKnowledge(entity);
+    const color = this._stateColors[knowledge] || this._stateColors.unknown;
+    const isAnchored = knowledge === 'anchored';
+    const size = isAnchored ? 14 : 10;
+    const isSelected = entityId === this._selectedId;
+    const isHighlighted = this._highlightedIds.has(entityId);
+
+    const dot = marker.getElement()?.querySelector('.map-marker-dot');
+    if (dot) {
+      dot.style.width = size + 'px';
+      dot.style.height = size + 'px';
+      dot.style.background = color;
+      dot.style.boxShadow = isSelected
+        ? `0 0 0 3px rgba(139,37,0,0.35), 0 2px 8px rgba(42,36,32,0.3)`
+        : isHighlighted
+        ? `0 0 0 3px rgba(196,149,32,0.3), 0 1px 4px rgba(42,36,32,0.3)`
+        : `0 1px 4px rgba(42,36,32,0.3)`;
+    }
+  }
+
+  // ── Region labels ───────────────────────────────────────────────────────────
+
+  _addRegionLabels() {
+    const regions = [
+      { name: 'SICILIA', lat: 37.5, lon: 14.15, size: 13, rotation: -3 },
+      { name: 'HELLAS', lat: 38.8, lon: 22.8, size: 12, rotation: 0 },
+      { name: 'MAGNA GRAECIA', lat: 39.8, lon: 16.3, size: 10, rotation: -12 },
+      { name: 'AFRICA', lat: 35.2, lon: 12.5, size: 11, rotation: 0 },
+      { name: 'ASIA MINOR', lat: 39.0, lon: 29.0, size: 10, rotation: 0 },
+    ];
+
+    regions.forEach(r => {
+      const label = L.marker([r.lat, r.lon], {
+        icon: L.divIcon({
+          className: 'region-label-div',
+          html: `<span style="font-size:${r.size}px;transform:rotate(${r.rotation}deg);display:inline-block;">${r.name}</span>`,
+          iconSize: [200, 20],
+          iconAnchor: [100, 10],
+        }),
+        interactive: false,
+      }).addTo(this._map);
+      this._regionLabels.push(label);
+    });
+  }
+
+  // ── Routes / connections ────────────────────────────────────────────────────
+
+  _addRoutes() {
+    const routes = [
+      {
+        id: 'corinth_syracuse',
+        from: 'corinth', to: 'syracuse',
+        label: 'Colonization',
+        waypoints: [[37.9386, 22.9322], [37.5, 20.0], [37.2, 17.5], [37.0755, 15.2866]],
+      },
+      {
+        id: 'gela_akragas',
+        from: 'gela', to: 'akragas',
+        label: '',
+        waypoints: [[37.0666, 14.2498], [37.3111, 13.5765]],
+      },
+      {
+        id: 'carthage_motya',
+        from: 'carthage', to: 'motya',
+        label: 'Trade',
+        waypoints: [[36.8528, 10.3233], [37.3, 11.5], [37.8686, 12.4669]],
+      },
+    ];
+
+    routes.forEach(route => {
+      const line = L.polyline(route.waypoints, {
+        color: '#8b2500',
+        weight: 1.2,
+        dashArray: '6,5',
+        opacity: 0.3,
+      }).addTo(this._map);
+      this._routeLines.push({ line, route });
+    });
+  }
+
+  // ── Filter system ───────────────────────────────────────────────────────────
+
+  _buildFilterPills() {
+    const row = document.getElementById('filter-row');
+    if (!row) return;
+    row.innerHTML = '';
+
+    const allCount = this._entities.filter(e => e.latitude != null).length;
+    const allPill = this._createPill('All Places', allCount, null);
+    row.appendChild(allPill);
+
+    this._filters.forEach(f => {
+      const count = this._entities.filter(e =>
+        e.latitude != null && f.match(e)
+      ).length;
+      const pill = this._createPill(f.label, count, f.id);
+      row.appendChild(pill);
+    });
+  }
+
+  _createPill(label, count, filterId) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-pill' + (this._activeFilter === filterId ? ' active' : '');
+    btn.innerHTML = `${label}<span class="pill-count">${count}</span>`;
+    btn.dataset.filterId = filterId || '';
+    btn.onclick = () => this.setFilter(filterId);
+    return btn;
+  }
+
+  setFilter(filterId) {
+    this._activeFilter = filterId;
+    const filterDef = this._filters.find(f => f.id === filterId);
+
+    this._markers.forEach((data, id) => {
+      const { marker, entity } = data;
+      const visible = !filterDef || filterDef.match(entity);
+      const timeVisible = this._isTimeVisible(entity);
+      const show = visible && timeVisible;
+
+      if (show) {
+        if (!this._map.hasLayer(marker)) marker.addTo(this._map);
+      } else {
+        if (this._map.hasLayer(marker)) this._map.removeLayer(marker);
+      }
+    });
+
+    // Update pills
+    document.querySelectorAll('.filter-pill').forEach(p => {
+      p.classList.toggle('active', (p.dataset.filterId || null) === (filterId || null));
+    });
+
+    // Fit to visible markers
+    this.fitAll(true);
+
+    this._fireCallback('filter', { filterId });
+  }
+
+  // ── Time filtering ──────────────────────────────────────────────────────────
+
+  _isTimeVisible(entity) {
+    if (!this._timeFilter) return true;
+    const start = entity.date_start;
+    const end = entity.date_end;
+    if (start == null) return true; // no date info → always show
+    // Show if the entity existed at _timeFilter year
+    const threshold = this._timeFilter;
+    if (start > threshold) return false; // founded after filter year
+    if (end != null && end < threshold) return false; // destroyed before filter year
+    return true;
+  }
+
+  setTimeFilter(year) {
+    this._timeFilter = year;
+    // Re-apply current spatial filter too
+    this.setFilter(this._activeFilter);
+  }
+
+  // ── Entity selection ────────────────────────────────────────────────────────
+
+  selectEntity(entityId) {
+    const prevId = this._selectedId;
+    this._selectedId = entityId;
+
+    // Refresh previous marker
+    if (prevId) this._refreshMarker(prevId);
+    // Refresh new marker
+    if (entityId) this._refreshMarker(entityId);
+
+    // Update entity sheet
+    const sheet = document.getElementById('entity-sheet');
+    if (!entityId) {
+      sheet.classList.remove('open');
+      this._fireCallback('select', null);
+      return;
+    }
+
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    const { entity } = data;
+    const knowledge = this._getKnowledge(entity);
+
+    document.getElementById('es-type').textContent = entity.entity_type || 'Place';
+    document.getElementById('es-name').textContent = entity.name;
+    document.getElementById('es-modern').textContent = entity.modern_name
+      ? `Modern ${entity.modern_name}` : '';
+    document.getElementById('es-dates').textContent = entity.dates || '';
+
+    const kBadge = document.getElementById('es-knowledge');
+    kBadge.textContent = knowledge;
+    kBadge.className = 'es-knowledge ' + knowledge;
+    kBadge.innerHTML = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${this._stateColors[knowledge]};"></span> ${knowledge}`;
+
+    document.getElementById('es-desc').textContent = entity.description || '';
+
+    // Meta row
+    const meta = document.getElementById('es-meta');
+    meta.innerHTML = '';
+    if (entity.dates) {
+      meta.innerHTML += `<div><div class="es-meta-label">Dates</div><div class="es-meta-value">${entity.dates}</div></div>`;
+    }
+    if (entity.curriculum_links?.length) {
+      meta.innerHTML += `<div><div class="es-meta-label">Curriculum</div><div class="es-meta-value">${entity.curriculum_links.length} nodes</div></div>`;
+    }
+    if (entity.nexus_score) {
+      meta.innerHTML += `<div><div class="es-meta-label">Nexus</div><div class="es-meta-value">${entity.nexus_score.toFixed(1)}</div></div>`;
+    }
+
+    sheet.classList.add('open');
+    this._fireCallback('select', entity);
+  }
+
+  focusEntity(entityId) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    this._map.flyTo(
+      [data.entity.latitude, data.entity.longitude],
+      9,
+      { duration: 0.8 }
+    );
+    this.selectEntity(entityId);
+  }
+
+  // ── Highlight entities (e.g., from current review session) ──────────────────
+
+  highlightEntities(entityIds) {
+    this._highlightedIds = new Set(entityIds);
+    this._markers.forEach((_, id) => this._refreshMarker(id));
+    this._fireCallback('highlight', { entityIds });
+  }
+
+  // ── Update knowledge state (for live transitions) ───────────────────────────
+
+  updateKnowledge(entityId, newState) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    data.entity._overrideKnowledge = newState;
+    this._refreshMarker(entityId);
+    // Refresh entity sheet if currently shown
+    if (this._selectedId === entityId) this.selectEntity(entityId);
+    this._buildFilterPills();
+    this._fireCallback('knowledge', { entityId, state: newState });
+  }
+
+  // ── Fit to visible markers ──────────────────────────────────────────────────
+
+  fitAll(animated = true) {
+    const bounds = [];
+    this._markers.forEach(({ marker }) => {
+      if (this._map.hasLayer(marker)) {
+        bounds.push(marker.getLatLng());
+      }
+    });
+    if (bounds.length) {
+      this._map.flyToBounds(L.latLngBounds(bounds).pad(0.15), {
+        duration: animated ? 0.6 : 0,
+        maxZoom: 9,
+      });
+    }
+  }
+
+  // ── Callbacks ───────────────────────────────────────────────────────────────
+
+  _fireCallback(type, data) {
+    // For WebView bridge: window.ReactNativeWebView?.postMessage(...)
+    const event = { type, data, timestamp: Date.now() };
+
+    if (type === 'select' && this._callbacks.onEntitySelect) {
+      this._callbacks.onEntitySelect(data);
+    }
+    if (type === 'action' && this._callbacks.onEntityAction) {
+      this._callbacks.onEntityAction(data.entityId, data.action);
+    }
+
+    // Log to the demo event panel
+    logEvent(event);
+  }
+
+  // ── Tile layer switching ─────────────────────────────────────────────────────
+
+  setTileLayer(layerId) {
+    if (!this._tileLayers[layerId] || layerId === this._activeTileLayer) return;
+
+    // Remove current
+    this._map.removeLayer(this._tileLayers[this._activeTileLayer]);
+    // Add new
+    this._tileLayers[layerId].addTo(this._map);
+    this._activeTileLayer = layerId;
+
+    // Update CSS filter for this layer
+    const tilePane = this._map.getPane('tilePane');
+    if (tilePane) {
+      tilePane.style.filter = this._tileFilters[layerId] || '';
+    }
+
+    // Update tooltip text shadow for satellite (needs lighter halo)
+    document.querySelectorAll('.place-tooltip').forEach(el => {
+      if (layerId === 'satellite') {
+        el.style.color = '#f7f4ec';
+        el.style.textShadow = '0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.9)';
+      } else {
+        el.style.color = '#2a2420';
+        el.style.textShadow = '0 0 3px #f7f4ec, 0 0 6px #f7f4ec, 0 0 10px #f7f4ec, 0 0 14px #f7f4ec';
+      }
+    });
+
+    // Update region label visibility for satellite
+    document.querySelectorAll('.region-label-div').forEach(el => {
+      el.style.color = layerId === 'satellite'
+        ? 'rgba(247,244,236,0.35)'
+        : 'rgba(176,168,152,0.45)';
+      el.style.textShadow = layerId === 'satellite'
+        ? '0 0 6px rgba(0,0,0,0.5)'
+        : '0 0 6px rgba(247,244,236,0.6)';
+    });
+
+    // Update button states
+    document.querySelectorAll('.map-ctrl-btn[data-layer]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.layer === layerId);
+    });
+
+    this._fireCallback('layer', { layerId });
+  }
+
+  // ── Label toggle ────────────────────────────────────────────────────────────
+
+  toggleLabels() {
+    this._labelsVisible = !this._labelsVisible;
+    this._markers.forEach(({ marker }) => {
+      const tooltip = marker.getTooltip();
+      if (tooltip) {
+        if (this._labelsVisible) {
+          marker.openTooltip();
+        } else {
+          marker.closeTooltip();
+        }
+      }
+    });
+
+    // Toggle region labels
+    this._regionLabels.forEach(label => {
+      const el = label.getElement();
+      if (el) el.style.display = this._labelsVisible ? '' : 'none';
+    });
+
+    document.getElementById('toggle-labels')?.classList.toggle('active', this._labelsVisible);
+  }
+
+  // ── Route toggle ────────────────────────────────────────────────────────────
+
+  toggleRoutes() {
+    this._routesVisible = !this._routesVisible;
+    this._routeLines.forEach(({ line }) => {
+      if (this._routesVisible) {
+        if (!this._map.hasLayer(line)) line.addTo(this._map);
+      } else {
+        if (this._map.hasLayer(line)) this._map.removeLayer(line);
+      }
+    });
+    document.getElementById('toggle-routes')?.classList.toggle('active', this._routesVisible);
+  }
+
+  // ── Destroy ─────────────────────────────────────────────────────────────────
+
+  destroy() {
+    this._map.remove();
+    this._markers.clear();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Demo data & initialization
+// ════════════════════════════════════════════════════════════════════════════════
+
+const ENTITIES = [
+  {
+    entity_id: "syracuse", name: "Syracuse", entity_type: "place",
+    modern_name: "Siracusa", latitude: 37.0755, longitude: 15.2866,
+    dates: "734 BC–present", date_start: -734, date_end: null,
+    description: "Greatest Greek colony in Sicily, founded by Corinthians. Under Dionysius I it became the most powerful city in the western Mediterranean.",
+    nexus_score: 8.2, aliases: ["Syrakousai"],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n1", lens_title: "Foundation", lens_emphasis: "", knowledge: "anchored" },
+      { domain_id: "sicily", node_id: "n2", lens_title: "Tyrants", lens_emphasis: "", knowledge: "engaged" },
+    ],
+  },
+  {
+    entity_id: "akragas", name: "Akragas", entity_type: "place",
+    modern_name: "Agrigento", latitude: 37.3111, longitude: 13.5765,
+    dates: "~580–406 BC", date_start: -580, date_end: -406,
+    description: "One of the wealthiest Greek colonies in Sicily. Famous for its massive temples — the Valley of the Temples still stands today. Destroyed by Carthage in 406 BC.",
+    nexus_score: 5.1, aliases: ["Agrigentum"],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n3", lens_title: "Colony", lens_emphasis: "", knowledge: "unknown" },
+    ],
+  },
+  {
+    entity_id: "himera", name: "Himera", entity_type: "place",
+    modern_name: "Termini Imerese", latitude: 37.9725, longitude: 13.6942,
+    dates: "648–409 BC", date_start: -648, date_end: -409,
+    description: "Site of a pivotal Greek victory over Carthage in 480 BC, traditionally dated to the same day as the Battle of Salamis.",
+    nexus_score: 4.3, aliases: [],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n4", lens_title: "Battles", lens_emphasis: "", knowledge: "mentioned" },
+    ],
+  },
+  {
+    entity_id: "naxos", name: "Naxos", entity_type: "place",
+    modern_name: "Giardini Naxos", latitude: 37.8231, longitude: 15.2672,
+    dates: "734 BC–", date_start: -734, date_end: null,
+    description: "First Greek colony on Sicily, founded by Chalcidians from Euboea.",
+    nexus_score: 3.8, aliases: [],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n5", lens_title: "First Colony", lens_emphasis: "", knowledge: "mentioned" },
+    ],
+  },
+  {
+    entity_id: "corinth", name: "Corinth", entity_type: "place",
+    modern_name: "Korinthos", latitude: 37.9386, longitude: 22.9322,
+    dates: "~6000 BC–", date_start: -6000, date_end: null,
+    description: "Major Greek city-state and commercial hub. Mother city of Syracuse — sent colonists to Sicily in 734 BC.",
+    nexus_score: 6.5, aliases: ["Korinthos"],
+    region: "mainland_greece",
+    curriculum_links: [
+      { domain_id: "greece", node_id: "n6", lens_title: "Colonizer", lens_emphasis: "", knowledge: "anchored" },
+    ],
+  },
+  {
+    entity_id: "athens", name: "Athens", entity_type: "place",
+    modern_name: "Athens", latitude: 37.9838, longitude: 23.7275,
+    dates: "~3000 BC–", date_start: -3000, date_end: null,
+    description: "Leading Greek city-state. Launched the catastrophic Sicilian Expedition in 415 BC — a turning point in the Peloponnesian War.",
+    nexus_score: 9.1, aliases: ["Athenai"],
+    region: "mainland_greece",
+    curriculum_links: [
+      { domain_id: "greece", node_id: "n7", lens_title: "Democracy", lens_emphasis: "", knowledge: "anchored" },
+      { domain_id: "sicily", node_id: "n8", lens_title: "Sicilian Expedition", lens_emphasis: "", knowledge: "engaged" },
+    ],
+  },
+  {
+    entity_id: "carthage", name: "Carthage", entity_type: "place",
+    modern_name: "near Tunis", latitude: 36.8528, longitude: 10.3233,
+    dates: "814–146 BC", date_start: -814, date_end: -146,
+    description: "Phoenician city-state and major Mediterranean power. Waged repeated wars against Greek Sicily before falling to Rome in 146 BC.",
+    nexus_score: 7.8, aliases: ["Qart-Hadasht"],
+    region: "phoenician",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n9", lens_title: "Rival Power", lens_emphasis: "", knowledge: "mentioned" },
+    ],
+  },
+  {
+    entity_id: "selinunte", name: "Selinunte", entity_type: "place",
+    modern_name: "Marinella di Selinunte", latitude: 37.5847, longitude: 12.8253,
+    dates: "628–250 BC", date_start: -628, date_end: -250,
+    description: "Westernmost Greek colony on Sicily, strategically exposed to Carthaginian territory. Destroyed in 409 BC.",
+    nexus_score: 3.5, aliases: ["Selinus"],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n10", lens_title: "Western Frontier", lens_emphasis: "", knowledge: "unknown" },
+    ],
+  },
+  {
+    entity_id: "gela", name: "Gela", entity_type: "place",
+    modern_name: "Gela", latitude: 37.0666, longitude: 14.2498,
+    dates: "688 BC–", date_start: -688, date_end: null,
+    description: "Cretan-Rhodian colony on Sicily's south coast. Mother city of Akragas. Home of the tyrant Gelon before he seized Syracuse.",
+    nexus_score: 4.0, aliases: [],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n11", lens_title: "Colony", lens_emphasis: "", knowledge: "mentioned" },
+    ],
+  },
+  {
+    entity_id: "sparta", name: "Sparta", entity_type: "place",
+    modern_name: "Sparti", latitude: 37.0739, longitude: 22.4297,
+    dates: "~900 BC–", date_start: -900, date_end: null,
+    description: "Militaristic Greek city-state, rival of Athens. Allied with Syracuse during the Sicilian Expedition.",
+    nexus_score: 6.0, aliases: ["Lakedaimon"],
+    region: "mainland_greece",
+    curriculum_links: [
+      { domain_id: "greece", node_id: "n12", lens_title: "Military", lens_emphasis: "", knowledge: "anchored" },
+    ],
+  },
+  {
+    entity_id: "motya", name: "Motya", entity_type: "place",
+    modern_name: "San Pantaleo island", latitude: 37.8686, longitude: 12.4669,
+    dates: "~800–397 BC", date_start: -800, date_end: -397,
+    description: "Phoenician island fortress off western Sicily. Destroyed by Dionysius I of Syracuse in 397 BC.",
+    nexus_score: 3.2, aliases: ["Mozia"],
+    region: "phoenician",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n13", lens_title: "Phoenician", lens_emphasis: "", knowledge: "unknown" },
+    ],
+  },
+  {
+    entity_id: "messina", name: "Messina", entity_type: "place",
+    modern_name: "Messina", latitude: 38.1938, longitude: 15.5540,
+    dates: "~730 BC–", date_start: -730, date_end: null,
+    description: "Greek colony (originally Zancle, later Messana) controlling the strait between Sicily and Italy.",
+    nexus_score: 3.9, aliases: ["Zancle", "Messana"],
+    region: "greek_sicily",
+    curriculum_links: [
+      { domain_id: "sicily", node_id: "n14", lens_title: "Strait", lens_emphasis: "", knowledge: "mentioned" },
+    ],
+  },
+];
+
+const FILTERS = [
+  {
+    id: 'greek_sicily',
+    label: 'Greek Sicily',
+    match: (e) => e.region === 'greek_sicily',
+  },
+  {
+    id: 'mainland_greece',
+    label: 'Mainland Greece',
+    match: (e) => e.region === 'mainland_greece',
+  },
+  {
+    id: 'phoenician',
+    label: 'Phoenician',
+    match: (e) => e.region === 'phoenician',
+  },
+];
+
+const ERAS = [
+  { start: -800, end: -650, name: 'Early Colonization' },
+  { start: -650, end: -500, name: 'Age of Colonization' },
+  { start: -500, end: -400, name: 'Age of Tyrants' },
+  { start: -400, end: -264, name: 'Hellenistic Struggles' },
+  { start: -264, end: -146, name: 'Punic Wars' },
+];
+
+// ── Initialize ────────────────────────────────────────────────────────────────
+
+const ancientMap = new AncientMap('map', {
+  entities: ENTITIES,
+  filters: FILTERS,
+  center: [37.5, 17.0],
+  zoom: 6,
+  showTimeline: true,
+  showRoutes: true,
+  onEntitySelect: (entity) => {
+    // In real app: open EntitySheet modal
+  },
+  onEntityAction: (entityId, action) => {
+    // In real app: call recordEntityTap(entityId, action)
+  },
+});
+
+// ── Time slider wiring ────────────────────────────────────────────────────────
+
+const slider = document.getElementById('time-slider');
+const timeValue = document.getElementById('time-value');
+const timeEra = document.getElementById('time-era');
+
+slider.addEventListener('input', () => {
+  const year = parseInt(slider.value);
+  if (year <= -795) {
+    // Far left = "All Eras" (no filter)
+    timeValue.textContent = 'All Eras';
+    timeEra.textContent = '';
+    ancientMap.setTimeFilter(null);
+  } else {
+    timeValue.textContent = `~${Math.abs(year)} BC`;
+    const era = ERAS.find(e => year >= e.start && year < e.end);
+    timeEra.textContent = era ? ` · ${era.name}` : '';
+    ancientMap.setTimeFilter(year);
+  }
+});
+
+// ── Event log for demo ────────────────────────────────────────────────────────
+
+function logEvent(event) {
+  const log = document.getElementById('event-log');
+  if (!log) return;
+  const cls = {
+    select: 'event-tap', action: 'event-tap',
+    filter: 'event-filter', highlight: 'event-new',
+    knowledge: 'event-new',
+  }[event.type] || '';
+
+  const text = event.type === 'select'
+    ? `tap → ${event.data?.name || 'deselected'}`
+    : event.type === 'action'
+    ? `action → ${event.data?.entityId}: ${event.data?.action}`
+    : event.type === 'filter'
+    ? `filter → ${event.data?.filterId || 'all'}`
+    : event.type === 'highlight'
+    ? `highlight → [${event.data?.entityIds?.join(', ') || ''}]`
+    : event.type === 'knowledge'
+    ? `knowledge → ${event.data?.entityId}: ${event.data?.state}`
+    : JSON.stringify(event);
+
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = `${new Date(event.timestamp).toLocaleTimeString()} ${text}`;
+  log.insertBefore(line, log.firstChild);
+
+  // Trim old entries
+  while (log.children.length > 30) log.removeChild(log.lastChild);
+}
+</script>
+</body>
+</html>

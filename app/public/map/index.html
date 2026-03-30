@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Crimson+Pro:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #f7f4ec;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    font-family: 'EB Garamond', Georgia, serif;
+    color: #2a2420;
+  }
+
+  /* ── Filter pills ── */
+  .filter-row {
+    display: none; /* hidden until filters provided */
+    gap: 6px;
+    padding: 8px 12px 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+    scrollbar-width: none;
+    background: #f7f4ec;
+  }
+  .filter-row.visible { display: flex; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-pill {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 4px 12px;
+    border: 1px solid #e4dfd4;
+    background: transparent;
+    color: #6a6458;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .filter-pill.active { border-color: #8b2500; color: #8b2500; background: rgba(139,37,0,0.04); }
+  .filter-pill .pill-count { font-family: 'DM Sans', sans-serif; font-size: 9px; margin-left: 4px; opacity: 0.6; }
+
+  /* ── Map ── */
+  .map-container { flex: 1; position: relative; min-height: 0; }
+  #map { width: 100%; height: 100%; }
+  .leaflet-tile-pane { filter: sepia(0.2) saturate(0.7) brightness(1.02) hue-rotate(-5deg); }
+  .leaflet-control-zoom { display: none !important; }
+  .leaflet-control-attribution {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 7px !important;
+    background: rgba(247,244,236,0.85) !important;
+    color: #b0a898 !important;
+    padding: 2px 6px !important;
+  }
+  .leaflet-control-attribution a { color: #8b2500 !important; }
+
+  .place-tooltip {
+    font-family: 'EB Garamond', Georgia, serif !important;
+    font-size: 11px; font-style: italic; color: #2a2420;
+    background: transparent !important; border: none !important;
+    box-shadow: none !important; padding: 0 !important;
+    text-shadow: 0 0 3px #f7f4ec, 0 0 6px #f7f4ec, 0 0 10px #f7f4ec, 0 0 14px #f7f4ec;
+    pointer-events: none !important;
+  }
+  .place-tooltip::before { display: none !important; }
+
+  .region-label-div {
+    font-family: 'Cormorant Garamond', Georgia, serif !important;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: rgba(176,168,152,0.45); white-space: nowrap;
+    pointer-events: none !important;
+    text-shadow: 0 0 6px rgba(247,244,236,0.6);
+  }
+
+  /* ── Map controls ── */
+  .map-controls {
+    position: absolute; top: 8px; right: 8px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .map-controls.hidden { display: none; }
+  .map-ctrl-group {
+    display: flex;
+    background: rgba(247,244,236,0.92);
+    backdrop-filter: blur(4px);
+    border: 1px solid #e4dfd4;
+    overflow: hidden;
+  }
+  .map-ctrl-btn {
+    padding: 6px 8px; border: none; background: transparent; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 8px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6a6458; transition: all 0.15s; white-space: nowrap;
+  }
+  .map-ctrl-btn + .map-ctrl-btn { border-left: 1px solid #e4dfd4; }
+  .map-ctrl-btn.active { background: #2a2420; color: #f7f4ec; }
+  .map-ctrl-toggle {
+    padding: 6px 8px; border: 1px solid #e4dfd4; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 8px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6a6458; transition: all 0.15s; text-align: left;
+    background: rgba(247,244,236,0.92); backdrop-filter: blur(4px);
+  }
+  .map-ctrl-toggle.active { color: #8b2500; }
+  .map-ctrl-toggle .toggle-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    border: 1px solid #b0a898; margin-right: 4px; vertical-align: middle;
+    transition: all 0.15s;
+  }
+  .map-ctrl-toggle.active .toggle-dot { background: #8b2500; border-color: #8b2500; }
+
+  /* ── Legend ── */
+  .map-legend {
+    position: absolute; bottom: 8px; left: 8px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 4px;
+    background: rgba(247,244,236,0.9); backdrop-filter: blur(4px);
+    padding: 8px 10px; border: 1px solid #e4dfd4;
+  }
+  .map-legend.hidden { display: none; }
+  .legend-row { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(42,36,32,0.2); }
+  .legend-text { font-family: 'DM Sans', sans-serif; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: #6a6458; }
+
+  /* ── Timeline ── */
+  .time-section {
+    display: none;
+    padding: 8px 12px 6px;
+    flex-shrink: 0;
+    background: #f7f4ec;
+    border-top: 1px solid #e4dfd4;
+  }
+  .time-section.visible { display: block; }
+  .time-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .time-label { font-family: 'EB Garamond', Georgia, serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #8b2500; }
+  .time-label::before { content: '\2726 '; }
+  .time-current-value { font-family: 'EB Garamond', Georgia, serif; font-size: 13px; color: #2a2420; }
+  .time-era-value { font-family: 'Crimson Pro', Georgia, serif; font-size: 11px; color: #6a6458; font-style: italic; }
+  .time-slider-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .time-bound { font-family: 'DM Sans', sans-serif; font-size: 8px; color: #b0a898; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+  input[type="range"] { flex: 1; -webkit-appearance: none; height: 3px; background: #e4dfd4; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #8b2500; cursor: grab; border: 2px solid #f7f4ec; box-shadow: 0 1px 4px rgba(42,36,32,0.2); }
+
+  /* ── Entity sheet ── */
+  .entity-sheet {
+    background: #f7f4ec; border-top: 2px solid #2a2420;
+    flex-shrink: 0; overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    max-height: 0; padding: 0 12px;
+  }
+  .entity-sheet.open { max-height: 260px; padding: 10px 12px 16px; }
+  .entity-sheet-rule { border-top: 1px solid #2a2420; margin-bottom: 8px; margin-top: 5px; }
+  .es-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .es-type { font-family: 'DM Sans', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #b0a898; }
+  .es-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px; font-weight: 600; color: #2a2420; margin: 1px 0 0; }
+  .es-modern { font-family: 'EB Garamond', Georgia, serif; font-size: 11px; color: #6a6458; font-style: italic; }
+  .es-right { text-align: right; flex-shrink: 0; }
+  .es-dates { font-family: 'EB Garamond', Georgia, serif; font-size: 13px; color: #2a2420; font-weight: 500; }
+  .es-knowledge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: 'DM Sans', sans-serif; font-size: 8px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 6px; border-radius: 2px; margin-top: 4px;
+  }
+  .es-knowledge.anchored { background: rgba(42,122,74,0.08); color: #2a6a3a; }
+  .es-knowledge.encountered, .es-knowledge.engaged, .es-knowledge.mentioned { background: rgba(146,96,14,0.08); color: #92600e; }
+  .es-knowledge.unknown { background: rgba(176,168,152,0.1); color: #b0a898; }
+  .es-desc { font-family: 'Crimson Pro', Georgia, serif; font-size: 13px; color: #333; line-height: 1.5; margin: 6px 0; }
+  .es-meta { display: flex; gap: 14px; margin-top: 4px; }
+  .es-meta-label { font-family: 'DM Sans', sans-serif; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: #b0a898; }
+  .es-meta-value { font-family: 'EB Garamond', Georgia, serif; font-size: 13px; color: #2a2420; font-weight: 500; }
+  .es-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .es-action {
+    flex: 1; padding: 7px; font-family: 'EB Garamond', Georgia, serif; font-size: 12px;
+    border: 1.5px solid; background: transparent; cursor: pointer; border-radius: 3px; text-align: center;
+  }
+  .es-action.action-red { border-color: #e0c0b8; color: #8b2500; }
+  .es-action.action-gold { border-color: #e0d8c0; color: #92600e; }
+  .es-action.action-green { border-color: #c0dcc8; color: #2a6a3a; }
+  .es-close { background: none; border: none; color: #b0a898; cursor: pointer; padding: 4px; font-size: 18px; line-height: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="filter-row" id="filter-row"></div>
+  <div class="map-container">
+    <div id="map"></div>
+    <div class="map-controls" id="map-controls">
+      <div class="map-ctrl-group">
+        <button class="map-ctrl-btn active" data-layer="terrain" onclick="mapInstance.setTileLayer('terrain')">Terrain</button>
+        <button class="map-ctrl-btn" data-layer="clean" onclick="mapInstance.setTileLayer('clean')">Clean</button>
+        <button class="map-ctrl-btn" data-layer="satellite" onclick="mapInstance.setTileLayer('satellite')">Satellite</button>
+      </div>
+      <button class="map-ctrl-toggle active" id="toggle-labels" onclick="mapInstance.toggleLabels()">
+        <span class="toggle-dot"></span>Ancient names
+      </button>
+      <button class="map-ctrl-toggle active" id="toggle-routes" onclick="mapInstance.toggleRoutes()">
+        <span class="toggle-dot"></span>Routes
+      </button>
+    </div>
+    <div class="map-legend" id="map-legend">
+      <div class="legend-row"><div class="legend-dot" style="background:#b0a898;"></div><span class="legend-text">Unknown</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#92600e;"></div><span class="legend-text">Encountered</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#2a7a4a;"></div><span class="legend-text">Anchored</span></div>
+    </div>
+  </div>
+  <div class="time-section" id="time-section">
+    <div class="time-header">
+      <span class="time-label">Era</span>
+      <span><span class="time-current-value" id="time-value">All Eras</span> <span class="time-era-value" id="time-era"></span></span>
+    </div>
+    <div class="time-slider-row">
+      <span class="time-bound">800 BC</span>
+      <input type="range" id="time-slider" min="-800" max="-146" value="-800" step="10">
+      <span class="time-bound">146 BC</span>
+    </div>
+  </div>
+  <div class="entity-sheet" id="entity-sheet">
+    <div class="entity-sheet-rule"></div>
+    <div class="es-header">
+      <div>
+        <div class="es-type" id="es-type"></div>
+        <div class="es-name" id="es-name"></div>
+        <div class="es-modern" id="es-modern"></div>
+      </div>
+      <div class="es-right">
+        <div class="es-dates" id="es-dates"></div>
+        <div class="es-knowledge" id="es-knowledge"></div>
+        <button class="es-close" onclick="mapInstance.selectEntity(null)">&times;</button>
+      </div>
+    </div>
+    <div class="es-desc" id="es-desc"></div>
+    <div class="es-meta" id="es-meta"></div>
+    <div class="es-actions" id="es-actions">
+      <button class="es-action action-red" onclick="handleAction('unknown')">I don't know this</button>
+      <button class="es-action action-gold" onclick="handleAction('interested')">Tell me more</button>
+      <button class="es-action action-green" onclick="handleAction('got_it')">Got it</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════════
+// AncientMap — Leaflet map engine for Petrarca
+//
+// Initialized via postMessage from the parent (React Native WebView or iframe).
+// Sends events back via postMessage.
+//
+// Inbound messages: { type: 'init', config: {...} }
+//                   { type: 'command', method: string, args: any[] }
+// Outbound events:  { type: 'select'|'action'|'filter'|..., data: any }
+// ════════════════════════════════════════════════════════════════════════════════
+
+const ERAS = [
+  { start: -800, end: -650, name: 'Early Colonization' },
+  { start: -650, end: -500, name: 'Age of Colonization' },
+  { start: -500, end: -400, name: 'Age of Tyrants' },
+  { start: -400, end: -264, name: 'Hellenistic Struggles' },
+  { start: -264, end: -146, name: 'Punic Wars' },
+];
+
+const STATE_COLORS = {
+  unknown: '#b0a898', encountered: '#92600e', mentioned: '#92600e',
+  engaged: '#92600e', anchored: '#2a7a4a',
+};
+
+const TILE_LAYERS = {
+  terrain: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: '&copy; OpenTopoMap &copy; OSM', maxZoom: 17 },
+  clean: { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', attr: '&copy; CARTO &copy; OSM', maxZoom: 18, subdomains: 'abcd' },
+  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: '&copy; Esri', maxZoom: 18 },
+};
+
+const TILE_FILTERS = {
+  terrain:   'sepia(0.2) saturate(0.7) brightness(1.02) hue-rotate(-5deg)',
+  clean:     'sepia(0.15) saturate(0.9) brightness(1.0) contrast(1.15)',
+  satellite: 'sepia(0.15) saturate(0.8) brightness(1.0)',
+};
+
+let mapInstance = null;
+
+// ── Bridge: send events to parent ─────────────────────────────────────────────
+
+function sendEvent(type, data) {
+  const msg = JSON.stringify({ type, data, timestamp: Date.now() });
+  // React Native WebView bridge
+  if (window.ReactNativeWebView?.postMessage) {
+    window.ReactNativeWebView.postMessage(msg);
+  }
+  // iframe parent bridge
+  if (window.parent !== window) {
+    window.parent.postMessage({ source: 'ancient-map', type, data }, '*');
+  }
+}
+
+function handleAction(action) {
+  if (!mapInstance?._selectedId) return;
+  sendEvent('action', { entityId: mapInstance._selectedId, action });
+}
+
+// ── Bridge: receive commands from parent ──────────────────────────────────────
+
+window.addEventListener('message', (event) => {
+  const msg = event.data;
+  if (!msg || typeof msg !== 'object') return;
+
+  if (msg.type === 'init') {
+    initMap(msg.config);
+  } else if (msg.type === 'command' && mapInstance) {
+    const fn = mapInstance[msg.method];
+    if (typeof fn === 'function') {
+      fn.apply(mapInstance, msg.args || []);
+    }
+  }
+});
+
+// ── Map class ─────────────────────────────────────────────────────────────────
+
+class AncientMapEngine {
+  constructor(config) {
+    this._entities = config.entities || [];
+    this._filters = config.filters || [];
+    this._markers = new Map();
+    this._routeLines = [];
+    this._regionLabels = [];
+    this._selectedId = null;
+    this._highlightedIds = new Set();
+    this._activeFilter = null;
+    this._timeFilter = null;
+    this._labelsVisible = true;
+    this._routesVisible = config.showRoutes !== false;
+    this._activeTileLayerId = config.tileLayer || 'terrain';
+
+    // UI visibility
+    const showFilters = config.showFilters !== false && this._filters.length > 0;
+    const showTimeline = config.showTimeline !== false;
+    const showControls = config.showControls !== false;
+    const showLegend = config.showLegend !== false;
+    const showEntitySheet = config.showEntitySheet !== false;
+
+    document.getElementById('filter-row').classList.toggle('visible', showFilters);
+    document.getElementById('time-section').classList.toggle('visible', showTimeline);
+    document.getElementById('map-controls').classList.toggle('hidden', !showControls);
+    document.getElementById('map-legend').classList.toggle('hidden', !showLegend);
+    if (!showEntitySheet) document.getElementById('entity-sheet').style.display = 'none';
+    this._showEntitySheet = showEntitySheet;
+
+    // Init Leaflet
+    this._map = L.map('map', {
+      center: config.center || [37.5, 17.0],
+      zoom: config.zoom || 6,
+      minZoom: config.minZoom || 5,
+      maxZoom: config.maxZoom || 11,
+      zoomControl: false,
+      attributionControl: true,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+    });
+
+    // Tile layers
+    this._tileLayers = {};
+    for (const [id, def] of Object.entries(TILE_LAYERS)) {
+      this._tileLayers[id] = L.tileLayer(def.url, {
+        attribution: def.attr, maxZoom: def.maxZoom,
+        ...(def.subdomains ? { subdomains: def.subdomains } : {}),
+      });
+    }
+    this._tileLayers[this._activeTileLayerId].addTo(this._map);
+
+    this._addRegionLabels();
+    this._addEntities();
+    if (this._routesVisible && config.routes) {
+      this._addRoutes(config.routes);
+    }
+    if (showFilters) this._buildFilterPills();
+
+    // Timeline wiring
+    if (showTimeline) {
+      const slider = document.getElementById('time-slider');
+      slider.addEventListener('input', () => {
+        const year = parseInt(slider.value);
+        if (year <= -795) {
+          document.getElementById('time-value').textContent = 'All Eras';
+          document.getElementById('time-era').textContent = '';
+          this.setTimeFilter(null);
+        } else {
+          document.getElementById('time-value').textContent = `~${Math.abs(year)} BC`;
+          const era = ERAS.find(e => year >= e.start && year < e.end);
+          document.getElementById('time-era').textContent = era ? ` \u00b7 ${era.name}` : '';
+          this.setTimeFilter(year);
+        }
+      });
+    }
+
+    if (config.selectedEntityId) this.selectEntity(config.selectedEntityId);
+    if (config.highlightEntityIds) this.highlightEntities(config.highlightEntityIds);
+
+    sendEvent('ready', { entityCount: this._entities.length });
+  }
+
+  // ── Entities ────────────────────────────────────────────────────────────────
+
+  _addEntities() {
+    this._entities.forEach(e => {
+      if (e.latitude != null && e.longitude != null) this._createMarker(e);
+    });
+  }
+
+  _createMarker(entity) {
+    const knowledge = this._getKnowledge(entity);
+    const color = STATE_COLORS[knowledge] || STATE_COLORS.unknown;
+    const size = knowledge === 'anchored' ? 14 : 10;
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="map-marker-dot" data-entity="${entity.entity_id}" style="
+        width:${size}px;height:${size}px;border-radius:50%;background:${color};
+        border:2px solid rgba(247,244,236,0.9);
+        box-shadow:0 1px 4px rgba(42,36,32,0.3);
+        transition:all 0.2s;cursor:pointer;
+      "></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+
+    const marker = L.marker([entity.latitude, entity.longitude], { icon }).addTo(this._map);
+    marker.bindTooltip(entity.name, { permanent: true, direction: 'top', offset: [0, -8], className: 'place-tooltip' });
+    marker.on('click', () => this.selectEntity(entity.entity_id));
+    this._markers.set(entity.entity_id, { marker, entity });
+  }
+
+  _getKnowledge(entity) {
+    if (entity._overrideKnowledge) return entity._overrideKnowledge;
+    if (!entity.curriculum_links?.length) return 'unknown';
+    const rank = { anchored: 3, engaged: 2, mentioned: 1, unknown: 0 };
+    return entity.curriculum_links.reduce((best, link) => {
+      const k = link.knowledge || 'unknown';
+      return (rank[k] || 0) > (rank[best] || 0) ? k : best;
+    }, 'unknown');
+  }
+
+  _refreshMarker(entityId) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    const { marker, entity } = data;
+    const knowledge = this._getKnowledge(entity);
+    const color = STATE_COLORS[knowledge] || STATE_COLORS.unknown;
+    const size = knowledge === 'anchored' ? 14 : 10;
+    const isSelected = entityId === this._selectedId;
+    const isHighlighted = this._highlightedIds.has(entityId);
+    const dot = marker.getElement()?.querySelector('.map-marker-dot');
+    if (dot) {
+      dot.style.width = size + 'px';
+      dot.style.height = size + 'px';
+      dot.style.background = color;
+      dot.style.boxShadow = isSelected
+        ? '0 0 0 3px rgba(139,37,0,0.35),0 2px 8px rgba(42,36,32,0.3)'
+        : isHighlighted
+        ? '0 0 0 3px rgba(196,149,32,0.3),0 1px 4px rgba(42,36,32,0.3)'
+        : '0 1px 4px rgba(42,36,32,0.3)';
+    }
+  }
+
+  // ── Region labels ───────────────────────────────────────────────────────────
+
+  _addRegionLabels() {
+    const regions = [
+      { name: 'SICILIA', lat: 37.5, lon: 14.15, size: 13, rotation: -3 },
+      { name: 'HELLAS', lat: 38.8, lon: 22.8, size: 12, rotation: 0 },
+      { name: 'MAGNA GRAECIA', lat: 39.8, lon: 16.3, size: 10, rotation: -12 },
+      { name: 'AFRICA', lat: 35.2, lon: 12.5, size: 11, rotation: 0 },
+      { name: 'ASIA MINOR', lat: 39.0, lon: 29.0, size: 10, rotation: 0 },
+    ];
+    regions.forEach(r => {
+      const label = L.marker([r.lat, r.lon], {
+        icon: L.divIcon({
+          className: 'region-label-div',
+          html: `<span style="font-size:${r.size}px;transform:rotate(${r.rotation}deg);display:inline-block;">${r.name}</span>`,
+          iconSize: [200, 20], iconAnchor: [100, 10],
+        }),
+        interactive: false,
+      }).addTo(this._map);
+      this._regionLabels.push(label);
+    });
+  }
+
+  // ── Routes ──────────────────────────────────────────────────────────────────
+
+  _addRoutes(routes) {
+    routes.forEach(route => {
+      const line = L.polyline(route.waypoints, {
+        color: '#8b2500', weight: 1.2, dashArray: '6,5', opacity: 0.3,
+      }).addTo(this._map);
+      this._routeLines.push({ line, route });
+    });
+  }
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+
+  _buildFilterPills() {
+    const row = document.getElementById('filter-row');
+    row.innerHTML = '';
+    const allCount = this._entities.filter(e => e.latitude != null).length;
+    row.appendChild(this._makePill('All Places', allCount, null));
+    this._filters.forEach(f => {
+      const count = this._entities.filter(e => e.latitude != null && this._matchFilter(f, e)).length;
+      row.appendChild(this._makePill(f.label, count, f.id));
+    });
+  }
+
+  _makePill(label, count, filterId) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-pill' + (this._activeFilter === filterId ? ' active' : '');
+    btn.innerHTML = `${label}<span class="pill-count">${count}</span>`;
+    btn.dataset.filterId = filterId || '';
+    btn.onclick = () => this.setFilter(filterId);
+    return btn;
+  }
+
+  _matchFilter(filterDef, entity) {
+    if (filterDef.field && filterDef.value) return entity[filterDef.field] === filterDef.value;
+    if (filterDef.entityIds) return filterDef.entityIds.includes(entity.entity_id);
+    return true;
+  }
+
+  setFilter(filterId) {
+    this._activeFilter = filterId;
+    const filterDef = this._filters.find(f => f.id === filterId);
+    this._markers.forEach(({ marker, entity }) => {
+      const visible = !filterDef || this._matchFilter(filterDef, entity);
+      const timeVisible = this._isTimeVisible(entity);
+      if (visible && timeVisible) { if (!this._map.hasLayer(marker)) marker.addTo(this._map); }
+      else { if (this._map.hasLayer(marker)) this._map.removeLayer(marker); }
+    });
+    document.querySelectorAll('.filter-pill').forEach(p => {
+      p.classList.toggle('active', (p.dataset.filterId || null) === (filterId || null));
+    });
+    this.fitAll(true);
+    sendEvent('filter', { filterId });
+  }
+
+  // ── Time filter ─────────────────────────────────────────────────────────────
+
+  _isTimeVisible(entity) {
+    if (!this._timeFilter) return true;
+    if (entity.date_start == null) return true;
+    if (entity.date_start > this._timeFilter) return false;
+    if (entity.date_end != null && entity.date_end < this._timeFilter) return false;
+    return true;
+  }
+
+  setTimeFilter(year) {
+    this._timeFilter = year;
+    this.setFilter(this._activeFilter);
+  }
+
+  // ── Selection ───────────────────────────────────────────────────────────────
+
+  selectEntity(entityId) {
+    const prevId = this._selectedId;
+    this._selectedId = entityId;
+    if (prevId) this._refreshMarker(prevId);
+    if (entityId) this._refreshMarker(entityId);
+
+    const sheet = document.getElementById('entity-sheet');
+    if (!entityId) {
+      sheet.classList.remove('open');
+      sendEvent('select', null);
+      return;
+    }
+
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    const { entity } = data;
+    const knowledge = this._getKnowledge(entity);
+
+    // Always send event (parent may open native EntitySheet instead)
+    sendEvent('select', {
+      entityId: entity.entity_id, name: entity.name,
+      entityType: entity.entity_type, knowledge,
+    });
+
+    // Populate in-HTML sheet if enabled
+    if (this._showEntitySheet) {
+      document.getElementById('es-type').textContent = entity.entity_type || 'Place';
+      document.getElementById('es-name').textContent = entity.name;
+      document.getElementById('es-modern').textContent = entity.modern_name ? `Modern ${entity.modern_name}` : '';
+      document.getElementById('es-dates').textContent = entity.dates || '';
+      const kBadge = document.getElementById('es-knowledge');
+      kBadge.className = 'es-knowledge ' + knowledge;
+      kBadge.innerHTML = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${STATE_COLORS[knowledge]};"></span> ${knowledge}`;
+      document.getElementById('es-desc').textContent = entity.description || '';
+      const meta = document.getElementById('es-meta');
+      meta.innerHTML = '';
+      if (entity.dates) meta.innerHTML += `<div><div class="es-meta-label">Dates</div><div class="es-meta-value">${entity.dates}</div></div>`;
+      if (entity.curriculum_links?.length) meta.innerHTML += `<div><div class="es-meta-label">Curriculum</div><div class="es-meta-value">${entity.curriculum_links.length} nodes</div></div>`;
+      sheet.classList.add('open');
+    }
+  }
+
+  focusEntity(entityId) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    this._map.flyTo([data.entity.latitude, data.entity.longitude], 9, { duration: 0.8 });
+    this.selectEntity(entityId);
+  }
+
+  highlightEntities(entityIds) {
+    this._highlightedIds = new Set(entityIds || []);
+    this._markers.forEach((_, id) => this._refreshMarker(id));
+  }
+
+  updateKnowledge(entityId, newState) {
+    const data = this._markers.get(entityId);
+    if (!data) return;
+    data.entity._overrideKnowledge = newState;
+    this._refreshMarker(entityId);
+    if (this._selectedId === entityId) this.selectEntity(entityId);
+  }
+
+  fitAll(animated = true) {
+    const bounds = [];
+    this._markers.forEach(({ marker }) => { if (this._map.hasLayer(marker)) bounds.push(marker.getLatLng()); });
+    if (bounds.length) this._map.flyToBounds(L.latLngBounds(bounds).pad(0.15), { duration: animated ? 0.6 : 0, maxZoom: 9 });
+  }
+
+  // ── Tile layers ─────────────────────────────────────────────────────────────
+
+  setTileLayer(layerId) {
+    if (!this._tileLayers[layerId] || layerId === this._activeTileLayerId) return;
+    this._map.removeLayer(this._tileLayers[this._activeTileLayerId]);
+    this._tileLayers[layerId].addTo(this._map);
+    this._activeTileLayerId = layerId;
+    const tilePane = this._map.getPane('tilePane');
+    if (tilePane) tilePane.style.filter = TILE_FILTERS[layerId] || '';
+    const isSat = layerId === 'satellite';
+    document.querySelectorAll('.place-tooltip').forEach(el => {
+      el.style.color = isSat ? '#f7f4ec' : '#2a2420';
+      el.style.textShadow = isSat
+        ? '0 0 4px rgba(0,0,0,0.8),0 0 8px rgba(0,0,0,0.6),0 1px 2px rgba(0,0,0,0.9)'
+        : '0 0 3px #f7f4ec,0 0 6px #f7f4ec,0 0 10px #f7f4ec,0 0 14px #f7f4ec';
+    });
+    document.querySelectorAll('.region-label-div').forEach(el => {
+      el.style.color = isSat ? 'rgba(247,244,236,0.35)' : 'rgba(176,168,152,0.45)';
+      el.style.textShadow = isSat ? '0 0 6px rgba(0,0,0,0.5)' : '0 0 6px rgba(247,244,236,0.6)';
+    });
+    document.querySelectorAll('.map-ctrl-btn[data-layer]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.layer === layerId);
+    });
+  }
+
+  toggleLabels() {
+    this._labelsVisible = !this._labelsVisible;
+    this._markers.forEach(({ marker }) => {
+      if (this._labelsVisible) marker.openTooltip(); else marker.closeTooltip();
+    });
+    this._regionLabels.forEach(l => { const el = l.getElement(); if (el) el.style.display = this._labelsVisible ? '' : 'none'; });
+    document.getElementById('toggle-labels')?.classList.toggle('active', this._labelsVisible);
+  }
+
+  toggleRoutes() {
+    this._routesVisible = !this._routesVisible;
+    this._routeLines.forEach(({ line }) => {
+      if (this._routesVisible) { if (!this._map.hasLayer(line)) line.addTo(this._map); }
+      else { if (this._map.hasLayer(line)) this._map.removeLayer(line); }
+    });
+    document.getElementById('toggle-routes')?.classList.toggle('active', this._routesVisible);
+  }
+}
+
+// ── Init from parent message or URL hash ──────────────────────────────────────
+
+function initMap(config) {
+  if (mapInstance) return; // already initialized
+  mapInstance = new AncientMapEngine(config);
+}
+
+// Support init via URL hash for debugging: index.html#debug
+if (window.location.hash === '#debug') {
+  initMap({
+    entities: [],
+    showTimeline: true,
+    showControls: true,
+    center: [37.5, 17.0],
+    zoom: 6,
+  });
+}
+</script>
+</body>
+</html>
