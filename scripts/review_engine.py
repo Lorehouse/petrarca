@@ -310,6 +310,35 @@ Output JSON:
 {{"remembered":"...","questions":["..."],"connections":["..."],"suggested_score":"knew|partly|missed"}}"""
 
 
+MAP_WHOLE_BOOK_PROMPT = """Map a finished book to curriculum nodes for a knowledge review system.
+
+The reader has finished this book. Identify ALL curriculum nodes the reader would have been meaningfully exposed to through reading it. Include nodes where the book provides substantial content — not passing one-sentence mentions.
+
+Book: {book_title} by {book_author}
+Topics: {book_topics}
+{book_context}
+
+Curriculum nodes ({curriculum_title}) — level 2+ only:
+{nodes_list}
+
+Which nodes does this book substantially cover? For historical fiction, include nodes whose events, figures, or settings form part of the narrative. For nonfiction, include nodes whose subject matter is discussed in depth.
+
+For each matched node:
+- "node_id": exact ID from the list
+- "node_title": node title
+- "source_text": 1-2 sentences of SPECIFIC content from this book relevant to the node — name concrete characters, events, settings, arguments. For fiction: "Cicero's prosecution of Verres is a central plot arc in the novel, depicting the corruption of Roman provincial governance in Sicily." For nonfiction: "Chapter on the Arab conquest covers the fall of Syracuse in 878 and the shift to Palermo as capital."
+- "lens": best retrieval lens — CAUSAL | COMPARATIVE | SIGNIFICANCE | TEMPORAL | PATTERN | CONSEQUENCE
+- "confidence": how central this node is to the book — "high" (major theme/arc), "medium" (significant coverage), "low" (meaningful but secondary)
+
+Be thorough — a 300-page book about Sicilian history might cover 20+ nodes. Don't under-count.
+
+Output JSON array only:
+[{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","confidence":"..."}}]"""
+
+# Minimum score from suggest_curricula_for_book to consider a curriculum relevant
+CURRICULUM_RELEVANCE_THRESHOLD = 0.40
+
+
 # ── Chapter mapping ───────────────────────────────────────────────────────────
 
 def _get_chapter_context(book_id: str, chapter_number: int, chapter_title: str) -> str:
@@ -537,6 +566,221 @@ def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: 
         'items_updated': updated,
         'gaps_filled': gaps_filled,
         'domain': domain_id,
+    }
+
+
+# ── Whole-book mapping ───────────────────────────────────────────────────────
+
+def _get_book_context(book_id: str, book_title: str) -> str:
+    """Gather any available context about a book: research, chapters, highlights."""
+    parts = []
+    # Book research file
+    path = BOOK_RESEARCH_DIR / f'{book_id}.json'
+    if path.exists():
+        try:
+            research = json.loads(path.read_text())
+            if research.get('summary'):
+                parts.append(f"Book summary: {research['summary']}")
+            if research.get('chapter_research'):
+                ch_titles = []
+                for ch_num, ch in sorted(research['chapter_research'].items(), key=lambda x: int(x[0])):
+                    title = ch.get('title', f'Chapter {ch_num}')
+                    ch_titles.append(f"  Ch {ch_num}: {title}")
+                if ch_titles:
+                    parts.append("Chapters:\n" + '\n'.join(ch_titles))
+        except Exception:
+            pass
+    # Chapter list from DB
+    try:
+        from db import get_connection
+        conn = get_connection()
+        row = conn.execute('SELECT chapters FROM physical_books WHERE id=?', (book_id,)).fetchone()
+        conn.close()
+        if row and row['chapters']:
+            chapters = json.loads(row['chapters'])
+            if chapters and not parts:  # Only if we don't already have chapter research
+                ch_list = [f"  {ch.get('title', ch.get('number', '?'))}" for ch in chapters[:30]]
+                if ch_list:
+                    parts.append("Chapter list:\n" + '\n'.join(ch_list))
+    except Exception:
+        pass
+    return '\n'.join(parts) if parts else f'(No additional context available for "{book_title}")'
+
+
+def _map_book_to_curriculum(book_id: str, book_title: str, book_author: str,
+                            book_topics: list, domain_id: str) -> list:
+    """Map a whole book against a single curriculum. Returns list of node mappings."""
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return []
+
+    node_lines = [
+        f"- {n['id']}: {n['title']} — {n['description'][:150]}..."
+        for n in curriculum['nodes'] if n.get('level', 1) >= 2
+    ]
+    if not node_lines:
+        return []
+
+    book_context = _get_book_context(book_id, book_title)
+    curriculum_title = curriculum.get('title', domain_id.replace('_', ' ').title())
+
+    prompt = MAP_WHOLE_BOOK_PROMPT.format(
+        book_title=book_title,
+        book_author=book_author or 'Unknown',
+        book_topics=', '.join(book_topics) if book_topics else 'None specified',
+        book_context=book_context,
+        nodes_list='\n'.join(node_lines),
+        curriculum_title=curriculum_title,
+    )
+
+    raw = call_llm(prompt, max_tokens=65536, response_mime_type='application/json')
+    if not raw:
+        return []
+
+    mappings = _parse_json(raw)
+    valid_ids = {n['id'] for n in curriculum['nodes']}
+    return [m for m in (mappings or []) if isinstance(m, dict) and m.get('node_id') in valid_ids]
+
+
+def map_whole_book(book_id: str, conn) -> dict:
+    """Map a finished book to ALL relevant curricula, creating knowledge_items.
+
+    Returns summary with per-curriculum results.
+    """
+    row = conn.execute(
+        'SELECT title, author, topics FROM physical_books WHERE id=?', (book_id,)
+    ).fetchone()
+    if not row:
+        return {'error': f'Book {book_id} not found'}
+
+    book_title = row['title']
+    book_author = row['author'] or ''
+    book_topics = json.loads(row['topics'] or '[]')
+
+    # Find all relevant curricula
+    scored = suggest_curricula_for_book(book_title, book_topics)
+    relevant = [c for c in scored if c['score'] >= CURRICULUM_RELEVANCE_THRESHOLD]
+    if not relevant:
+        return {'error': 'No relevant curricula found', 'scores': scored}
+
+    print(f'[review] Mapping whole book "{book_title}" to {len(relevant)} curricula: '
+          f'{[(c["id"][:30], c["score"]) for c in relevant]}', flush=True)
+
+    now = int(time.time() * 1000)
+    results = []
+
+    for curr_meta in relevant:
+        domain_id = curr_meta['id']
+        mappings = _map_book_to_curriculum(
+            book_id, book_title, book_author, book_topics, domain_id
+        )
+        if not mappings:
+            results.append({'domain': domain_id, 'score': curr_meta['score'],
+                            'nodes_covered': [], 'items_created': 0, 'items_updated': 0})
+            continue
+
+        created = 0
+        updated = 0
+        node_titles = []
+        mapped_node_ids = []
+
+        for m in mappings:
+            item_id = f"{domain_id}:{m['node_id']}"
+            mapped_node_ids.append(m['node_id'])
+
+            new_source = {
+                'book_id': book_id,
+                'chapter_number': None,
+                'chapter_title': f'Whole book: {book_title}',
+                'source_text': m.get('source_text', ''),
+                'lens': m.get('lens', 'SIGNIFICANCE'),
+                'confidence': m.get('confidence', 'medium'),
+                'added_at': now,
+            }
+
+            existing = conn.execute(
+                'SELECT id, sources FROM knowledge_items WHERE id=?', (item_id,)
+            ).fetchone()
+
+            if existing:
+                try:
+                    sources = json.loads(existing['sources'] or '[]')
+                except Exception:
+                    sources = []
+                # Skip if this book already mapped to this node
+                already = any(s.get('book_id') == book_id for s in sources)
+                if not already:
+                    sources.append(new_source)
+                    conn.execute(
+                        'UPDATE knowledge_items SET sources=?, cached_question=NULL WHERE id=?',
+                        (json.dumps(sources), item_id)
+                    )
+                    updated += 1
+            else:
+                conn.execute('''
+                    INSERT INTO knowledge_items
+                    (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                     sources, question_history, created_at)
+                    VALUES (?,?,?,?,?,?,?,?)
+                ''', (
+                    item_id, m['node_id'], domain_id,
+                    INITIAL_STABILITY_DAYS, now,
+                    json.dumps([new_source]), '[]', now,
+                ))
+                created += 1
+
+            node_titles.append(m.get('node_title', m['node_id']))
+
+        gaps_filled = fill_prerequisite_gaps(domain_id, mapped_node_ids, conn, now)
+        conn.commit()
+
+        print(f'[review] Book→{domain_id[:30]}: {created} created, {updated} updated, '
+              f'{gaps_filled} gaps, {len(node_titles)} nodes', flush=True)
+
+        results.append({
+            'domain': domain_id,
+            'score': curr_meta['score'],
+            'nodes_covered': node_titles,
+            'items_created': created,
+            'items_updated': updated,
+            'gaps_filled': gaps_filled,
+        })
+
+    # Pre-generate questions in background for all new items
+    all_new_ids = []
+    for r in results:
+        domain_id = r['domain']
+        items = conn.execute(
+            'SELECT id FROM knowledge_items WHERE curriculum_domain=? AND cached_question IS NULL',
+            (domain_id,)
+        ).fetchall()
+        all_new_ids.extend(row['id'] for row in items)
+
+    if all_new_ids:
+        def _pregen():
+            from db import get_connection as _conn
+            c = _conn()
+            for iid in all_new_ids:
+                try:
+                    q = generate_question(iid, c)
+                    c.execute('UPDATE knowledge_items SET cached_question=? WHERE id=?',
+                              (json.dumps(q), iid))
+                    c.commit()
+                except Exception as e:
+                    print(f'[review] pre-gen failed {iid}: {e}', flush=True)
+            c.close()
+            print(f'[review] pre-generated {len(all_new_ids)} questions for "{book_title}"', flush=True)
+        threading.Thread(target=_pregen, daemon=True).start()
+
+    total_created = sum(r.get('items_created', 0) for r in results)
+    total_updated = sum(r.get('items_updated', 0) for r in results)
+    return {
+        'book_id': book_id,
+        'book_title': book_title,
+        'curricula_mapped': len([r for r in results if r.get('nodes_covered')]),
+        'total_items_created': total_created,
+        'total_items_updated': total_updated,
+        'details': results,
     }
 
 

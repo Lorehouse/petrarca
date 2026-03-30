@@ -3725,10 +3725,40 @@ JSON array only:"""
 
         from db import get_connection, upsert_books, upsert_captures
         conn = get_connection()
+
+        # Detect books transitioning to 'finished' — check pre-sync status
+        newly_finished = []
+        for book in books:
+            if book.get('reading_status') == 'finished' and book.get('id'):
+                row = conn.execute(
+                    'SELECT reading_status FROM physical_books WHERE id=?', (book['id'],)
+                ).fetchone()
+                was_finished = row and row['reading_status'] == 'finished' if row else False
+                if not was_finished:
+                    newly_finished.append(book['id'])
+
         book_count = upsert_books(books, conn)
         cap_count = upsert_captures(captures, conn)
         conn.commit()
         conn.close()
+
+        # Auto-map newly finished books to curricula in the background
+        if newly_finished:
+            import threading
+            def _map_finished():
+                from review_engine import map_whole_book
+                from db import get_connection as _gc
+                for bid in newly_finished:
+                    try:
+                        c = _gc()
+                        result = map_whole_book(bid, c)
+                        c.close()
+                        print(f'[book/sync] Auto-mapped finished book {bid}: '
+                              f'{result.get("total_items_created", 0)} items created', flush=True)
+                    except Exception as e:
+                        print(f'[book/sync] Auto-map failed for {bid}: {e}', flush=True)
+            threading.Thread(target=_map_finished, daemon=True).start()
+            print(f'[book/sync] {len(newly_finished)} newly finished books → mapping in background', flush=True)
 
         print(f'[book/sync] Saved {book_count} books, {cap_count} captures → SQLite', flush=True)
         self._send_json_response(200, {
@@ -4271,6 +4301,31 @@ JSON array only:"""
 
     # ── Review handlers ────────────────────────────────────────────────────────
 
+    def _handle_review_book_complete(self):
+        """POST /review/book-complete — map finished book to all relevant curricula."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id')
+        if not book_id:
+            self._send_json_response(400, {'error': 'Missing book_id'})
+            return
+
+        from db import get_connection
+        from review_engine import map_whole_book
+        conn = get_connection()
+        try:
+            result = map_whole_book(book_id, conn)
+            if 'error' in result:
+                self._send_json_response(404, result)
+                return
+            from review_engine import get_review_stats
+            stats = get_review_stats(conn)
+            result['due_today'] = stats['due_today']
+            self._send_json_response(200, result)
+        finally:
+            conn.close()
+
     def _handle_review_chapter_complete(self):
         """POST /review/chapter-complete — map chapter to curriculum nodes, create review items."""
         body = self._read_json_body()
@@ -4588,6 +4643,8 @@ JSON array only:"""
             return self._handle_knowledge_import_assessment()
 
         # Review endpoints
+        if self.path == '/review/book-complete':
+            return self._handle_review_book_complete()
         if self.path == '/review/chapter-complete':
             return self._handle_review_chapter_complete()
         if self.path == '/review/generate-question':
