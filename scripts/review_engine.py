@@ -55,16 +55,16 @@ def detect_curriculum(book_title: str, book_topics: list) -> str:
     try:
         from limbic.amygdala import EmbeddingModel
         model = EmbeddingModel()
-        book_vec = model.embed([book_text])[0]
+        book_vec = model.embed(book_text)
 
+        import numpy as np
         best_id, best_score = curricula[0]['id'], -1.0
         for meta in curricula:
             c = load_curriculum(meta['id'])
             if not c:
                 continue
             c_text = f"{c.get('title', '')}. {c.get('description', '')} {' '.join(n['title'] for n in c.get('nodes', [])[:10])}"
-            c_vec = model.embed([c_text])[0]
-            import numpy as np
+            c_vec = model.embed(c_text)
             score = float(np.dot(book_vec, c_vec) / (np.linalg.norm(book_vec) * np.linalg.norm(c_vec) + 1e-9))
             if score > best_score:
                 best_score, best_id = score, meta['id']
@@ -111,19 +111,20 @@ def suggest_curricula_for_book(book_title: str, book_topics: list) -> list[dict]
         from limbic.amygdala import EmbeddingModel
         import numpy as np
         model = EmbeddingModel()
-        book_vec = model.embed([book_text])[0]
+        book_vec = model.embed(book_text)
 
         for meta in curricula:
             c = load_curriculum(meta['id'])
             if not c:
                 continue
             c_text = f"{c.get('title', '')}. {' '.join(n['title'] for n in c.get('nodes', [])[:15])}"
-            c_vec = model.embed([c_text])[0]
+            c_vec = model.embed(c_text)
             score = float(np.dot(book_vec, c_vec) / (np.linalg.norm(book_vec) * np.linalg.norm(c_vec) + 1e-9))
             results.append({'id': meta['id'], 'title': meta['title'], 'score': round(score, 3)})
 
         results.sort(key=lambda x: -x['score'])
-    except Exception:
+    except Exception as e:
+        print(f'[review] suggest_curricula embedding failed: {e}', flush=True)
         results = [{'id': m['id'], 'title': m['title'], 'score': 0.0} for m in curricula]
 
     return results
