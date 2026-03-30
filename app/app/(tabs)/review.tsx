@@ -68,15 +68,13 @@ function ReviewCard({
 
   return (
     <View style={cs.card}>
-      {/* Header: type badge + node */}
+      {/* Header: type badge (node title shown only after reveal to avoid spoilers) */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
           <Text style={cs.typeBadgeText}>{typeLabel}</Text>
         </View>
-        {item.node_title ? (
-          <Text style={cs.nodeTitle}>{item.node_title}</Text>
-        ) : item.cluster_label ? (
-          <Text style={cs.nodeTitle}>{item.cluster_label}</Text>
+        {revealed && (item.node_title || item.cluster_label) ? (
+          <Text style={cs.nodeTitle}>{item.node_title || item.cluster_label}</Text>
         ) : null}
       </View>
 
