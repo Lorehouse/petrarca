@@ -62,3 +62,4 @@ stderr.tmp
 scripts/pipeline-tests/sessions/
 .env
 kindle-email-attachments/
+scripts/data/
