@@ -566,6 +566,7 @@ export interface ResurfacingSession {
   // Curriculum review fields (present when session includes review items)
   retrieval_count?: number;
   ordering_count?: number;
+  total_questions_in_pool?: number;
 }
 
 // ─── Knowledge Review ────────────────────────────────────────────────────────

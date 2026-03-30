@@ -1,230 +1,300 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Platform, Pressable,
+  ActivityIndicator, Platform, Pressable, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { colors } from '../../design/tokens';
-import { ReviewItem, ReviewStats } from '../../data/types';
-import { getReviewQueue, getReviewStats } from '../../lib/review-api';
+import { useFocusEffect } from 'expo-router';
+import { colors, fonts, layout } from '../../design/tokens';
+import { ResurfacingItem, ResurfacingSession } from '../../data/types';
+import {
+  generateCurriculumReview, recordReviewResult,
+} from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
+import DoubleRule from '../../components/DoubleRule';
 
-const LENS_LABELS: Record<string, string> = {
-  CAUSAL: 'Why?', COMPARATIVE: 'Compare', SIGNIFICANCE: 'Why it matters',
-  TEMPORAL: 'Timing', PATTERN: 'Pattern', CONSEQUENCE: 'What followed',
-};
-const LENS_COLORS: Record<string, string> = {
-  CAUSAL: '#7a3000', COMPARATIVE: '#1a4a7a', SIGNIFICANCE: '#2a6a3a',
-  TEMPORAL: '#5a3a7a', PATTERN: '#7a6a00', CONSEQUENCE: '#5a0a0a',
-};
+// ── Review Card ─────────────────────────────────────────────────────
 
-const TYPE_LABELS: Record<string, string> = {
-  book_chapter: '📖', exploration: '✦', voice_followup: '◎',
-};
+function ReviewCard({
+  item,
+  onResult,
+}: {
+  item: ResurfacingItem;
+  onResult: (result: string) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [graded, setGraded] = useState(false);
+
+  const answerType = item.answer_type || 'concept';
+  const typeLabel = answerType === 'date' ? 'Date'
+    : answerType === 'name' ? 'Identity'
+    : answerType === 'sequence' ? 'Timeline'
+    : 'Concept';
+
+  const gradingButtons = answerType === 'date' ? [
+    { value: 'exact_year', label: 'Exact year', style: 'correct' as const },
+    { value: 'right_decade', label: 'Right decade', style: 'partial' as const },
+    { value: 'right_century', label: 'Right century', style: 'weak' as const },
+    { value: 'missed', label: 'Missed', style: 'wrong' as const },
+  ] : answerType === 'name' ? [
+    { value: 'correct', label: 'Knew it', style: 'correct' as const },
+    { value: 'wrong', label: 'Didn\'t know', style: 'wrong' as const },
+  ] : answerType === 'sequence' ? [
+    { value: 'all_correct', label: 'All correct', style: 'correct' as const },
+    { value: 'mostly_right', label: 'Mostly right', style: 'partial' as const },
+    { value: 'wrong', label: 'Wrong order', style: 'wrong' as const },
+  ] : [
+    { value: 'correct', label: 'Knew it', style: 'correct' as const },
+    { value: 'partial', label: 'Partly', style: 'partial' as const },
+    { value: 'missed', label: 'Missed', style: 'wrong' as const },
+  ];
+
+  const handleGrade = (result: string) => {
+    onResult(result);
+    setGraded(true);
+  };
+
+  if (graded) {
+    return (
+      <View style={cs.card}>
+        <Text style={cs.responded}>Recorded {'\u2713'}</Text>
+      </View>
+    );
+  }
+
+  const displayAnswer = item.rich_answer || item.answer || '';
+  const anchors = item.anchors || [];
+
+  return (
+    <View style={cs.card}>
+      {/* Header: type badge + node */}
+      <View style={cs.headerRow}>
+        <View style={cs.typeBadge}>
+          <Text style={cs.typeBadgeText}>{typeLabel}</Text>
+        </View>
+        {item.node_title ? (
+          <Text style={cs.nodeTitle}>{item.node_title}</Text>
+        ) : item.cluster_label ? (
+          <Text style={cs.nodeTitle}>{item.cluster_label}</Text>
+        ) : null}
+      </View>
+
+      {/* Question */}
+      <Text style={cs.question}>{item.question}</Text>
+
+      {/* Reveal / Answer */}
+      {!revealed ? (
+        <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+          <Text style={cs.revealText}>Show answer</Text>
+        </Pressable>
+      ) : (
+        <View>
+          {/* Rich answer */}
+          <View style={cs.answerBox}>
+            <Text style={cs.answerText}>{displayAnswer}</Text>
+          </View>
+
+          {/* Memory hook */}
+          {item.memory_hook ? (
+            <View style={cs.hookBox}>
+              <Text style={cs.hookLabel}>{'\u2726'} Memory hook</Text>
+              <Text style={cs.hookText}>{item.memory_hook}</Text>
+            </View>
+          ) : null}
+
+          {/* Temporal anchors */}
+          {anchors.length > 0 ? (
+            <View style={cs.anchorBox}>
+              {anchors.map((a, i) => (
+                <Text key={i} style={cs.anchorText}>{'\u2022'} {a}</Text>
+              ))}
+            </View>
+          ) : null}
+
+          {/* Grading buttons */}
+          <View style={cs.gradeRow}>
+            {gradingButtons.map(btn => {
+              const btnStyle = btn.style === 'correct' ? cs.gradeCorrect
+                : btn.style === 'partial' ? cs.gradePartial
+                : btn.style === 'weak' ? cs.gradeWeak
+                : cs.gradeWrong;
+              const txtStyle = btn.style === 'correct' ? cs.gradeCorrectText
+                : btn.style === 'partial' ? cs.gradePartialText
+                : btn.style === 'weak' ? cs.gradeWeakText
+                : cs.gradeWrongText;
+              return (
+                <Pressable
+                  key={btn.value}
+                  style={[cs.gradeButton, btnStyle]}
+                  onPress={() => handleGrade(btn.value)}
+                >
+                  <Text style={txtStyle}>{btn.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Main Screen ─────────────────────────────────────────────────────
 
 export default function ReviewScreen() {
-  const router = useRouter();
-  const [stats, setStats] = useState<ReviewStats | null>(null);
-  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [session, setSession] = useState<ResurfacingSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  useFocusEffect(useCallback(() => {
-    setFeedbackContext({ screen: 'review' });
-    loadData();
-    logEvent('review_tab_open', { has_stats: !!stats });
-  }, []));
-
-  async function loadData() {
+  const loadSession = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const [statsData, queueData] = await Promise.all([
-        getReviewStats(),
-        getReviewQueue(30),
-      ]);
-      setStats(statsData);
-      setItems(queueData.items);
-      logEvent('review_queue_loaded', {
-        due_today: statsData.due_today,
-        due_this_week: statsData.due_this_week,
-        total: statsData.total,
-        overdue: queueData.items.filter((i: any) => i.due_at <= Date.now()).length,
-        lens_breakdown: queueData.items.reduce((acc: Record<string, number>, i: any) => {
-          const l = i.lens || 'UNKNOWN';
-          acc[l] = (acc[l] || 0) + 1;
-          return acc;
-        }, {}),
+      const s = await generateCurriculumReview();
+      setSession(s);
+      logEvent('review_session_loaded', {
+        session_id: s.id,
+        item_count: s.items?.length ?? 0,
       });
-    } catch (e) {
-      console.error('Review load failed:', e);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  function startReview() {
-    logEvent('review_session_start', { count: items.length });
-    router.push('/review-session');
-  }
+  useFocusEffect(useCallback(() => {
+    setFeedbackContext({ screen: 'review' });
+    loadSession();
+  }, []));
 
-  const dueNow = items.filter(i => i.due_at <= Date.now());
+  const handleResult = async (item: ResurfacingItem, result: string) => {
+    if (item.question_id) {
+      await recordReviewResult(item.question_id, result);
+      logEvent('review_result', {
+        question_id: item.question_id,
+        result,
+        answer_type: item.answer_type,
+        domain: item.domain,
+      });
+    }
+  };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={styles.screenTitle}>Review</Text>
-          <Pressable onPress={() => setDrawerOpen(true)} style={styles.drawerBtn}>
-            <Text style={styles.drawerBtnText}>✦</Text>
-          </Pressable>
-        </View>
-        <View style={styles.doubleRule} />
-        {stats && (
-          <Text style={styles.statsLine}>
-            <Text style={styles.statsBold}>{stats.due_today}</Text>
-            {' due today · '}
-            <Text style={styles.statsBold}>{stats.due_this_week}</Text>
-            {' this week · '}
-            {stats.total} total
-          </Text>
-        )}
-      </View>
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.rubric} />
-      ) : dueNow.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>✦ All caught up</Text>
-          <Text style={styles.emptySubtitle}>
-            {stats?.due_this_week
-              ? `${stats.due_this_week} item${stats.due_this_week !== 1 ? 's' : ''} coming up this week`
-              : 'Finish a book chapter to schedule your first review'}
-          </Text>
-        </View>
-      ) : (
-        <>
-          {/* Start button */}
-          <Pressable style={styles.startBtn} onPress={startReview}>
-            <Text style={styles.startBtnText}>
-              Start Review — {dueNow.length} item{dueNow.length !== 1 ? 's' : ''}
+    <View style={s.container}>
+      <ScrollView contentContainerStyle={s.content}>
+        {/* Header */}
+        <View style={s.header}>
+          <View style={s.titleRow}>
+            <Text style={s.screenTitle}>Review</Text>
+            <Pressable onPress={() => setDrawerOpen(true)} style={s.drawerBtn}>
+              <Text style={s.drawerBtnText}>{'\u2726'}</Text>
+            </Pressable>
+          </View>
+          <DoubleRule />
+          {session && (
+            <Text style={s.statsLine}>
+              {session.items.length} questions
+              {session.total_questions_in_pool ? ` · ${session.total_questions_in_pool} in pool` : ''}
             </Text>
-          </Pressable>
+          )}
+        </View>
 
-          {/* Queue preview */}
-          <FlatList
-            data={dueNow}
-            keyExtractor={i => i.id}
-            style={styles.list}
-            renderItem={({ item }) => <ReviewQueueRow item={item} />}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
+        {/* Loading */}
+        {loading && (
+          <View style={s.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.rubric} />
+            <Text style={s.loadingText}>Loading review...</Text>
+          </View>
+        )}
+
+        {/* Error */}
+        {error ? <Text style={s.errorText}>{error}</Text> : null}
+
+        {/* Empty */}
+        {session && session.items.length === 0 && !loading && (
+          <View style={s.emptyState}>
+            <Text style={s.emptyTitle}>{'\u2726'} All caught up</Text>
+            <Text style={s.emptySubtitle}>No questions due right now. Come back later or read more!</Text>
+          </View>
+        )}
+
+        {/* Questions */}
+        {session?.items.map((item, i) => (
+          <ReviewCard
+            key={item.question_id || `q-${i}`}
+            item={item}
+            onResult={(result) => handleResult(item, result)}
           />
-        </>
-      )}
+        ))}
+
+        {/* New session button */}
+        {session && session.items.length > 0 && (
+          <Pressable style={s.newSessionBtn} onPress={loadSession}>
+            <Text style={s.newSessionText}>New session</Text>
+          </Pressable>
+        )}
+      </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }
 
-function ReviewQueueRow({ item }: { item: ReviewItem }) {
-  const lens = item.lens || 'SIGNIFICANCE';
-  const color = LENS_COLORS[lens] || colors.textSecondary;
-  const overdue = item.due_at < Date.now();
+// ── Styles ──────────────────────────────────────────────────────────
 
-  return (
-    <View style={styles.queueRow}>
-      <View style={styles.queueRowLeft}>
-        <Text style={styles.queueRowType}>{TYPE_LABELS[item.item_type] || '◦'}</Text>
-        <View style={styles.queueRowContent}>
-          <Text style={styles.queueNodeTitle} numberOfLines={1}>
-            {item.curriculum_node_title || item.source_chapter_title || 'Review item'}
-          </Text>
-          {item.source_chapter_title && (
-            <Text style={styles.queueChapter} numberOfLines={1}>
-              {item.source_chapter_title}
-            </Text>
-          )}
-        </View>
-      </View>
-      <View style={styles.queueRowRight}>
-        <Text style={[styles.lensBadge, { color }]}>{LENS_LABELS[lens] || lens}</Text>
-        {overdue && <Text style={styles.overdueTag}>due</Text>}
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.parchment },
-  header: { paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 16, paddingBottom: 8 },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  screenTitle: {
-    fontFamily: Platform.select({ web: "'EB Garamond', Georgia, serif", default: 'EBGaramond' }),
-    fontSize: 22, fontWeight: '600', color: colors.ink,
+const cs = StyleSheet.create({
+  card: {
+    marginHorizontal: layout.screenPadding, marginBottom: 20, paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule,
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  typeBadge: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
+  typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, flex: 1, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  question: { fontFamily: fonts.reading, fontSize: 18, lineHeight: 26, color: colors.ink, marginBottom: 16 },
+  revealButton: { borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 12, alignItems: 'center' },
+  revealText: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric },
+  answerBox: { borderLeftWidth: 3, borderLeftColor: colors.claimNew, paddingLeft: 14, marginBottom: 14 },
+  answerText: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody },
+  hookBox: { backgroundColor: 'rgba(139,37,0,0.04)', borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 12, paddingVertical: 8, marginBottom: 12, borderRadius: 2 },
+  hookLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.rubric, letterSpacing: 0.3, marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  hookText: { fontFamily: fonts.readingItalic, fontSize: 14, lineHeight: 20, color: colors.textBody, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  anchorBox: { marginBottom: 14 },
+  anchorText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 2 },
+  gradeRow: { flexDirection: 'row', gap: 8 },
+  gradeButton: { flex: 1, paddingVertical: 10, borderRadius: 4, alignItems: 'center', borderWidth: 1 },
+  gradeCorrect: { borderColor: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.05)' },
+  gradeCorrectText: { fontFamily: fonts.ui, fontSize: 12, color: colors.claimNew },
+  gradePartial: { borderColor: colors.textMuted, backgroundColor: 'rgba(176,168,152,0.08)' },
+  gradePartialText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary },
+  gradeWeak: { borderColor: '#b8860b', backgroundColor: 'rgba(184,134,11,0.06)' },
+  gradeWeakText: { fontFamily: fonts.ui, fontSize: 12, color: '#b8860b' },
+  gradeWrong: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.05)' },
+  gradeWrongText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
+  responded: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.claimNew, textAlign: 'center', paddingVertical: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+});
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.parchment },
+  content: {
+    paddingBottom: 60,
+    ...(Platform.OS === 'web' ? { maxWidth: layout.readingMeasure + 2 * layout.screenPadding, width: '100%', alignSelf: 'center' as const } : {}),
+  },
+  header: { paddingHorizontal: layout.screenPadding, paddingTop: Platform.OS === 'ios' ? 56 : 16, paddingBottom: 8 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  screenTitle: { fontFamily: fonts.displaySemiBold, fontSize: 28, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   drawerBtn: { padding: 8 },
   drawerBtnText: { fontSize: 18, color: colors.rubric },
-  doubleRule: {
-    height: 5,
-    backgroundColor: 'transparent',
-    borderTopWidth: 2, borderTopColor: colors.rubric,
-    borderBottomWidth: 1, borderBottomColor: colors.rubric,
-    marginTop: 4, marginBottom: 10,
-  },
-  statsLine: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 13, color: colors.textSecondary, marginBottom: 4,
-  },
-  statsBold: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontWeight: '600', color: colors.ink,
-  },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyTitle: {
-    fontFamily: Platform.select({ web: "'EB Garamond', Georgia, serif", default: 'EBGaramond' }),
-    fontSize: 20, color: colors.ink, marginBottom: 12,
-  },
-  emptySubtitle: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20,
-  },
-  startBtn: {
-    marginHorizontal: 16, marginTop: 8, marginBottom: 16,
-    paddingVertical: 12, paddingHorizontal: 24,
-    borderWidth: 1, borderColor: colors.rubric,
-    borderRadius: 3, alignItems: 'center',
-  },
-  startBtnText: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 14, fontWeight: '500', color: colors.rubric, letterSpacing: 0.4,
-  },
-  list: { flex: 1 },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.rule, marginHorizontal: 16 },
-  queueRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-  },
-  queueRowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  queueRowType: { fontSize: 16, marginRight: 10, color: colors.textMuted },
-  queueRowContent: { flex: 1 },
-  queueNodeTitle: {
-    fontFamily: Platform.select({ web: "'EB Garamond', Georgia, serif", default: 'EBGaramond' }),
-    fontSize: 15, color: colors.ink,
-  },
-  queueChapter: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 11, color: colors.textMuted, marginTop: 1,
-  },
-  queueRowRight: { alignItems: 'flex-end', gap: 4 },
-  lensBadge: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 10, letterSpacing: 0.06, textTransform: 'uppercase', fontWeight: '500',
-  },
-  overdueTag: {
-    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
-    fontSize: 9, color: colors.rubric, letterSpacing: 0.04,
-  },
+  statsLine: { fontFamily: fonts.ui, fontSize: 13, color: colors.textSecondary, marginTop: 4 },
+  loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.rubric, textAlign: 'center', paddingVertical: 20, paddingHorizontal: layout.screenPadding },
+  emptyState: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  emptyTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 12, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  emptySubtitle: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  newSessionBtn: { marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 24, paddingVertical: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, alignItems: 'center' },
+  newSessionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
 });
