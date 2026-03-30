@@ -174,6 +174,29 @@ function ReviewCard({
             </View>
           ) : null}
 
+          {/* Place entities — map link */}
+          {(() => {
+            const allSpans = Object.values(item.entity_spans || {}).flat();
+            const places = allSpans.filter(sp => sp.entity_type === 'place');
+            // Deduplicate by entity_id
+            const seen = new Set<string>();
+            const unique = places.filter(sp => {
+              if (seen.has(sp.entity_id)) return false;
+              seen.add(sp.entity_id);
+              return true;
+            });
+            if (unique.length === 0) return null;
+            return (
+              <View style={cs.mapLinkRow}>
+                {unique.map(sp => (
+                  <Pressable key={sp.entity_id} onPress={() => onEntityTap(sp.entity_id)}>
+                    <Text style={cs.mapLinkText}>{'\u{1F4CD}'} {sp.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            );
+          })()}
+
           {/* Grading buttons */}
           <View style={cs.gradeRow}>
             {gradingButtons.map(btn => {
@@ -464,6 +487,8 @@ const cs = StyleSheet.create({
   hookText: { fontFamily: fonts.readingItalic, fontSize: 14, lineHeight: 20, color: colors.textBody, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   anchorBox: { marginBottom: 14 },
   anchorText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 2 },
+  mapLinkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 14 },
+  mapLinkText: { fontFamily: fonts.ui, fontSize: 13, color: colors.info, textDecorationLine: 'underline' },
   gradeRow: { flexDirection: 'row', gap: 8 },
   gradeButton: { flex: 1, paddingVertical: 10, borderRadius: 4, alignItems: 'center', borderWidth: 1 },
   gradeCorrect: { borderColor: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.05)' },

@@ -28,4 +28,9 @@ fi
 echo "Deploying to $REMOTE..."
 scp -r "$DIST_DIR"/* "$REMOTE"
 
+# Copy public assets not included in expo export (map HTML for WebView)
+if [ -d "$APP_DIR/public/map" ]; then
+  scp -r "$APP_DIR/public/map" "$REMOTE"
+fi
+
 echo "Done. Visit http://alifstian.duckdns.org:8084/"
