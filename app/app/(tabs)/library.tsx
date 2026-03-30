@@ -1,9 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import { logEvent } from '../../data/logger';
 import { getPhysicalBooks, getBookCaptures, archiveBook } from '../../data/book-store';
@@ -40,6 +41,7 @@ const progressStyles = StyleSheet.create({
 
 function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook; captureCount: number; onPress: () => void; onDelete: () => void }) {
   const [hovered, setHovered] = useState(false);
+  const isWeb = Platform.OS === 'web';
   const isIdentifying = book.processing_status === 'identifying';
   const statusLabel = isIdentifying ? 'Identifying...'
     : book.reading_status === 'finished' ? 'Finished'
@@ -51,40 +53,51 @@ function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook
     : null;
   const coverUri = book.cover_url || book.cover_image_uri;
 
-  return (
-    <View
-      style={[bookStyles.row, hovered && bookStyles.rowHovered]}
-      {...(Platform.OS === 'web' ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as any : {})}
+  const renderRightActions = (
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+  ) => {
+    const scale = dragX.interpolate({ inputRange: [-100, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+    return (
+      <Animated.View style={[bookStyles.swipeAction, { transform: [{ scale }] }]}>
+        <Text style={bookStyles.swipeActionText}>Remove</Text>
+      </Animated.View>
+    );
+  };
+
+  const rowContent = (
+    <Pressable
+      style={[bookStyles.row, isWeb && hovered && bookStyles.rowHovered]}
+      onPress={onPress}
+      {...(isWeb ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as any : {})}
     >
-      <Pressable style={bookStyles.rowInner} onPress={onPress}>
-        <View style={bookStyles.coverWrap}>
-          {coverUri ? (
-            <Image source={{ uri: coverUri }} style={bookStyles.cover} />
-          ) : (
-            <View style={bookStyles.coverPlaceholder}>
-              <Text style={bookStyles.coverInitial}>{book.title.charAt(0)}</Text>
-            </View>
-          )}
-        </View>
-        <View style={bookStyles.info}>
-          <Text style={bookStyles.title} numberOfLines={2}>{book.title}</Text>
-          <Text style={bookStyles.author}>{book.author}</Text>
-          <View style={bookStyles.metaRow}>
-            <Text style={bookStyles.status}>{statusLabel}</Text>
-            {positionText && <Text style={bookStyles.position}> · {positionText}</Text>}
+      <View style={bookStyles.coverWrap}>
+        {coverUri ? (
+          <Image source={{ uri: coverUri }} style={bookStyles.cover} />
+        ) : (
+          <View style={bookStyles.coverPlaceholder}>
+            <Text style={bookStyles.coverInitial}>{book.title.charAt(0)}</Text>
           </View>
-          {book.topics.length > 0 && (
-            <View style={bookStyles.topicRow}>
-              {book.topics.slice(0, 2).map(t => (
-                <Text key={t} style={bookStyles.topic}>{t}</Text>
-              ))}
-            </View>
-          )}
-          {book.current_page && book.page_count && book.reading_status === 'reading' && (
-            <ProgressBar current={book.current_page} total={book.page_count} />
-          )}
+        )}
+      </View>
+      <View style={bookStyles.info}>
+        <Text style={bookStyles.title} numberOfLines={2}>{book.title}</Text>
+        <Text style={bookStyles.author}>{book.author}</Text>
+        <View style={bookStyles.metaRow}>
+          <Text style={bookStyles.status}>{statusLabel}</Text>
+          {positionText && <Text style={bookStyles.position}> · {positionText}</Text>}
         </View>
-      </Pressable>
+        {book.topics.length > 0 && (
+          <View style={bookStyles.topicRow}>
+            {book.topics.slice(0, 2).map(t => (
+              <Text key={t} style={bookStyles.topic}>{t}</Text>
+            ))}
+          </View>
+        )}
+        {book.current_page && book.page_count && book.reading_status === 'reading' && (
+          <ProgressBar current={book.current_page} total={book.page_count} />
+        )}
+      </View>
       <View style={bookStyles.sidebar}>
         {isIdentifying ? (
           <ActivityIndicator size="small" color={colors.rubric} />
@@ -96,23 +109,30 @@ function BookRow({ book, captureCount, onPress, onDelete }: { book: PhysicalBook
           </>
         )}
       </View>
-      {(hovered || Platform.OS !== 'web') && (
-        <Pressable
-          style={bookStyles.removeButton}
-          onPress={onDelete}
-          hitSlop={8}
-        >
+      {isWeb && hovered && (
+        <Pressable style={bookStyles.removeButton} onPress={(e) => { e.stopPropagation(); onDelete(); }} hitSlop={8}>
           <Text style={bookStyles.removeButtonText}>×</Text>
         </Pressable>
       )}
-    </View>
+    </Pressable>
+  );
+
+  if (isWeb) return rowContent;
+
+  return (
+    <Swipeable
+      renderRightActions={renderRightActions}
+      onSwipeableOpen={() => onDelete()}
+      overshootRight={false}
+    >
+      {rowContent}
+    </Swipeable>
   );
 }
 
 const bookStyles = StyleSheet.create({
-  row: { position: 'relative' as const, flexDirection: 'row', paddingVertical: 14, paddingHorizontal: layout.screenPadding, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule, ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}) },
+  row: { position: 'relative' as const, flexDirection: 'row', paddingVertical: 14, paddingHorizontal: layout.screenPadding, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule, gap: 14, backgroundColor: colors.parchment, ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}) },
   rowHovered: { backgroundColor: colors.parchmentHover },
-  rowInner: { flexDirection: 'row', flex: 1, gap: 14 },
   coverWrap: { width: 52, height: 72, borderRadius: 2, overflow: 'hidden', backgroundColor: colors.rule },
   cover: { width: 52, height: 72, borderRadius: 2 },
   coverPlaceholder: { width: 52, height: 72, backgroundColor: colors.parchmentDark, borderWidth: 1, borderColor: colors.rule, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },
@@ -125,12 +145,14 @@ const bookStyles = StyleSheet.create({
   position: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
   topicRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   topic: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.rubric, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
-  sidebar: { width: 56, alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2, marginLeft: 14 },
+  sidebar: { width: 56, alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 },
   sideNumber: { fontFamily: fonts.displaySemiBold, fontSize: 22, color: colors.ink, lineHeight: 26, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   sideLabel: { fontFamily: fonts.uiMedium, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textMuted, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   timeAgo: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, marginTop: 6 },
   removeButton: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.parchmentDark, alignItems: 'center', justifyContent: 'center' },
   removeButtonText: { fontFamily: fonts.ui, fontSize: 16, color: colors.textMuted, lineHeight: 18 },
+  swipeAction: { justifyContent: 'center', paddingHorizontal: 24, backgroundColor: colors.rubric, alignItems: 'flex-end' },
+  swipeActionText: { fontFamily: fonts.ui, fontSize: 13, color: colors.parchment },
 });
 
 type FilterMode = 'active' | 'all' | 'archived';
