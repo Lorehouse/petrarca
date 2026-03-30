@@ -7,13 +7,14 @@ import { useFocusEffect } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
 import { EntitySpan, ResurfacingItem, ResurfacingSession } from '../../data/types';
 import {
-  generateCurriculumReview, recordReviewResult,
+  generateCurriculumReview, recordReviewResult, recordEntityTap,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import DoubleRule from '../../components/DoubleRule';
 import EntitySheet from '../../components/EntitySheet';
+import AncientMap from '../../components/AncientMap';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -201,6 +202,114 @@ function ReviewCard({
   );
 }
 
+// ── Entity Intro Card ────────────────────────────────────────────────
+
+const INTRO_TYPE_LABELS: Record<string, string> = {
+  place: '\u{1F4CD} Place',
+  person: '\u{1F464} Person',
+  event: '\u26A1 Event',
+  period: '\u{1F551} Period',
+};
+
+function EntityIntroCard({
+  item,
+  onContinue,
+}: {
+  item: ResurfacingItem;
+  onContinue: () => void;
+}) {
+  const [continued, setContinued] = useState(false);
+
+  const formatYear = (y: number | null | undefined) => {
+    if (y == null) return '';
+    return y < 0 ? `${Math.abs(y)} BC` : `${y} AD`;
+  };
+
+  const handleContinue = () => {
+    setContinued(true);
+    if (item.entity_id) {
+      recordEntityTap(item.entity_id, 'encountered').catch(() => {});
+      logEvent('entity_intro_seen', { entity_id: item.entity_id });
+    }
+    setTimeout(onContinue, 400);
+  };
+
+  if (continued) {
+    return (
+      <View style={cs.card}>
+        <Text style={cs.responded}>Noted {'\u2713'}</Text>
+      </View>
+    );
+  }
+
+  const dateStr = item.date_start != null
+    ? `${formatYear(item.date_start)}${item.date_end != null ? ` \u2013 ${formatYear(item.date_end)}` : ''}`
+    : null;
+
+  return (
+    <View style={cs.card}>
+      {/* Header: type badge */}
+      <View style={cs.headerRow}>
+        {item.entity_type && (
+          <View style={ic.introBadge}>
+            <Text style={ic.introBadgeText}>
+              {INTRO_TYPE_LABELS[item.entity_type] || item.entity_type}
+            </Text>
+          </View>
+        )}
+        <Text style={ic.introLabel}>Entity briefing</Text>
+      </View>
+
+      {/* Name */}
+      <Text style={ic.entityName}>{item.entity_name}</Text>
+      {item.modern_name && item.modern_name !== item.entity_name ? (
+        <Text style={ic.modernName}>Modern: {item.modern_name}</Text>
+      ) : null}
+
+      {/* Mini map for places */}
+      {item.entity_type === 'place' && item.latitude != null && item.longitude != null ? (
+        <View style={ic.miniMapWrap}>
+          <AncientMap
+            entities={[{
+              entity_id: item.entity_id || '',
+              name: item.entity_name || '',
+              entity_type: 'place',
+              latitude: item.latitude,
+              longitude: item.longitude,
+              aliases: [],
+              nexus_score: 0,
+              curriculum_links: [],
+            }]}
+            center={[item.latitude, item.longitude]}
+            zoom={7}
+            showControls={false}
+            showTimeline={false}
+            showFilters={false}
+            showLegend={false}
+            showEntitySheet={false}
+            style={{ height: 140 }}
+          />
+        </View>
+      ) : null}
+
+      {/* Description */}
+      {item.description ? (
+        <Text style={ic.description}>{item.description}</Text>
+      ) : null}
+
+      {/* Date facts */}
+      {dateStr ? (
+        <Text style={ic.dateFact}>{'\u2022'} {dateStr}</Text>
+      ) : null}
+
+      {/* Continue button */}
+      <Pressable style={ic.continueBtn} onPress={handleContinue}>
+        <Text style={ic.continueText}>Continue {'\u2192'}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 // ── Main Screen ─────────────────────────────────────────────────────
 
 export default function ReviewScreen() {
@@ -300,15 +409,21 @@ export default function ReviewScreen() {
           </View>
         )}
 
-        {/* Current question */}
-        {currentItem && (
+        {/* Current card — dispatch by type */}
+        {currentItem && currentItem.type === 'entity_intro' ? (
+          <EntityIntroCard
+            key={`intro-${currentItem.entity_id || currentIndex}`}
+            item={currentItem}
+            onContinue={() => setCurrentIndex(i => i + 1)}
+          />
+        ) : currentItem ? (
           <ReviewCard
             key={currentItem.question_id || `q-${currentIndex}`}
             item={currentItem}
             onResult={(result) => handleResult(currentItem, result)}
             onEntityTap={setActiveEntityId}
           />
-        )}
+        ) : null}
 
         {/* Session complete */}
         {isDone && (
@@ -360,6 +475,19 @@ const cs = StyleSheet.create({
   gradeWrong: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.05)' },
   gradeWrongText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
   responded: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.claimNew, textAlign: 'center', paddingVertical: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+});
+
+const ic = StyleSheet.create({
+  introBadge: { backgroundColor: '#b8860b', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
+  introBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  introLabel: { fontFamily: fonts.readingItalic, fontSize: 11, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  entityName: { fontFamily: fonts.displaySemiBold, fontSize: 24, color: colors.ink, marginBottom: 2, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  modernName: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  miniMapWrap: { height: 140, borderRadius: 8, overflow: 'hidden', marginBottom: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.rule },
+  description: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody, marginBottom: 12 },
+  dateFact: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 10 },
+  continueBtn: { borderWidth: 1, borderColor: '#b8860b', borderRadius: 4, paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(184,134,11,0.04)' },
+  continueText: { fontFamily: fonts.body, fontSize: 14, color: '#b8860b' },
 });
 
 const s = StyleSheet.create({

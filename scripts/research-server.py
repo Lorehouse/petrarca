@@ -3922,7 +3922,7 @@ JSON array only:"""
         content_length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(content_length))
         entity_id = body.get('entity_id')
-        action = body.get('action', 'tap')  # tap, unknown, interested
+        action = body.get('action', 'tap')  # tap, unknown, interested, encountered
         if not entity_id:
             self._send_json_response(400, {'error': 'entity_id required'})
             return
@@ -3939,6 +3939,22 @@ JSON array only:"""
             domain_id, node_id = link['domain_id'], link['node_id']
             now_ms = int(time.time() * 1000)
             stability = 1.0 if action == 'unknown' else 3.0
+
+            # "encountered" from intro cards — mark knowledge as mentioned if currently unknown
+            if action == 'encountered':
+                conn.execute('''
+                    INSERT INTO knowledge_states (domain_id, node_id, knowledge, interest, confidence, highest_layer, last_updated)
+                    VALUES (?, ?, 'mentioned', 0.5, 0.1, '', ?)
+                    ON CONFLICT(domain_id, node_id) DO UPDATE SET
+                        knowledge = CASE WHEN knowledge = 'unknown' THEN 'mentioned' ELSE knowledge END,
+                        last_updated = ?
+                ''', (domain_id, node_id, now_ms, now_ms))
+                conn.commit()
+                self._send_json_response(200, {
+                    'status': 'encountered', 'entity_id': entity_id,
+                })
+                return
+
             # Create knowledge_item for review scheduling if missing
             item_id = f"{domain_id}:{node_id}"
             existing = conn.execute(
@@ -3966,7 +3982,42 @@ JSON array only:"""
                           json.dumps([source]), '[]', now_ms))
                 except Exception:
                     pass
-            # Boost interest in knowledge_states
+
+            # "interested" — generate exploration prompts
+            if action == 'interested':
+                # Boost interest + schedule, then generate exploration in background
+                conn.execute('''
+                    INSERT INTO knowledge_states (domain_id, node_id, knowledge, interest, confidence, highest_layer, last_updated)
+                    VALUES (?, ?, 'unknown', 0.9, 0.0, '', ?)
+                    ON CONFLICT(domain_id, node_id) DO UPDATE SET
+                        interest = MAX(interest, 0.9),
+                        last_updated = ?
+                ''', (domain_id, node_id, now_ms, now_ms))
+                conn.commit()
+
+                # Generate entity exploration prompts
+                from review_engine import create_entity_exploration_items
+                entity = conn.execute(
+                    'SELECT entity_id, name, description, entity_type FROM shared_entities WHERE entity_id = ?',
+                    (entity_id,)
+                ).fetchone()
+                if entity:
+                    created = create_entity_exploration_items(
+                        dict(entity), domain_id, node_id, conn
+                    )
+                    self._send_json_response(200, {
+                        'status': 'exploration_queued',
+                        'entity_id': entity_id,
+                        'prompts_created': len(created),
+                        'prompts': created,
+                    })
+                else:
+                    self._send_json_response(200, {
+                        'status': 'scheduled', 'entity_id': entity_id,
+                    })
+                return
+
+            # Default tap/unknown — boost interest in knowledge_states
             conn.execute('''
                 INSERT INTO knowledge_states (domain_id, node_id, knowledge, interest, confidence, highest_layer, last_updated)
                 VALUES (?, ?, 'unknown', 0.8, 0.0, '', ?)

@@ -524,7 +524,7 @@ export interface ChapterInsights {
 // --- Resurfacing types ---
 
 export interface ResurfacingItem {
-  type: 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
+  type: 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering' | 'entity_intro';
   prompt_type?: string;
   prompt_text?: string;
   // Resonance fields
@@ -557,6 +557,17 @@ export interface ResurfacingItem {
   grading_options?: string[];
   // Entity annotation (from server entity matching)
   entity_spans?: Record<string, EntitySpan[]>;
+  // Entity intro card fields
+  entity_id?: string;
+  entity_name?: string;
+  entity_type?: string;
+  modern_name?: string;
+  description?: string;
+  latitude?: number;
+  longitude?: number;
+  wikipedia_url?: string;
+  date_start?: number;
+  date_end?: number;
 }
 
 export interface EntitySpan {

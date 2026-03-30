@@ -406,13 +406,14 @@ export async function fetchEntityDetails(
 
 export async function recordEntityTap(
   entityId: string,
-  action: 'tap' | 'unknown' | 'interested' = 'tap',
-): Promise<void> {
-  await fetch(`${RESEARCH_BASE}/entity/tap`, {
+  action: 'tap' | 'unknown' | 'interested' | 'encountered' = 'tap',
+): Promise<{ status: string; prompts_created?: number }> {
+  const resp = await fetch(`${RESEARCH_BASE}/entity/tap`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ entity_id: entityId, action }),
   });
+  return resp.json();
 }
 
 // --- Kindle Processing API ---

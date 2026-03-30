@@ -603,6 +603,107 @@ def get_timeline(domain_id: str, conn=None) -> list[dict]:
 REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60, 120]
 QUESTIONS_PER_SESSION = 8
 ORDERING_PER_SESSION = 2
+MAX_INTRO_CARDS = 3
+
+
+def _load_entity_knowledge(conn) -> dict[str, str]:
+    """Load best knowledge state per entity (max across linked curriculum nodes).
+
+    Returns {entity_id: knowledge_level} where knowledge_level is one of:
+    unknown, mentioned, engaged, anchored.
+    """
+    rows = conn.execute('''
+        SELECT ecl.entity_id, COALESCE(ks.knowledge, 'unknown') as knowledge
+        FROM entity_curriculum_links ecl
+        LEFT JOIN knowledge_states ks
+          ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+    ''').fetchall()
+
+    rank = {'unknown': 0, 'mentioned': 1, 'engaged': 2, 'anchored': 3}
+    best: dict[str, str] = {}
+    for r in rows:
+        eid = r['entity_id']
+        knowledge = r['knowledge']
+        if rank.get(knowledge, 0) > rank.get(best.get(eid, 'unknown'), 0):
+            best[eid] = knowledge
+    return best
+
+
+def _load_entity_details_for_intros(entity_ids: list[str], conn) -> dict[str, dict]:
+    """Load full entity details for building intro cards."""
+    if not entity_ids:
+        return {}
+    placeholders = ','.join('?' * len(entity_ids))
+    rows = conn.execute(f'''
+        SELECT entity_id, name, description, entity_type, modern_name,
+               wikipedia_url, latitude, longitude, date_start, date_end, aliases
+        FROM shared_entities WHERE entity_id IN ({placeholders})
+    ''', entity_ids).fetchall()
+    return {r['entity_id']: dict(r) for r in rows}
+
+
+def _build_entity_intro_items(items: list[dict], entity_knowledge: dict[str, str],
+                              conn) -> list[dict]:
+    """Build entity intro cards for unknown entities referenced in session items.
+
+    Returns a list of (intro_item, before_index) tuples merged into a flat list
+    of intro items to be inserted before the session items.
+    """
+    # Collect unknown entities and which item first references them
+    unknown_entities: dict[str, int] = {}  # entity_id -> first item index
+    for i, item in enumerate(items):
+        spans_by_field = item.get('entity_spans', {})
+        for field_spans in spans_by_field.values():
+            for span in field_spans:
+                eid = span['entity_id']
+                if eid in unknown_entities:
+                    continue
+                knowledge = entity_knowledge.get(eid, 'unknown')
+                if knowledge == 'unknown':
+                    unknown_entities[eid] = i
+
+    if not unknown_entities:
+        return items
+
+    # Cap and load details for the most relevant unknowns
+    # Prioritize entities that appear earliest in the session
+    sorted_unknowns = sorted(unknown_entities.items(), key=lambda x: x[1])[:MAX_INTRO_CARDS]
+    entity_ids = [eid for eid, _ in sorted_unknowns]
+    details = _load_entity_details_for_intros(entity_ids, conn)
+
+    # Build intro items and interleave before their first dependent question
+    intro_items: list[tuple[dict, int]] = []
+    for eid, before_idx in sorted_unknowns:
+        d = details.get(eid)
+        if not d or not d.get('description'):
+            continue
+        intro_items.append(({
+            'type': 'entity_intro',
+            'entity_id': eid,
+            'entity_name': d['name'],
+            'entity_type': d.get('entity_type'),
+            'modern_name': d.get('modern_name'),
+            'description': d.get('description'),
+            'latitude': d.get('latitude'),
+            'longitude': d.get('longitude'),
+            'wikipedia_url': d.get('wikipedia_url'),
+            'date_start': d.get('date_start'),
+            'date_end': d.get('date_end'),
+        }, before_idx))
+
+    if not intro_items:
+        return items
+
+    # Merge: insert intros before their target index (adjust for prior insertions)
+    result = []
+    intro_by_idx: dict[int, list[dict]] = {}
+    for intro, idx in intro_items:
+        intro_by_idx.setdefault(idx, []).append(intro)
+    for i, item in enumerate(items):
+        for intro in intro_by_idx.get(i, []):
+            result.append(intro)
+        result.append(item)
+    return result
 
 
 def _load_entity_index(conn) -> list[dict]:
@@ -801,11 +902,16 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
 
         random.shuffle(items)
 
+        # Insert entity intro cards before questions with unknown entity dependencies
+        entity_knowledge = _load_entity_knowledge(conn)
+        items = _build_entity_intro_items(items, entity_knowledge, conn)
+
         count_domain_clause = "AND domain_id LIKE ?" if domain_filter else ""
         total_questions = conn.execute(
             f"SELECT COUNT(*) FROM retrieval_questions WHERE 1=1 {count_domain_clause}", params
         ).fetchone()[0]
 
+        intro_count = sum(1 for it in items if it.get('type') == 'entity_intro')
         return {
             'id': f'cr_{int(time.time())}',
             'items': items,
@@ -813,6 +919,7 @@ def generate_review_session(domain_filter: str | None = None, conn=None) -> dict
             'domain': domain_filter or 'all',
             'retrieval_count': len(selected_retrieval),
             'ordering_count': len(selected_ordering),
+            'intro_count': intro_count,
             'total_questions_in_pool': total_questions,
         }
     finally:

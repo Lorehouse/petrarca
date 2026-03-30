@@ -31,16 +31,19 @@ const KNOWLEDGE_COLORS: Record<string, string> = {
 export default function EntitySheet({ entityId, onClose }: Props) {
   const [entity, setEntity] = useState<EntityDetails | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tapped, setTapped] = useState(false);
+  const [tapped, setTapped] = useState<false | 'unknown' | 'interested' | 'loading'>(false);
+  const [promptsQueued, setPromptsQueued] = useState(0);
 
   useEffect(() => {
     if (!entityId) {
       setEntity(null);
       setTapped(false);
+      setPromptsQueued(0);
       return;
     }
     setLoading(true);
     setTapped(false);
+    setPromptsQueued(0);
     fetchEntityDetails(entityId)
       .then(setEntity)
       .catch(() => setEntity(null))
@@ -53,12 +56,22 @@ export default function EntitySheet({ entityId, onClose }: Props) {
 
   if (!entityId) return null;
 
-  const handleAction = (action: 'unknown' | 'interested') => {
+  const handleAction = async (action: 'unknown' | 'interested') => {
     if (!entityId) return;
-    recordEntityTap(entityId, action).catch(() => {});
     logEvent('entity_action', { entity_id: entityId, action });
-    setTapped(true);
-    if (action === 'unknown') {
+
+    if (action === 'interested') {
+      setTapped('loading');
+      try {
+        const resp = await recordEntityTap(entityId, action);
+        setPromptsQueued(resp.prompts_created || 0);
+        setTapped('interested');
+      } catch {
+        setTapped('interested');
+      }
+    } else {
+      recordEntityTap(entityId, action).catch(() => {});
+      setTapped('unknown');
       setTimeout(onClose, 800);
     }
   };
@@ -171,8 +184,19 @@ export default function EntitySheet({ entityId, onClose }: Props) {
               ) : null}
 
               {/* Actions */}
-              {tapped ? (
+              {tapped === 'unknown' ? (
                 <Text style={es.tappedConfirm}>Noted ✓</Text>
+              ) : tapped === 'loading' ? (
+                <View style={es.actionRow}>
+                  <ActivityIndicator size="small" color="#b8860b" />
+                  <Text style={es.explorationLoading}>Generating questions...</Text>
+                </View>
+              ) : tapped === 'interested' ? (
+                <Text style={es.explorationConfirm}>
+                  {promptsQueued > 0
+                    ? `${promptsQueued} exploration questions queued for next session ✦`
+                    : 'Queued for exploration ✦'}
+                </Text>
               ) : (
                 <View style={es.actionRow}>
                   <Pressable
@@ -364,6 +388,20 @@ const es = StyleSheet.create({
     fontFamily: fonts.readingItalic,
     fontSize: 14,
     color: colors.claimNew,
+    textAlign: 'center',
+    paddingVertical: 12,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  explorationLoading: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 14,
+    color: '#b8860b',
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  explorationConfirm: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 14,
+    color: '#b8860b',
     textAlign: 'center',
     paddingVertical: 12,
     ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),

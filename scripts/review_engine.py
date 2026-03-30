@@ -992,6 +992,128 @@ def create_exploration_items(item_id: str, conn) -> list:
     return created
 
 
+# ── Entity exploration ────────────────────────────────────────────────────────
+
+ENTITY_EXPLORE_PROMPTS = {
+    'place': """A learner tapped "Tell me more" on this place during a knowledge review session.
+
+Entity: {name}
+Description: {description}
+Type: Place
+
+Generate 3 research questions to deepen understanding of this place. Vary lenses:
+1. Geographic/founding: Why was it located here? What strategic or economic factors?
+2. Comparative: How does it compare to other places in the region or period?
+3. Legacy: What remains today? What's its modern significance?
+
+Output JSON only:
+[{{"question":"...","lens":"...","suggested_source":"brief hint where to find the answer"}}]""",
+
+    'person': """A learner tapped "Tell me more" on this person during a knowledge review session.
+
+Entity: {name}
+Description: {description}
+Type: Person
+
+Generate 3 research questions to deepen understanding of this person. Vary lenses:
+1. Formative: What shaped their worldview or actions?
+2. Impact: How did they change the course of events?
+3. Legacy: How are they remembered? What's their modern significance?
+
+Output JSON only:
+[{{"question":"...","lens":"...","suggested_source":"brief hint where to find the answer"}}]""",
+
+    'event': """A learner tapped "Tell me more" on this event during a knowledge review session.
+
+Entity: {name}
+Description: {description}
+Type: Event
+
+Generate 3 research questions to deepen understanding of this event. Vary lenses:
+1. Causal: What chain of events led to this?
+2. Consequences: What were the long-term effects?
+3. Parallels: What similar events happened elsewhere or in other periods?
+
+Output JSON only:
+[{{"question":"...","lens":"...","suggested_source":"brief hint where to find the answer"}}]""",
+
+    'default': """A learner tapped "Tell me more" on this entity during a knowledge review session.
+
+Entity: {name}
+Description: {description}
+
+Generate 3 research questions to deepen understanding. Vary lenses:
+1. Causal depth (why/how)
+2. Comparative (relation to other periods/places/concepts)
+3. Significance (consequences or modern relevance)
+
+Output JSON only:
+[{{"question":"...","lens":"...","suggested_source":"brief hint where to find the answer"}}]""",
+}
+
+
+def create_entity_exploration_items(entity: dict, domain_id: str, node_id: str, conn) -> list:
+    """Generate 3 AI exploration prompts scoped to an entity and queue as review items."""
+    entity_id = entity['entity_id']
+    entity_type = entity.get('entity_type', '')
+    now = int(time.time() * 1000)
+
+    # Don't create duplicates — check for recent entity exploration items
+    existing = conn.execute(
+        """SELECT count(*) FROM review_items
+           WHERE parent_item_id = ? AND item_type = 'exploration' AND due_at > ?""",
+        (f'entity:{entity_id}', now - 7 * 24 * 60 * 60 * 1000)
+    ).fetchone()[0]
+    if existing > 0:
+        return []
+
+    prompt_template = ENTITY_EXPLORE_PROMPTS.get(entity_type, ENTITY_EXPLORE_PROMPTS['default'])
+    prompt = prompt_template.format(
+        name=entity.get('name', ''),
+        description=entity.get('description', '')[:400],
+    )
+
+    raw = _call_claude(prompt) or (call_llm(prompt, max_tokens=65536, response_mime_type='application/json') if call_llm else None)
+    questions = _parse_json(raw) if raw else None
+    if not isinstance(questions, list):
+        return []
+
+    # Look up node title for the review items
+    node = conn.execute(
+        'SELECT title FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+        (node_id, domain_id)
+    ).fetchone()
+    node_title = node['title'] if node else entity.get('name', '')
+
+    tomorrow = now + 24 * 60 * 60 * 1000
+    created = []
+
+    for i, q in enumerate(questions[:3]):
+        child_id = f'entity:{entity_id}_explore_{i}_{now}'
+        conn.execute("""
+            INSERT INTO review_items
+              (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
+               source_book_id, source_chapter_number, source_chapter_title,
+               source_text, lens, parent_item_id, stability_days, due_at, review_count, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            child_id, 'exploration',
+            domain_id, node_id, f'{node_title} — {entity.get("name", "")}',
+            None, None, f'Entity exploration: {entity.get("name", "")}',
+            q.get('question', ''), q.get('lens', 'SIGNIFICANCE'),
+            f'entity:{entity_id}', 1.0, tomorrow, 0, now,
+        ))
+        created.append({
+            'id': child_id,
+            'question': q.get('question', ''),
+            'lens': q.get('lens', ''),
+            'suggested_source': q.get('suggested_source', ''),
+        })
+
+    conn.commit()
+    return created
+
+
 # ── Voice memo ────────────────────────────────────────────────────────────────
 
 def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> dict:
