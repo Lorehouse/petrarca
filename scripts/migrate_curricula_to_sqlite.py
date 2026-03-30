@@ -20,7 +20,11 @@ from pathlib import Path
 
 # Ensure imports work
 sys.path.insert(0, str(Path(__file__).parent))
-os.environ.setdefault('PETRARCA_DB', str(Path(__file__).parent.parent / 'data' / 'petrarca_content.db'))
+# Default to petrarca.db on server, petrarca_content.db locally (if petrarca.db doesn't exist)
+_default_db = Path(__file__).parent.parent / 'data' / 'petrarca.db'
+if not _default_db.exists():
+    _default_db = Path(__file__).parent.parent / 'data' / 'petrarca_content.db'
+os.environ.setdefault('PETRARCA_DB', str(_default_db))
 
 from db import get_connection, init_db
 
