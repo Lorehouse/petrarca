@@ -914,6 +914,55 @@ def generate_openstax_curriculum(curriculum_data: dict, output_dir: Path, dry_ru
 # CLI
 # ─────────────────────────────────────────────
 
+def sync_curricula_to_sqlite(curricula: list[dict], db_path: str = '/opt/petrarca/data/petrarca.db') -> int:
+    """Insert generated curricula into SQLite curriculum_domains/curriculum_nodes tables."""
+    import sqlite3
+    if not os.path.exists(db_path):
+        print(f"  SQLite DB not found at {db_path}, skipping sync", flush=True)
+        return 0
+
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    synced = 0
+
+    for curriculum in curricula:
+        domain_id = curriculum["id"]
+        existing = conn.execute(
+            "SELECT id FROM curriculum_domains WHERE id = ?", (domain_id,)
+        ).fetchone()
+        if existing:
+            # Update node count in case it changed
+            conn.execute(
+                "UPDATE curriculum_domains SET node_count = ? WHERE id = ?",
+                (len(curriculum.get("nodes", [])), domain_id),
+            )
+            continue
+
+        conn.execute(
+            "INSERT INTO curriculum_domains (id, title, description, depth, node_count, generated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (domain_id, curriculum.get("title", ""), curriculum.get("description", ""),
+             curriculum.get("depth", "introductory"), len(curriculum.get("nodes", [])),
+             curriculum.get("generated_at", "")),
+        )
+
+        for node in curriculum.get("nodes", []):
+            conn.execute(
+                "INSERT OR IGNORE INTO curriculum_nodes (id, domain_id, title, description, parent_id, level, obscurity, bloom_floor, date_start, date_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (node["id"], domain_id, node.get("title", ""), node.get("description", ""),
+                 node.get("parent_id"), node.get("level", 2),
+                 node.get("obscurity", 3), node.get("bloom_floor", "recognize"),
+                 node.get("date_start"), node.get("date_end")),
+            )
+
+        conn.commit()
+        synced += 1
+        print(f"  Synced to SQLite: {domain_id} ({len(curriculum['nodes'])} nodes)", flush=True)
+
+    conn.close()
+    return synced
+
+
 CURRICULA = {
     "ap_world_history": ("ap", AP_WORLD_HISTORY),
     "ap_european_history": ("ap", AP_EUROPEAN_HISTORY),
@@ -959,6 +1008,15 @@ def main():
         else:
             result = generate_openstax_curriculum(data, output_dir=output_dir, dry_run=args.dry_run)
         results[name] = result
+
+    # Sync to SQLite (so curriculum_db.list_curricula() picks them up)
+    if not args.dry_run:
+        synced = sync_curricula_to_sqlite(
+            [r for r in results.values() if r],
+            db_path=os.environ.get('PETRARCA_DB', '/opt/petrarca/data/petrarca.db'),
+        )
+        if synced:
+            print(f"\nSynced {synced} new curricula to SQLite", flush=True)
 
     # Summary
     print(f"\n{'='*60}", flush=True)
