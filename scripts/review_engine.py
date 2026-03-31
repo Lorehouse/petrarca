@@ -82,6 +82,7 @@ def detect_curriculum(book_title: str, book_topics: list) -> str:
         'roman_republic_and_empire': ['rome', 'roman', 'caesar', 'republic'],
         'byzantine': ['byzantine', 'byzantium', 'constantinople', 'justinian', 'belisarius'],
         'islamic': ['islamic', 'islam', 'arab', 'caliphate', 'muslim', 'ottoman'],
+        'classical_reception': ['classics', 'classical education', 'humanism', 'humanist', 'liberal arts', 'trivium', 'quadrivium', 'paideia', 'hellenism', 'renaissance learning', 'erasmus', 'petrarch', 'scriptoria', 'manuscript'],
     }
     for domain_id, keywords in keyword_map.items():
         if any(kw in text for kw in keywords):
