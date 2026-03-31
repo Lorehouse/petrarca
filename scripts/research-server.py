@@ -78,6 +78,8 @@ from curriculum import (
 from review_engine import (
     create_review_items_for_chapter, get_review_queue, generate_question,
     record_answer, get_review_stats, create_exploration_items, process_voice_memo,
+    run_voice_elicitation, get_elicitation_candidates, generate_hamarquizen_session,
+    generate_cross_book_hamarquizen, notify_article_read_curriculum,
 )
 
 SONIOX_API_KEY = os.environ.get('SONIOX_API_KEY', '557c7c5a86a2f5b8fa734ddbbe179f0f21fd342c762768c9af4f4ffff8c58e1f')
@@ -4358,6 +4360,146 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_chapter_context(self):
+        """POST /review/chapter-context — curriculum context for a chapter (preview or review)."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id', '')
+        chapter_number = body.get('chapter_number', 0)
+        chapter_title = body.get('chapter_title', '')
+        mode = body.get('mode', 'review')
+
+        if not book_id or not chapter_number:
+            self._send_json_response(400, {'error': 'Missing book_id or chapter_number'})
+            return
+
+        from db import get_connection
+        from review_engine import detect_curriculum, _generate_temporal_hook
+        from curriculum_db import load_curriculum
+
+        conn = get_connection(readonly=True)
+        try:
+            row = conn.execute('SELECT title, topics FROM physical_books WHERE id=?', (book_id,)).fetchone()
+            if not row:
+                self._send_json_response(404, {'error': 'Book not found'})
+                return
+            book_title = row['title']
+            book_topics = json.loads(row['topics'] or '[]')
+
+            domain_id = detect_curriculum(book_title, book_topics)
+            curriculum = load_curriculum(domain_id, conn)
+            if not curriculum or not curriculum.get('nodes'):
+                self._send_json_response(200, {
+                    'nodes': [], 'mode': mode,
+                    'message': 'No curriculum mapping available for this chapter',
+                })
+                return
+
+            nodes_by_id = {n['id']: n for n in curriculum.get('nodes', [])}
+
+            # Get knowledge states for all nodes in this curriculum
+            knowledge_rows = conn.execute(
+                'SELECT node_id, knowledge, confidence FROM knowledge_states WHERE domain_id = ?',
+                (domain_id,),
+            ).fetchall()
+            knowledge_map = {r['node_id']: {'knowledge': r['knowledge'], 'confidence': r['confidence']} for r in knowledge_rows}
+
+            # Map chapter to nodes via LLM (same logic as chapter-complete)
+            from review_engine import map_chapter_to_nodes
+            mappings = map_chapter_to_nodes(book_id, book_title, book_topics, chapter_number, chapter_title)
+            if not mappings:
+                self._send_json_response(200, {
+                    'nodes': [], 'mode': mode, 'domain_id': domain_id,
+                    'message': 'No curriculum nodes mapped to this chapter',
+                })
+                return
+
+            enriched_nodes = []
+            for m in mappings:
+                node_id = m.get('node_id', '')
+                node = nodes_by_id.get(node_id, {})
+                state = knowledge_map.get(node_id, {'knowledge': 'unknown', 'confidence': 0.0})
+
+                enriched = {
+                    'node_id': node_id,
+                    'node_title': m.get('node_title', node.get('title', '')),
+                    'description': node.get('description', ''),
+                    'knowledge': state['knowledge'],
+                    'confidence': state['confidence'],
+                    'source_text': m.get('source_text', ''),
+                    'lens': m.get('lens', ''),
+                }
+
+                if mode == 'preview':
+                    prereqs = node.get('prerequisites', [])
+                    shaky_prereqs = []
+                    for pid in prereqs:
+                        pstate = knowledge_map.get(pid, {'knowledge': 'unknown', 'confidence': 0.0})
+                        if pstate['knowledge'] in ('unknown', 'mentioned') or pstate['confidence'] < 0.4:
+                            pnode = nodes_by_id.get(pid, {})
+                            shaky_prereqs.append({
+                                'node_id': pid,
+                                'node_title': pnode.get('title', pid),
+                                'description': pnode.get('description', ''),
+                                'knowledge': pstate['knowledge'],
+                            })
+                    enriched['shaky_prerequisites'] = shaky_prereqs
+                    enriched['is_new'] = state['knowledge'] in ('unknown', 'mentioned')
+
+                if mode == 'review' and node.get('date_start') is not None:
+                    try:
+                        hook = _generate_temporal_hook(node, domain_id, conn)
+                        enriched['temporal_hook'] = hook
+                    except Exception:
+                        enriched['temporal_hook'] = ''
+
+                enriched_nodes.append(enriched)
+
+            # Generate a self-assessment question for review mode
+            assessment_question = None
+            if mode == 'review' and enriched_nodes:
+                target = next(
+                    (n for n in enriched_nodes if n.get('is_new', n['knowledge'] == 'unknown')),
+                    enriched_nodes[0],
+                )
+                try:
+                    from gemini_llm import call_llm as llm_call
+                    q_prompt = (
+                        f"Generate one short question (6-12 words) testing understanding of: {target['node_title']}\n"
+                        f"Definition: {target['description'][:200]}\n"
+                        f"Start with What/Why/How. Output just the question text, nothing else."
+                    )
+                    q_text = llm_call(q_prompt, max_tokens=100)
+                    if q_text:
+                        assessment_question = {
+                            'node_id': target['node_id'],
+                            'node_title': target['node_title'],
+                            'question': q_text.strip().strip('"'),
+                        }
+                except Exception:
+                    pass
+
+            known_count = sum(1 for n in enriched_nodes if n['knowledge'] in ('engaged', 'anchored'))
+            new_count = sum(1 for n in enriched_nodes if n['knowledge'] in ('unknown', 'mentioned'))
+
+            result = {
+                'mode': mode,
+                'domain_id': domain_id,
+                'chapter_number': chapter_number,
+                'chapter_title': chapter_title,
+                'nodes': enriched_nodes,
+                'assessment_question': assessment_question,
+                'summary': {
+                    'total': len(enriched_nodes),
+                    'known': known_count,
+                    'new': new_count,
+                },
+            }
+            self._send_json_response(200, result)
+        finally:
+            conn.close()
+
     def _handle_review_generate_question(self):
         """POST /review/generate-question — personalized question for a review item."""
         body = self._read_json_body()
@@ -4442,6 +4584,55 @@ JSON array only:"""
         finally:
             audio_path.unlink(missing_ok=True)
 
+    def _handle_voice_elicitation(self):
+        """POST /review/voice-elicit — voice free-recall elicitation for a curriculum node."""
+        import cgi
+        content_type = self.headers.get('Content-Type', '')
+        if 'multipart' not in content_type:
+            self._send_json_response(400, {'error': 'Expected multipart'})
+            return
+        length = int(self.headers.get('Content-Length', 0))
+        data = self.rfile.read(length)
+        environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
+        import io
+        fs = cgi.FieldStorage(fp=io.BytesIO(data), environ=environ, keep_blank_values=True)
+        node_id = fs.getvalue('node_id', '')
+        domain_id = fs.getvalue('domain_id', '')
+        audio_field = fs['audio'] if 'audio' in fs else None
+        if not node_id or not domain_id or not audio_field:
+            self._send_json_response(400, {'error': 'Missing node_id, domain_id, or audio'})
+            return
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
+            tmp.write(audio_field.file.read())
+            audio_path = Path(tmp.name)
+        try:
+            from db import get_connection
+            conn = get_connection()
+            try:
+                result = run_voice_elicitation(node_id, domain_id, audio_path, conn, transcribe_on_server)
+                self._send_json_response(200, result)
+            finally:
+                conn.close()
+        finally:
+            audio_path.unlink(missing_ok=True)
+
+    def _handle_elicit_candidates(self):
+        """GET /review/elicit-candidates?domain_id=X&limit=5 — nodes suitable for voice elicitation.
+        If domain_id is omitted, returns candidates from all domains.
+        """
+        from urllib.parse import parse_qs, urlparse
+        params = parse_qs(urlparse(self.path).query)
+        domain_id = params.get('domain_id', [''])[0] or None
+        limit = int(params.get('limit', ['5'])[0])
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            candidates = get_elicitation_candidates(domain_id, limit=limit, conn=conn)
+            self._send_json_response(200, {'candidates': candidates})
+        finally:
+            conn.close()
+
     def _handle_review_queue(self):
         """GET /review/queue — due items in dependency order."""
         from urllib.parse import parse_qs, urlparse
@@ -4520,11 +4711,48 @@ JSON array only:"""
                     )
                     surfaced.append(item_id)
             conn.commit()
+
+            # Also update curriculum knowledge states for mapped nodes
+            curriculum_result = notify_article_read_curriculum(article_id, conn)
+
             self._send_json_response(200, {
                 'nodes_found': len(article_nodes),
                 'items_surfaced': len(surfaced),
                 'nodes': node_titles[:5],
+                'curriculum_nodes_updated': curriculum_result.get('nodes_updated', 0),
             })
+        finally:
+            conn.close()
+
+    def _handle_hamarquizen(self):
+        """POST /review/hamarquizen — generate Hamarquizen PRIME->READ->TEST session for a book."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id', '')
+        limit = body.get('limit', 5)
+        if not book_id:
+            self._send_json_response(400, {'error': 'Missing book_id'})
+            return
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            cards = generate_hamarquizen_session(book_id, limit=limit, conn=conn)
+            self._send_json_response(200, {'cards': cards, 'count': len(cards)})
+        finally:
+            conn.close()
+
+    def _handle_hamarquizen_cross(self):
+        """POST /review/hamarquizen-cross — cross-book comparison Hamarquizen cards."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        limit = body.get('limit', 5)
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            cards = generate_cross_book_hamarquizen(limit=limit, conn=conn)
+            self._send_json_response(200, {'cards': cards, 'count': len(cards)})
         finally:
             conn.close()
 
@@ -4647,6 +4875,8 @@ JSON array only:"""
             return self._handle_review_book_complete()
         if self.path == '/review/chapter-complete':
             return self._handle_review_chapter_complete()
+        if self.path == '/review/chapter-context':
+            return self._handle_chapter_context()
         if self.path == '/review/generate-question':
             return self._handle_review_generate_question()
         if self.path == '/review/answer':
@@ -4655,8 +4885,14 @@ JSON array only:"""
             return self._handle_review_explore()
         if self.path == '/review/voice-memo':
             return self._handle_review_voice_memo()
+        if self.path == '/review/voice-elicit':
+            return self._handle_voice_elicitation()
         if self.path == '/review/article-read':
             return self._handle_review_article_read()
+        if self.path == '/review/hamarquizen':
+            return self._handle_hamarquizen()
+        if self.path == '/review/hamarquizen-cross':
+            return self._handle_hamarquizen_cross()
 
         if self.path == '/research/explore-batch':
             return self._handle_explore_batch()
@@ -5196,6 +5432,8 @@ JSON array only:"""
             return self._handle_review_queue()
         if self.path == '/review/stats':
             return self._handle_review_stats()
+        if self.path.startswith('/review/elicit-candidates'):
+            return self._handle_elicit_candidates()
         if self.path == '/media/log':
             media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
             try:

@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Knowledge Companion Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Crimson+Pro:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --parchment: #f7f4ec;
+    --parchment-dark: #f0ece2;
+    --ink: #2a2420;
+    --text-primary: #1a1a18;
+    --text-body: #333333;
+    --text-secondary: #6a6458;
+    --text-muted: #b0a898;
+    --rubric: #8b2500;
+    --rule: #e4dfd4;
+    --claim-new: #2a7a4a;
+    --claim-known: #d0ccc0;
+    --info: #2a4a6a;
+    --warning: #92600e;
+    --success: #2a7a4a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    background: var(--parchment);
+  }
+
+  body {
+    font-family: 'Crimson Pro', Georgia, serif;
+    color: var(--text-body);
+    background: var(--parchment);
+    line-height: 1.7;
+    font-size: 17px;
+  }
+
+  /* ── Navigation ── */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--ink);
+    border-bottom: 2px solid var(--rubric);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 48px;
+    gap: 32px;
+    overflow-x: auto;
+  }
+  nav .brand {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--parchment);
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+  nav .brand span { color: var(--rubric); filter: brightness(1.6); }
+  nav a {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--parchment); }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 72px 24px 80px;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+    padding-top: 24px;
+  }
+  header h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.15;
+    margin-bottom: 8px;
+  }
+  header .subtitle {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 17px;
+    font-style: italic;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+  .double-rule {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0 auto;
+    max-width: 400px;
+  }
+  .double-rule .thick { height: 2px; background: var(--ink); }
+  .double-rule .thin { height: 1px; background: var(--ink); }
+
+  /* ── Section Headers ── */
+  .section-marker {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--rubric);
+    margin-top: 56px;
+    margin-bottom: 6px;
+  }
+  .section-marker::before { content: '✦ '; }
+
+  h2 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  h2 + .section-desc {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 15.5px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 28px;
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-top: 32px;
+    margin-bottom: 8px;
+  }
+
+  h4 {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 20px;
+    margin-bottom: 4px;
+  }
+
+  p { margin-bottom: 14px; }
+
+  /* ── Stats Grid ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin: 24px 0 32px;
+  }
+  .stat-card {
+    background: var(--parchment-dark);
+    border: 1px solid var(--rule);
+    padding: 16px 14px 12px;
+    text-align: center;
+  }
+  .stat-card .number {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-card .label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .stat-card .detail {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    line-height: 1.35;
+  }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+  .badge.built { background: #d4edda; color: #155724; }
+  .badge.designed { background: #fff3cd; color: #856404; }
+  .badge.gap { background: #f8d7da; color: #721c24; }
+  .badge.partial { background: #d1ecf1; color: #0c5460; }
+
+  /* ── Idea Cards ── */
+  .idea-card {
+    border-left: 3px solid var(--rubric);
+    background: white;
+    padding: 28px 28px 24px;
+    margin: 28px 0;
+    position: relative;
+  }
+  .idea-card .idea-number {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 48px;
+    font-weight: 600;
+    color: var(--rule);
+    line-height: 1;
+    padding: 4px 12px;
+  }
+  .idea-card h3 {
+    margin-top: 0;
+    padding-right: 50px;
+    color: var(--rubric);
+    font-size: 22px;
+  }
+  .idea-card .impact-line {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .idea-card .impact-line span { display: flex; align-items: center; gap: 4px; }
+
+  .subsection {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+  }
+  .subsection-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  /* ── Research citation ── */
+  .citation {
+    background: var(--parchment-dark);
+    border-left: 2px solid var(--claim-known);
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 15px;
+    color: var(--text-secondary);
+  }
+  .citation .author {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .citation em { color: var(--text-body); }
+
+  /* ── Code/data blocks ── */
+  .data-block {
+    background: var(--ink);
+    color: #d4c9be;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 16px 18px;
+    margin: 12px 0;
+    overflow-x: auto;
+    border-radius: 2px;
+  }
+  .data-block .comment { color: #7a7060; }
+  .data-block .keyword { color: #c9a84c; }
+  .data-block .string { color: #8baa6a; }
+  .data-block .number { color: #c08050; }
+
+  /* ── Flow diagrams (text-based) ── */
+  .flow {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0;
+    color: var(--text-secondary);
+  }
+  .flow .step {
+    background: var(--parchment-dark);
+    border: 1px solid var(--rule);
+    padding: 6px 12px;
+    font-weight: 500;
+  }
+  .flow .step.highlight {
+    background: white;
+    border-color: var(--rubric);
+    color: var(--rubric);
+  }
+  .flow .arrow { color: var(--text-muted); font-size: 16px; }
+
+  /* ── Comparison table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14.5px;
+  }
+  th {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--ink);
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(139, 37, 0, 0.02); }
+  td:first-child { font-weight: 500; color: var(--text-primary); }
+
+  /* ── Constraint blocks ── */
+  .constraint {
+    display: flex;
+    gap: 12px;
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: var(--parchment-dark);
+    border: 1px solid var(--rule);
+  }
+  .constraint .icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .constraint .text {
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .constraint .text strong {
+    font-family: 'EB Garamond', Georgia, serif;
+    color: var(--text-primary);
+  }
+
+  /* ── Score bars ── */
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+  }
+  .score-row .label {
+    width: 100px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .score-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--rule);
+    position: relative;
+    border-radius: 1px;
+  }
+  .score-bar .fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.6s ease;
+  }
+  .score-row .value {
+    width: 36px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  /* ── Knowledge state visualization ── */
+  .knowledge-strip {
+    display: flex;
+    height: 14px;
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .knowledge-strip .seg { transition: width 0.4s ease; }
+  .knowledge-strip .anchored { background: var(--claim-new); }
+  .knowledge-strip .engaged { background: #6a8a4a; }
+  .knowledge-strip .mentioned { background: var(--warning); }
+  .knowledge-strip .unknown { background: var(--rule); }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .legend span::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 1px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .legend .l-anchored::before { background: var(--claim-new); }
+  .legend .l-engaged::before { background: #6a8a4a; }
+  .legend .l-mentioned::before { background: var(--warning); }
+  .legend .l-unknown::before { background: var(--rule); }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 20px;
+    gap: 0;
+  }
+  .tab-bar button {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 14px;
+    background: none;
+    border: none;
+    padding: 8px 18px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s;
+  }
+  .tab-bar button.active {
+    color: var(--ink);
+    border-bottom-color: var(--rubric);
+  }
+  .tab-bar button:hover { color: var(--text-body); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Priority matrix ── */
+  .matrix {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin: 20px 0;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .matrix .cell {
+    background: var(--parchment);
+    padding: 14px 16px;
+    min-height: 90px;
+  }
+  .matrix .cell-header {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .matrix .cell.top-right { background: #fef9f0; }
+  .matrix .cell.top-right .cell-header { color: var(--rubric); }
+  .matrix .item {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 14px;
+    color: var(--text-body);
+    margin: 3px 0;
+    padding-left: 12px;
+    position: relative;
+  }
+  .matrix .item::before {
+    content: '✦';
+    position: absolute;
+    left: 0;
+    color: var(--rubric);
+    font-size: 8px;
+    top: 4px;
+  }
+
+  /* ── Architecture diagram ── */
+  .arch-diagram {
+    background: white;
+    border: 1px solid var(--rule);
+    padding: 24px;
+    margin: 20px 0;
+    text-align: center;
+  }
+  .arch-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
+  .arch-box {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 8px 14px;
+    border: 1px solid var(--rule);
+    background: var(--parchment);
+    min-width: 120px;
+    text-align: center;
+  }
+  .arch-box.active {
+    border-color: var(--claim-new);
+    background: #f0f8f0;
+    color: var(--claim-new);
+  }
+  .arch-box.proposed {
+    border-color: var(--rubric);
+    border-style: dashed;
+    background: #fef6f4;
+    color: var(--rubric);
+  }
+  .arch-box.data {
+    border-color: var(--info);
+    background: #f0f4f8;
+    color: var(--info);
+  }
+  .arch-connector {
+    font-size: 16px;
+    color: var(--text-muted);
+    margin: 4px 0;
+  }
+  .arch-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 12px 0 6px;
+  }
+
+  /* ── Example blocks ── */
+  .example {
+    background: white;
+    border: 1px solid var(--rule);
+    padding: 18px 20px;
+    margin: 14px 0;
+    font-size: 15px;
+  }
+  .example .label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--rubric);
+    margin-bottom: 8px;
+  }
+  .example .prime { color: var(--info); font-style: italic; }
+  .example .read { color: var(--text-body); }
+  .example .test { color: var(--rubric); font-weight: 500; }
+  .example .note {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--rule);
+  }
+
+  /* ── Lists ── */
+  ul, ol {
+    margin: 8px 0 14px 20px;
+    font-size: 15.5px;
+  }
+  li { margin: 4px 0; }
+  li::marker { color: var(--text-muted); }
+
+  strong { color: var(--text-primary); }
+  em { color: var(--text-secondary); }
+
+  /* ── Separator ── */
+  hr {
+    border: none;
+    margin: 40px auto;
+    max-width: 200px;
+    height: 1px;
+    background: var(--rule);
+  }
+  hr.double {
+    height: auto;
+    background: none;
+    max-width: 400px;
+    border-top: 2px solid var(--ink);
+    padding-top: 5px;
+    border-bottom: 1px solid var(--ink);
+  }
+
+  /* ── Inline code ── */
+  code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13.5px;
+    background: var(--parchment-dark);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--rubric);
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    margin-top: 64px;
+    padding: 24px 0;
+    border-top: 1px solid var(--rule);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ── Scroll anchor offset ── */
+  [id] { scroll-margin-top: 64px; }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 30px; }
+    h2 { font-size: 24px; }
+    .idea-card { padding: 20px 18px; }
+    .idea-card .idea-number { font-size: 36px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .matrix { grid-template-columns: 1fr; }
+    nav { gap: 16px; padding: 0 12px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">✦ <span>Petrarca</span></div>
+  <a href="#system">System</a>
+  <a href="#research">Research</a>
+  <a href="#constraints">Constraints</a>
+  <a href="#ideas">Ideas</a>
+  <a href="#built">Built</a>
+  <a href="#verify">Verify</a>
+  <a href="#next">Next</a>
+</nav>
+
+<div class="container">
+
+<header>
+  <h1>From Reading to Rich Literacy</h1>
+  <div class="subtitle">What learning science says about pushing Petrarca's book companion further</div>
+  <div class="double-rule"><div class="thick"></div><div class="thin"></div></div>
+</header>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 1: CURRENT SYSTEM                  -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="system">The System As Built</div>
+<h2>What Exists Today</h2>
+<p class="section-desc">A book companion that maps reading to curricula, tracks knowledge, and generates review questions. Remarkably complete infrastructure — but the learning science suggests several mechanisms aren't yet exploited.</p>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="number">5</div>
+    <div class="label">Curricula</div>
+    <div class="detail">Greece, Rome, Sicily, Byzantine, Islamic — 280+ nodes total</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">769</div>
+    <div class="label">Claim → Node Links</div>
+    <div class="detail">Articles mapped to curriculum at 0.65 cosine threshold</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">98</div>
+    <div class="label">Articles Mapped</div>
+    <div class="detail">Feed articles connected to curriculum nodes via embeddings</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">6</div>
+    <div class="label">Review Lenses</div>
+    <div class="detail">Causal, Comparative, Significance, Temporal, Pattern, Consequence</div>
+  </div>
+</div>
+
+<h3>Current Architecture</h3>
+
+<div class="arch-diagram">
+  <div class="arch-label">Data Sources</div>
+  <div class="arch-row">
+    <div class="arch-box active">Physical Books</div>
+    <div class="arch-box active">Kindle Library</div>
+    <div class="arch-box active">RSS / Twitter</div>
+    <div class="arch-box active">Voice Captures</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-label">Processing Layer</div>
+  <div class="arch-row">
+    <div class="arch-box active">Gemini Extraction</div>
+    <div class="arch-box active">MiniLM Embeddings</div>
+    <div class="arch-box active">Curriculum Mapping</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-label">Knowledge Layer</div>
+  <div class="arch-row">
+    <div class="arch-box data">Curricula (5 domains)</div>
+    <div class="arch-box data">Knowledge State</div>
+    <div class="arch-box data">Book Mappings</div>
+    <div class="arch-box data">Article-Node Links</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-label">Surfaces (Where Users See It)</div>
+  <div class="arch-row">
+    <div class="arch-box active">Knowledge Map</div>
+    <div class="arch-box active">Review Session</div>
+    <div class="arch-box active">Book Context</div>
+    <div class="arch-box active">Curriculum Scan</div>
+  </div>
+  <div class="arch-connector" style="margin-top:12px">↓ <span style="font-size:12px; font-family:'DM Sans',sans-serif; color:var(--rubric);">GAP — These surfaces are proposed but not built</span> ↓</div>
+  <div class="arch-row" style="margin-top:8px">
+    <div class="arch-box proposed">Chapter Cards</div>
+    <div class="arch-box proposed">Reading Echoes</div>
+    <div class="arch-box proposed">Pre-Read Briefing</div>
+    <div class="arch-box proposed">Cross-Book Review</div>
+    <div class="arch-box proposed">Voice Recall</div>
+  </div>
+</div>
+
+<h3>How Review Currently Works</h3>
+<p>The review session loads 10 cards from <code>knowledge_items</code>, each tied to a curriculum node. Questions are LLM-generated and cached.</p>
+
+<div class="flow">
+  <div class="step">Load queue</div>
+  <div class="arrow">→</div>
+  <div class="step">Show question</div>
+  <div class="arrow">→</div>
+  <div class="step highlight">Tap to reveal</div>
+  <div class="arrow">→</div>
+  <div class="step">Knew / Partly / Missed</div>
+  <div class="arrow">→</div>
+  <div class="step">Update FSRS stability</div>
+</div>
+
+<p>This is essentially <strong>cued recall with binary self-assessment</strong> — the weakest retrieval format according to the research. The review count determines question depth:</p>
+
+<table>
+  <tr><th>Reviews</th><th>Question Type</th><th>Lens</th><th>Example</th></tr>
+  <tr>
+    <td>1–2</td>
+    <td>Factual concept check</td>
+    <td>—</td>
+    <td>"What drove Greek colonization of Sicily?"</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Difficulty ramp</td>
+    <td>Causal / Significance</td>
+    <td>"Why did colonization matter for Mediterranean trade?"</td>
+  </tr>
+  <tr>
+    <td>4+</td>
+    <td>Analytical</td>
+    <td>All 6 lenses</td>
+    <td>"Compare Greek and Phoenician colonization strategies"</td>
+  </tr>
+</table>
+
+<h3>Knowledge State per Curriculum</h3>
+<p>Example: Sicily curriculum (70 nodes) — showing current distribution from assessment + book mapping:</p>
+
+<div class="knowledge-strip">
+  <div class="seg anchored" style="width: 18%"></div>
+  <div class="seg engaged" style="width: 22%"></div>
+  <div class="seg mentioned" style="width: 15%"></div>
+  <div class="seg unknown" style="width: 45%"></div>
+</div>
+<div class="legend">
+  <span class="l-anchored">Anchored (13)</span>
+  <span class="l-engaged">Engaged (15)</span>
+  <span class="l-mentioned">Mentioned (11)</span>
+  <span class="l-unknown">Unknown (31)</span>
+</div>
+
+<h3>What's Working Well</h3>
+<ul>
+  <li><strong>Curriculum quality is high</strong> — Opus-generated, 50–70 nodes per domain, with dates, prerequisites, and cross-references</li>
+  <li><strong>Embedding-based article↔curriculum mapping</strong> — 769 links at calibrated 0.65 threshold, validated quality</li>
+  <li><strong>Question generation improving</strong> — Session 39 moved from trivia ("Which city founded Naxos?") to conceptual ("What drove Greek colonization?")</li>
+  <li><strong>Cross-book connections exist in data</strong> — <code>BookCurriculumContext</code> shows which books share curriculum nodes</li>
+  <li><strong>Six review lenses</strong> — causal, comparative, significance, temporal, pattern, consequence</li>
+  <li><strong>Temporal hooks designed</strong> — four types (anchor, same-moment, causal chain, cross-domain), priority ordered</li>
+</ul>
+
+<h3>Key Gaps Between Data and Experience</h3>
+
+<table>
+  <tr><th>Data Exists</th><th>User Never Sees It</th></tr>
+  <tr>
+    <td>Article↔curriculum node links (769)</td>
+    <td>No "this article reinforced your reading" note after finishing</td>
+  </tr>
+  <tr>
+    <td>Temporal hooks in question generation</td>
+    <td>Hooks buried in expandable source text — not prominent</td>
+  </tr>
+  <tr>
+    <td>Cross-book connections per node</td>
+    <td>Static "Also covered by…" link, no comparative review</td>
+  </tr>
+  <tr>
+    <td>Prerequisite graph per curriculum</td>
+    <td>No pre-reading briefing showing what you're missing</td>
+  </tr>
+  <tr>
+    <td>Chapter→node mapping code</td>
+    <td>No chapter-complete card in the UI</td>
+  </tr>
+  <tr>
+    <td>Node date_start/date_end enriched</td>
+    <td>Same-moment connections not computed or shown</td>
+  </tr>
+  <tr>
+    <td>Voice transcription pipeline</td>
+    <td>No voice-based free recall review mode</td>
+  </tr>
+</table>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 2: RESEARCH FINDINGS               -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="research">What the Research Says</div>
+<h2>Learning Science for Adult Knowledge Retention</h2>
+<p class="section-desc">Findings from cognitive psychology, spaced repetition research, curriculum design theory, and Petrarca's own calibration experiments — filtered for what's actionable in software for an adult reader outside formal school.</p>
+
+<h3>1. Flashcards Fail for Conceptual Knowledge</h3>
+
+<p>Traditional SRS (Anki, SuperMemo) reinforces single prompt-response links. This works for vocabulary and dates but breaks down for arguments, frameworks, and causal reasoning — exactly the knowledge books provide.</p>
+
+<div class="citation">
+  <span class="author">Scott H. Young</span>
+  SRS is <em>"fantastic for discrete pieces of information"</em> but <em>"struggles with conceptual understanding"</em> because it reinforces isolated links while conceptual understanding requires understanding how ideas <em>relate to and depend on each other</em>.
+</div>
+
+<div class="citation">
+  <span class="author">LessWrong Community Critique</span>
+  After using SRS <em>"religiously for 3 years,"</em> users report insufficient returns for complex material. Card-creation burden is enormous for conceptual content, and cards tend to be either too simple (missing the concept) or too complex (effectively re-reading a paragraph).
+</div>
+
+<p><strong>What SRS gets right</strong>: The spacing effect itself is one of the most robust findings in cognitive psychology (10–30% retention improvement per meta-analysis of 254 studies). The problem isn't spacing — it's the flashcard format. The spacing effect works through any repeated encounter at expanding intervals, especially with active processing.</p>
+
+<h3>2. Elaborative Retrieval Dramatically Outperforms Recognition</h3>
+
+<div class="citation">
+  <span class="author">Karpicke & Blunt, 2011 — Science</span>
+  Retrieval practice produces more learning than elaborative studying with concept mapping. Crucially, the advantage held <em>even when the test required creating concept maps</em> — the active ingredient is retrieval itself.
+</div>
+
+<p>The research reveals a clear hierarchy of retrieval effectiveness:</p>
+
+<table>
+  <tr><th>Format</th><th>Mechanism</th><th>Retention Impact</th></tr>
+  <tr>
+    <td>Free recall</td>
+    <td>"What do you remember about X?"</td>
+    <td>Strongest — relational + item-specific processing</td>
+  </tr>
+  <tr>
+    <td>Connection prompts</td>
+    <td>"How does X relate to Y?"</td>
+    <td>Very strong — elaborative encoding</td>
+  </tr>
+  <tr>
+    <td>Explanation prompts</td>
+    <td>"Why did the author argue X?"</td>
+    <td>Strong — causal model building</td>
+  </tr>
+  <tr>
+    <td>Cued recall</td>
+    <td>"What was the author's thesis about X?"</td>
+    <td>Moderate — item-specific only</td>
+  </tr>
+  <tr>
+    <td style="color: var(--rubric)">Card-flip recognition ←&nbsp;<em>current</em></td>
+    <td>"Did you know this? Knew / Partly / Missed"</td>
+    <td>Weakest — familiarity only, not recollection</td>
+  </tr>
+</table>
+
+<p><strong>Implication</strong>: Petrarca's current review-session.tsx uses the weakest format. Moving to free recall (voice-based) or connection prompts would dramatically improve retention with the same time investment.</p>
+
+<h3>3. Natural Spacing Through Reading Beats Artificial Review</h3>
+
+<p>Reading a new article that touches concepts from a previously-read book creates "natural spacing" with several advantages over SRS:</p>
+
+<ul>
+  <li><strong>Novel context</strong> — concept appears in genuinely new context, encoding additional retrieval cues</li>
+  <li><strong>Incidental retrieval</strong> — reader's recognition of a familiar concept triggers retrieval of the original source</li>
+  <li><strong>Elaborative connection</strong> — reader naturally compares and contrasts the two sources' perspectives</li>
+  <li><strong>Intrinsic motivation</strong> — the new article is interesting in its own right, not a chore</li>
+</ul>
+
+<div class="citation">
+  <span class="author">Bjork & Bjork, Desirable Difficulties Framework</span>
+  Interleaved practice produced <em>43% better performance on delayed tests</em> vs. blocked practice. A reading feed that naturally interleaves articles from different books' topics provides interleaving benefits automatically.
+</div>
+
+<p><strong>Petrarca already creates this</strong> — 769 claim→node links map articles to the same curriculum nodes as books. But the reader is never told "this article just reinforced concepts from your book." Making this visible transforms passive consumption into active knowledge maintenance.</p>
+
+<h3>4. Gist Memory Outlasts Detail Memory</h3>
+
+<div class="citation">
+  <span class="author">Brainerd & Reyna — Fuzzy-Trace Theory</span>
+  People encode two parallel memory traces: <em>verbatim</em> (surface form, exact details) and <em>gist</em> (essential meaning, the argument). <em>"Verbatim traces become inaccessible faster than gist traces."</em> Gist memories persist months to years for well-understood material.
+</div>
+
+<p>The retention timeline without reinforcement:</p>
+
+<table>
+  <tr><th>Time</th><th>What Remains</th></tr>
+  <tr><td>1 week</td><td>Main arguments, key examples, resonant passages</td></tr>
+  <tr><td>1 month</td><td>Main thesis clear, specific arguments fuzzy, examples gone</td></tr>
+  <tr><td>3 months</td><td>Can state the book's "big idea" but not reconstruct its argument</td></tr>
+  <tr><td>1 year</td><td>Vague sense of "having read something about X"</td></tr>
+</table>
+
+<p><strong>Key insight</strong>: The system should reinforce <em>gist</em> occasionally (to prevent even gist decay), and re-connect <em>details to gist</em> when encountered in new contexts. Testing for verbatim recall of names and dates is the wrong target.</p>
+
+<h3>5. Test-Potentiated Learning — Failed Attempts Are Valuable</h3>
+
+<div class="citation">
+  <span class="author">Arnold & McDermott, 2013</span>
+  Even <em>unsuccessful</em> retrieval attempts, followed by feedback, produce stronger learning than successful retrieval alone. This is "test-potentiated learning" — the struggle is the active ingredient.
+</div>
+
+<div class="citation">
+  <span class="author">Pastötter & Bäuml, 2014</span>
+  The "forward effect of testing" — testing on material A improves subsequent learning of material B, even unrelated material. The act of retrieval primes the encoding machinery.
+</div>
+
+<p><strong>Implication</strong>: When a user answers "missed" in the review session, that's the <em>most valuable learning moment</em>. The system should respond with enriched context — temporal hooks, cross-book connections, vivid details — not the same brief answer guidance shown to someone who got it right.</p>
+
+<h3>6. Comparative Judgment Is More Reliable Than Absolute Self-Report</h3>
+
+<div class="citation">
+  <span class="author">Thurstone's Law of Comparative Judgment</span>
+  Asking <em>"Which do you know more about: X or Y?"</em> produces more reliable data than <em>"How well do you know X?"</em> (1–5 scale). Each comparison gives two data points simultaneously. Adults calibrate significantly better on relative judgments than absolute ratings.
+</div>
+
+<p>Petrarca's curriculum scan currently uses absolute 3-level assessment (new/some/all). Mixing in comparative pairs — "Which do you know more about: Athenian democracy or Spartan military society?" — would be faster, more reliable, and feel less like a test.</p>
+
+<h3>7. The Michel Thomas Principle</h3>
+
+<p>From Petrarca's own user research — perhaps the most important constraint of all:</p>
+
+<div class="citation">
+  <span class="author">User Feedback (Session 26)</span>
+  <em>"The fear of being overwhelmed and the fear of forgetting has been stopping me from reading interesting nonfiction."</em> Michel Thomas' language method tells students: <em>"Don't try to remember. I'll manage your memory for you."</em> That freedom from anxiety actually improves learning.
+</div>
+
+<p>Every feature must pass this test: <strong>does it make reading feel lighter, or heavier?</strong> The knowledge map should feel like liberation ("look how much I know!"), not homework ("look how much I've forgotten").</p>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 3: CONSTRAINTS                     -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="constraints">Design Constraints</div>
+<h2>What Shapes the Solution Space</h2>
+<p class="section-desc">These aren't just limitations — they're design principles that make the system honest.</p>
+
+<div class="constraint">
+  <div class="icon">📖</div>
+  <div class="text"><strong>Books are encoding; system is maintenance.</strong> The system never competes with books for the learning role. Books provide narrative, voice, argument, structure — the richest encoding. The system's job is connecting, resurfacing, and preventing decay. Never teach; always remind and connect.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🧠</div>
+  <div class="text"><strong>Single adult user, not a classroom.</strong> No multi-user abstractions. The reader has deep prior knowledge, strong metacognition, and idiosyncratic interests. Self-report is more reliable than for novices (experts calibrate better). But also — this user has limited time and infinite curiosity. Zero-friction or nothing.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">⏱</div>
+  <div class="text"><strong>Stolen moments, not study sessions.</strong> Reading happens on buses, at lunch, in the evening. A chapter-complete card must be dismissable in 1 tap. A review session must be valuable in 3 minutes. If it feels like homework, it dies.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🗺</div>
+  <div class="text"><strong>Multiple bounded curricula, not one world graph.</strong> Knowledge is modeled as overlapping college-course-sized domains (50–80 nodes each). Power comes from intersections — nexus entities that light up across curricula. Avoids the Otak failure mode (67K-node fractal graph that lost coherence).</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🔄</div>
+  <div class="text"><strong>Knowledge doesn't decay like flashcards.</strong> Gist persists for months/years. Details fade first. The system shouldn't model binary forgetting (FSRS). Instead: gradient confidence that fades naturally but resets through related reading encounters. "You probably still know the gist — let me reconnect a detail."</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🖥</div>
+  <div class="text"><strong>Server-first, LLM-generated.</strong> All state lives on the server. Reviews, questions, connections are generated via Gemini Flash (speed) or Claude Opus (quality). No pre-authored card decks. Everything is dynamic and contextual.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">📊</div>
+  <div class="text"><strong>Calibrated thresholds.</strong> Every similarity threshold has been human-calibrated: KNOWN ≥ 0.82, EXTENDS ≥ 0.74, curriculum mapping ≥ 0.65, article similarity AUROC = 0.930. New features should operate within this calibrated space, not introduce uncalibrated magic numbers.</div>
+</div>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 4: IDEAS                           -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="ideas">Ten Ideas</div>
+<h2>Actionable Proposals</h2>
+<p class="section-desc">Each proposal maps a specific research finding to Petrarca's existing infrastructure. Ordered by expected impact × feasibility.</p>
+
+<!-- ─── IDEA 1 ─── -->
+<div class="idea-card" id="idea-1">
+  <div class="idea-number">1</div>
+  <h3>Chapter-Complete Cards with Temporal Hooks</h3>
+  <div class="impact-line">
+    <span><span class="badge built">Built</span></span>
+    <span>Impact: Very High</span>
+    <span>As: Manual chapter preview/review buttons</span>
+  </div>
+
+  <p>When you select a new chapter in the book detail dropdown, a brief card appears showing what you just covered and connecting it to what you already know. One tap dismisses it. Value accumulates over weeks of reading.</p>
+
+  <div class="example">
+    <div class="label">Example: Finishing Chapter 4 of "A History of Sicily"</div>
+    <p style="margin-bottom:8px"><strong>Chapter 4: The Tyranny of Dionysius</strong></p>
+    <p style="margin:4px 0">✦ <strong>Dionysian tyranny</strong> — now engaged &nbsp; ✦ <strong>Carthaginian wars</strong> — anchored</p>
+    <p style="margin:8px 0; color: var(--info); font-style: italic;">While Dionysius was fortifying Syracuse (405 BC), Plato was still a student of Socrates in Athens — he wouldn't visit Syracuse for another 17 years.</p>
+    <p style="margin:4px 0"><em>Quick check:</em> Why did Syracuse need a tyrant at this moment? <span style="color:var(--text-muted)">[new / some / knew]</span></p>
+    <div class="note">Data needed: chapter→node mapping (built), temporal cross-references from node dates (enriched), knowledge state (tracked). Zero new algorithms — orchestration only.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Elaborative encoding through temporal association</strong> (generation effect): connecting a new fact to a known anchor makes it dramatically more durable. The Hamarquizen pattern ("Hanna Winsnes born 1789 = French Revolution") proved this works for both children and adults.</p>
+    <p><strong>Micro-testing at encoding time</strong>: The quick self-assessment ("new / some / knew") exploits the testing effect — even asking the question, with no consequences for getting it wrong, improves later recall by 50% compared to just reading (Roediger & Karpicke 2006).</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">What Already Exists</div>
+    <ul>
+      <li><code>map_chapter_to_nodes()</code> — Maps chapters to 3–6 curriculum nodes via Gemini Flash</li>
+      <li><code>fill_prerequisite_gaps()</code> — Creates items for prerequisites + time-period siblings</li>
+      <li>All 5 curricula enriched with <code>date_start</code> / <code>date_end</code> per node</li>
+      <li>Chapter complete endpoint: <code>POST /review/chapter-complete</code> exists on server</li>
+      <li>Design doc with full UX spec in <code>reading-companion-process-design.md</code></li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">What Needs Building</div>
+    <ul>
+      <li><strong>Temporal hook generation</strong>: For each node covered by the chapter, find nodes in other curricula with overlapping dates where the reader has knowledge ≥ "engaged." Select the most vivid connection.</li>
+      <li><strong>Chapter-complete card component</strong>: Brief, dismissable card in book detail screen. Shows nodes, hook, and single self-assessment question.</li>
+      <li><strong>Chapter tracking persistence</strong>: <code>chapter_completions: Record&lt;number, timestamp&gt;</code> field on book object.</li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Key Design Decision</div>
+    <p>Temporal hooks can be <strong>precomputed</strong> (faster, less contextual) or <strong>generated on-demand</strong> (richer, slower). Recommendation: precompute a pool of date-overlapping node pairs across curricula, then select from the pool based on the reader's current knowledge state. This gets the best of both: speed from precomputation, personalization from knowledge-aware selection.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 2 ─── -->
+<div class="idea-card" id="idea-2">
+  <div class="idea-number">2</div>
+  <h3>"Reinforced From Your Reading" — Visible Natural Spacing</h3>
+  <div class="impact-line">
+    <span><span class="badge gap">New</span></span>
+    <span>Impact: High</span>
+    <span>Effort: Small</span>
+  </div>
+
+  <p>After finishing an article, show a subtle note identifying which curriculum nodes from the reader's books were just reinforced. Makes the invisible knowledge maintenance visible.</p>
+
+  <div class="example">
+    <div class="label">After reading an article about Mediterranean naval warfare</div>
+    <p style="margin-bottom:4px">✦ <em>Reinforced from your reading</em></p>
+    <p>This article touched on <strong>Greek naval tactics</strong> and <strong>Syracusan alliances</strong> — topics you're covering in <em>A History of Sicily</em>. <span style="color: var(--claim-new)">+2 nodes strengthened</span></p>
+    <div class="note">Uses: article_curriculum_nodes from knowledge_index.json + book mappings. Computation is a simple set intersection — the data is already linked.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Natural spacing is the gold standard</strong> — encountering a concept in a new context (different article, different author, different angle) creates contextual variation, which encodes additional retrieval cues. This is better than flashcard review because the context is genuinely novel and the motivation is intrinsic.</p>
+    <p><strong>Transfer-appropriate processing</strong>: Memory retrieval is best when cognitive processes at retrieval match those at encoding. Reading an article about the same topic = same deep-reading context as the original book. Much better match than a flashcard prompt.</p>
+    <p><strong>The Michel Thomas effect</strong>: Making maintenance visible ("I'm tracking this for you") directly fulfills the "I'll manage your memory" promise. The reader feels cared for, not quizzed.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Implementation Detail</div>
+    <p>In the article reader's completion flow (after "Done" tap):</p>
+    <ol>
+      <li>Look up <code>article_curriculum_nodes[articleId]</code> from knowledge index</li>
+      <li>For each node, check if any active book has a mapping to the same node</li>
+      <li>If matches found, show reinforcement note with book title and node names</li>
+      <li>Optionally update the curriculum knowledge state: bump confidence on matched nodes (source: "article:article_id")</li>
+    </ol>
+    <p>Side effect: the feed ranking algorithm could use this data to boost articles that would reinforce active reading — articles touching curriculum nodes from in-progress books. The <code>_getActiveBookTopicBoost</code> function already exists but uses keyword matching; this would use the calibrated curriculum mapping instead.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 3 ─── -->
+<div class="idea-card" id="idea-3">
+  <div class="idea-number">3</div>
+  <h3>Voice Free-Recall Review Mode</h3>
+  <div class="impact-line">
+    <span><span class="badge built">Built</span></span>
+    <span>Impact: Very High</span>
+    <span>As: Voice Elicitation screen + server pipeline</span>
+  </div>
+
+  <p>Replace card-flip recognition with the strongest retrieval format: "Tell me what you remember about [topic]." The user speaks for 30–60 seconds. The system transcribes, extracts claims, compares against the curriculum node, and provides rich feedback.</p>
+
+  <div class="flow">
+    <div class="step">Show node title</div>
+    <div class="arrow">→</div>
+    <div class="step highlight">"What do you remember?"</div>
+    <div class="arrow">→</div>
+    <div class="step">User speaks (30–60s)</div>
+    <div class="arrow">→</div>
+    <div class="step">Transcribe (Soniox)</div>
+    <div class="arrow">→</div>
+    <div class="step">Extract claims + compare</div>
+    <div class="arrow">→</div>
+    <div class="step">Rich feedback</div>
+  </div>
+
+  <div class="example">
+    <div class="label">Example Feedback After Voice Recall</div>
+    <p><strong>Greek Colonization of Sicily</strong></p>
+    <p style="color: var(--claim-new)">✓ You captured: founding of Syracuse, Corinthian origins, agricultural motivation</p>
+    <p style="color: var(--warning)">~ Partial: mentioned trade routes but not the specific connection to Magna Graecia</p>
+    <p style="color: var(--rubric)">✗ Missing: the role of the Delphic oracle in sanctioning colonies, and the conflict with indigenous Sicels</p>
+    <p style="margin-top:8px; font-style: italic; color: var(--info)">Hook: Greek colonization of Sicily began around 734 BC — roughly the same time Assyria was conquering the Kingdom of Israel.</p>
+    <div class="note">Claim comparison uses amygdala's pairwise_cosine + classify_pairs against the curriculum node description + all book sources for that node. The VOICE_EXTRACT_PROMPT already exists in review_engine.py.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Free recall is the strongest retention format</strong> — promotes both relational and item-specific processing (research synthesis). Cued recall and recognition "do not appear to enhance conceptual organization and under some conditions can disrupt it."</p>
+    <p><strong>The generation effect</strong>: actively producing information yourself produces better memory than passively receiving it. Speaking forces the user to reconstruct knowledge, identify gaps, and organize thoughts — all of which strengthen the memory network.</p>
+    <p><strong>Self-explanation effect</strong>: explaining to yourself <em>why</em> something is true and <em>how</em> it connects is even more powerful than elaborative interrogation. Voice recall naturally triggers self-explanation as the user tries to articulate connections.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Existing Infrastructure</div>
+    <ul>
+      <li>Soniox API integration (key in .env, patterns in alif + alignment)</li>
+      <li><code>VOICE_EXTRACT_PROMPT</code> in review_engine.py — extracts remembered facts, questions, connections, suggested score</li>
+      <li>expo-av recording already used for book voice captures</li>
+      <li>amygdala pairwise_cosine for comparing extracted claims against node description</li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Design Decision: When to Use Each Mode</div>
+    <p>Don't replace card-flip entirely — offer both. Voice free recall is ideal for 5-minute dedicated review sessions (e.g., morning coffee). Card-flip suits quick checks during commutes when speaking isn't possible. The review session screen could offer a toggle: "Cards" vs. "Voice recall" at the top.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 4 ─── -->
+<div class="idea-card" id="idea-4">
+  <div class="idea-number">4</div>
+  <h3>Pre-Reading Book Briefing</h3>
+  <div class="impact-line">
+    <span><span class="badge built">Built</span></span>
+    <span>Impact: High</span>
+    <span>As: "Preview this chapter" button in book detail</span>
+  </div>
+
+  <p>When starting a new book, show what you already know, what you'll learn, and what foundational knowledge you might be missing. Activates prior knowledge and sets expectations — two of the strongest encoding enhancers.</p>
+
+  <div class="example">
+    <div class="label">Pre-Reading Briefing for "The Normans in Sicily"</div>
+    <p style="color: var(--claim-new); margin-bottom:4px"><strong>You already know well (6 nodes):</strong></p>
+    <p style="margin-left:12px; font-size:14.5px">Byzantine administration of Sicily, Arab conquest, Emirate of Sicily, Greek colonial legacy, Syracuse as power center, Mediterranean trade networks</p>
+    <p style="color: var(--info); margin-bottom:4px; margin-top:10px"><strong>You'll likely learn about (8 nodes):</strong></p>
+    <p style="margin-left:12px; font-size:14.5px">Norman conquest strategy, Roger I & II, Kingdom of Sicily, Norman-Arab-Byzantine synthesis, Palermo as cultural capital, Frederick II, papal conflicts, Sicilian Vespers</p>
+    <p style="color: var(--rubric); margin-bottom:4px; margin-top:10px"><strong>Shaky prerequisites (2 nodes):</strong></p>
+    <p style="margin-left:12px; font-size:14.5px">Viking expansion context (mentioned, not engaged) — the Normans were originally Norse settlers in France. Investiture Controversy (unknown) — key context for papal politics that drives much of this period.</p>
+    <div class="note">Computation: book→curriculum mapping (exists) × prerequisite graph (exists) × knowledge state (tracked). No new data — just a new view.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Prior knowledge activation</strong>: Schema theory shows that activating existing mental frameworks before new learning dramatically improves encoding. The mPFC "resonance detector" integrates new information directly when it fits pre-existing structures.</p>
+    <p><strong>Zone of Proximal Development</strong>: Vygotsky's ZPD says you learn best at the frontier — where prerequisites are met but the concept is new. Flagging shaky prerequisites lets the reader choose: skip them (the book may cover it) or do a quick 2-minute review before starting.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Implementation</div>
+    <p>This is pure data orchestration over existing infrastructure:</p>
+    <ol>
+      <li>Run <code>map_book_to_curriculum()</code> to get the book's curriculum coverage (or use existing mapping)</li>
+      <li>For each mapped node, classify by reader's knowledge state: known (anchored/engaged) vs. new (unknown/mentioned)</li>
+      <li>For each new node, check if its prerequisites are in the reader's knowledge state. If not → "shaky prerequisite"</li>
+      <li>Display as a section in the book detail screen, before/alongside BookCurriculumContext</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ─── IDEA 5 ─── -->
+<div class="idea-card" id="idea-5">
+  <div class="idea-number">5</div>
+  <h3>Cross-Book Mini-Tutorials (PRIME→READ→TEST)</h3>
+  <div class="impact-line">
+    <span><span class="badge built">Built</span></span>
+    <span>Impact: Very High</span>
+    <span>As: Hamarquizen screen for finished books</span>
+  </div>
+
+  <p>On-demand 3–5 minute reviews that combine content from ALL books being read. Not a quiz — a rich mini-essay with temporal hooks, cross-book connections, and surprising juxtapositions. The Hamarquizen PRIME→READ→TEST pattern at scale.</p>
+
+  <div class="example">
+    <div class="label">Cross-Book Mini-Tutorial: "Syracuse Between Empires"</div>
+    <p class="prime" style="margin-bottom:8px"><strong>PRIME:</strong> Before we begin — what do you remember about why Syracuse kept switching allegiances between Greek and Carthaginian powers?</p>
+    <p class="read" style="margin-bottom:8px"><strong>READ:</strong> In Norwich's <em>A History of Sicily</em>, you read about Dionysius playing Carthage against the Greek mainland. But in your Greek history reading, Athens' Sicilian Expedition (415 BC) shows the view from the other shore — Athens saw Sicily as the key to controlling the western Mediterranean. These are the same events, but Syracuse is the protagonist in one story and the target in the other.</p>
+    <p class="read" style="margin-bottom:8px">What makes Syracuse extraordinary is its durability as a pivot point. Two centuries later, it played the same game with Rome and Carthage — and this time lost. Archimedes died in that final siege (212 BC), roughly 75 years after Alexander's death changed the entire Greek world.</p>
+    <p class="test"><strong>TEST:</strong> Why did Syracuse's strategy of playing empires against each other ultimately fail with Rome, when it had worked for centuries with Carthage and Athens?</p>
+    <div class="note">Generated via LLM (Opus for quality) using: book chapter claims + curriculum node descriptions + knowledge state + cross-book node overlaps. Personalized to what the reader actually knows.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Interleaving</strong> (Rohrer & Taylor 2007): 43% better delayed performance when mixing topics. Cross-book review inherently interleaves.</p>
+    <p><strong>Elaborative retrieval</strong>: The comparison ("Norwich says X, your Greek history says Y") forces the reader to reconstruct and reconcile — the strongest retention mechanism.</p>
+    <p><strong>Connection prompts are the most effective format</strong>: "How does X from Book A relate to Y from Book B?" This is exactly what cross-book tutorials generate.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Data Pipeline</div>
+    <ol>
+      <li>Identify curriculum nodes covered by 2+ active books (cross-book connections already computed)</li>
+      <li>For each shared node, collect chapter claims from each book + the curriculum node description</li>
+      <li>Include temporal hooks: nodes from other curricula with overlapping dates where reader has knowledge</li>
+      <li>Generate PRIME→READ→TEST via Opus, with explicit instructions to compare perspectives and include at least one temporal hook</li>
+      <li>Reader self-assesses at end → updates curriculum knowledge state</li>
+    </ol>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Key Design Decision</div>
+    <p><strong>Must feel rich and surprising, not like a quiz.</strong> The "READ" section is a genuine mini-essay, not a list of facts. It should make the reader think "huh, I never connected those two things." This requires Opus-quality generation — Gemini Flash won't produce the right voice.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 6 ─── -->
+<div class="idea-card" id="idea-6">
+  <div class="idea-number">6</div>
+  <h3>Knowledge-Aware Lens Selection</h3>
+  <div class="impact-line">
+    <span><span class="badge partial">Easy Extension</span></span>
+    <span>Impact: Medium</span>
+    <span>Effort: Small</span>
+  </div>
+
+  <p>Currently, review lenses are selected based on review count (factual → ramp → analytical). Instead, select based on <em>knowledge state</em> — what kind of retrieval will strengthen this specific node most at its current level?</p>
+
+  <table>
+    <tr><th>Knowledge State</th><th>Best Lens</th><th>Why</th></tr>
+    <tr>
+      <td>Low confidence (&lt;0.3)</td>
+      <td>Recognition / Identity</td>
+      <td>Establish the basics — "What was this?" (ZPD: below frontier = skip complex)</td>
+    </tr>
+    <tr>
+      <td>Medium (0.3–0.6)</td>
+      <td>Causal / Significance</td>
+      <td>Build framework — "Why did this matter?" (ZPD: at frontier = grow)</td>
+    </tr>
+    <tr>
+      <td>High (0.6–0.8)</td>
+      <td>Comparative / Pattern</td>
+      <td>Cross-reference — "How does this compare to X?" (strengthen gist)</td>
+    </tr>
+    <tr>
+      <td>Very high (&gt;0.8)</td>
+      <td>Consequence / Temporal</td>
+      <td>Deepen framework — "What long-term effects?" (prevent gist decay)</td>
+    </tr>
+  </table>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Graduated depth assessment</strong> (ZPD): Testing below the frontier wastes time. Testing above it is frustrating. The sweet spot is 36–69% accuracy — where the reader knows enough to attempt but not enough to succeed easily.</p>
+    <p><strong>Bloom's taxonomy applied to SRS</strong> (Jensen et al. 2014): Exams requiring higher-order thinking produce conceptual understanding that transfers to untested items. But only when lower levels are solid first.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Implementation</div>
+    <p>In <code>review_engine.py</code>'s question generation, replace the review-count-based lens selection with confidence-based selection. The confidence value already exists on each <code>knowledge_item</code>. Map confidence ranges to lens types in the prompt.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 7 ─── -->
+<div class="idea-card" id="idea-7">
+  <div class="idea-number">7</div>
+  <h3>Comparative Judgment in Curriculum Scans</h3>
+  <div class="impact-line">
+    <span><span class="badge gap">New</span></span>
+    <span>Impact: Medium</span>
+    <span>Effort: Medium</span>
+  </div>
+
+  <p>Mix comparative pairs into the curriculum breadth scan. Every 3rd card, instead of asking about one node, show two nodes and ask "Which do you know more about?" This gives two data points per question and is psychometrically more reliable.</p>
+
+  <div class="example">
+    <div class="label">Comparative Assessment Card</div>
+    <p style="text-align:center; margin-bottom:16px; font-family:'EB Garamond',Georgia,serif; font-size:16px; font-style:italic; color: var(--text-secondary)">Which do you know more about?</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+      <div style="background:var(--parchment-dark); padding:14px; border:1px solid var(--rule); cursor:pointer">
+        <strong style="font-family:'EB Garamond',Georgia,serif">Athenian Democracy</strong>
+        <p style="font-size:13px; color:var(--text-secondary); margin-top:4px; margin-bottom:0">Assembly, courts, citizenship reforms, Pericles' era</p>
+      </div>
+      <div style="background:var(--parchment-dark); padding:14px; border:1px solid var(--rule); cursor:pointer">
+        <strong style="font-family:'EB Garamond',Georgia,serif">Spartan Military Society</strong>
+        <p style="font-size:13px; color:var(--text-secondary); margin-top:4px; margin-bottom:0">Agoge training, dual kingship, helot system, Thermopylae</p>
+      </div>
+    </div>
+    <p style="text-align:center; margin-top:10px; font-size:13px; color:var(--text-muted)">Tap the one you're more confident about &nbsp;·&nbsp; "Neither" skips both</p>
+    <div class="note">Bayesian update: selecting A over B constrains both simultaneously. Amygdala's EIG selection can pick the most informative pairs (highest joint entropy reduction).</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Thurstone's law of comparative judgment</strong>: Two-item comparison is more reliable than absolute rating. ACJ (Adaptive Comparative Judgment) gives two data points per question.</p>
+    <p><strong>Dunning-Kruger mitigation</strong>: Adults are bad at absolute self-assessment, especially for topics they know little about (they can't judge what they don't know). But comparative judgment bypasses this — you can judge relative familiarity even when both topics are vague.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Integration with Amygdala</div>
+    <p>Amygdala's <code>knowledge_map</code> module already implements entropy-maximizing probe selection. Extending it to support comparative (paired) questions alongside absolute questions would make the breadth scan converge faster — potentially reaching useful accuracy in 15 questions instead of 25.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 8 ─── -->
+<div class="idea-card" id="idea-8">
+  <div class="idea-number">8</div>
+  <h3>Rich Failure Feedback — Lean Into "Missed"</h3>
+  <div class="impact-line">
+    <span><span class="badge partial">Easy Extension</span></span>
+    <span>Impact: High</span>
+    <span>Effort: Small</span>
+  </div>
+
+  <p>When the user answers "missed" in a review session, show an expanded rich response — temporal hooks, cross-book connections, vivid context. Make failure the moment of richest learning, not a brief "here's what you should have known."</p>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0">
+    <div style="background:#fef6f4; border:1px solid #e0c0b8; padding:14px">
+      <div style="font-family:'DM Sans',sans-serif; font-size:10px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase; color:var(--rubric); margin-bottom:8px">Current "Missed" Response</div>
+      <p style="font-size:14px; margin:0"><strong>Dionysius I of Syracuse</strong></p>
+      <p style="font-size:13.5px; color:var(--text-secondary); margin:4px 0 0">Tyrant who seized power after Carthaginian destruction of Akragas. Built Syracuse into the strongest Greek city in the western Mediterranean.</p>
+    </div>
+    <div style="background:#f0f8f0; border:1px solid #c0dcc8; padding:14px">
+      <div style="font-family:'DM Sans',sans-serif; font-size:10px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase; color:var(--claim-new); margin-bottom:8px">Proposed "Missed" Response</div>
+      <p style="font-size:14px; margin:0"><strong>Dionysius I of Syracuse</strong></p>
+      <p style="font-size:13.5px; margin:4px 0">Seized power in 405 BC after Carthage destroyed Akragas — the crisis created demand for a strongman. Built the longest walls in the Greek world, invented the catapult (first recorded use), and made Syracuse the dominant western Greek power for 38 years.</p>
+      <p style="font-size:13px; color:var(--info); font-style:italic; margin:6px 0 0">Timeline anchor: Dionysius came to power 8 years after Athens' catastrophic Sicilian Expedition (413 BC) — the power vacuum that expedition created in Sicily made his rise possible.</p>
+      <p style="font-size:13px; margin:6px 0 0">📖 <em>Covered in: A History of Sicily, Ch 4</em></p>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Test-potentiated learning</strong> (Arnold & McDermott 2013): Failed retrieval + feedback produces stronger learning than successful retrieval. The struggle is the active ingredient — but the feedback quality determines how much is learned from the failure.</p>
+    <p><strong>Alif pattern</strong>: When a learner forgets, respond with enrichment (more context, mnemonics, connections), not punishment. This is the Michel Thomas principle in action — "I'll manage your memory" means adding more hooks when something slips, not asking the user to try harder.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Implementation</div>
+    <p>Modify the question generation prompt (<code>QUESTION_GEN_PROMPT</code>) to always include a <code>rich_answer</code> field alongside <code>answer_guidance</code>. The rich answer includes: vivid detail, temporal hook, book source reference. In the review session UI, show <code>answer_guidance</code> for "knew" and <code>rich_answer</code> for "missed" and "partly."</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 9 ─── -->
+<div class="idea-card" id="idea-9">
+  <div class="idea-number">9</div>
+  <h3>Confidence Decay Model (Replace FSRS)</h3>
+  <div class="impact-line">
+    <span><span class="badge gap">New Model</span></span>
+    <span>Impact: Medium</span>
+    <span>Effort: Medium</span>
+  </div>
+
+  <p>Replace the FSRS stability model with gradient confidence decay on curriculum nodes. Knowledge doesn't vanish like a flashcard — gist persists, details fade. The model should reflect this.</p>
+
+  <div class="data-block">
+<span class="comment"># Current: FSRS-style binary stability</span>
+stability_days = old_stability * <span class="number">2.5</span>  <span class="comment"># if knew</span>
+due_at = now + stability_days * <span class="number">86400000</span>
+
+<span class="comment"># Proposed: Gradient confidence with engagement-depth half-lives</span>
+HALF_LIVES = {
+    <span class="string">'surface_reading'</span>: <span class="number">30</span>,   <span class="comment"># days — detail fades fast</span>
+    <span class="string">'chapter_complete'</span>: <span class="number">60</span>,  <span class="comment"># basic gist</span>
+    <span class="string">'review_correct'</span>: <span class="number">90</span>,   <span class="comment"># tested gist</span>
+    <span class="string">'elaborative_recall'</span>: <span class="number">180</span>, <span class="comment"># voice free recall</span>
+    <span class="string">'cross_book_synthesis'</span>: <span class="number">365</span>, <span class="comment"># multiple sources</span>
+    <span class="string">'article_reinforced'</span>: <span class="keyword">+30</span>,  <span class="comment"># bonus: natural spacing</span>
+}
+
+<span class="comment"># Confidence decays as sigmoid</span>
+<span class="keyword">def</span> current_confidence(base_confidence, days_since, half_life):
+    <span class="keyword">return</span> base_confidence * <span class="number">2</span> ** (-days_since / half_life)
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Fuzzy-Trace Theory</strong>: Gist and verbatim traces decay at different rates. A system that models both (gist confidence with long half-life, detail confidence with short half-life) more accurately reflects reality than FSRS's single stability number.</p>
+    <p><strong>Natural resurfacing resets decay</strong>: When an article touches a curriculum node from your book, that's a genuine re-encounter that should reset/extend the confidence half-life. FSRS has no mechanism for this — only explicit review resets stability.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Key Insight: Article Reading as Maintenance</div>
+    <p>The <code>article_reinforced</code> half-life bonus means that reading articles in the feed <em>automatically maintains book knowledge</em> — without the reader doing any explicit review. The system tracks which curriculum nodes were touched by article reading (via the 769 claim→node links) and adds a confidence bonus. This makes the feed itself a knowledge maintenance engine.</p>
+  </div>
+</div>
+
+<!-- ─── IDEA 10 ─── -->
+<div class="idea-card" id="idea-10">
+  <div class="idea-number">10</div>
+  <h3>Forward Testing Warm-Ups Before New Chapters</h3>
+  <div class="impact-line">
+    <span><span class="badge gap">New</span></span>
+    <span>Impact: Medium</span>
+    <span>Effort: Small</span>
+  </div>
+
+  <p>Before starting a new chapter, offer a 90-second warm-up: 3 quick questions reviewing the previous chapter's key nodes. Not to test retention — to prime the encoding machinery for the new material.</p>
+
+  <div class="example">
+    <div class="label">Warm-Up Before Starting Chapter 5</div>
+    <p style="font-style:italic; color:var(--text-secondary); margin-bottom:8px">Quick warm-up from Chapter 4:</p>
+    <p style="margin:4px 0">1. Why did Syracuse need a tyrant after 405 BC? <span style="color:var(--text-muted)">[tap to check]</span></p>
+    <p style="margin:4px 0">2. What military innovation did Dionysius introduce? <span style="color:var(--text-muted)">[tap to check]</span></p>
+    <p style="margin:4px 0">3. How did Dionysius relate to Plato's political philosophy? <span style="color:var(--text-muted)">[tap to check]</span></p>
+    <p style="margin-top:10px; font-size:14px"><em>Ready for Chapter 5: The Greek Golden Age in Sicily</em> →</p>
+    <div class="note">Questions drawn from knowledge_items mapped to previous chapter. Takes 60-90 seconds. The forward testing effect means even thinking about the answer (without checking) improves encoding of the next chapter.</div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Research Backing</div>
+    <p><strong>Forward effect of testing</strong> (Pastötter & Bäuml 2014): Testing on material A improves subsequent learning of material B. The act of retrieval activates encoding mechanisms that persist into the next learning episode.</p>
+    <p><strong>Prior knowledge activation</strong>: The warm-up also activates the specific knowledge network that the next chapter will build on — the reader starts Chapter 5 with Dionysius and Plato fresh in mind, making any references to them in the new chapter more salient.</p>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-label">Integration</div>
+    <p>This naturally combines with the chapter-complete card (Idea 1). The flow becomes: <strong>complete chapter → chapter card with temporal hook → start new chapter → 3 warm-up questions from previous chapter → read</strong>. The chapter card and warm-up can even be the same screen with two sections.</p>
+  </div>
+</div>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 5: WHAT WE BUILT                   -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="built">What We Built</div>
+<h2>Session 40 Implementation</h2>
+<p class="section-desc">Four features built in one session, plus a critical bug fix. All follow the principle: the system does the heavy lifting, the reader just reads or speaks.</p>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="number">871</div>
+    <div class="label">Lines Added</div>
+    <div class="detail">7 files modified, 4 new files created</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">3</div>
+    <div class="label">New Screens</div>
+    <div class="detail">Voice Elicitation, Hamarquizen, Chapter Context modal</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">4</div>
+    <div class="label">New Endpoints</div>
+    <div class="detail">voice-elicit, elicit-candidates, chapter-context, hamarquizen</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">2</div>
+    <div class="label">Bugs Fixed</div>
+    <div class="detail">Research path was broken + chapter data excluded from mapping</div>
+  </div>
+</div>
+
+<!-- Built item 1: Bug Fix -->
+<h3>Bug Fix: Curriculum Mapping Was Blind to Chapter Content</h3>
+
+<p><code>map_book_to_curriculum()</code> had <strong>two compounding bugs</strong>:</p>
+
+<ol>
+  <li><strong>Wrong file path</strong> — Looking for research at <code>/opt/petrarca/data/books/research_{id}.json</code> when files actually live at <code>scripts/data/book_research/{id}.json</code>. Research data was <em>silently never found</em>. The thesis and key_terms fields were always empty strings.</li>
+  <li><strong>Chapter research discarded</strong> — Even if the path were correct, only <code>thesis</code> and <code>key_terms</code> were extracted. The per-chapter data (summaries, claims, key terms) from <code>chapter_research</code> was ignored. The LLM received only chapter titles — "Ch 1: The Founding of Syracuse" — with no content to work with.</li>
+</ol>
+
+<p><strong>Fix</strong>: New helper functions (<code>_load_book()</code>, <code>_load_book_research()</code>, <code>_format_chapters_with_research()</code>) that read from the correct path, load from SQLite first, and format each chapter with its summary, claims, and key terms. The mapping prompt now receives:</p>
+
+<div class="data-block">
+Ch 1: The Founding of Syracuse
+  <span class="string">Summary: This chapter chronicles the origins of Syracuse,</span>
+  <span class="string">tracing its development from prehistoric settlement...</span>
+  <span class="string">Key claims: Gelon established Syracuse as preeminent power</span>
+  <span class="string">by 485 BC; The ruling family held hereditary religious authority</span>
+  <span class="string">Terms: Ortygia, Gelon, Deinomenes</span>
+
+Ch 2: Archaic Syracuse
+  <span class="string">Summary: The emergence of Syracuse as a naval power...</span>
+  <span class="comment">... instead of just "Ch 1: The Founding of Syracuse, Ch 2: Archaic Syracuse"</span>
+</div>
+
+<p><strong>Impact</strong>: Every future curriculum mapping will be dramatically more accurate. Existing mappings should be re-run for books with chapter research (Syracuse, Midnight in Sicily, Invention of Sicily have 8–15 chapters of research data).</p>
+
+<!-- Built item 2: Voice Elicitation -->
+<h3>Voice Elicitation — Free Recall as Review</h3>
+
+<p>A new review mode that replaces card-flip recognition with the strongest retrieval format from the research: free recall. Accessible from the ✦ drawer as "Voice Recall."</p>
+
+<div class="arch-diagram">
+  <div class="arch-label">Voice Elicitation Flow</div>
+  <div class="arch-row">
+    <div class="arch-box active">Select domain</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box data">get_elicitation_candidates()</div>
+  </div>
+  <div class="arch-connector">↓ picks medium-confidence nodes (ZPD frontier)</div>
+  <div class="arch-row">
+    <div class="arch-box active">Show: "Tell me about…"<br>+ node title + description</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box" style="border-color:#cc4444; color:#cc4444">Record (expo-av)</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box data">Soniox transcription (~3s)</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box data">Gemini Flash analysis<br>vs node description + book sources</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box active">Rich feedback card</div>
+    <div class="arch-box proposed">"I wonder" → research queue</div>
+  </div>
+  <div class="arch-connector">↓</div>
+  <div class="arch-row">
+    <div class="arch-box data">Update knowledge_state + FSRS</div>
+  </div>
+</div>
+
+<p><strong>Candidate selection</strong> uses a scoring function that peaks at confidence = 0.5 and gives a bonus to "engaged" nodes — the ZPD frontier where free recall is most informative. Avoids "unknown" nodes (nothing to recall) and "anchored" nodes (already well-known).</p>
+
+<p><strong>The feedback card</strong> shows:</p>
+<ul>
+  <li><span style="color:var(--claim-new)">✓ Captured</span> — facts matched against node description + book sources (generous: paraphrases count)</li>
+  <li><span style="color:var(--rubric)">✗ Missed</span> — the 2–3 most important omissions from the definition</li>
+  <li><span style="color:var(--info)">✦ Interesting</span> — things the user said that go <em>beyond</em> the sources — connections, hypotheses, links</li>
+  <li><span style="color:#5a3a7a">→ Research queued</span> — "I wonder..." statements extracted and added to the exploration queue</li>
+  <li>Coverage bar (percentage) + temporal hook + suggested score</li>
+</ul>
+
+<p><strong>The "wonderings" pipeline</strong> is the most novel part. If you say "I wonder whether Plato's visits to Syracuse influenced Roman political thought," the system detects it, creates a <code>voice_followup</code> review item due in 4 hours, and can eventually feed it into the topic research pipeline. Voice review becomes a knowledge <em>generation</em> mechanism, not just a testing mechanism.</p>
+
+<!-- Built item 3: Chapter Context -->
+<h3>Manual Chapter Preview / Review</h3>
+
+<p>Two buttons in the book detail screen, below the chapter dropdown: <strong>"Preview this chapter"</strong> and <strong>"Review this chapter"</strong>. Never auto-triggered — always manual.</p>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0">
+  <div style="background:white; border:1px solid var(--rule); padding:16px">
+    <div style="font-family:'DM Sans',sans-serif; font-size:10px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase; color:var(--info); margin-bottom:8px">Preview Mode</div>
+    <p style="font-size:14.5px; margin:4px 0"><strong>What you'll learn:</strong> Nodes this chapter covers that are new to you</p>
+    <p style="font-size:14.5px; margin:4px 0"><strong>Shaky prerequisites:</strong> Prerequisites where your knowledge is low — flagged in rubric</p>
+    <p style="font-size:14.5px; margin:4px 0"><strong>Already known:</strong> Nodes you're strong on (anchored/engaged)</p>
+    <p style="font-size:13px; color:var(--text-muted); margin-top:8px">Activates prior knowledge before reading. Schema theory says this dramatically improves encoding.</p>
+  </div>
+  <div style="background:white; border:1px solid var(--rule); padding:16px">
+    <div style="font-family:'DM Sans',sans-serif; font-size:10px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase; color:var(--rubric); margin-bottom:8px">Review Mode</div>
+    <p style="font-size:14.5px; margin:4px 0"><strong>What you covered:</strong> Curriculum nodes mapped from the chapter</p>
+    <p style="font-size:14.5px; margin:4px 0"><strong>Temporal hooks:</strong> Cross-curriculum connections for dated nodes</p>
+    <p style="font-size:14.5px; margin:4px 0"><strong>Quick self-assessment:</strong> One question with 3-tap answer (new/some/knew)</p>
+    <p style="font-size:13px; color:var(--text-muted); margin-top:8px">Consolidates encoding. The testing effect means even the question improves later recall by 50%.</p>
+  </div>
+</div>
+
+<p><strong>Design decision: pull, not push.</strong> The original design called for auto-triggering on chapter change. We made it manual because: (a) you're often not at the book detail screen when you finish a chapter, (b) data quality varies — books without chapter research get weaker mappings, (c) the Michel Thomas principle says the system should feel helpful, not nagging. You tap when you want it.</p>
+
+<p><strong>Data flow</strong>: The endpoint calls <code>map_chapter_to_nodes()</code> (LLM-based, uses the now-fixed chapter research data), cross-references with the reader's knowledge state, and computes prerequisite gaps. The modal shows knowledge dots (green/teal/orange/gray) for each node.</p>
+
+<!-- Built item 4: Hamarquizen -->
+<h3>Hamarquizen — PRIME→READ→TEST for Finished Books</h3>
+
+<p>A new review format for books you've already read. Generates vivid micro-narratives with immediate quizzes. Answers enter the FSRS review pool for long-term retention.</p>
+
+<div class="example">
+  <div class="label">Example Card: Cicero's Roman Republic</div>
+  <p class="prime" style="margin-bottom:10px"><strong>PRIME:</strong> What do you remember about Cicero's role in the Catiline conspiracy?</p>
+  <p class="read" style="margin-bottom:10px; border-left:2px solid var(--rubric); padding-left:12px"><strong>READ:</strong> In 63 BC, Cicero as consul uncovered Catiline's plot to overthrow the Republic. His four orations against Catiline — delivered in the Senate — became the most famous political speeches in Roman history. But his decision to execute the conspirators without trial haunted him: it gave Clodius the legal weapon to exile him three years later.</p>
+  <p class="test" style="margin-bottom:6px"><strong>TEST:</strong> Why did executing the Catilinarian conspirators ultimately weaken Cicero's position?</p>
+  <p style="font-size:13.5px; color:var(--text-secondary)"><strong>ANSWER:</strong> Executing citizens without trial was technically illegal, giving political enemies (especially Clodius) grounds to prosecute him for overstepping consular authority.</p>
+  <p style="margin-top:8px; font-style:italic; color:var(--info); font-size:13.5px">✦ Temporal hook: Cicero's consulship (63 BC) was just 17 years before Caesar crossed the Rubicon</p>
+  <div class="note">The READ section has a distinctive rubric left-border in the app. Each scored answer updates FSRS: knew ×2.5 stability, partly ×1.5, missed ×0.4.</div>
+</div>
+
+<p><strong>Entry points</strong>:</p>
+<ul>
+  <li><strong>Book detail</strong>: "✦ Hamarquizen Review" button appears when <code>reading_status</code> is <code>finished</code> or <code>read</code></li>
+  <li><strong>✦ Drawer</strong>: "Hamarquizen" entry (requires book selection)</li>
+</ul>
+
+<p><strong>Card generation</strong>: Queries <code>knowledge_items</code> for the book, orders by lowest confidence first (review what's fading), generates PRIME→READ→TEST via Gemini Flash with the <code>HAMARQUIZEN_PROMPT</code>. The prompt demands concrete names, dates, and one surprising temporal anchor per card.</p>
+
+<p><strong>Key difference from regular review</strong>: The READ section. Regular review cards show question → answer. Hamarquizen shows question → vivid narrative → quiz → answer. The narrative re-encodes the knowledge with rich context, not just tests whether it's there. This is the "test-potentiated learning" mechanism from the research — even failed attempts followed by rich feedback produce stronger learning.</p>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 6: HOW TO VERIFY                   -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="verify">How to Tell If It's Working</div>
+<h2>Verification & Signals</h2>
+<p class="section-desc">Each feature needs different evidence. Some can be tested immediately; others require weeks of use to judge.</p>
+
+<h3>Immediate Verification (Can Test Today)</h3>
+
+<table>
+  <tr><th>Feature</th><th>Test</th><th>Success Signal</th></tr>
+  <tr>
+    <td>Mapping bug fix</td>
+    <td>Re-run <code>map_book_to_curriculum()</code> for Syracuse book</td>
+    <td>More nodes mapped, evidence strings reference specific chapters (not just "the book mentions...")</td>
+  </tr>
+  <tr>
+    <td>Voice elicitation</td>
+    <td>Open ✦ drawer → Voice Recall → speak about a Sicily topic for 30s</td>
+    <td>Feedback card appears within ~8s showing captured/missed/interesting. Coverage % feels reasonable.</td>
+  </tr>
+  <tr>
+    <td>Chapter preview</td>
+    <td>Open a book with chapters → select a chapter → tap "Preview this chapter"</td>
+    <td>Modal shows curriculum nodes with knowledge dots. "New" nodes are ones you don't know. Shaky prerequisites flagged.</td>
+  </tr>
+  <tr>
+    <td>Hamarquizen</td>
+    <td>Open a finished book → tap "✦ Hamarquizen Review"</td>
+    <td>PRIME→READ→TEST flow loads. READ sections are vivid with specific names/dates. Scoring works and next card loads.</td>
+  </tr>
+</table>
+
+<h3>Short-Term Signals (1–2 Weeks)</h3>
+
+<div class="constraint">
+  <div class="icon">🎙</div>
+  <div class="text"><strong>Voice elicitation engagement.</strong> Do you actually use it? The hypothesis is that speaking freely is more engaging than tapping cards. Watch: do sessions complete (all 5 nodes), or do you bail after 1–2? If the feedback feels inaccurate or unhelpful, the Gemini Flash analysis may need prompt tuning.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">📖</div>
+  <div class="text"><strong>Hamarquizen card quality.</strong> Are the READ sections vivid and accurate? Or are they generic summaries? The prompt demands "concrete names, dates, places — not abstractions" and "one sensory or dramatic detail." If cards feel flat, the prompt needs iteration — possibly switching to Opus for generation quality.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🗺</div>
+  <div class="text"><strong>Chapter context relevance.</strong> Does the chapter→curriculum mapping feel right? With the bug fix, the LLM now gets chapter summaries and claims. But for books without chapter research (0 chapters in research JSON), the mapping will be poor. Check: for Syracuse (15 chapters of research), does the preview show relevant nodes? For a book with no research, does it gracefully show "No curriculum mapping available"?</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🔬</div>
+  <div class="text"><strong>"Wonderings" pipeline value.</strong> Do you actually say "I wonder..." during voice recall? If so, do the queued research triggers surface useful content later? This is the most speculative feature — it turns voice review into knowledge generation. If wonderings are rare, the prompt may need to explicitly invite them.</div>
+</div>
+
+<h3>Long-Term Hypotheses (1–3 Months)</h3>
+
+<table>
+  <tr><th>Hypothesis</th><th>Measurement</th><th>Falsification</th></tr>
+  <tr>
+    <td>Voice free recall produces better retention than card-flip</td>
+    <td>Compare review scores on nodes reviewed via voice vs. cards over 30 days. Voice-reviewed nodes should have higher "knew" rates on subsequent encounters.</td>
+    <td>If voice-reviewed and card-reviewed nodes show identical recall rates, the extra effort of speaking isn't paying off. Possible explanation: the LLM comparison may be too generous, making "captured" inflated.</td>
+  </tr>
+  <tr>
+    <td>Hamarquizen READ sections improve retention vs. bare answer cards</td>
+    <td>Nodes first encountered via Hamarquizen vs. regular review: compare stability growth (how quickly they reach 30+ day intervals)</td>
+    <td>If stability growth is identical, the vivid narrative isn't adding encoding value. The micro-narrative may be too short to create genuine encoding — it's more like a reminder than a first encounter.</td>
+  </tr>
+  <tr>
+    <td>Chapter preview activates prior knowledge and improves reading</td>
+    <td>Qualitative: does reviewing prerequisites before a chapter make the reading richer? Do you notice connections you would have missed?</td>
+    <td>If previews feel like busywork (you already know the context, or the mapped nodes are wrong), the feature adds friction without value. Drop it.</td>
+  </tr>
+  <tr>
+    <td>Better curriculum mapping (with chapter data) produces more accurate node assignments</td>
+    <td>Re-map books with chapter research → compare node count and evidence quality vs. old mappings</td>
+    <td>If node counts are similar and evidence strings still feel generic, the chapter data may not be rich enough (Gemini-inferred, not extracted from actual text). Physical book captures may be needed for real quality.</td>
+  </tr>
+  <tr>
+    <td>The "wonderings" pipeline surfaces genuinely useful research</td>
+    <td>Track: how many wonderings are generated → how many become research → how many surface interesting articles/answers</td>
+    <td>If the pipeline produces noise (vague questions, irrelevant research), the voice extraction prompt needs tightening, or wonderings should be user-confirmed before queuing.</td>
+  </tr>
+</table>
+
+<hr class="double">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SECTION 7: OPEN ENDS & NEXT STEPS          -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="section-marker" id="next">Open Ends & Next Steps</div>
+<h2>What's Left</h2>
+<p class="section-desc">The four built features are prototypes — functional but needing real-world iteration. Here's what's still open.</p>
+
+<h3>Known Gaps in What We Built</h3>
+
+<table>
+  <tr><th>Feature</th><th>Gap</th><th>Mitigation</th></tr>
+  <tr>
+    <td>Voice elicitation</td>
+    <td><s>Only loads candidates from one domain at a time (defaults to Sicily).</s></td>
+    <td><span class="badge built">Fixed</span> Now loads from all domains with knowledge states. Server merges candidates across domains, sorted by elicitation score.</td>
+  </tr>
+  <tr>
+    <td>Voice elicitation</td>
+    <td>Soniox transcription takes 3–10s (polling). Total latency from stop-recording to feedback is ~8–15s.</td>
+    <td>Show transcript incrementally while LLM analysis runs. Or switch to streaming transcription if Soniox supports it.</td>
+  </tr>
+  <tr>
+    <td>Chapter context</td>
+    <td>Calls <code>map_chapter_to_nodes()</code> which is an LLM call — takes 3–5s. No caching.</td>
+    <td>Cache chapter→node mappings after first call. Store in <code>book_curriculum_mappings</code> with chapter_number.</td>
+  </tr>
+  <tr>
+    <td>Chapter context</td>
+    <td>Books without chapter research (0 chapters in JSON) get poor-quality mappings from title alone.</td>
+    <td>For these books, show a prompt to photograph the TOC or add chapter notes.</td>
+  </tr>
+  <tr>
+    <td>Hamarquizen</td>
+    <td>Drawer entry doesn't pass a book_id — needs a book picker or "most recently finished" default.</td>
+    <td>Show a simple book picker modal when accessed from the drawer without a book_id.</td>
+  </tr>
+  <tr>
+    <td>Hamarquizen</td>
+    <td>Generates all 5 cards sequentially (5 LLM calls). Could be slow on first load (~10–15s).</td>
+    <td>Generate cards in parallel, or stream them one at a time (show first card while generating the rest).</td>
+  </tr>
+  <tr>
+    <td>Hamarquizen</td>
+    <td><s>Currently single-book only.</s></td>
+    <td><span class="badge built">Fixed</span> Cross-book variant built. <code>?mode=cross</code> finds nodes covered by 2+ books, generates comparison tutorials via <code>CROSS_BOOK_HAMARQUIZEN_PROMPT</code>.</td>
+  </tr>
+  <tr>
+    <td>All features</td>
+    <td><s>Knowledge_states table is sparse → hooks are rare.</s></td>
+    <td><span class="badge built">Fixed</span> Article reads now auto-populate curriculum knowledge states. <code>notify_article_read_curriculum()</code> bumps nodes to "mentioned" when articles map to curriculum nodes (threshold: ≥2 claims or ≥0.70 similarity).</td>
+  </tr>
+</table>
+
+<h3>Ideas Status (From the Original 10)</h3>
+
+<table>
+  <tr><th>#</th><th>Idea</th><th>Status</th></tr>
+  <tr><td>1</td><td>Chapter-complete cards with temporal hooks</td><td><span class="badge built">Built</span> Manual preview/review buttons</td></tr>
+  <tr><td>2</td><td>"Reinforced from reading" notes</td><td><span class="badge gap">Not built</span> Still the highest-value remaining item</td></tr>
+  <tr><td>3</td><td>Voice free-recall review mode</td><td><span class="badge built">Built</span> + multi-domain + review tab toggle</td></tr>
+  <tr><td>4</td><td>Pre-reading book briefing</td><td><span class="badge built">Built</span> As chapter preview mode</td></tr>
+  <tr><td>5</td><td>Cross-book mini-tutorials (PRIME→READ→TEST)</td><td><span class="badge built">Built</span> Hamarquizen single-book + cross-book</td></tr>
+  <tr><td>6</td><td>Knowledge-aware lens selection</td><td><span class="badge partial">Skipped</span> User skeptical, review-count progression sufficient</td></tr>
+  <tr><td>7</td><td>Comparative judgment in scans</td><td><span class="badge designed">Future</span></td></tr>
+  <tr><td>8</td><td>Rich failure feedback</td><td><span class="badge built">Built</span> rich_answer shown for 2.5s on missed/partly</td></tr>
+  <tr><td>9</td><td>Confidence decay model</td><td><span class="badge designed">Future</span></td></tr>
+  <tr><td>10</td><td>Forward testing warm-ups</td><td><span class="badge designed">Future</span></td></tr>
+</table>
+
+<p><strong>#2 (reinforced-from-reading)</strong> is still the highest-value remaining item. The backend is now partially there — <code>notify_article_read_curriculum()</code> populates knowledge states when articles are read. What's missing is the UI: showing the reader "This article reinforced [topic] from [book]" after finishing an article.</p>
+
+<h3>New: Real-World Curricula</h3>
+
+<p>Three new curricula are being generated from established educational frameworks, filling the major coverage gaps:</p>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="number">~73</div>
+    <div class="label">Ancient & Classical</div>
+    <div class="detail">From OpenStax Vol 1. Prehistory → 1500 CE. Fills the pre-1200 gap no AP course covers.</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">~78</div>
+    <div class="label">AP World History</div>
+    <div class="detail">66 topics + 9 units. 1200 CE → present. The global baseline.</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">~95</div>
+    <div class="label">AP European History</div>
+    <div class="detail">88 topics + 9 units. 1450 → present. Deep European focus.</div>
+  </div>
+</div>
+
+<p>Combined with the existing 5 curricula (~280 nodes), this brings the total to <strong>~525 curriculum nodes</strong> spanning prehistory to present. The AP "Essential Knowledge" statements provide the node descriptions — these are the specific factual claims an educated person should know.</p>
+
+<p>The generation script (<code>scripts/generate_curricula_from_sources.py</code>) converts the AP/OpenStax topic structures to Petrarca format via Opus, adding: descriptions, prerequisites, date ranges, obscurity ratings, and Bloom's floor levels.</p>
+
+<h3>Bigger Open Questions</h3>
+
+<div class="constraint">
+  <div class="icon">📚</div>
+  <div class="text"><strong>How much can we know about books we don't have the text of?</strong> Chapter research is Gemini-inferred from titles + web search. For well-known books (Norwich, Iggulden) this is decent. For obscure books, it's guesswork. The real quality leap would come from: (a) photographing key pages, (b) Kindle highlights, (c) voice captures summarizing chapters. The system should actively invite these when chapter data is thin.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🧩</div>
+  <div class="text"><strong>Should the concrete knowledge SRS and the conceptual understanding system be separate?</strong> The user's insight is right: dates, places, and wars ARE the scaffolding — without them, conceptual understanding collapses. But the research shows they need different retrieval formats. The current system uses the same card-flip for both. A possible split: <strong>factual drill</strong> (dates, names → standard SRS cards, high repetition) + <strong>elaborative review</strong> (significance, connections → Hamarquizen/voice, lower frequency). The curriculum node's <code>bloom_floor</code> field (recognize/explain/analyze) could drive this split.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🔄</div>
+  <div class="text"><strong>How should article reading feed back into the book knowledge system?</strong> Currently, articles map to curriculum nodes (769 links) and books map to curriculum nodes — but the connection is invisible. When you read an article about Greek naval warfare, it's reinforcing the same curriculum nodes as your Sicily book. The system should: (a) tell you this happened (#2), (b) bump confidence on those nodes, and (c) use this as a "natural spacing" event that extends the review interval. This turns the feed into a passive knowledge maintenance engine.</div>
+</div>
+
+<div class="constraint">
+  <div class="icon">🎯</div>
+  <div class="text"><strong>What's the right depth for curricula?</strong> Current curricula have 50–70 nodes each. Is this enough? The AP World History framework has ~150–300 assessable nodes per domain. But these are "educated adult" curricula, not course-prep. The answer may be: start at 50–70 and deepen organically — when the user shows sustained interest in a subtopic (via reviews, voice recalls, article reading), auto-suggest expanding that branch.</div>
+</div>
+
+<hr>
+
+<h3>The Arc of the System</h3>
+
+<p>What we're building is a <strong>knowledge companion that knows what you've read, knows what you know, and uses both to help you retain and deepen your understanding</strong>. The four features built today form the interaction layer between the data (curricula, mappings, knowledge states) and the reader (at the moments that matter):</p>
+
+<div class="arch-diagram">
+  <div class="arch-label">The Reader's Moments</div>
+  <div class="arch-row">
+    <div class="arch-box active">Before a chapter<br><span style="font-size:9px">Preview → prime knowledge</span></div>
+    <div class="arch-box active">After a chapter<br><span style="font-size:9px">Review → consolidate</span></div>
+    <div class="arch-box active">Reviewing a book<br><span style="font-size:9px">Hamarquizen → re-encode</span></div>
+    <div class="arch-box active">Dedicated review<br><span style="font-size:9px">Voice recall → deep retrieval</span></div>
+  </div>
+  <div class="arch-connector">↕ mediated by</div>
+  <div class="arch-row">
+    <div class="arch-box data">5 Curricula<br>280+ nodes</div>
+    <div class="arch-box data">Knowledge State<br>per node per user</div>
+    <div class="arch-box data">Book Mappings<br>node ↔ chapter</div>
+    <div class="arch-box data">Temporal Hooks<br>cross-curriculum dates</div>
+  </div>
+  <div class="arch-connector">↕ and also (not yet built)</div>
+  <div class="arch-row">
+    <div class="arch-box proposed">Reading an article<br><span style="font-size:9px">"Reinforced from book"</span></div>
+    <div class="arch-box proposed">Forgetting something<br><span style="font-size:9px">Rich context on "missed"</span></div>
+    <div class="arch-box proposed">Starting a new book<br><span style="font-size:9px">Full-book prerequisite scan</span></div>
+    <div class="arch-box proposed">Knowledge decaying<br><span style="font-size:9px">Confidence-based resurfacing</span></div>
+  </div>
+</div>
+
+<p>The Michel Thomas promise is becoming real: <em>"Read whatever interests you. I'm tracking everything, making connections, and I'll resurface what matters when it matters."</em></p>
+
+<footer>
+  Petrarca · Knowledge Companion Analysis · March 2026 · Updated after Session 40 build<br>
+  Research from: Roediger & Karpicke (2006), Karpicke & Blunt (2011), Bjork & Bjork (2011), Brainerd & Reyna (Fuzzy-Trace Theory), Matuschak & Nielsen (Quantum Country), Falmagne (Knowledge Space Theory), Vygotsky (ZPD), Jensen et al. (2014), Arnold & McDermott (2013), Pastötter & Bäuml (2014)
+</footer>
+
+</div><!-- .container -->
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab-bar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.closest('.tab-group');
+    group.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+    group.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    group.querySelector(`.tab-content[data-tab="${btn.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// Smooth scroll for nav
+document.querySelectorAll('nav a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    document.querySelector(a.getAttribute('href')).scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+// Animate stats on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '1';
+      entry.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.stat-card, .idea-card').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(12px)';
+  el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+  observer.observe(el);
+});
+
+// Knowledge strip animation
+const stripObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelectorAll('.seg').forEach((seg, i) => {
+        const width = seg.style.width;
+        seg.style.width = '0%';
+        setTimeout(() => { seg.style.width = width; }, i * 80);
+      });
+    }
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.knowledge-strip').forEach(el => stripObserver.observe(el));
+</script>
+
+</body>
+</html>

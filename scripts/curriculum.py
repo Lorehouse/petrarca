@@ -58,6 +58,8 @@ def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str 
 
 DATA_DIR = Path(os.environ.get('CURRICULUM_DIR', '/opt/petrarca/data/curricula'))
 PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
+SCRIPT_DIR = Path(__file__).resolve().parent
+BOOK_RESEARCH_DIR = SCRIPT_DIR / "data" / "book_research"
 
 # Ensure dirs exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -415,9 +417,11 @@ BOOK:
 Title: {title}
 Author: {author}
 Topics: {topics}
-Chapters: {chapters}
 Thesis: {thesis}
 Key terms: {key_terms}
+
+CHAPTERS WITH CONTENT:
+{chapters}
 
 CURRICULUM NODES (the topics we want to map against):
 {curriculum_nodes}
@@ -425,11 +429,79 @@ CURRICULUM NODES (the topics we want to map against):
 For each curriculum node that this book covers, output a JSON object with:
 - "node_title": exact title from the curriculum
 - "coverage": "surface" (mentions it briefly), "moderate" (covers it meaningfully), or "deep" (substantial coverage)
-- "evidence": Brief explanation of why you think this book covers this topic
+- "evidence": Brief explanation of why you think this book covers this topic, referencing specific chapters where possible
 
 Only include nodes the book actually covers — don't guess. If uncertain, use "surface" coverage.
 
 Output as a JSON array. No markdown, just the JSON array."""
+
+
+def _load_book(book_id: str) -> dict | None:
+    """Load a book by ID. Tries SQLite first, falls back to JSON."""
+    try:
+        from db import get_connection, BOOK_JSON_FIELDS
+        conn = get_connection(readonly=True)
+        row = conn.execute('SELECT * FROM physical_books WHERE id = ?', (book_id,)).fetchone()
+        conn.close()
+        if row:
+            book = dict(row)
+            for f in BOOK_JSON_FIELDS:
+                if isinstance(book.get(f), str):
+                    try:
+                        book[f] = json.loads(book[f])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            return book
+    except Exception:
+        pass
+
+    # Fallback: JSON file
+    if PHYSICAL_BOOKS_PATH.exists():
+        with open(PHYSICAL_BOOKS_PATH) as f:
+            books_data = json.load(f)
+        for b in books_data.get("books", []):
+            if b.get("id") == book_id:
+                return b
+    return None
+
+
+def _load_book_research(book_id: str) -> dict | None:
+    """Load book research data (thesis, chapter summaries, claims, key terms)."""
+    research_path = BOOK_RESEARCH_DIR / f"{book_id}.json"
+    if research_path.exists():
+        with open(research_path) as f:
+            return json.load(f)
+    return None
+
+
+def _format_chapters_with_research(book: dict, research: dict | None) -> str:
+    """Format chapter listing, enriched with research data when available."""
+    chapters = book.get("chapters", [])
+    if not chapters:
+        return "No chapters available"
+
+    chapter_research = research.get("chapter_research", {}) if research else {}
+    lines = []
+    for ch in chapters:
+        num = ch.get("number", "?")
+        title = ch.get("title", "?")
+        cr = chapter_research.get(str(num), {})
+        if cr:
+            summary = cr.get("summary", "")
+            claims = cr.get("claims", [])
+            terms = cr.get("key_terms", [])
+            line = f"Ch {num}: {title}"
+            if summary:
+                line += f"\n  Summary: {summary}"
+            if claims:
+                line += f"\n  Key claims: {'; '.join(claims[:4])}"
+            if terms:
+                line += f"\n  Terms: {', '.join(terms[:5])}"
+            lines.append(line)
+        else:
+            lines.append(f"Ch {num}: {title}")
+
+    return "\n".join(lines)
 
 
 def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
@@ -438,18 +510,7 @@ def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
     if not curriculum:
         return None
 
-    # Load book data
-    books_data = {}
-    if PHYSICAL_BOOKS_PATH.exists():
-        with open(PHYSICAL_BOOKS_PATH) as f:
-            books_data = json.load(f)
-
-    book = None
-    for b in books_data.get("books", []):
-        if b.get("id") == book_id:
-            book = b
-            break
-
+    book = _load_book(book_id)
     if not book:
         return None
 
@@ -461,20 +522,15 @@ def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
         node_lines.append(f"{indent}- {node['title']}: {node['description'][:100]}")
         title_to_id[node["title"]] = node["id"]
 
-    chapters_text = ", ".join(
-        f"Ch {ch.get('number', '?')}: {ch.get('title', '?')}"
-        for ch in book.get("chapters", [])
-    ) or "No chapters available"
+    # Load book research (thesis, chapter summaries, claims)
+    research = _load_book_research(book_id)
+    thesis = research.get("thesis", "") if research else ""
+    key_terms = ", ".join(
+        t.get("term", "") for t in (research.get("key_terms", []) if research else [])[:20]
+    )
 
-    # Look for book research
-    research_path = PHYSICAL_BOOKS_PATH.parent / "books" / f"research_{book_id}.json"
-    thesis = ""
-    key_terms = ""
-    if research_path.exists():
-        with open(research_path) as f:
-            research = json.load(f)
-        thesis = research.get("thesis", "")
-        key_terms = ", ".join(t.get("term", "") for t in research.get("key_terms", [])[:20])
+    # Format chapters enriched with research data
+    chapters_text = _format_chapters_with_research(book, research)
 
     prompt = BOOK_MAPPING_PROMPT.format(
         title=book.get("title", "Unknown"),

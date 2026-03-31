@@ -76,6 +76,7 @@ export default function RootLayout() {
         <Stack.Screen name="curriculum-scan" />
         <Stack.Screen name="projects" />
         <Stack.Screen name="project-detail" />
+        <Stack.Screen name="hamarquizen" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <FeedbackCapture />

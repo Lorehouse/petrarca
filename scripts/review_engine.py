@@ -251,7 +251,7 @@ The answer_guidance should be 2-3 sentences drawn from the curriculum definition
 {temporal_context}
 
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
+{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
 
 
 QUESTION_GEN_PROMPT = """Generate an analytical review question.
@@ -279,7 +279,7 @@ Lens options:
 Keep question under 20 words.
 
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","temporal_hook":"...","curriculum_context":"..."}}"""
+{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
@@ -310,6 +310,56 @@ Extract:
 
 Output JSON:
 {{"remembered":"...","questions":["..."],"connections":["..."],"suggested_score":"knew|partly|missed"}}"""
+
+
+VOICE_ELICITATION_PROMPT = """Analyze a learner's free recall about a historical topic.
+
+TOPIC: {node_title}
+TOPIC DEFINITION: {node_description}
+
+BOOK SOURCES (what the learner has read about this):
+{sources_text}
+
+LEARNER'S RECALL (transcribed speech):
+{transcript}
+
+Compare the learner's recall against the topic definition and book sources. Identify:
+
+1. CAPTURED: Specific facts or concepts from the definition/sources that the learner mentioned (even if imprecisely). Be generous — paraphrases count.
+2. MISSED: Important facts from the definition/sources that were NOT mentioned. Focus on the 2-3 most important omissions, not every detail.
+3. INTERESTING: Things the learner said that go BEYOND the sources — personal connections, questions, hypotheses, links to other topics. These are valuable signals.
+4. WONDERINGS: Any "I wonder..." or questioning statements — these are research triggers.
+
+Output JSON:
+{{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["question1"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
+
+
+HAMARQUIZEN_PROMPT = """Generate a Hamarquizen-style micro-lesson for reviewing a book topic.
+
+Book: {book_title} by {book_author}
+Curriculum node: {node_title}
+Node description: {node_description}
+Source text from book: {source_text}
+Reader's current knowledge: {knowledge_level} (confidence: {confidence})
+
+Create a PRIME→READ→TEST sequence:
+
+1. PRIME: A casual question to activate memory (8-15 words). Start with "What do you remember about..." or "Do you recall why..." or "Can you picture..."
+
+2. READ: 2-3 vivid, specific sentences that bring the topic alive. Include:
+   - Concrete names, dates, places (not abstractions)
+   - One sensory or dramatic detail ("the walls were 5km long", "he was 75 when he died in the siege")
+   - One surprising connection or temporal anchor to another known event
+   Keep it tight — this is a micro-narrative, not a textbook paragraph.
+
+3. TEST: A focused question (6-12 words) whose answer is directly in the READ section. Tests understanding, not trivia. Start with What/Why/How.
+
+4. ANSWER: 1-2 sentence answer guidance drawn from the READ section.
+
+5. TEMPORAL_HOOK: One cross-period anchor connecting this to another era the reader might know.
+
+Output JSON:
+{{"prime":"...","read":"...","test":"...","answer":"...","temporal_hook":"..."}}"""
 
 
 MAP_WHOLE_BOOK_PROMPT = """Map a finished book to curriculum nodes for a knowledge review system.
@@ -1411,3 +1461,555 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
         'connections': extracted.get('connections', []),
         'follow_ups_created': follow_ups,
     }
+
+
+# ── Voice elicitation (free recall) ─────────────────────────────────────────
+
+def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, transcribe_fn) -> dict:
+    """Run voice free-recall elicitation for a curriculum node.
+
+    User speaks freely about what they know about a topic.
+    System transcribes, compares against node definition + book sources, gives rich feedback.
+    """
+    # Load curriculum and find node
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return {'error': f'Curriculum {domain_id} not found'}
+
+    node = None
+    for n in curriculum.get('nodes', []):
+        if n['id'] == node_id:
+            node = n
+            break
+    if not node:
+        return {'error': f'Node {node_id} not found'}
+
+    # Transcribe
+    transcript = transcribe_fn(audio_path)
+    if not transcript:
+        return {'error': 'Transcription failed'}
+
+    # Gather all book sources for this node from knowledge_items
+    sources_text = _gather_node_sources(node_id, domain_id, conn)
+
+    # Run LLM analysis
+    prompt = VOICE_ELICITATION_PROMPT.format(
+        node_title=node['title'],
+        node_description=node['description'],
+        sources_text=sources_text or 'No specific book sources available.',
+        transcript=transcript,
+    )
+
+    raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=4096,
+                   response_mime_type='application/json')
+    result = _parse_json(raw) if raw else {}
+    if not isinstance(result, dict):
+        result = {}
+
+    # Generate temporal hook for this node
+    temporal_hook = _generate_temporal_hook(node, domain_id, conn)
+    result['temporal_hook'] = temporal_hook
+    result['node_title'] = node['title']
+    result['node_description'] = node['description']
+    result['transcript'] = transcript
+
+    # Process "wonderings" — create research triggers
+    wonderings = result.get('wonderings', [])
+    research_triggers = []
+    for w in wonderings[:3]:
+        trigger_id = f'wonder_{node_id}_{int(time.time() * 1000)}'
+        try:
+            conn.execute("""
+                INSERT INTO review_items
+                  (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
+                   source_text, lens, stability_days, due_at, review_count, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                trigger_id, 'voice_followup',
+                domain_id, node_id, node['title'],
+                w, 'SIGNIFICANCE', 1.0,
+                int(time.time() * 1000) + 4 * 3600 * 1000,  # due in 4h
+                0, int(time.time() * 1000),
+            ))
+            research_triggers.append({'id': trigger_id, 'question': w})
+        except Exception:
+            pass
+
+    # Update knowledge state based on coverage
+    coverage = result.get('coverage_pct', 50)
+    score = result.get('suggested_score', 'partly')
+    knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
+    confidence = coverage / 100.0
+    update_knowledge(domain_id, node_id, knowledge=knowledge_level,
+                     confidence=confidence, source='voice_elicitation')
+
+    # Update knowledge_items if one exists for this node
+    now_ms = int(time.time() * 1000)
+    stability_mult = {'knew': 2.5, 'partly': 1.5, 'missed': 0.4}.get(score, 1.0)
+    conn.execute("""
+        UPDATE knowledge_items
+        SET last_score = ?, last_reviewed_at = ?,
+            stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
+            due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
+            review_count = review_count + 1,
+            cached_question = NULL
+        WHERE curriculum_node_id = ? AND curriculum_domain = ?
+    """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
+
+    conn.commit()
+
+    result['research_triggers'] = research_triggers
+    return result
+
+
+def _gather_node_sources(node_id: str, domain_id: str, conn) -> str:
+    """Gather all book source texts for a curriculum node."""
+    rows = conn.execute("""
+        SELECT sources FROM knowledge_items
+        WHERE curriculum_node_id = ? AND curriculum_domain = ?
+    """, (node_id, domain_id)).fetchall()
+
+    parts = []
+    for row in rows:
+        try:
+            sources = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            if isinstance(sources, list):
+                for s in sources:
+                    if isinstance(s, dict):
+                        book_title = s.get('book_title', s.get('book_id', 'Unknown book'))
+                        chapter = s.get('chapter_title', '')
+                        text = s.get('source_text', '')
+                        if text:
+                            parts.append(f"From {book_title}" + (f", {chapter}" if chapter else "") + f": {text}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return '\n'.join(parts) if parts else ''
+
+
+def _generate_temporal_hook(node: dict, domain_id: str, conn) -> str:
+    """Generate a temporal hook by finding overlapping nodes in other curricula."""
+    date_start = node.get('date_start')
+    date_end = node.get('date_end')
+    if date_start is None:
+        return ''
+
+    if date_end is None:
+        date_end = date_start
+
+    # Find nodes in OTHER curricula with overlapping dates where user has knowledge
+    try:
+        rows = conn.execute("""
+            SELECT cn.title, cn.date_start, cn.date_end, cd.title as domain_title,
+                   ks.knowledge, ks.confidence
+            FROM curriculum_nodes cn
+            JOIN curriculum_domains cd ON cn.domain_id = cd.id
+            LEFT JOIN knowledge_states ks ON ks.node_id = cn.id AND ks.domain_id = cn.domain_id
+            WHERE cn.domain_id != ?
+              AND cn.date_start IS NOT NULL
+              AND cn.date_start <= ? AND COALESCE(cn.date_end, cn.date_start) >= ?
+              AND (ks.knowledge IN ('engaged', 'anchored') OR ks.confidence > 0.5)
+            ORDER BY ks.confidence DESC
+            LIMIT 3
+        """, (domain_id, date_end + 50, date_start - 50)).fetchall()
+
+        if rows:
+            best = rows[0]
+            return f"Contemporaneous with {best[0]} ({best[3]})"
+    except Exception:
+        pass
+
+    return ''
+
+
+def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
+    """Get elicitation candidates for a single domain (internal helper)."""
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return []
+
+    rows = conn.execute("""
+        SELECT node_id, knowledge, confidence
+        FROM knowledge_states
+        WHERE domain_id = ?
+    """, (domain_id,)).fetchall()
+
+    states = {r[0]: {'knowledge': r[1], 'confidence': r[2]} for r in rows}
+
+    candidates = []
+    for node in curriculum.get('nodes', []):
+        if node['level'] < 2:
+            continue  # skip Area-level nodes
+        state = states.get(node['id'], {})
+        knowledge = state.get('knowledge', 'unknown')
+        confidence = state.get('confidence', 0.0)
+
+        if knowledge == 'unknown':
+            continue  # nothing to recall
+
+        # Score: prefer medium confidence (peak at 0.5)
+        score = 1.0 - abs(confidence - 0.5) * 2  # peaks at 0.5
+        if knowledge == 'engaged':
+            score += 0.3  # bonus for engaged (most to gain)
+        elif knowledge == 'mentioned':
+            score += 0.1
+
+        candidates.append({
+            'node_id': node['id'],
+            'node_title': node['title'],
+            'node_description': node['description'],
+            'domain_id': domain_id,
+            'knowledge': knowledge,
+            'confidence': confidence,
+            'elicitation_score': round(score, 2),
+        })
+
+    return candidates
+
+
+def get_elicitation_candidates(domain_id: str | None = None, limit: int = 5, conn=None) -> list[dict]:
+    """Get curriculum nodes suitable for voice elicitation.
+
+    Prioritizes: medium-confidence nodes (engaged, 0.3-0.7) where voice recall
+    would be most informative. Avoids unknown (nothing to recall) and anchored
+    (already well-known).
+
+    If domain_id is None, returns candidates from ALL domains where the user
+    has engaged/anchored nodes, merged and sorted by elicitation_score.
+    """
+    own = conn is None
+    if own:
+        from db import get_connection
+        conn = get_connection(readonly=True)
+
+    try:
+        if domain_id:
+            candidates = _elicitation_candidates_for_domain(domain_id, conn)
+        else:
+            # Find all domains with engaged/anchored nodes
+            domain_rows = conn.execute("""
+                SELECT DISTINCT domain_id FROM knowledge_states
+                WHERE knowledge IN ('engaged', 'anchored', 'mentioned')
+            """).fetchall()
+            candidates = []
+            for row in domain_rows:
+                candidates.extend(_elicitation_candidates_for_domain(row[0], conn))
+
+        candidates.sort(key=lambda c: c['elicitation_score'], reverse=True)
+        return candidates[:limit]
+    finally:
+        if own:
+            conn.close()
+
+
+# ── Article-read curriculum updates ──────────────────────────────────────────
+
+def notify_article_read_curriculum(article_id: str, conn) -> dict:
+    """When an article is read, update curriculum knowledge states for mapped nodes."""
+    rows = conn.execute("""
+        SELECT node_id, domain_id, claim_count, avg_similarity
+        FROM article_curriculum_nodes
+        WHERE article_id = ?
+    """, (article_id,)).fetchall()
+
+    if not rows:
+        return {'nodes_updated': 0}
+
+    updated = 0
+    nodes = []
+    for row in rows:
+        node_id, domain_id = row['node_id'], row['domain_id']
+        claim_count, avg_sim = row['claim_count'], row['avg_similarity']
+        # Only update if the mapping is strong enough
+        if claim_count >= 2 or avg_sim >= 0.70:
+            current = conn.execute(
+                "SELECT knowledge, confidence FROM knowledge_states WHERE node_id = ? AND domain_id = ?",
+                (node_id, domain_id)
+            ).fetchone()
+
+            if current is None or current['knowledge'] == 'unknown':
+                update_knowledge(domain_id, node_id, knowledge='mentioned',
+                                 confidence=0.2, source=f'article:{article_id}')
+                updated += 1
+                nodes.append(node_id)
+            elif current['knowledge'] == 'mentioned':
+                # Bump confidence slightly for additional article encounters
+                new_conf = min(0.5, (current['confidence'] or 0.2) + 0.05)
+                update_knowledge(domain_id, node_id, knowledge='mentioned',
+                                 confidence=new_conf, source=f'article:{article_id}')
+                updated += 1
+                nodes.append(node_id)
+
+    return {'nodes_updated': updated, 'nodes': nodes}
+
+
+# ── Hamarquizen sessions ─────────────────────────────────────────────────────
+
+def generate_hamarquizen_session(book_id: str, limit: int = 5, conn=None) -> list[dict]:
+    """Generate Hamarquizen PRIME->READ->TEST cards for a finished book."""
+    own = conn is None
+    if own:
+        from db import get_connection
+        conn = get_connection(readonly=True)
+
+    try:
+        row = conn.execute(
+            'SELECT title, author, topics FROM physical_books WHERE id=?', (book_id,)
+        ).fetchone()
+        if not row:
+            return []
+
+        book_title = row['title']
+        book_author = row['author'] or ''
+
+        # Find knowledge_items linked to this book, ordered by lowest confidence first
+        items = conn.execute("""
+            SELECT ki.id, ki.curriculum_node_id, ki.curriculum_domain,
+                   ki.sources, ki.review_count, ki.stability_days,
+                   ks.knowledge, ks.confidence
+            FROM knowledge_items ki
+            LEFT JOIN knowledge_states ks
+              ON ks.node_id = ki.curriculum_node_id AND ks.domain_id = ki.curriculum_domain
+            WHERE ki.sources LIKE ?
+            ORDER BY COALESCE(ks.confidence, 0.5) ASC, ki.review_count ASC
+            LIMIT ?
+        """, (f'%{book_id}%', limit * 3)).fetchall()
+
+        if not items:
+            return []
+
+        cards = []
+        curriculum_cache: dict = {}
+
+        for item_row in items:
+            if len(cards) >= limit:
+                break
+
+            item_id = item_row['id']
+            node_id = item_row['curriculum_node_id']
+            domain_id = item_row['curriculum_domain']
+            sources_raw = item_row['sources']
+            knowledge = item_row['knowledge'] or 'unknown'
+            confidence = item_row['confidence'] or 0.0
+
+            # Get source text for this node from this book
+            source_text = ''
+            try:
+                sources = json.loads(sources_raw) if isinstance(sources_raw, str) else sources_raw
+                if isinstance(sources, list):
+                    for s in sources:
+                        if isinstance(s, dict) and s.get('book_id') == book_id:
+                            source_text = s.get('source_text', '')
+                            break
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            # Load curriculum and find node description
+            if domain_id not in curriculum_cache:
+                curriculum_cache[domain_id] = load_curriculum(domain_id)
+            curriculum = curriculum_cache[domain_id]
+
+            node_title = node_id
+            node_desc = ''
+            if curriculum:
+                for n in curriculum.get('nodes', []):
+                    if n['id'] == node_id:
+                        node_title = n.get('title', node_id)
+                        node_desc = n.get('description', '')
+                        break
+
+            prompt = HAMARQUIZEN_PROMPT.format(
+                book_title=book_title,
+                book_author=book_author or 'Unknown',
+                node_title=node_title,
+                node_description=node_desc,
+                source_text=source_text or 'No specific source text available',
+                knowledge_level=knowledge,
+                confidence=confidence,
+            )
+
+            raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=2048,
+                           response_mime_type='application/json')
+            card_data = _parse_json(raw) if raw else {}
+            if not isinstance(card_data, dict):
+                card_data = {}
+
+            if card_data.get('test'):
+                cards.append({
+                    'item_id': item_id,
+                    'node_id': node_id,
+                    'domain_id': domain_id,
+                    'node_title': node_title,
+                    'book_id': book_id,
+                    'book_title': book_title,
+                    'prime': card_data.get('prime', ''),
+                    'read': card_data.get('read', ''),
+                    'test': card_data.get('test', ''),
+                    'answer': card_data.get('answer', ''),
+                    'temporal_hook': card_data.get('temporal_hook', ''),
+                    'knowledge': knowledge,
+                    'confidence': confidence,
+                })
+
+        return cards
+    finally:
+        if own:
+            conn.close()
+
+
+CROSS_BOOK_HAMARQUIZEN_PROMPT = """Generate a cross-book comparison micro-lesson.
+
+Two books cover the same historical topic from different angles:
+
+Topic: {node_title}
+Definition: {node_description}
+
+Book A: "{book_a_title}" — {source_a}
+Book B: "{book_b_title}" — {source_b}
+
+Create a PRIME->READ->TEST sequence that COMPARES the two perspectives:
+
+1. PRIME: "What do you remember about [topic] from your reading?" (8-15 words)
+
+2. READ: 3-4 sentences that juxtapose the two books' treatments. What does Book A emphasize that Book B doesn't? What's the same event seen from two angles? Include specific names, dates, details from both. Make the comparison vivid — this is not a summary, it's a dialogue between two authors.
+
+3. TEST: A question (6-12 words) that requires understanding BOTH perspectives. "Why might [Author A] and [Author B] emphasize different aspects of [event]?" or "What does the contrast between [X] and [Y] reveal about [topic]?"
+
+4. ANSWER: 2 sentences explaining the comparative insight.
+
+5. TEMPORAL_HOOK: One cross-period anchor.
+
+Output JSON:
+{{"prime":"...","read":"...","test":"...","answer":"...","temporal_hook":"..."}}"""
+
+
+def generate_cross_book_hamarquizen(limit: int = 5, conn=None) -> list[dict]:
+    """Generate cross-book comparison Hamarquizen cards for curriculum nodes covered by 2+ books."""
+    own = conn is None
+    if own:
+        from db import get_connection
+        conn = get_connection(readonly=True)
+
+    try:
+        # Find curriculum nodes with knowledge_items sourced from 2+ different books
+        rows = conn.execute("""
+            SELECT ki.curriculum_node_id, ki.curriculum_domain, ki.sources, ki.id AS item_id
+            FROM knowledge_items ki
+            WHERE ki.sources IS NOT NULL AND ki.sources != '[]'
+        """).fetchall()
+
+        # Group by node, collect distinct book sources
+        from collections import defaultdict
+        node_books: dict[tuple[str, str], list[dict]] = defaultdict(list)
+        node_item_ids: dict[tuple[str, str], str] = {}
+
+        for row in rows:
+            node_id = row['curriculum_node_id']
+            domain_id = row['curriculum_domain']
+            item_id = row['item_id']
+            key = (domain_id, node_id)
+            node_item_ids[key] = item_id
+            try:
+                sources = json.loads(row['sources']) if isinstance(row['sources'], str) else row['sources']
+                if isinstance(sources, list):
+                    for s in sources:
+                        if isinstance(s, dict) and s.get('book_id'):
+                            node_books[key].append(s)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Filter to nodes with 2+ distinct books
+        multi_book_nodes = []
+        for key, sources in node_books.items():
+            book_ids = list({s['book_id'] for s in sources})
+            if len(book_ids) >= 2:
+                multi_book_nodes.append((key, sources, book_ids))
+
+        if not multi_book_nodes:
+            return []
+
+        # Load book titles
+        all_book_ids = set()
+        for _, _, bids in multi_book_nodes:
+            all_book_ids.update(bids)
+
+        book_titles = {}
+        for bid in all_book_ids:
+            brow = conn.execute('SELECT title FROM physical_books WHERE id=?', (bid,)).fetchone()
+            if brow:
+                book_titles[bid] = brow['title']
+
+        # Build cards (limit * 3 attempts, stop at limit)
+        cards = []
+        curriculum_cache: dict = {}
+
+        for (domain_id, node_id), sources, book_ids in multi_book_nodes[:limit * 3]:
+            if len(cards) >= limit:
+                break
+
+            # Get node metadata
+            if domain_id not in curriculum_cache:
+                curriculum_cache[domain_id] = load_curriculum(domain_id)
+            curriculum = curriculum_cache[domain_id]
+
+            node_title = node_id
+            node_desc = ''
+            if curriculum:
+                for n in curriculum.get('nodes', []):
+                    if n['id'] == node_id:
+                        node_title = n.get('title', node_id)
+                        node_desc = n.get('description', '')
+                        break
+
+            # Pick first two distinct books
+            book_a_id, book_b_id = book_ids[0], book_ids[1]
+            source_a = ''
+            source_b = ''
+            for s in sources:
+                if s.get('book_id') == book_a_id and not source_a:
+                    source_a = s.get('source_text', '')
+                elif s.get('book_id') == book_b_id and not source_b:
+                    source_b = s.get('source_text', '')
+
+            book_a_title = book_titles.get(book_a_id, book_a_id)
+            book_b_title = book_titles.get(book_b_id, book_b_id)
+
+            prompt = CROSS_BOOK_HAMARQUIZEN_PROMPT.format(
+                node_title=node_title,
+                node_description=node_desc,
+                book_a_title=book_a_title,
+                source_a=source_a or 'No specific source text available',
+                book_b_title=book_b_title,
+                source_b=source_b or 'No specific source text available',
+            )
+
+            raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=2048,
+                           response_mime_type='application/json')
+            card_data = _parse_json(raw) if raw else {}
+            if not isinstance(card_data, dict):
+                card_data = {}
+
+            if card_data.get('test'):
+                item_id = node_item_ids.get((domain_id, node_id), f'{domain_id}:{node_id}')
+                cards.append({
+                    'item_id': item_id,
+                    'node_id': node_id,
+                    'domain_id': domain_id,
+                    'node_title': node_title,
+                    'book_id': book_a_id,
+                    'book_title': book_a_title,
+                    'book_b_id': book_b_id,
+                    'book_b_title': book_b_title,
+                    'prime': card_data.get('prime', ''),
+                    'read': card_data.get('read', ''),
+                    'test': card_data.get('test', ''),
+                    'answer': card_data.get('answer', ''),
+                    'temporal_hook': card_data.get('temporal_hook', ''),
+                    'knowledge': 'engaged',
+                    'confidence': 0.5,
+                })
+
+        return cards
+    finally:
+        if own:
+            conn.close()

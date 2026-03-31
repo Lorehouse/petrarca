@@ -109,6 +109,16 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             onPress={() => navigate('knowledge_map', '/knowledge-map')}
           />
           <NavItem
+            title="Voice Recall"
+            subtitle="Test your memory on curriculum topics"
+            onPress={() => navigate('voice_recall', '/voice-elicitation')}
+          />
+          <NavItem
+            title="Hamarquizen"
+            subtitle="PRIME→READ→TEST for finished books"
+            onPress={() => navigate('hamarquizen', '/hamarquizen')}
+          />
+          <NavItem
             title="Ancient Map"
             subtitle="Places from your curriculum"
             onPress={() => navigate('map', '/map')}

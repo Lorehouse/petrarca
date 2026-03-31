@@ -4,22 +4,12 @@
 const SERVER_DEFAULT = "http://alifstian.duckdns.org:8090";
 const COOKIE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const KINDLE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const HIGHLIGHT_SYNC_PERIOD_MINUTES = 720; // 12 hours
+// const HIGHLIGHT_SYNC_PERIOD_MINUTES = 720; // 12 hours — disabled, was opening kindle website
 
-// --- Periodic highlight sync via chrome.alarms ---
-chrome.alarms.create("kindleHighlightSync", {
-  delayInMinutes: 5,
-  periodInMinutes: HIGHLIGHT_SYNC_PERIOD_MINUTES,
-});
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "kindleHighlightSync") {
-    console.log("[petrarca-kindle] Alarm triggered: highlight sync");
-    syncHighlightsInBackground().catch((e) => {
-      console.log(`[petrarca-kindle] Scheduled highlight sync failed: ${e.message}`);
-    });
-  }
-});
+// --- Periodic highlight sync disabled ---
+// Was opening read.amazon.com/notebook every 12h to scrape highlights.
+// kindle_sync.py reads the local Kindle Mac app DB instead.
+// Manual sync still available via clipper popup "kindleSyncHighlights" message.
 
 // Listen for messages from popup or content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

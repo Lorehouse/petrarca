@@ -72,3 +72,121 @@ export async function sendVoiceMemo(itemId: string, audioUri: string): Promise<{
   if (!res.ok) throw new Error(`voice-memo failed: ${res.status}`);
   return res.json();
 }
+
+// ── Chapter context (preview / review) ───────────────────────────────────────
+
+export interface ChapterContextNode {
+  node_id: string;
+  node_title: string;
+  description: string;
+  knowledge: string;
+  confidence: number;
+  source_text: string;
+  lens: string;
+  temporal_hook?: string;
+  is_new?: boolean;
+  shaky_prerequisites?: Array<{
+    node_id: string;
+    node_title: string;
+    description: string;
+    knowledge: string;
+  }>;
+}
+
+export interface ChapterContextResult {
+  mode: 'preview' | 'review';
+  domain_id: string;
+  chapter_number: number;
+  chapter_title: string;
+  nodes: ChapterContextNode[];
+  assessment_question?: { node_id: string; node_title: string; question: string };
+  summary: { total: number; known: number; new: number };
+  message?: string;
+}
+
+export async function getChapterContext(
+  bookId: string, chapterNumber: number, chapterTitle: string, mode: 'preview' | 'review'
+): Promise<ChapterContextResult> {
+  return post('/review/chapter-context', { book_id: bookId, chapter_number: chapterNumber, chapter_title: chapterTitle, mode });
+}
+
+// ── Hamarquizen (PRIME→READ→TEST) ────────────────────────────────────────────
+
+export interface HamarquizenCard {
+  item_id: string;
+  node_id: string;
+  domain_id: string;
+  node_title: string;
+  book_id: string;
+  book_title: string;
+  prime: string;
+  read: string;
+  test: string;
+  answer: string;
+  temporal_hook: string;
+  knowledge: string;
+  confidence: number;
+}
+
+export async function getHamarquizenSession(
+  bookId: string, limit = 5
+): Promise<{ cards: HamarquizenCard[]; count: number }> {
+  return post('/review/hamarquizen', { book_id: bookId, limit });
+}
+
+export async function getCrossBookHamarquizen(
+  limit = 5
+): Promise<{ cards: HamarquizenCard[]; count: number }> {
+  return post('/review/hamarquizen-cross', { limit });
+}
+
+// ── Voice elicitation (free recall) ─────────────────────────────────────────
+
+export interface ElicitationCandidate {
+  node_id: string;
+  node_title: string;
+  node_description: string;
+  domain_id: string;
+  knowledge: string;
+  confidence: number;
+  elicitation_score: number;
+}
+
+export interface ElicitationResult {
+  captured: string[];
+  missed: string[];
+  interesting: string[];
+  wonderings: string[];
+  coverage_pct: number;
+  suggested_score: string;
+  feedback_summary: string;
+  temporal_hook: string;
+  node_title: string;
+  node_description: string;
+  transcript: string;
+  research_triggers: Array<{ id: string; question: string }>;
+}
+
+export async function getElicitationCandidates(
+  domainId?: string, limit = 5
+): Promise<{ candidates: ElicitationCandidate[] }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (domainId) params.append('domain_id', domainId);
+  return get(`/review/elicit-candidates?${params}`);
+}
+
+export async function sendVoiceElicitation(
+  nodeId: string, domainId: string, audioUri: string
+): Promise<ElicitationResult> {
+  const form = new FormData();
+  form.append('node_id', nodeId);
+  form.append('domain_id', domainId);
+  form.append('audio', { uri: audioUri, type: 'audio/m4a', name: 'elicit.m4a' } as any);
+  const res = await fetchWithTimeout(`${RESEARCH_BASE}/review/voice-elicit`, {
+    method: 'POST',
+    body: form,
+    timeout: 90000,
+  });
+  if (!res.ok) throw new Error(`voice-elicit failed: ${res.status}`);
+  return res.json();
+}

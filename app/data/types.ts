@@ -643,6 +643,7 @@ export interface ReviewItem {
 export interface ReviewQuestion {
   question: string;
   answer_guidance: string;
+  rich_answer?: string;
   temporal_hook: string;
   curriculum_context: string;
 }

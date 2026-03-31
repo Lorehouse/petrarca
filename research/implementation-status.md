@@ -329,7 +329,7 @@
 - **Title resolution** — 349 sideloaded filenames resolved via LLM
 - **Gmail attachment downloader** — `gmail_kindle_attachments.py`, 436 book files from `brightkindle@kindle.com`
 - **EPUB finder** — `upload_epubs.py`, 190 local EPUBs (539MB)
-- **Automation** — launchd plist (4h DB sync), chrome.alarms (12h highlight sync)
+- **Automation** — launchd plist (4h DB sync, not loaded), chrome.alarms highlight sync **disabled** (was opening kindle website every 12h; manual sync still available)
 - **Server endpoints**: `/kindle/sync`, `/kindle/library`, `/kindle/highlights`, `/kindle/curate`, `/kindle/classify`, `/kindle/resolve-titles`, `/kindle/include`
 
 #### YouTube Integration (deployed)

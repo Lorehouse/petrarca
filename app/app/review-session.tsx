@@ -20,6 +20,10 @@ const DOMAIN_LABELS: Record<string, string> = {
   byzantine_empire_history_culture_and_legacy_3301453_ad: 'Byzantine Empire',
   islamic_civilization_history_expansion_and_intellectual_legacy_5701500: 'Islamic Civilization',
   roman_republic_and_empire: 'Roman Republic & Empire',
+  ancient_classical_world: 'Ancient & Classical World',
+  ap_world_history_modern: 'AP World History',
+  ap_european_history: 'AP European History',
+  classical_reception_and_liberal_education_the_transmission_of: 'Classical Reception',
 };
 
 const LENS_COLORS: Record<string, [string, string]> = {
@@ -35,7 +39,8 @@ const LENS_LABELS: Record<string, string> = {
   TEMPORAL: 'Timing', PATTERN: 'Pattern', CONSEQUENCE: 'What followed',
 };
 
-type SessionState = 'loading' | 'question' | 'revealed' | 'done';
+type SessionState = 'loading' | 'question' | 'revealed' | 'scored' | 'done';
+type SessionMode = 'cards' | 'voice';
 
 interface SessionCard {
   item: ReviewItem;
@@ -54,6 +59,8 @@ export default function ReviewSession() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [exploreItems, setExploreItems] = useState<string[]>([]);
   const [remainingDue, setRemainingDue] = useState<number>(0);
+  const [mode, setMode] = useState<SessionMode>('cards');
+  const [scoredAs, setScoredAs] = useState<'knew' | 'partly' | 'missed' | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAt = useRef<number>(0);
   const revealedAt = useRef<number>(0);
@@ -127,31 +134,9 @@ export default function ReviewSession() {
     });
   }
 
-  async function score(s: 'knew' | 'partly' | 'missed') {
-    const card = cards[current];
-    if (!card) return;
-    const nowMs = Date.now();
-    logEvent('review_card_scored', {
-      item_id: card.item.id,
-      score: s,
-      lens: card.item.lens,
-      curriculum_node_id: card.item.curriculum_node_id,
-      curriculum_node_title: card.item.curriculum_node_title,
-      chapter: card.item.source_chapter_title,
-      item_type: card.item.item_type,
-      review_count: card.item.review_count,
-      stability_days: card.item.stability_days,
-      time_to_reveal_ms: revealedAt.current - cardShownAt.current,
-      time_to_score_ms: nowMs - revealedAt.current,
-      card_index: current,
-      has_temporal_hook: !!card.question?.temporal_hook,
-      has_curriculum_context: !!card.question?.curriculum_context,
-    });
-    await recordAnswer(card.item.id, s).catch(() => {});
-    const newScores = [...scores, { id: card.item.id, score: s }];
-    setScores(newScores);
-
+  function advanceToNext() {
     Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setScoredAs(null);
       const nextIdx = current + 1;
       if (nextIdx >= cards.length) {
         setState('done');
@@ -177,6 +162,41 @@ export default function ReviewSession() {
       }
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     });
+  }
+
+  async function score(s: 'knew' | 'partly' | 'missed') {
+    const card = cards[current];
+    if (!card) return;
+    const nowMs = Date.now();
+    logEvent('review_card_scored', {
+      item_id: card.item.id,
+      score: s,
+      lens: card.item.lens,
+      curriculum_node_id: card.item.curriculum_node_id,
+      curriculum_node_title: card.item.curriculum_node_title,
+      chapter: card.item.source_chapter_title,
+      item_type: card.item.item_type,
+      review_count: card.item.review_count,
+      stability_days: card.item.stability_days,
+      time_to_reveal_ms: revealedAt.current - cardShownAt.current,
+      time_to_score_ms: nowMs - revealedAt.current,
+      card_index: current,
+      has_temporal_hook: !!card.question?.temporal_hook,
+      has_curriculum_context: !!card.question?.curriculum_context,
+      has_rich_answer: !!card.question?.rich_answer,
+    });
+    await recordAnswer(card.item.id, s).catch(() => {});
+    const newScores = [...scores, { id: card.item.id, score: s }];
+    setScores(newScores);
+
+    const showRich = (s === 'missed' || s === 'partly') && card.question?.rich_answer;
+    if (showRich) {
+      setScoredAs(s);
+      setState('scored');
+      setTimeout(advanceToNext, 2500);
+    } else {
+      advanceToNext();
+    }
   }
 
   function toggleExpanded(itemId: string) {
@@ -342,11 +362,38 @@ export default function ReviewSession() {
   const [lensColor, lensBg] = LENS_COLORS[lens] || ['#666', '#f5f5f5'];
   const progress = cards.length > 0 ? (current / cards.length) : 0;
 
+  // Derive domain_id from current cards for voice mode navigation
+  const domainId = card?.item.curriculum_domain || cards[0]?.item.curriculum_domain;
+
+  if (mode === 'voice') {
+    router.replace({ pathname: '/voice-elicitation', params: domainId ? { domain_id: domainId } : {} });
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       {/* Progress */}
       <View style={styles.progressOuter}>
         <View style={[styles.progressInner, { width: `${progress * 100}%` as any }]} />
+      </View>
+
+      {/* Mode toggle */}
+      <View style={styles.modeToggle}>
+        <Pressable
+          style={[styles.modeBtn, mode === 'cards' && styles.modeBtnActive]}
+          onPress={() => setMode('cards')}
+        >
+          <Text style={[styles.modeBtnText, mode === 'cards' && styles.modeBtnTextActive]}>Cards</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.modeBtn, mode === 'voice' && styles.modeBtnActive]}
+          onPress={() => {
+            logEvent('review_mode_switch', { to: 'voice', domain_id: domainId, cards_completed: current });
+            setMode('voice');
+          }}
+        >
+          <Text style={[styles.modeBtnText, mode === 'voice' && styles.modeBtnTextActive]}>Voice</Text>
+        </Pressable>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -383,11 +430,21 @@ export default function ReviewSession() {
             )}
           </Pressable>
 
-          {/* Answer (revealed) */}
-          {state === 'revealed' && card.question && (
+          {/* Answer (revealed or scored) */}
+          {(state === 'revealed' || state === 'scored') && card.question && (
             <>
               <View style={styles.answerDivider} />
               <Text style={styles.answerText}>{card.question.answer_guidance}</Text>
+
+              {/* Rich answer — shown after missed/partly scoring */}
+              {state === 'scored' && scoredAs && scoredAs !== 'knew' && card.question.rich_answer ? (
+                <View style={styles.richAnswer}>
+                  <Text style={styles.richAnswerLabel}>
+                    ✦ {scoredAs === 'missed' ? 'Here\u2019s what to remember' : 'Filling in the gaps'}
+                  </Text>
+                  <Text style={styles.richAnswerText}>{card.question.rich_answer}</Text>
+                </View>
+              ) : null}
 
               {card.question.temporal_hook ? (
                 <View style={styles.temporalHook}>
@@ -399,21 +456,34 @@ export default function ReviewSession() {
                 <Text style={styles.curriculumContext}>{card.question.curriculum_context}</Text>
               ) : null}
 
-              {/* Self-assess */}
-              <View style={styles.assessRow}>
-                <Pressable style={[styles.assessBtn, styles.assessKnew]} onPress={() => score('knew')}>
-                  <Text style={[styles.assessBtnText, { color: '#2a7a4a' }]}>✓ Knew it</Text>
-                </Pressable>
-                <Pressable style={[styles.assessBtn, styles.assessPartly]} onPress={() => score('partly')}>
-                  <Text style={[styles.assessBtnText, { color: '#8a6a00' }]}>~ Partly</Text>
-                </Pressable>
-                <Pressable style={[styles.assessBtn, styles.assessMissed]} onPress={() => score('missed')}>
-                  <Text style={[styles.assessBtnText, { color: '#cc4444' }]}>✗ Missed</Text>
-                </Pressable>
-              </View>
+              {/* Self-assess — only before scoring */}
+              {state === 'revealed' && (
+                <View style={styles.assessRow}>
+                  <Pressable style={[styles.assessBtn, styles.assessKnew]} onPress={() => score('knew')}>
+                    <Text style={[styles.assessBtnText, { color: '#2a7a4a' }]}>✓ Knew it</Text>
+                  </Pressable>
+                  <Pressable style={[styles.assessBtn, styles.assessPartly]} onPress={() => score('partly')}>
+                    <Text style={[styles.assessBtnText, { color: '#8a6a00' }]}>~ Partly</Text>
+                  </Pressable>
+                  <Pressable style={[styles.assessBtn, styles.assessMissed]} onPress={() => score('missed')}>
+                    <Text style={[styles.assessBtnText, { color: '#cc4444' }]}>✗ Missed</Text>
+                  </Pressable>
+                </View>
+              )}
 
-              {/* Source expansion */}
-              {card.item.source_text ? (
+              {/* Score indicator when in scored state */}
+              {state === 'scored' && scoredAs && (
+                <View style={styles.scoredIndicator}>
+                  <Text style={[styles.scoredIndicatorText, {
+                    color: scoredAs === 'partly' ? '#8a6a00' : '#cc4444'
+                  }]}>
+                    {scoredAs === 'partly' ? '~ Partly' : '✗ Missed'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Source expansion — only before scoring */}
+              {state === 'revealed' && card.item.source_text ? (
                 <>
                   <Pressable style={styles.sourceToggle} onPress={() => toggleExpanded(card.item.id)}>
                     <Text style={styles.sourceToggleText}>
@@ -437,22 +507,24 @@ export default function ReviewSession() {
                 </>
               ) : null}
 
-              {/* Voice memo */}
-              <View style={styles.secondaryRow}>
-                <Pressable
-                  style={[styles.secondaryBtn, styles.secondaryBtnFull,
-                    (recording && recordingItem === card.item.id) && styles.secondaryBtnRecording,
-                    processingVoice && styles.secondaryBtnProcessing]}
-                  onPress={toggleRecording}
-                  disabled={processingVoice}
-                >
-                  <Text style={styles.secondaryBtnText}>
-                    {processingVoice ? '◎ Processing…'
-                      : recording && recordingItem === card.item.id ? '◎ Tap to stop recording'
-                      : '◎ Voice memo'}
-                  </Text>
-                </Pressable>
-              </View>
+              {/* Voice memo — only before scoring */}
+              {state === 'revealed' && (
+                <View style={styles.secondaryRow}>
+                  <Pressable
+                    style={[styles.secondaryBtn, styles.secondaryBtnFull,
+                      (recording && recordingItem === card.item.id) && styles.secondaryBtnRecording,
+                      processingVoice && styles.secondaryBtnProcessing]}
+                    onPress={toggleRecording}
+                    disabled={processingVoice}
+                  >
+                    <Text style={styles.secondaryBtnText}>
+                      {processingVoice ? '◎ Processing…'
+                        : recording && recordingItem === card.item.id ? '◎ Tap to stop recording'
+                        : '◎ Voice memo'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </>
           )}
         </Animated.View>
@@ -470,7 +542,7 @@ const styles = StyleSheet.create({
   progressOuter: { height: 3, backgroundColor: colors.rule },
   progressInner: { height: 3, backgroundColor: colors.rubric },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingTop: Platform.OS === 'ios' ? 60 : 20 },
+  scrollContent: { padding: 16, paddingTop: 12 },
   loadingText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
     fontSize: 13, color: colors.textMuted, marginTop: 12,
@@ -560,6 +632,50 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
     fontSize: 12, color: colors.textSecondary,
+  },
+
+  richAnswer: {
+    borderLeftWidth: 2, borderLeftColor: '#2a7a4a',
+    paddingLeft: 12, paddingVertical: 10, marginBottom: 12,
+    backgroundColor: '#f0faf4',
+  },
+  richAnswerLabel: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 11, color: '#2a7a4a', fontWeight: '600', letterSpacing: 0.04,
+    textTransform: 'uppercase', marginBottom: 6,
+  },
+  richAnswerText: {
+    fontFamily: Platform.select({ web: "'Crimson Pro', Georgia, serif", default: 'CrimsonPro_400Regular' }),
+    fontSize: 15, lineHeight: 22, color: colors.textBody,
+  },
+  scoredIndicator: {
+    alignItems: 'center', paddingVertical: 8, marginBottom: 4,
+  },
+  scoredIndicatorText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 13, fontWeight: '500',
+  },
+
+  modeToggle: {
+    flexDirection: 'row', alignSelf: 'center',
+    marginTop: Platform.OS === 'ios' ? 52 : 8,
+    marginBottom: -4,
+    borderWidth: 1, borderColor: colors.rule, borderRadius: 3,
+    overflow: 'hidden',
+  },
+  modeBtn: {
+    paddingHorizontal: 18, paddingVertical: 6,
+    backgroundColor: 'transparent',
+  },
+  modeBtnActive: {
+    backgroundColor: colors.ink,
+  },
+  modeBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans_400Regular' }),
+    fontSize: 12, color: colors.textMuted, fontWeight: '500',
+  },
+  modeBtnTextActive: {
+    color: colors.parchment,
   },
 
   counter: {

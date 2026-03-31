@@ -17,6 +17,7 @@ import {
 import { useBookStoreVersion } from '../data/use-book-store';
 import { uploadBookVoiceNote, researchBook, getBookResearch, getStorySoFar, identifyBookCover } from '../lib/book-api';
 import { notifyChapterComplete } from '../lib/review-api';
+import ChapterContext from '../components/ChapterContext';
 import { enqueuePhotoUpload, pollPhotoResults, getUploadQueueStatus, initUploadQueue } from '../lib/upload-queue';
 import type { PhysicalBook, BookCapture, BookResearch, StorySoFarBriefing, BookArticleConnection, SuggestedReading } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
@@ -180,6 +181,7 @@ export default function BookDetailScreen() {
   const [showStorySoFar, setShowStorySoFar] = useState(false);
   const [chapterCompleteText, setChapterCompleteText] = useState<string | null>(null);
   const [reviewDueCount, setReviewDueCount] = useState(0);
+  const [chapterContextMode, setChapterContextMode] = useState<'preview' | 'review' | null>(null);
 
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
@@ -616,6 +618,28 @@ export default function BookDetailScreen() {
                 ))}
               </View>
             )}
+            {selectedChapter && !chapterDropdownOpen && (
+              <View style={styles.chapterActions}>
+                <Pressable
+                  style={styles.chapterActionBtn}
+                  onPress={() => {
+                    setChapterContextMode('preview');
+                    logEvent('chapter_context_open', { book_id: book.id, mode: 'preview', chapter: selectedChapter });
+                  }}
+                >
+                  <Text style={styles.chapterActionText}>Preview this chapter</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.chapterActionBtn}
+                  onPress={() => {
+                    setChapterContextMode('review');
+                    logEvent('chapter_context_open', { book_id: book.id, mode: 'review', chapter: selectedChapter });
+                  }}
+                >
+                  <Text style={styles.chapterActionText}>Review this chapter</Text>
+                </Pressable>
+              </View>
+            )}
           </>
         )}
         {chapterCompleteText && (
@@ -747,6 +771,22 @@ export default function BookDetailScreen() {
         currentChapter={book.current_chapter || undefined}
       />
 
+      {/* Hamarquizen review for finished books */}
+      {(book.reading_status === 'finished' || book.reading_status === 'read') && (
+        <View style={styles.hamarquizenSection}>
+          <Pressable
+            style={styles.hamarquizenBtn}
+            onPress={() => {
+              logEvent('hamarquizen_started', { book_id: book.id, title: book.title });
+              router.push(`/hamarquizen?book_id=${book.id}` as any);
+            }}
+          >
+            <Text style={styles.hamarquizenBtnText}>{'\u2726'} Hamarquizen Review</Text>
+            <Text style={styles.hamarquizenSubtext}>PRIME {'\u2192'} READ {'\u2192'} TEST micro-lessons</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Capture timeline */}
       <View style={styles.timelineSection}>
         <Text style={styles.sectionLabel}>{'\u2726'} Notes & captures</Text>
@@ -784,6 +824,23 @@ export default function BookDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* Chapter context modal (preview / review) */}
+      {chapterContextMode && selectedChapter && (() => {
+        const match = selectedChapter.match(/^Ch (\d+):\s*(.*)$/);
+        const chNum = match ? parseInt(match[1], 10) : 0;
+        const chTitle = match ? match[2] : selectedChapter;
+        return (
+          <ChapterContext
+            bookId={book.id}
+            chapterNumber={chNum}
+            chapterTitle={chTitle}
+            mode={chapterContextMode}
+            visible
+            onClose={() => setChapterContextMode(null)}
+          />
+        );
+      })()}
     </ScrollView>
   );
 }
@@ -889,4 +946,12 @@ const styles = StyleSheet.create({
   storySoFarDismissText: { fontFamily: fonts.body, fontSize: 14, color: colors.parchment },
   reviewBadge: { borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 10, paddingVertical: 8, marginTop: 4 },
   reviewBadgeText: { fontFamily: fonts.ui, fontSize: 13, color: colors.rubric },
+  chapterActions: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: 8, marginLeft: 72 },
+  chapterActionBtn: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.rubric, borderRadius: 3 },
+  chapterActionText: { fontFamily: fonts.ui, fontSize: 11, color: colors.rubric },
+  // Hamarquizen
+  hamarquizenSection: { paddingHorizontal: layout.screenPadding, paddingTop: 18, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  hamarquizenBtn: { backgroundColor: colors.ink, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 4, alignItems: 'center' },
+  hamarquizenBtnText: { fontFamily: fonts.body, fontSize: 15, color: colors.parchment },
+  hamarquizenSubtext: { fontFamily: fonts.ui, fontSize: 10, color: 'rgba(247,244,236,0.5)', marginTop: 3, letterSpacing: 0.5 },
 });
