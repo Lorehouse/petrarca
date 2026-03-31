@@ -229,7 +229,7 @@ def list_curricula() -> list[dict]:
     """List all available curricula (metadata only)."""
     skip_prefixes = ("knowledge_", "elicit_", "mappings_", "self_report",
                      "cross_curriculum", "curriculum_embeddings", "entity_index",
-                     "article_curriculum", "place_hierarchy", "sicily_")
+                     "article_curriculum", "place_hierarchy")
     results = []
     all_files = list(DATA_DIR.glob("*.json"))
     for path in all_files:
