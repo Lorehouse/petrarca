@@ -227,13 +227,19 @@ def load_curriculum(domain_id: str) -> dict | None:
 
 def list_curricula() -> list[dict]:
     """List all available curricula (metadata only)."""
+    skip_prefixes = ("knowledge_", "elicit_", "mappings_", "self_report",
+                     "cross_curriculum", "curriculum_embeddings", "entity_index",
+                     "article_curriculum", "place_hierarchy", "sicily_")
     results = []
-    for path in DATA_DIR.glob("*.json"):
-        if path.stem.startswith("knowledge_") or path.stem.startswith("elicit_"):
+    all_files = list(DATA_DIR.glob("*.json"))
+    for path in all_files:
+        if any(path.stem.startswith(p) for p in skip_prefixes):
             continue
         try:
             with open(path) as f:
                 data = json.load(f)
+            if not isinstance(data, dict) or "id" not in data or "nodes" not in data:
+                continue
             results.append({
                 "id": data["id"],
                 "title": data["title"],
@@ -241,8 +247,8 @@ def list_curricula() -> list[dict]:
                 "node_count": data.get("node_count", len(data.get("nodes", []))),
                 "generated_at": data.get("generated_at"),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            print(f'[curriculum] Skipping {path.name}: {e}', flush=True)
     return results
 
 
