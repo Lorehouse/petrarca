@@ -2746,7 +2746,7 @@ export default function ReaderScreen() {
       {/* Reinforcement note — shown after Done when article maps to curriculum nodes */}
       {reinforcementNote && reinforcementNote.length > 0 && (
         <Pressable
-          style={styles.reinforcementOverlay}
+          style={reinforcementStyles.reinforcementOverlay}
           onPress={() => {
             Animated.timing(reinforcementOpacity, {
               toValue: 0,
@@ -2762,21 +2762,21 @@ export default function ReaderScreen() {
             });
           }}
         >
-          <Animated.View style={[styles.reinforcementCard, { opacity: reinforcementOpacity }]}>
-            <Text style={styles.reinforcementLabel}>{'✦ REINFORCED FROM YOUR READING'}</Text>
-            <Text style={styles.reinforcementBody}>
+          <Animated.View style={[reinforcementStyles.reinforcementCard, { opacity: reinforcementOpacity }]}>
+            <Text style={reinforcementStyles.reinforcementLabel}>{'✦ REINFORCED FROM YOUR READING'}</Text>
+            <Text style={reinforcementStyles.reinforcementBody}>
               {'This article touched on '}
               {reinforcementNote.slice(0, 3).map((n, i) => (
-                <Text key={n.node_id} style={styles.reinforcementTopic}>
+                <Text key={n.node_id} style={reinforcementStyles.reinforcementTopic}>
                   {n.node_title}{i < Math.min(reinforcementNote.length, 3) - 2 ? ', ' : i < Math.min(reinforcementNote.length, 3) - 1 ? ' and ' : ''}
                 </Text>
               ))}
               {reinforcementNote.length > 3 && (
-                <Text style={styles.reinforcementBody}>{` and ${reinforcementNote.length - 3} more`}</Text>
+                <Text style={reinforcementStyles.reinforcementBody}>{` and ${reinforcementNote.length - 3} more`}</Text>
               )}
               {' \u2014 topics from your active reading.'}
             </Text>
-            <Text style={styles.reinforcementCount}>
+            <Text style={reinforcementStyles.reinforcementCount}>
               +{reinforcementNote.length} curriculum {reinforcementNote.length === 1 ? 'node' : 'nodes'} strengthened
             </Text>
           </Animated.View>
@@ -3892,7 +3892,10 @@ const marginStyles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Reinforcement note
+});
+
+// Separate StyleSheet to avoid TS inference limit (263 keys in main styles)
+const reinforcementStyles = StyleSheet.create({
   reinforcementOverlay: {
     position: 'absolute' as const,
     bottom: 80,
