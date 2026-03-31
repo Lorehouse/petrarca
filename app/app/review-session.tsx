@@ -365,11 +365,6 @@ export default function ReviewSession() {
   // Derive domain_id from current cards for voice mode navigation
   const domainId = card?.item.curriculum_domain || cards[0]?.item.curriculum_domain;
 
-  if (mode === 'voice') {
-    router.replace({ pathname: '/voice-elicitation', params: domainId ? { domain_id: domainId } : {} });
-    return null;
-  }
-
   return (
     <View style={styles.container}>
       {/* Progress */}
@@ -380,19 +375,19 @@ export default function ReviewSession() {
       {/* Mode toggle */}
       <View style={styles.modeToggle}>
         <Pressable
-          style={[styles.modeBtn, mode === 'cards' && styles.modeBtnActive]}
-          onPress={() => setMode('cards')}
+          style={[styles.modeBtn, styles.modeBtnActive]}
+          onPress={() => {}}
         >
-          <Text style={[styles.modeBtnText, mode === 'cards' && styles.modeBtnTextActive]}>Cards</Text>
+          <Text style={[styles.modeBtnText, styles.modeBtnTextActive]}>Cards</Text>
         </Pressable>
         <Pressable
-          style={[styles.modeBtn, mode === 'voice' && styles.modeBtnActive]}
+          style={styles.modeBtn}
           onPress={() => {
             logEvent('review_mode_switch', { to: 'voice', domain_id: domainId, cards_completed: current });
-            setMode('voice');
+            router.replace({ pathname: '/voice-elicitation', params: domainId ? { domain_id: domainId } : {} });
           }}
         >
-          <Text style={[styles.modeBtnText, mode === 'voice' && styles.modeBtnTextActive]}>Voice</Text>
+          <Text style={styles.modeBtnText}>Voice</Text>
         </Pressable>
       </View>
 

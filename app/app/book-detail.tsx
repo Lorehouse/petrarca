@@ -772,7 +772,7 @@ export default function BookDetailScreen() {
       />
 
       {/* Hamarquizen review for finished books */}
-      {(book.reading_status === 'finished' || book.reading_status === 'read') && (
+      {book.reading_status === 'finished' && (
         <View style={styles.hamarquizenSection}>
           <Pressable
             style={styles.hamarquizenBtn}
