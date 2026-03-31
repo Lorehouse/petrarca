@@ -50,9 +50,22 @@ export async function createExplorationItems(
   return post('/review/explore', { item_id: itemId });
 }
 
+export interface CurriculumNodeDetail {
+  node_id: string;
+  node_title: string;
+  domain_id: string;
+  domain_title: string;
+}
+
 export async function notifyArticleRead(
   articleId: string
-): Promise<{ nodes_found: number; items_surfaced: number; nodes: string[] }> {
+): Promise<{
+  nodes_found: number;
+  items_surfaced: number;
+  nodes: string[];
+  curriculum_nodes_updated: number;
+  curriculum_node_details: CurriculumNodeDetail[];
+}> {
   return post('/review/article-read', { article_id: articleId });
 }
 

@@ -9,7 +9,7 @@ import AskAI from '../components/AskAI';
 import VoiceFeedback from '../components/VoiceFeedback';
 import DoubleRule from '../components/DoubleRule';
 import { spawnTopicResearch, ingestUrl, getIngestStatus, reportBadScrape, generateMoreQuestions } from '../lib/chat-api';
-import { notifyArticleRead } from '../lib/review-api';
+import { notifyArticleRead, type CurriculumNodeDetail } from '../lib/review-api';
 import { addToQueue, addToQueueFront } from '../data/queue';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getArticleById, getArticles, getReadingState, updateReadingState, getHighlightBlockIndices, addHighlight, removeHighlight, markArticleRead, recordInterestSignal, recordTopicInterestSignal, getCrossArticleConnections, getParagraphConnections, dismissArticle, getAdjacentArticleId } from '../data/store';
@@ -1552,6 +1552,10 @@ export default function ReaderScreen() {
   const [activeEntity, setActiveEntity] = useState<ArticleEntity | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [linkToast, setLinkToast] = useState<{ domain: string; articleId: string } | null>(null);
+  const [reinforcementNote, setReinforcementNote] = useState<CurriculumNodeDetail[] | null>(null);
+  const reinforcementNoteRef = useRef<CurriculumNodeDetail[] | null>(null);
+  const reinforcementNextRef = useRef<{ articleId: string; nextFeedId: string | null } | null>(null);
+  const reinforcementOpacity = useRef(new Animated.Value(0)).current;
   const voicePulseAnim = useRef(new Animated.Value(1)).current;
 
   // Adjacent articles for top bar navigation
@@ -1575,6 +1579,11 @@ export default function ReaderScreen() {
   const viewportHeight = useRef(0);
   const maxScrollY = useRef(0);
   const completionFlash = useRef(new Animated.Value(0)).current;
+
+  // Keep reinforcement ref in sync with state
+  useEffect(() => {
+    reinforcementNoteRef.current = reinforcementNote;
+  }, [reinforcementNote]);
 
   // Auto-clear status toast
   useEffect(() => {
@@ -2020,7 +2029,25 @@ export default function ReaderScreen() {
     }
   }, [article, router, feedLens]);
 
-  // Done handler — mark read and immediately advance to next
+  // Navigate to next article (queue → feed → back)
+  const advanceToNext = useCallback(async (articleId: string, precomputedNextFeedId: string | null) => {
+    await removeFromQueue(articleId);
+    const queuedIds = getQueuedArticleIds();
+    const nextQueueId = queuedIds.find(qId => qId !== articleId);
+    const nextQueued = nextQueueId ? getArticleById(nextQueueId) : null;
+
+    if (nextQueued) {
+      logEvent('auto_advance_triggered', { from_article_id: articleId, to_article_id: nextQueued.id, source: 'queue' });
+      router.replace({ pathname: '/reader', params: { id: nextQueued.id, autoAdvanceFrom: articleId } });
+    } else if (precomputedNextFeedId) {
+      logEvent('auto_advance_triggered', { from_article_id: articleId, to_article_id: precomputedNextFeedId, source: 'feed' });
+      router.replace({ pathname: '/reader', params: { id: precomputedNextFeedId, autoAdvanceFrom: articleId } });
+    } else {
+      router.back();
+    }
+  }, [router]);
+
+  // Done handler — mark read, show reinforcement note if applicable, then advance
   const handleDone = useCallback(() => {
     if (!article) return;
     // Capture next feed article BEFORE marking read (read articles are filtered from feed)
@@ -2029,32 +2056,56 @@ export default function ReaderScreen() {
     markArticleEncountered(article.id, 'read');
     recordInterestSignal('tap_done', article.id);
     logEvent('reader_done', { article_id: article.id });
-    notifyArticleRead(article.id).catch(() => {});
 
-    // Brief completion flash, then advance
+    // Fire article-read notification and capture curriculum reinforcement
+    const articleId = article.id;
+    notifyArticleRead(articleId).then((result) => {
+      const details = result?.curriculum_node_details;
+      if (details && details.length > 0) {
+        setReinforcementNote(details);
+        reinforcementNextRef.current = { articleId, nextFeedId: precomputedNextFeedId };
+        logEvent('reinforcement_note_shown', {
+          article_id: articleId,
+          nodes_count: details.length,
+          node_ids: details.map(d => d.node_id),
+        });
+        reinforcementOpacity.setValue(0);
+        Animated.timing(reinforcementOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+        // Auto-dismiss after 3s and navigate
+        setTimeout(() => {
+          Animated.timing(reinforcementOpacity, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }).start(() => {
+            setReinforcementNote(null);
+            advanceToNext(articleId, precomputedNextFeedId);
+          });
+        }, 3000);
+      }
+    }).catch(() => {});
+
+    // Brief completion flash, then advance (only if no reinforcement note)
     completionFlash.setValue(0);
     Animated.timing(completionFlash, {
       toValue: 1,
       duration: 400,
       useNativeDriver: true,
     }).start(async () => {
-      // Queue takes priority, then precomputed feed next, then back
-      await removeFromQueue(article.id);
-      const queuedIds = getQueuedArticleIds();
-      const nextQueueId = queuedIds.find(qId => qId !== article.id);
-      const nextQueued = nextQueueId ? getArticleById(nextQueueId) : null;
-
-      if (nextQueued) {
-        logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: nextQueued.id, source: 'queue' });
-        router.replace({ pathname: '/reader', params: { id: nextQueued.id, autoAdvanceFrom: article.id } });
-      } else if (precomputedNextFeedId) {
-        logEvent('auto_advance_triggered', { from_article_id: article.id, to_article_id: precomputedNextFeedId, source: 'feed' });
-        router.replace({ pathname: '/reader', params: { id: precomputedNextFeedId, autoAdvanceFrom: article.id } });
-      } else {
-        router.back();
-      }
+      // Wait a tick to see if reinforcement note will appear
+      // If reinforcement is showing, it will handle navigation
+      setTimeout(async () => {
+        // Only navigate if no reinforcement note is being shown
+        if (!reinforcementNoteRef.current) {
+          await advanceToNext(articleId, precomputedNextFeedId);
+        }
+      }, 200);
     });
-  }, [article, feedLens, router]);
+  }, [article, feedLens, router, advanceToNext]);
 
   // Up next handler — navigate to next queued article
   const handleUpNext = useCallback(async () => {
@@ -2690,6 +2741,46 @@ export default function ReaderScreen() {
             onClose={() => setShowVoiceFeedback(false)}
           />
         </View>
+      )}
+
+      {/* Reinforcement note — shown after Done when article maps to curriculum nodes */}
+      {reinforcementNote && reinforcementNote.length > 0 && (
+        <Pressable
+          style={styles.reinforcementOverlay}
+          onPress={() => {
+            Animated.timing(reinforcementOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start(() => {
+              setReinforcementNote(null);
+              const nav = reinforcementNextRef.current;
+              reinforcementNextRef.current = null;
+              if (nav) {
+                advanceToNext(nav.articleId, nav.nextFeedId);
+              }
+            });
+          }}
+        >
+          <Animated.View style={[styles.reinforcementCard, { opacity: reinforcementOpacity }]}>
+            <Text style={styles.reinforcementLabel}>{'✦ REINFORCED FROM YOUR READING'}</Text>
+            <Text style={styles.reinforcementBody}>
+              {'This article touched on '}
+              {reinforcementNote.slice(0, 3).map((n, i) => (
+                <Text key={n.node_id} style={styles.reinforcementTopic}>
+                  {n.node_title}{i < Math.min(reinforcementNote.length, 3) - 2 ? ', ' : i < Math.min(reinforcementNote.length, 3) - 1 ? ' and ' : ''}
+                </Text>
+              ))}
+              {reinforcementNote.length > 3 && (
+                <Text style={styles.reinforcementBody}>{` and ${reinforcementNote.length - 3} more`}</Text>
+              )}
+              {' \u2014 topics from your active reading.'}
+            </Text>
+            <Text style={styles.reinforcementCount}>
+              +{reinforcementNote.length} curriculum {reinforcementNote.length === 1 ? 'node' : 'nodes'} strengthened
+            </Text>
+          </Animated.View>
+        </Pressable>
       )}
 
       </ReaderErrorBoundary>
@@ -3799,5 +3890,61 @@ const marginStyles = StyleSheet.create({
     fontSize: 9,
     color: colors.claimNew,
     marginTop: 2,
+  },
+
+  // Reinforcement note
+  reinforcementOverlay: {
+    position: 'absolute' as const,
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center' as const,
+    zIndex: 300,
+    paddingHorizontal: 20,
+  },
+  reinforcementCard: {
+    maxWidth: 480,
+    width: '100%' as any,
+    backgroundColor: '#fff',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.rubric,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+    } : {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.10,
+      shadowRadius: 12,
+      elevation: 4,
+    }),
+  },
+  reinforcementLabel: {
+    fontFamily: fonts.uiMedium,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.rubric,
+    marginBottom: 6,
+    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
+  },
+  reinforcementBody: {
+    fontFamily: fonts.reading,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textBody,
+    marginBottom: 6,
+  },
+  reinforcementTopic: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textBody,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  reinforcementCount: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: colors.textMuted,
   },
 });

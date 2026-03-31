@@ -1705,18 +1705,24 @@ def get_elicitation_candidates(domain_id: str | None = None, limit: int = 5, con
 # ── Article-read curriculum updates ──────────────────────────────────────────
 
 def notify_article_read_curriculum(article_id: str, conn) -> dict:
-    """When an article is read, update curriculum knowledge states for mapped nodes."""
+    """When an article is read, update curriculum knowledge states for mapped nodes.
+
+    Returns node_details with titles and domain info for client display.
+    """
     rows = conn.execute("""
-        SELECT node_id, domain_id, claim_count, avg_similarity
-        FROM article_curriculum_nodes
-        WHERE article_id = ?
+        SELECT acn.node_id, acn.domain_id, acn.node_title, acn.claim_count, acn.avg_similarity,
+               cd.title AS domain_title
+        FROM article_curriculum_nodes acn
+        LEFT JOIN curriculum_domains cd ON cd.id = acn.domain_id
+        WHERE acn.article_id = ?
     """, (article_id,)).fetchall()
 
     if not rows:
-        return {'nodes_updated': 0}
+        return {'nodes_updated': 0, 'node_details': []}
 
     updated = 0
     nodes = []
+    node_details = []
     for row in rows:
         node_id, domain_id = row['node_id'], row['domain_id']
         claim_count, avg_sim = row['claim_count'], row['avg_similarity']
@@ -1732,6 +1738,12 @@ def notify_article_read_curriculum(article_id: str, conn) -> dict:
                                  confidence=0.2, source=f'article:{article_id}')
                 updated += 1
                 nodes.append(node_id)
+                node_details.append({
+                    'node_id': node_id,
+                    'node_title': row['node_title'] or node_id.replace('_', ' ').title(),
+                    'domain_id': domain_id,
+                    'domain_title': row['domain_title'] or domain_id,
+                })
             elif current['knowledge'] == 'mentioned':
                 # Bump confidence slightly for additional article encounters
                 new_conf = min(0.5, (current['confidence'] or 0.2) + 0.05)
@@ -1739,8 +1751,14 @@ def notify_article_read_curriculum(article_id: str, conn) -> dict:
                                  confidence=new_conf, source=f'article:{article_id}')
                 updated += 1
                 nodes.append(node_id)
+                node_details.append({
+                    'node_id': node_id,
+                    'node_title': row['node_title'] or node_id.replace('_', ' ').title(),
+                    'domain_id': domain_id,
+                    'domain_title': row['domain_title'] or domain_id,
+                })
 
-    return {'nodes_updated': updated, 'nodes': nodes}
+    return {'nodes_updated': updated, 'nodes': nodes, 'node_details': node_details}
 
 
 # ── Hamarquizen sessions ─────────────────────────────────────────────────────

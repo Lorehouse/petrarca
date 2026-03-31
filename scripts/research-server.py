@@ -4720,6 +4720,7 @@ JSON array only:"""
                 'items_surfaced': len(surfaced),
                 'nodes': node_titles[:5],
                 'curriculum_nodes_updated': curriculum_result.get('nodes_updated', 0),
+                'curriculum_node_details': curriculum_result.get('node_details', []),
             })
         finally:
             conn.close()
