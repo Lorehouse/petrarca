@@ -1,8 +1,48 @@
 # Knowledge System Implementation Status
 
-**Date**: March 30, 2026 (last updated — session 41: book removal from library)
+**Date**: April 1, 2026 (last updated — session 41: review system consolidation + fractal exploration)
 
-## Session 41: Book Removal from Library (March 30, 2026)
+## Session 41: Review System Consolidation + Fractal Exploration (March 30 – April 1, 2026)
+
+### Review Tab Rewrite — Infinite River + Knowledge Items
+- **Data source changed**: Review now uses `knowledge_items` (253 items across 6 curricula) instead of `retrieval_questions` (19 Sicily-only). Knowledge items carry FSRS scheduling, curriculum context, and source provenance.
+- **Cards/Voice sub-tabs**: Review tab split into two modes — card-based review and voice recall. Cards are the default.
+- **Infinite river**: No session boundary. Cards stream continuously; user stops when they want. Replaces the old 10-card batch + "Continue" button pattern.
+- **Skip button**: Every card has a skip action — logs `review_skip` and moves to next card without affecting scheduling.
+- **Simplified grading**: Three grades — knew / partly / missed — feed directly into FSRS scheduling via `review_engine.record_answer()`.
+
+### Fractal Exploration — Microlearning Research Pipeline
+- **Follow-up queries**: Each review card gets 3 LLM-generated follow-up research queries (e.g., "How did X influence Y?").
+- **Tap to research**: Tapping a query triggers background Gemini + Search. Result stored as a `microlearning_card` with content, an assessment question, and 3 new follow-up queries (recursive fractal).
+- **Interleaved in stream**: Microlearning cards appear in the review river every ~5 items, mixing retrieval practice with discovery.
+- **Text input**: Every card has a text input for custom research queries — user types a question, same pipeline runs.
+- **New table**: `microlearning_cards` in petrarca.db (content, assessment Q, follow-ups, parent card reference).
+- **New endpoint**: `POST /review/microlearning` — generates microlearning card from query via Gemini + Search.
+
+### Voice Mode — Chapter Recall Prompts
+- Voice elicitation now includes "What do you remember from Chapter X?" prompts for active books.
+- Chapter recalls get high priority in candidate selection for voice elicitation sessions.
+
+### Data Cleanup — Legacy Review Code Removed
+- **Removed code paths**: `record_review_result()`, `get_review_status()`, `get_retrieval_questions()` — all replaced by knowledge_items + review_engine.
+- **Archived tables**: `retrieval_questions` and `review_schedule` tables archived with data preserved (not dropped), but no code references them.
+- **Still active**: `review_items` table remains (used for exploration items and voice follow-ups).
+- **Scoring**: Exclusively through `review_engine.record_answer()` — single path for all review grading.
+
+### Interaction Logging — Comprehensive Review Events
+New events for algorithm tuning:
+- `review_card_shown` — card presented to user
+- `review_answer_revealed` — user taps to see answer
+- `review_result` — grading result with `time_seconds` field for response latency
+- `review_skip` — card skipped
+- `review_entity_intro_continue` — entity introduction card continued
+- `review_custom_query` — user typed a custom research query
+- `review_research_triggered` — follow-up research query tapped
+
+### Navigation Cleanup
+- **Drawer**: "Voice Recall" and "Hamarquizen" entries removed from drawer navigation.
+- **Book detail**: "Hamarquizen" renamed to "Book Review".
+- **Book detail review badge**: Now navigates to the Review tab instead of inline Hamarquizen screen.
 
 ### Book archive/remove feature
 - **Swipe-to-remove on mobile**: `Swipeable` from `react-native-gesture-handler` on book rows in Library tab — swipe left reveals rubric-red "Remove" action. Same pattern as ArticleRow feed dismiss.
@@ -45,16 +85,16 @@
 #### Roman Republic + other gaps
 - Roman Republic: 38 knowledge_items from self-assessment (curriculum already had dates 509 BC–476 AD)
 - Ancient Greece: 8 self-assessment gap items filled
-- Total: **206 knowledge_items across 5 curricula** (was 24 Sicily-only)
+- Total: **206 knowledge_items across 5 curricula** (was 24 Sicily-only) → **253 across 6 curricula** by session 41
 
 #### Review queue ordering
 - Sort key: `(area_order, date_start, due_at)` — history areas before culture areas, chronological within area
 - Result: All 5 curricula interleave historically (~800 BC polis → ~480 BC Persian Wars → ~330 AD Constantinople → ~570 AD Islam)
 
-### Review UX: 10-Card Batches + Continue Button
-- Session already capped at 10 cards via `getReviewQueue(10)`.
-- **Done screen**: "✦ Continue · N more due" rubric button when items remain; reloads next batch. Session state fully reset on continue.
-- Stats endpoint called after queue load to get remaining count.
+### Review UX: 10-Card Batches + Continue Button (superseded by session 41 infinite river)
+- ~~Session already capped at 10 cards via `getReviewQueue(10)`~~.
+- ~~**Done screen**: "✦ Continue · N more due" rubric button when items remain; reloads next batch.~~
+- **Replaced in session 41**: Infinite river with no session boundary, skip button on every card, Cards/Voice sub-tabs.
 
 ### Article Reading → Review Queue (#9)
 - `POST /review/article-read` endpoint: looks up `article_curriculum_nodes` for an article, bumps matching `knowledge_items` due in 1h (if currently far-future).
@@ -121,8 +161,8 @@
 - **Logging**: `sync_mode` field in `content_downloaded` event tracks which path was taken (`incremental`, `cached`, `full`, `full_after_mismatch`)
 
 ### Next Priorities
-- Knowledge model simplification (drop FSRS → binary seen/unseen)
-- Cross-book review generation with temporal hooks
+- ~~Knowledge model simplification (drop FSRS → binary seen/unseen)~~ — kept FSRS, now exclusively via `review_engine.record_answer()`
+- ~~Cross-book review generation with temporal hooks~~ — done (session 40 Hamarquizen cross-book, session 41 Book Review rename)
 - Map old books (Kindle → curriculum → Amygdala probes)
 
 ## Session 35: Claim Calibration + Article Similarity + Prompt Overhaul (March 21–22, 2026)
@@ -670,7 +710,7 @@ App (Expo SDK 54):
 | GEMINI_KEY | ✅ Configured | In `/opt/petrarca/.env` (used by `gemini_llm.py`, also `GEMINI_API_KEY` alias) |
 | Voice notes storage | ✅ Working | `/opt/petrarca/data/notes/` (JSON) + `/opt/petrarca/data/audio/` (m4a) |
 | Chat conversations | ✅ Working | `/opt/petrarca/data/chats/` (JSON, per conversation_id) |
-| Research server endpoints | ✅ Updated | `/chat`, `/note`, `/research/topic`, `/notes`, `/notes/{id}/execute-action`, `/research`, `/research/results`, `/twitter/status`, `/twitter/cookies`, `/ingest-note`, `/ingest-cancel`, `/report-scrape`, `/scrape-reports`, `/generate-questions` on port 8090 |
+| Research server endpoints | ✅ Updated | `/chat`, `/note`, `/research/topic`, `/notes`, `/notes/{id}/execute-action`, `/research`, `/research/results`, `/twitter/status`, `/twitter/cookies`, `/ingest-note`, `/ingest-cancel`, `/report-scrape`, `/scrape-reports`, `/generate-questions`, `/review/microlearning` on port 8090 |
 | Scrape reports queue | ✅ Working | `/opt/petrarca/data/scrape_reports.json` — user-reported bad scrapes, `GET /scrape-reports` lists pending. **Review periodically** to identify scraping failure patterns and strengthen the pipeline (e.g. site-specific extractors, better fallback logic). |
 
 ### SSH Access
@@ -837,6 +877,14 @@ App (Expo SDK 54):
 38. ~~**Tweet URL ingestion via twikit**~~ — DONE: `/ingest` endpoint detects twitter.com/x.com URLs and routes through twikit instead of generic URL import. Fetches full tweet metadata, reconstructs threads (same-author reply chains), extracts + resolves t.co links. If tweet has URLs → ingests linked article with tweet context. If no URLs → uses tweet/thread text as article content. Falls back to normal import if twikit fails.
 39. ~~**Auto-sync Twitter cookies**~~ — DONE: Chrome extension silently extracts `auth_token` + `ct0` cookies when user visits X.com and pushes to server via `POST /twitter/cookies`. Throttled to once per 4 hours. Eliminates manual SSH cookie refresh. New manifest permissions: `cookies` + `host_permissions` for x.com/twitter.com.
 40. ~~**Cookie health endpoints**~~ — DONE: `GET /twitter/status` checks cookie validity + age. `POST /twitter/cookies` accepts `{auth_token, ct0}` for remote cookie refresh.
+
+### Completed (Session 41: Review System Consolidation + Fractal Exploration)
+63. ~~**Review tab rewrite — infinite river**~~ — DONE: Review now uses `knowledge_items` (253 items, 6 curricula) instead of `retrieval_questions` (19 Sicily-only). Cards/Voice sub-tabs. Infinite river with no session boundary. Skip button on every card. Simplified grading (knew/partly/missed) via `review_engine.record_answer()`.
+64. ~~**Fractal exploration microlearning**~~ — DONE: Each review card gets 3 LLM-generated follow-up queries. Tap triggers Gemini + Search → stored as `microlearning_card` with content, assessment Q, and 3 new follow-ups. Interleaved every ~5 items. Text input for custom queries. New table: `microlearning_cards`. New endpoint: `POST /review/microlearning`.
+65. ~~**Voice chapter recall prompts**~~ — DONE: Voice elicitation includes "What do you remember from Chapter X?" with high-priority candidate selection.
+66. ~~**Legacy review code cleanup**~~ — DONE: `record_review_result()`, `get_review_status()`, `get_retrieval_questions()` removed. `retrieval_questions` and `review_schedule` tables archived. Scoring exclusively through `review_engine.record_answer()`.
+67. ~~**Review interaction logging**~~ — DONE: 7 new event types for algorithm tuning: `review_card_shown`, `review_answer_revealed`, `review_result` (with `time_seconds`), `review_skip`, `review_entity_intro_continue`, `review_custom_query`, `review_research_triggered`.
+68. ~~**Navigation cleanup**~~ — DONE: "Voice Recall" and "Hamarquizen" removed from drawer. "Hamarquizen" → "Book Review" in book-detail. Review badge navigates to Review tab.
 
 ### Gap Analysis: Built vs. Full Spec (updated end of session 8)
 
