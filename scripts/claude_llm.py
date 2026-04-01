@@ -116,6 +116,30 @@ def extract_json(text: str) -> dict | list | None:
     return None
 
 
+def call_claude_search(prompt: str, *, timeout: int = 180,
+                       model: str | None = None) -> str | None:
+    """Call Claude with web search enabled. Replaces Gemini's call_with_search."""
+    cmd = ['claude', '-p', '--output-format', 'text',
+           '--tools', 'WebSearch,WebFetch']
+    if model:
+        cmd.extend(['--model', model])
+
+    try:
+        result = subprocess.run(
+            cmd, input=prompt, capture_output=True, text=True,
+            timeout=timeout,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        if result.stderr:
+            print(f'[claude-search] stderr: {result.stderr[:200]}', flush=True)
+    except subprocess.TimeoutExpired:
+        print(f'[claude-search] timeout after {timeout}s', flush=True)
+    except FileNotFoundError:
+        print('[claude-search] CLI not found', flush=True)
+    return None
+
+
 def call_claude_or_gemini(prompt: str, *, timeout: int = 180,
                           json_mode: bool = False,
                           model: str | None = None) -> str | dict | list | None:

@@ -1295,14 +1295,14 @@ def _run_microlearning_research(card_id: str, query: str,
                 node_title = row['title']
                 node_description = row['description'] or ''
 
-        # Try Gemini search grounding for factual accuracy (Gemini-specific feature)
+        # Search for factual accuracy via Claude with web search
         search_result = None
         try:
-            from gemini_llm import call_with_search
+            from claude_llm import call_claude_search
             search_prompt = f"Research this question thoroughly: {query}"
             if node_title:
                 search_prompt += f"\nContext: this relates to {node_title}"
-            search_result = call_with_search(search_prompt, max_tokens=2048)
+            search_result = call_claude_search(search_prompt, timeout=120)
         except Exception as e:
             print(f'[microlearning] search failed for {card_id}: {e}', flush=True)
 
