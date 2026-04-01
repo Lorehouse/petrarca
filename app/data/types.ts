@@ -524,37 +524,25 @@ export interface ChapterInsights {
 // --- Resurfacing types ---
 
 export interface ResurfacingItem {
-  type: 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering' | 'entity_intro';
-  prompt_type?: string;
-  prompt_text?: string;
-  // Resonance fields
-  capture_id?: string;
-  book_id?: string;
-  book_title?: string;
-  book_author?: string;
-  book_cover_url?: string;
-  chapter?: string;
-  highlight_text?: string;
-  full_text?: string;
-  months_since_capture?: number;
-  resurface_count?: number;
-  // Dialogue fields
-  claim_a?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
-  claim_b?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
-  tension_prompt?: string;
-  // Curriculum retrieval fields
+  type: 'review' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
+  // Review card fields (from knowledge_items)
   question_id?: string;
   question?: string;
   answer?: string;
   rich_answer?: string;
-  question_type?: 'date' | 'person' | 'event' | 'sequence' | 'significance' | 'name' | 'concept' | 'temporal_ordering';
   answer_type?: 'date' | 'name' | 'concept' | 'sequence';
   node_title?: string;
+  node_description?: string;
   domain?: string;
-  cluster_label?: string;
   memory_hook?: string;
+  temporal_hook?: string;
+  curriculum_context?: string;
   anchors?: string[];
-  grading_options?: string[];
+  review_count?: number;
+  last_score?: string;
+  stability_days?: number;
+  node_knowledge?: string;
+  node_confidence?: number;
   // Entity annotation (from server entity matching)
   entity_spans?: Record<string, EntitySpan[]>;
   // Entity intro card fields
@@ -568,6 +556,37 @@ export interface ResurfacingItem {
   wikipedia_url?: string;
   date_start?: number;
   date_end?: number;
+  // Legacy fields (retained for compatibility)
+  prompt_type?: string;
+  prompt_text?: string;
+  question_type?: string;
+  cluster_label?: string;
+  grading_options?: string[];
+  capture_id?: string;
+  book_id?: string;
+  book_title?: string;
+  book_author?: string;
+  book_cover_url?: string;
+  chapter?: string;
+  highlight_text?: string;
+  full_text?: string;
+  months_since_capture?: number;
+  resurface_count?: number;
+  claim_a?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
+  claim_b?: { text: string; book_id: string; book_title: string; book_author: string; chapter: string };
+  tension_prompt?: string;
+}
+
+export interface ReviewStreamResponse {
+  items: ResurfacingItem[];
+  generated_at: string;
+  offset: number;
+  has_more: boolean;
+  total_candidates: number;
+  total_items: number;
+  total_with_question: number;
+  due_count: number;
+  domain_counts: Record<string, number>;
 }
 
 export interface EntitySpan {

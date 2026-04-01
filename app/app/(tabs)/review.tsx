@@ -1,13 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Platform, Pressable, ScrollView,
+  ActivityIndicator, Animated, Platform, Pressable, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
-import { EntitySpan, ResurfacingItem, ResurfacingSession } from '../../data/types';
+import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/types';
 import {
-  generateCurriculumReview, recordReviewResult, recordEntityTap,
+  fetchReviewStream, recordReviewResult, recordEntityTap,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -71,10 +71,12 @@ const entityStyle = StyleSheet.create({
 function ReviewCard({
   item,
   onResult,
+  onSkip,
   onEntityTap,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
+  onSkip: () => void;
   onEntityTap: (entityId: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -86,21 +88,15 @@ function ReviewCard({
     : answerType === 'sequence' ? 'Timeline'
     : 'Concept';
 
-  const gradingButtons = answerType === 'date' ? [
-    { value: 'exact_year', label: 'Exact year', style: 'correct' as const },
-    { value: 'right_decade', label: 'Right decade', style: 'partial' as const },
-    { value: 'right_century', label: 'Right century', style: 'weak' as const },
-    { value: 'missed', label: 'Missed', style: 'wrong' as const },
-  ] : answerType === 'name' ? [
-    { value: 'correct', label: 'Knew it', style: 'correct' as const },
-    { value: 'wrong', label: 'Didn\'t know', style: 'wrong' as const },
-  ] : answerType === 'sequence' ? [
-    { value: 'all_correct', label: 'All correct', style: 'correct' as const },
-    { value: 'mostly_right', label: 'Mostly right', style: 'partial' as const },
-    { value: 'wrong', label: 'Wrong order', style: 'wrong' as const },
-  ] : [
-    { value: 'correct', label: 'Knew it', style: 'correct' as const },
-    { value: 'partial', label: 'Partly', style: 'partial' as const },
+  // Domain label — short readable name
+  const domainLabel = (item.domain || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .slice(0, 40);
+
+  const gradingButtons = [
+    { value: 'knew', label: 'Knew it', style: 'correct' as const },
+    { value: 'partly', label: 'Partly', style: 'partial' as const },
     { value: 'missed', label: 'Missed', style: 'wrong' as const },
   ];
 
@@ -122,24 +118,32 @@ function ReviewCard({
 
   return (
     <View style={cs.card}>
-      {/* Header: type badge (node title shown only after reveal to avoid spoilers) */}
+      {/* Header: type badge + domain */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
           <Text style={cs.typeBadgeText}>{typeLabel}</Text>
         </View>
-        {revealed && (item.node_title || item.cluster_label) ? (
-          <Text style={cs.nodeTitle}>{item.node_title || item.cluster_label}</Text>
-        ) : null}
+        <Text style={cs.domainLabel} numberOfLines={1}>{domainLabel}</Text>
       </View>
+
+      {/* Node title (context) */}
+      {revealed && item.node_title ? (
+        <Text style={cs.nodeTitle}>{item.node_title}</Text>
+      ) : null}
 
       {/* Question */}
       <Text style={cs.question}>{item.question}</Text>
 
       {/* Reveal / Answer */}
       {!revealed ? (
-        <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
-          <Text style={cs.revealText}>Show answer</Text>
-        </Pressable>
+        <View style={cs.actionRow}>
+          <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+            <Text style={cs.revealText}>Show answer</Text>
+          </Pressable>
+          <Pressable style={cs.skipButton} onPress={onSkip}>
+            <Text style={cs.skipText}>Skip {'\u2192'}</Text>
+          </Pressable>
+        </View>
       ) : (
         <View>
           {/* Rich answer */}
@@ -174,11 +178,15 @@ function ReviewCard({
             </View>
           ) : null}
 
-          {/* Place entities — map link */}
+          {/* Curriculum context */}
+          {item.curriculum_context ? (
+            <Text style={cs.contextText}>{item.curriculum_context}</Text>
+          ) : null}
+
+          {/* Place entity map links */}
           {(() => {
             const allSpans = Object.values(item.entity_spans || {}).flat();
             const places = allSpans.filter(sp => sp.entity_type === 'place');
-            // Deduplicate by entity_id
             const seen = new Set<string>();
             const unique = places.filter(sp => {
               if (seen.has(sp.entity_id)) return false;
@@ -190,7 +198,7 @@ function ReviewCard({
               <View style={cs.mapLinkRow}>
                 {unique.map(sp => (
                   <Pressable key={sp.entity_id} onPress={() => onEntityTap(sp.entity_id)}>
-                    <Text style={cs.mapLinkText}>{'\u{1F4CD}'} {sp.name}</Text>
+                    <Text style={cs.mapLinkText}>{'\uD83D\uDCCD'} {sp.name}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -202,11 +210,9 @@ function ReviewCard({
             {gradingButtons.map(btn => {
               const btnStyle = btn.style === 'correct' ? cs.gradeCorrect
                 : btn.style === 'partial' ? cs.gradePartial
-                : btn.style === 'weak' ? cs.gradeWeak
                 : cs.gradeWrong;
               const txtStyle = btn.style === 'correct' ? cs.gradeCorrectText
                 : btn.style === 'partial' ? cs.gradePartialText
-                : btn.style === 'weak' ? cs.gradeWeakText
                 : cs.gradeWrongText;
               return (
                 <Pressable
@@ -228,10 +234,10 @@ function ReviewCard({
 // ── Entity Intro Card ────────────────────────────────────────────────
 
 const INTRO_TYPE_LABELS: Record<string, string> = {
-  place: '\u{1F4CD} Place',
-  person: '\u{1F464} Person',
+  place: '\uD83D\uDCCD Place',
+  person: '\uD83D\uDC64 Person',
   event: '\u26A1 Event',
-  period: '\u{1F551} Period',
+  period: '\uD83D\uDD51 Period',
 };
 
 function EntityIntroCard({
@@ -271,7 +277,6 @@ function EntityIntroCard({
 
   return (
     <View style={cs.card}>
-      {/* Header: type badge */}
       <View style={cs.headerRow}>
         {item.entity_type && (
           <View style={ic.introBadge}>
@@ -283,13 +288,11 @@ function EntityIntroCard({
         <Text style={ic.introLabel}>Entity briefing</Text>
       </View>
 
-      {/* Name */}
       <Text style={ic.entityName}>{item.entity_name}</Text>
       {item.modern_name && item.modern_name !== item.entity_name ? (
         <Text style={ic.modernName}>Modern: {item.modern_name}</Text>
       ) : null}
 
-      {/* Mini map for places */}
       {item.entity_type === 'place' && item.latitude != null && item.longitude != null ? (
         <View style={ic.miniMapWrap}>
           <AncientMap
@@ -316,17 +319,14 @@ function EntityIntroCard({
         </View>
       ) : null}
 
-      {/* Description */}
       {item.description ? (
         <Text style={ic.description}>{item.description}</Text>
       ) : null}
 
-      {/* Date facts */}
       {dateStr ? (
         <Text style={ic.dateFact}>{'\u2022'} {dateStr}</Text>
       ) : null}
 
-      {/* Continue button */}
       <Pressable style={ic.continueBtn} onPress={handleContinue}>
         <Text style={ic.continueText}>Continue {'\u2192'}</Text>
       </Pressable>
@@ -336,61 +336,129 @@ function EntityIntroCard({
 
 // ── Main Screen ─────────────────────────────────────────────────────
 
+type Tab = 'cards' | 'voice';
+
 export default function ReviewScreen() {
-  const [session, setSession] = useState<ResurfacingSession | null>(null);
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>('cards');
+  const [items, setItems] = useState<ResurfacingItem[]>([]);
+  const [streamMeta, setStreamMeta] = useState<Partial<ReviewStreamResponse>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
+  const offsetRef = useRef(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  const loadSession = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const loadStream = useCallback(async (reset = true) => {
+    if (reset) {
+      setLoading(true);
+      setError('');
+      offsetRef.current = 0;
+    } else {
+      setLoadingMore(true);
+    }
     try {
-      const s = await generateCurriculumReview();
-      setSession(s);
-      logEvent('review_session_loaded', {
-        session_id: s.id,
-        item_count: s.items?.length ?? 0,
+      const result = await fetchReviewStream({
+        limit: 20,
+        offset: offsetRef.current,
+      });
+      if (reset) {
+        setItems(result.items);
+        setCurrentIndex(0);
+      } else {
+        setItems(prev => [...prev, ...result.items]);
+      }
+      setStreamMeta(result);
+      offsetRef.current += result.items.length;
+      logEvent('review_stream_loaded', {
+        item_count: result.items.length,
+        total_candidates: result.total_candidates,
+        due_count: result.due_count,
+        offset: offsetRef.current,
       });
     } catch (e: any) {
       setError(e.message || 'Failed to load');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
   useFocusEffect(useCallback(() => {
     setFeedbackContext({ screen: 'review' });
-    loadSession();
-  }, []));
+    if (tab === 'cards') loadStream(true);
+  }, [tab]));
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Auto-load more when nearing end of items
+  const maybeLoadMore = useCallback(() => {
+    if (currentIndex >= items.length - 3 && streamMeta.has_more && !loadingMore) {
+      loadStream(false);
+    }
+  }, [currentIndex, items.length, streamMeta.has_more, loadingMore]);
+
+  const animateTransition = useCallback((callback: () => void) => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      callback();
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [fadeAnim]);
 
   const handleResult = async (item: ResurfacingItem, result: string) => {
     if (item.question_id) {
-      await recordReviewResult(item.question_id, result);
+      recordReviewResult(item.question_id, result).catch(e =>
+        console.warn('[review] score failed:', e));
       logEvent('review_result', {
         question_id: item.question_id,
         result,
         answer_type: item.answer_type,
         domain: item.domain,
+        node_title: item.node_title,
+        review_count: item.review_count,
       });
     }
-    // Advance to next question after a brief delay
     setTimeout(() => {
+      animateTransition(() => {
+        setCurrentIndex(i => i + 1);
+        maybeLoadMore();
+      });
+    }, 500);
+  };
+
+  const handleSkip = (item: ResurfacingItem) => {
+    logEvent('review_skip', {
+      question_id: item.question_id,
+      domain: item.domain,
+      node_title: item.node_title,
+    });
+    animateTransition(() => {
       setCurrentIndex(i => i + 1);
-    }, 600);
+      maybeLoadMore();
+    });
   };
 
-  const handleNewSession = () => {
-    setCurrentIndex(0);
-    loadSession();
+  const handleEntityIntroContinue = () => {
+    animateTransition(() => {
+      setCurrentIndex(i => i + 1);
+      maybeLoadMore();
+    });
   };
 
-  const items = session?.items || [];
   const currentItem = items[currentIndex];
-  const isDone = session && currentIndex >= items.length && !loading;
+  const reviewedCount = currentIndex;
+  const dueCount = streamMeta.due_count ?? 0;
+  const totalCandidates = streamMeta.total_candidates ?? 0;
+  const domainCount = Object.keys(streamMeta.domain_counts || {}).length;
 
   return (
     <View style={s.container}>
@@ -404,58 +472,103 @@ export default function ReviewScreen() {
             </Pressable>
           </View>
           <DoubleRule />
-          {session && (
+
+          {/* Tab switcher */}
+          <View style={s.tabRow}>
+            <Pressable
+              style={[s.tabBtn, tab === 'cards' && s.tabBtnActive]}
+              onPress={() => setTab('cards')}
+            >
+              <Text style={[s.tabText, tab === 'cards' && s.tabTextActive]}>Cards</Text>
+            </Pressable>
+            <Pressable
+              style={[s.tabBtn, tab === 'voice' && s.tabBtnActive]}
+              onPress={() => setTab('voice')}
+            >
+              <Text style={[s.tabText, tab === 'voice' && s.tabTextActive]}>Voice</Text>
+            </Pressable>
+          </View>
+
+          {tab === 'cards' && !loading && (
             <Text style={s.statsLine}>
-              {currentIndex < items.length
-                ? `${currentIndex + 1} / ${items.length}`
-                : `${items.length} / ${items.length}`}
-              {session.total_questions_in_pool ? `  ·  ${session.total_questions_in_pool} in pool` : ''}
+              {reviewedCount > 0 ? `${reviewedCount} reviewed  \u00b7  ` : ''}
+              {dueCount} due  \u00b7  {totalCandidates} in pool  \u00b7  {domainCount} curricula
             </Text>
           )}
         </View>
 
-        {/* Loading */}
-        {loading && (
-          <View style={s.loadingContainer}>
-            <ActivityIndicator size="small" color={colors.rubric} />
-            <Text style={s.loadingText}>Loading review...</Text>
-          </View>
+        {/* ── Cards tab ────────────────────────────────────────── */}
+        {tab === 'cards' && (
+          <>
+            {loading && (
+              <View style={s.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.rubric} />
+                <Text style={s.loadingText}>Loading review...</Text>
+              </View>
+            )}
+
+            {error ? <Text style={s.errorText}>{error}</Text> : null}
+
+            {!loading && items.length === 0 && (
+              <View style={s.emptyState}>
+                <Text style={s.emptyTitle}>{'\u2726'} All caught up</Text>
+                <Text style={s.emptySubtitle}>
+                  No review items yet. Read more books and articles to build your review pool!
+                </Text>
+              </View>
+            )}
+
+            {currentItem && (
+              <Animated.View style={{ opacity: fadeAnim }}>
+                {currentItem.type === 'entity_intro' ? (
+                  <EntityIntroCard
+                    key={`intro-${currentItem.entity_id || currentIndex}`}
+                    item={currentItem}
+                    onContinue={handleEntityIntroContinue}
+                  />
+                ) : (
+                  <ReviewCard
+                    key={currentItem.question_id || `q-${currentIndex}`}
+                    item={currentItem}
+                    onResult={(result) => handleResult(currentItem, result)}
+                    onSkip={() => handleSkip(currentItem)}
+                    onEntityTap={setActiveEntityId}
+                  />
+                )}
+              </Animated.View>
+            )}
+
+            {!loading && !currentItem && items.length > 0 && (
+              <View style={s.emptyState}>
+                <Text style={s.emptyTitle}>{'\u2726'} End of stream</Text>
+                <Text style={s.emptySubtitle}>{reviewedCount} cards reviewed</Text>
+                <Pressable style={s.newSessionBtn} onPress={() => loadStream(true)}>
+                  <Text style={s.newSessionText}>Refresh</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {loadingMore && (
+              <View style={s.loadingMoreRow}>
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              </View>
+            )}
+          </>
         )}
 
-        {/* Error */}
-        {error ? <Text style={s.errorText}>{error}</Text> : null}
-
-        {/* Empty session */}
-        {session && items.length === 0 && !loading && (
-          <View style={s.emptyState}>
-            <Text style={s.emptyTitle}>{'\u2726'} All caught up</Text>
-            <Text style={s.emptySubtitle}>No questions due right now. Come back later or read more!</Text>
-          </View>
-        )}
-
-        {/* Current card — dispatch by type */}
-        {currentItem && currentItem.type === 'entity_intro' ? (
-          <EntityIntroCard
-            key={`intro-${currentItem.entity_id || currentIndex}`}
-            item={currentItem}
-            onContinue={() => setCurrentIndex(i => i + 1)}
-          />
-        ) : currentItem ? (
-          <ReviewCard
-            key={currentItem.question_id || `q-${currentIndex}`}
-            item={currentItem}
-            onResult={(result) => handleResult(currentItem, result)}
-            onEntityTap={setActiveEntityId}
-          />
-        ) : null}
-
-        {/* Session complete */}
-        {isDone && (
-          <View style={s.emptyState}>
-            <Text style={s.emptyTitle}>{'\u2726'} Session complete</Text>
-            <Text style={s.emptySubtitle}>{items.length} questions reviewed</Text>
-            <Pressable style={s.newSessionBtn} onPress={handleNewSession}>
-              <Text style={s.newSessionText}>New session</Text>
+        {/* ── Voice tab ────────────────────────────────────────── */}
+        {tab === 'voice' && (
+          <View style={s.voiceSection}>
+            <Text style={s.voiceTitle}>{'\u2726'} Voice Recall</Text>
+            <Text style={s.voiceDesc}>
+              Speak freely about a curriculum topic. The system will analyze what you
+              remembered, identify gaps, and capture any questions for research.
+            </Text>
+            <Pressable
+              style={s.voiceLaunchBtn}
+              onPress={() => router.push('/voice-elicitation')}
+            >
+              <Text style={s.voiceLaunchText}>Start free recall {'\u2192'}</Text>
             </Pressable>
           </View>
         )}
@@ -477,10 +590,14 @@ const cs = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   typeBadge: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
   typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
-  nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, flex: 1, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  domainLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, flex: 1 },
+  nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   question: { fontFamily: fonts.reading, fontSize: 18, lineHeight: 26, color: colors.ink, marginBottom: 16 },
-  revealButton: { borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 12, alignItems: 'center' },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  revealButton: { flex: 1, borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 12, alignItems: 'center' },
   revealText: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric },
+  skipButton: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  skipText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textMuted },
   answerBox: { borderLeftWidth: 3, borderLeftColor: colors.claimNew, paddingLeft: 14, marginBottom: 14 },
   answerText: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody },
   hookBox: { backgroundColor: 'rgba(139,37,0,0.04)', borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 12, paddingVertical: 8, marginBottom: 12, borderRadius: 2 },
@@ -488,6 +605,7 @@ const cs = StyleSheet.create({
   hookText: { fontFamily: fonts.readingItalic, fontSize: 14, lineHeight: 20, color: colors.textBody, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   anchorBox: { marginBottom: 14 },
   anchorText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 2 },
+  contextText: { fontFamily: fonts.readingItalic, fontSize: 12, lineHeight: 18, color: colors.textMuted, marginBottom: 14, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   mapLinkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 14 },
   mapLinkText: { fontFamily: fonts.ui, fontSize: 13, color: colors.info, textDecorationLine: 'underline' },
   gradeRow: { flexDirection: 'row', gap: 8 },
@@ -496,8 +614,6 @@ const cs = StyleSheet.create({
   gradeCorrectText: { fontFamily: fonts.ui, fontSize: 12, color: colors.claimNew },
   gradePartial: { borderColor: colors.textMuted, backgroundColor: 'rgba(176,168,152,0.08)' },
   gradePartialText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary },
-  gradeWeak: { borderColor: '#b8860b', backgroundColor: 'rgba(184,134,11,0.06)' },
-  gradeWeakText: { fontFamily: fonts.ui, fontSize: 12, color: '#b8860b' },
   gradeWrong: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.05)' },
   gradeWrongText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
   responded: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.claimNew, textAlign: 'center', paddingVertical: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
@@ -527,7 +643,12 @@ const s = StyleSheet.create({
   screenTitle: { fontFamily: fonts.displaySemiBold, fontSize: 28, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   drawerBtn: { padding: 8 },
   drawerBtnText: { fontSize: 18, color: colors.rubric },
-  statsLine: { fontFamily: fonts.ui, fontSize: 13, color: colors.textSecondary, marginTop: 4 },
+  tabRow: { flexDirection: 'row', gap: 0, marginTop: 12, marginBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  tabBtn: { paddingVertical: 8, paddingHorizontal: 20, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabBtnActive: { borderBottomColor: colors.rubric },
+  tabText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  tabTextActive: { color: colors.ink },
+  statsLine: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, marginTop: 4 },
   loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.rubric, textAlign: 'center', paddingVertical: 20, paddingHorizontal: layout.screenPadding },
@@ -536,4 +657,11 @@ const s = StyleSheet.create({
   emptySubtitle: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   newSessionBtn: { marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 24, paddingVertical: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, alignItems: 'center' },
   newSessionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
+  loadingMoreRow: { alignItems: 'center', paddingVertical: 16 },
+  // Voice tab
+  voiceSection: { paddingHorizontal: layout.screenPadding, paddingTop: 20 },
+  voiceTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 12, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  voiceDesc: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody, marginBottom: 20 },
+  voiceLaunchBtn: { borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 14, alignItems: 'center', backgroundColor: 'rgba(139,37,0,0.03)' },
+  voiceLaunchText: { fontFamily: fonts.body, fontSize: 15, color: colors.rubric },
 });

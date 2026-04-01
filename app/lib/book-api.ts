@@ -329,7 +329,7 @@ export async function loadBooksFromServer(): Promise<{
 
 // --- Resurfacing API ---
 
-import type { ResurfacingSession } from '../data/types';
+import type { ResurfacingSession, ReviewStreamResponse } from '../data/types';
 
 export async function generateResurfacingSession(
   includeDialogues: boolean = true,
@@ -371,27 +371,48 @@ export async function getResurfacingStatus(): Promise<Record<string, unknown>> {
 
 // --- Curriculum Review API ---
 
-export async function generateCurriculumReview(
-  domain?: string,
-): Promise<ResurfacingSession> {
+export async function fetchReviewStream(
+  opts: { domain?: string; limit?: number; offset?: number } = {},
+): Promise<ReviewStreamResponse> {
   const resp = await fetch(`${RESEARCH_BASE}/curriculum/review/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain }),
+    body: JSON.stringify({
+      domain: opts.domain,
+      limit: opts.limit ?? 20,
+      offset: opts.offset ?? 0,
+    }),
   });
-  if (!resp.ok) throw new Error(`Review generate failed (${resp.status})`);
+  if (!resp.ok) throw new Error(`Review stream failed (${resp.status})`);
   return resp.json();
 }
 
 export async function recordReviewResult(
   questionId: string,
   result: string,
-): Promise<void> {
-  await fetch(`${RESEARCH_BASE}/curriculum/review/result`, {
+): Promise<{ next_due_at?: number; new_stability_days?: number }> {
+  const resp = await fetch(`${RESEARCH_BASE}/curriculum/review/result`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question_id: questionId, result }),
   });
+  if (!resp.ok) throw new Error(`Review result failed (${resp.status})`);
+  return resp.json();
+}
+
+// Legacy wrapper for backwards compatibility
+export async function generateCurriculumReview(
+  domain?: string,
+): Promise<ResurfacingSession> {
+  const stream = await fetchReviewStream({ domain });
+  return {
+    id: `cr_${Date.now()}`,
+    items: stream.items,
+    generated_at: stream.generated_at,
+    resonance_count: 0,
+    dialogue_count: 0,
+    total_questions_in_pool: stream.total_items,
+  };
 }
 
 // --- Entity API ---
