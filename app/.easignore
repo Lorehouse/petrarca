@@ -1,0 +1,9 @@
+# Heavy dirs not needed for native build
+app/mockups
+app/preview-mockups
+research
+scripts
+data
+*.db
+*.db-shm
+*.db-wal
