@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { Audio } from 'expo-av';
+import { documentDirectory, makeDirectoryAsync, copyAsync } from 'expo-file-system/legacy';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../design/tokens';
 import {
@@ -13,7 +14,7 @@ import {
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
 
-type Phase = 'loading' | 'prompt' | 'recording' | 'processing' | 'feedback' | 'done';
+type Phase = 'loading' | 'prompt' | 'recording' | 'processing' | 'feedback' | 'retry' | 'done';
 
 export default function VoiceElicitation() {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function VoiceElicitation() {
   const [result, setResult] = useState<ElicitationResult | null>(null);
   const [results, setResults] = useState<Array<{ node: string; score: string }>>([]);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [retryError, setRetryError] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const savedUriRef = useRef<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -77,29 +80,49 @@ export default function VoiceElicitation() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     try {
       await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      const tempUri = recording.getURI();
       setRecording(null);
-      setPhase('processing');
 
-      if (uri) {
-        const cand = candidates[current];
-        logEvent('voice_elicitation_submitted', {
-          node_id: cand.node_id, duration_s: recordingDuration,
-        });
-        const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
-        setResult(res);
-        setPhase('feedback');
-        logEvent('voice_elicitation_result', {
-          node_id: cand.node_id, coverage_pct: res.coverage_pct,
-          captured_count: res.captured?.length || 0,
-          missed_count: res.missed?.length || 0,
-          interesting_count: res.interesting?.length || 0,
-          wonderings_count: res.wonderings?.length || 0,
-        });
-      }
+      if (!tempUri) return;
+
+      // Save to persistent location before uploading
+      const ts = Date.now();
+      const persistDir = `${documentDirectory}voice-elicitation/`;
+      await makeDirectoryAsync(persistDir, { intermediates: true }).catch(() => {});
+      const savedPath = `${persistDir}elicit_${ts}.m4a`;
+      await copyAsync({ from: tempUri, to: savedPath });
+      savedUriRef.current = savedPath;
+
+      await uploadElicitation(savedPath);
     } catch (e) {
-      console.error('Processing failed:', e);
-      setPhase('prompt');
+      console.error('Recording save/upload failed:', e);
+      setRetryError(String(e));
+      setPhase('retry');
+    }
+  }
+
+  async function uploadElicitation(uri: string) {
+    setPhase('processing');
+    setRetryError('');
+    try {
+      const cand = candidates[current];
+      logEvent('voice_elicitation_submitted', {
+        node_id: cand.node_id, duration_s: recordingDuration,
+      });
+      const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
+      setResult(res);
+      setPhase('feedback');
+      logEvent('voice_elicitation_result', {
+        node_id: cand.node_id, coverage_pct: res.coverage_pct,
+        captured_count: res.captured?.length || 0,
+        missed_count: res.missed?.length || 0,
+        interesting_count: res.interesting?.length || 0,
+        wonderings_count: res.wonderings?.length || 0,
+      });
+    } catch (e) {
+      console.error('Upload failed:', e);
+      setRetryError(String(e));
+      setPhase('retry');
     }
   }
 
@@ -130,6 +153,31 @@ export default function VoiceElicitation() {
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator color={colors.rubric} />
         <Text style={styles.loadingText}>Finding topics for recall…</Text>
+      </View>
+    );
+  }
+
+  if (phase === 'retry') {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.headerTitle}>{'\u2726'} Upload Failed</Text>
+        <Text style={[styles.loadingText, { marginBottom: 12, textAlign: 'center', paddingHorizontal: 20 }]}>
+          Your recording is saved locally. You can retry the upload.
+        </Text>
+        {retryError ? (
+          <Text style={{ fontFamily: 'CrimsonPro_400Regular', fontSize: 12, color: '#cc4444', marginBottom: 16, paddingHorizontal: 20, textAlign: 'center' }}>
+            {retryError.slice(0, 120)}
+          </Text>
+        ) : null}
+        <Pressable
+          style={[styles.recordBtn, { marginBottom: 12 }]}
+          onPress={() => savedUriRef.current && uploadElicitation(savedUriRef.current)}
+        >
+          <Text style={styles.recordBtnText}>Retry upload</Text>
+        </Pressable>
+        <Pressable onPress={nextNode}>
+          <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Skip to next</Text>
+        </Pressable>
       </View>
     );
   }

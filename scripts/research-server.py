@@ -4651,7 +4651,7 @@ JSON array only:"""
         node_id = fs.getvalue('node_id', '')
         domain_id = fs.getvalue('domain_id', '')
         audio_field = fs['audio'] if 'audio' in fs else None
-        if not node_id or not domain_id or not audio_field:
+        if not node_id or not domain_id or audio_field is None:
             self._send_json_response(400, {'error': 'Missing node_id, domain_id, or audio'})
             return
         import tempfile
