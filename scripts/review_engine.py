@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from gemini_llm import call_llm
+from claude_llm import call_claude, call_claude_json, call_claude_or_gemini
 from curriculum import (
     load_curriculum, load_knowledge_states, update_knowledge,
 )
@@ -133,14 +133,9 @@ def suggest_curricula_for_book(book_title: str, book_topics: list) -> list[dict]
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
 
-def _call_claude(prompt: str, timeout: int = 120) -> str | None:
-    try:
-        r = subprocess.run(['claude', '-p', prompt], capture_output=True, text=True, timeout=timeout)
-        if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-    return None
+def _call_claude(prompt: str, timeout: int = 180) -> str | None:
+    """Legacy wrapper — delegates to claude_llm module."""
+    return call_claude(prompt, timeout=timeout)
 
 
 def _parse_json(text: str) -> dict | list | None:
@@ -213,45 +208,33 @@ Output JSON array only:
 [{{"node_id":"...","node_title":"...","source_text":"...","lens":"...","temporal_hook":"..."}}]"""
 
 
-QUESTION_GEN_PROMPT_FACTUAL = """Generate a concept-check question for a knowledge review.
+QUESTION_GEN_PROMPT_FACTUAL = """Generate a factual review question that tests framework knowledge.
 
-This is FIRST ENCOUNTER with this concept. The goal is NOT to test a specific fact — it is to check
-whether the learner can explain what this node represents in history: what happened, who was involved,
-why it mattered, or what characterized this period/event/person.
+The learner is building a mental scaffold of history. They need to recall KEY FACTS:
+dates, key figures, key events, and where things fit in the timeline. These facts are
+the load-bearing pillars that make everything else they read richer and more connected.
 
 Concept: {node_title}
 Curriculum definition: {node_description}
 
-The curriculum definition IS the answer. Write a question whose correct answer IS the substance of that definition.
-The question should be answerable by someone who read and understood the definition — not by someone who memorized a name or date.
+Extract the most important FACTS from this curriculum node and test ONE of them:
+- KEY DATES: When did this happen? What century/decade? (e.g., "When was the Battle of Himera?")
+- KEY FIGURES: Who was the central person? What was their role? (e.g., "Who was Gelon?")
+- KEY EVENTS: What happened? What was the outcome? (e.g., "What ended Arab rule in Sicily?")
+- TIMELINE PLACEMENT: What came before/after? What was happening elsewhere? (e.g., "Himera was simultaneous with which Greek battle?")
 
-Step 1 — identify the CORE CONCEPT the definition conveys:
-- What was the central dynamic or conflict?
-- What characterized this period/event/figure?
-- What caused or resulted from this?
-- What makes this historically significant or distinctive?
+Pick the single most important fact to test — the one that, once known, makes this
+entire period click into place. Prefer dates and figures for early reviews.
 
-Step 2 — write a SHORT question (6-12 words) that asks for that core concept.
-Start with: What / Why / How / Who was / What characterized / What drove / What resulted
+DO NOT ask vague conceptual questions like "What characterized..." or "What made X unique..."
+— those come later. Right now we need the factual scaffolding.
 
-Good questions (test understanding of the concept):
-- "What drove Greek colonization of Sicily?" → tests the Why-they-came concept
-- "Why did the theme system transform Byzantine military power?" → tests the Theme System concept
-- "What made Justinian's reign the high-water mark of Byzantine power?" → tests the Age of Justinian
-- "What characterized Muhammad's early community in Medina?" → tests the Hijra concept
-- "What caused the fall of the Roman Republic?" → tests Late Republic dynamics
-
-Bad questions (test isolated facts the curriculum doesn't emphasize):
-- "Which city founded Naxos?" → a minor detail, not the concept
-- "What year did Belisarius arrive?" → a date, not the concept
-- "Who was the leader of the Carthaginian army?" → a name, not the concept
-
-The answer_guidance should be 2-3 sentences drawn from the curriculum definition — what a good answer should cover.
+The answer should be SHORT and specific (a date, a name, a 1-sentence event).
 
 {temporal_context}
 
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
+{{"question":"short factual question (6-15 words)","answer_guidance":"the specific factual answer (1-2 sentences max)","rich_answer":"4-5 sentences placing this fact in vivid context — who, what, when, why it matters. Include a temporal anchor to another known period. This is shown when the learner gets it wrong.","temporal_hook":"connection to another era the learner knows","curriculum_context":"brief placement in the larger history"}}"""
 
 
 QUESTION_GEN_PROMPT = """Generate an analytical review question.
@@ -435,14 +418,13 @@ def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
         curriculum_title=curriculum_title,
     )
 
-    raw = call_llm(prompt, max_tokens=65536,
-                   response_mime_type='application/json')
-    if not raw:
+    mappings = call_claude_json(prompt, timeout=240)
+    if not mappings:
         return []
 
-    mappings = _parse_json(raw)
     valid_ids = {n['id'] for n in curriculum['nodes']}
-    return [m for m in (mappings or []) if isinstance(m, dict) and m.get('node_id') in valid_ids]
+    return [m for m in (mappings if isinstance(mappings, list) else [])
+            if isinstance(m, dict) and m.get('node_id') in valid_ids]
 
 
 def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int) -> int:
@@ -685,13 +667,13 @@ def _map_book_to_curriculum(book_id: str, book_title: str, book_author: str,
         curriculum_title=curriculum_title,
     )
 
-    raw = call_llm(prompt, max_tokens=65536, response_mime_type='application/json')
-    if not raw:
+    mappings = call_claude_json(prompt, timeout=240)
+    if not mappings:
         return []
 
-    mappings = _parse_json(raw)
     valid_ids = {n['id'] for n in curriculum['nodes']}
-    return [m for m in (mappings or []) if isinstance(m, dict) and m.get('node_id') in valid_ids]
+    return [m for m in (mappings if isinstance(mappings, list) else [])
+            if isinstance(m, dict) and m.get('node_id') in valid_ids]
 
 
 def map_whole_book(book_id: str, conn) -> dict:
@@ -978,6 +960,36 @@ def _best_source_for_question(sources: list) -> dict:
     return sources[-1] if sources else {}
 
 
+def _pick_key_fact(key_facts: list, question_history: list) -> dict | None:
+    """Pick the highest-priority untested key_fact. Returns None if all tested."""
+    tested_ids = {h.get('fact_id') for h in question_history if h.get('fact_id')}
+    # Priority ordering, then type ordering within same priority
+    type_order = {'event': 0, 'date': 1, 'person': 2, 'connection': 3, 'significance': 4}
+    sorted_facts = sorted(key_facts, key=lambda f: (
+        f.get('priority', 99),
+        type_order.get(f.get('type', ''), 5),
+    ))
+    for fact in sorted_facts:
+        if fact.get('id') not in tested_ids:
+            return fact
+    # All tested — pick the one with worst score for retry
+    return None
+
+
+def _key_fact_to_question(fact: dict, node_title: str, node_description: str) -> dict:
+    """Convert a key_fact to the cached_question format."""
+    return {
+        'question': fact['question'],
+        'answer_guidance': fact['answer'],
+        'rich_answer': fact.get('rich_answer') or fact['answer'],
+        'answer_type': fact.get('type', 'event'),
+        'temporal_hook': '',
+        'curriculum_context': node_description[:200] if node_description else '',
+        'fact_id': fact.get('id', ''),
+        'entities': fact.get('entities', []),
+    }
+
+
 def generate_question(item_id: str, conn) -> dict:
     # First try knowledge_items (node-centric); fall back to review_items (exploration/voice)
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
@@ -1018,6 +1030,37 @@ def generate_question(item_id: str, conn) -> dict:
         temporal_hook = item.get('temporal_hook', '')
         lens = item.get('lens', 'SIGNIFICANCE')
 
+    # Parse question_history to know which facts have been tested
+    try:
+        question_history = json.loads(item.get('question_history') or '[]')
+    except Exception:
+        question_history = []
+
+    review_count = item.get('review_count', 0) + 1
+
+    # ── Try key_facts (deterministic, no LLM) ────────────────────────────────
+    key_facts = []
+    if node:
+        try:
+            key_facts = json.loads(node.get('key_facts') or '[]')
+        except Exception:
+            key_facts = []
+
+    if key_facts and review_count <= len(key_facts):
+        fact = _pick_key_fact(key_facts, question_history)
+        if fact:
+            result = _key_fact_to_question(fact, node_title, node_description)
+            # Generate follow-up queries from key_facts entities (no LLM needed)
+            entities = fact.get('entities', [])
+            if entities:
+                result['follow_up_queries'] = [
+                    f'Tell me more about {entities[0]}' if entities else '',
+                    f'What happened before {node_title}?',
+                    f'How does {node_title} connect to other periods?',
+                ]
+            return result
+
+    # ── Reviews 3+ or no key_facts: use Claude ────────────────────────────────
     known = [n['title'] for n in (curriculum or {}).get('nodes', [])
              if knowledge_state.get(n['id'], {}).get('knowledge') in ('engaged', 'anchored')
              and n['id'] != item.get('curriculum_node_id')]
@@ -1031,10 +1074,17 @@ def generate_question(item_id: str, conn) -> dict:
     if temporal_hook:
         temporal_ctx = f"Temporal hook: {temporal_hook}"
 
-    review_count = item.get('review_count', 0) + 1
+    # Include mastered key_facts as context for analytical questions
+    known_facts_ctx = ''
+    if key_facts:
+        mastered = [f for f in key_facts if f.get('id') in
+                    {h.get('fact_id') for h in question_history if h.get('score') == 'knew'}]
+        if mastered:
+            known_facts_ctx = 'Facts the learner already knows:\n' + '\n'.join(
+                f'- {f["question"]} → {f["answer"]}' for f in mastered[:6])
 
-    # Reviews 1-2: pure factual recall — who/when/what, no analysis
-    if review_count <= 2:
+    if review_count <= 2 and not key_facts:
+        # No key_facts available — use LLM factual prompt
         prompt = QUESTION_GEN_PROMPT_FACTUAL.format(
             node_title=node_title,
             node_description=node_description,
@@ -1056,9 +1106,10 @@ def generate_question(item_id: str, conn) -> dict:
             difficulty_instruction=difficulty,
             known_nodes_context=known_ctx, temporal_context=temporal_ctx,
         )
+        if known_facts_ctx:
+            prompt += f'\n\n{known_facts_ctx}'
 
-    raw = call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
-    result = _parse_json(raw) if raw else None
+    result = call_claude_json(prompt, timeout=120)
 
     if isinstance(result, dict) and 'question' in result:
         result.setdefault('temporal_hook', temporal_hook)
@@ -1070,7 +1121,7 @@ def generate_question(item_id: str, conn) -> dict:
             'curriculum_context': '',
         }
 
-    # Generate follow-up research queries (separate lightweight call)
+    # Generate follow-up research queries via Claude
     if 'follow_up_queries' not in result:
         try:
             fq_prompt = (
@@ -1081,8 +1132,7 @@ def generate_question(item_id: str, conn) -> dict:
                 f'3. A surprising detail, debate, or modern relevance\n'
                 f'Output JSON array of 3 strings only: ["q1","q2","q3"]'
             )
-            fq_raw = call_llm(fq_prompt, max_tokens=256, response_mime_type='application/json')
-            fq = _parse_json(fq_raw) if fq_raw else None
+            fq = call_claude_json(fq_prompt, timeout=60, model='sonnet')
             if isinstance(fq, list) and len(fq) >= 2:
                 result['follow_up_queries'] = fq[:3]
         except Exception as e:
@@ -1230,7 +1280,6 @@ def _run_microlearning_research(card_id: str, query: str,
                                  node_id: str | None, domain_id: str | None):
     """Background: run search + LLM, fill in the microlearning card."""
     from db import get_connection
-    from gemini_llm import call_with_search, call_llm as gemini_call
     try:
         # Load node context if available
         node_title = ''
@@ -1246,9 +1295,10 @@ def _run_microlearning_research(card_id: str, query: str,
                 node_title = row['title']
                 node_description = row['description'] or ''
 
-        # Try Gemini with search grounding first for factual accuracy
+        # Try Gemini search grounding for factual accuracy (Gemini-specific feature)
         search_result = None
         try:
+            from gemini_llm import call_with_search
             search_prompt = f"Research this question thoroughly: {query}"
             if node_title:
                 search_prompt += f"\nContext: this relates to {node_title}"
@@ -1256,7 +1306,7 @@ def _run_microlearning_research(card_id: str, query: str,
         except Exception as e:
             print(f'[microlearning] search failed for {card_id}: {e}', flush=True)
 
-        # Generate structured microlearning card
+        # Generate structured microlearning card via Claude
         prompt = MICROLEARNING_PROMPT.format(
             query=query,
             node_title=node_title or 'General history',
@@ -1265,8 +1315,7 @@ def _run_microlearning_research(card_id: str, query: str,
         if search_result:
             prompt += f"\n\nSearch results to incorporate:\n{search_result[:2000]}"
 
-        raw = gemini_call(prompt, max_tokens=1024, response_mime_type='application/json')
-        result = json.loads(raw) if raw else None
+        result = call_claude_json(prompt, timeout=120)
 
         if not result or 'content' not in result:
             raise ValueError(f'Invalid response: {raw[:200] if raw else "empty"}')
@@ -1409,8 +1458,7 @@ def create_exploration_items(item_id: str, conn) -> list:
         score=item.get('last_score', 'partly'),
     )
 
-    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=65536, response_mime_type='application/json')
-    questions = _parse_json(raw) if raw else None
+    questions = call_claude_json(prompt, timeout=120)
     if not isinstance(questions, list):
         return []
 
@@ -1520,8 +1568,7 @@ def create_entity_exploration_items(entity: dict, domain_id: str, node_id: str, 
         description=entity.get('description', '')[:400],
     )
 
-    raw = _call_claude(prompt) or (call_llm(prompt, max_tokens=65536, response_mime_type='application/json') if call_llm else None)
-    questions = _parse_json(raw) if raw else None
+    questions = call_claude_json(prompt, timeout=120)
     if not isinstance(questions, list):
         return []
 
@@ -1578,8 +1625,7 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
         transcript=transcript,
     )
 
-    raw = _call_claude(prompt) or call_llm(prompt, max_tokens=65536, response_mime_type='application/json')
-    extracted = _parse_json(raw) if raw else {}
+    extracted = call_claude_json(prompt, timeout=120)
     if not isinstance(extracted, dict):
         extracted = {}
 
@@ -1651,9 +1697,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         transcript=transcript,
     )
 
-    raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=4096,
-                   response_mime_type='application/json')
-    result = _parse_json(raw) if raw else {}
+    result = call_claude_json(prompt, timeout=180)
     if not isinstance(result, dict):
         result = {}
 
@@ -2061,9 +2105,7 @@ def generate_hamarquizen_session(book_id: str, limit: int = 5, conn=None) -> lis
                 confidence=confidence,
             )
 
-            raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=2048,
-                           response_mime_type='application/json')
-            card_data = _parse_json(raw) if raw else {}
+            card_data = call_claude_json(prompt, timeout=120)
             if not isinstance(card_data, dict):
                 card_data = {}
 
@@ -2216,9 +2258,7 @@ def generate_cross_book_hamarquizen(limit: int = 5, conn=None) -> list[dict]:
                 source_b=source_b or 'No specific source text available',
             )
 
-            raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=2048,
-                           response_mime_type='application/json')
-            card_data = _parse_json(raw) if raw else {}
+            card_data = call_claude_json(prompt, timeout=120)
             if not isinstance(card_data, dict):
                 card_data = {}
 

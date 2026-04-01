@@ -22,9 +22,9 @@ from pathlib import Path
 from db import get_connection, init_db
 
 try:
-    from gemini_llm import call_llm
+    from claude_llm import call_claude_json
 except ImportError:
-    call_llm = None
+    call_claude_json = None
 
 # ── LLM helpers (unchanged from curriculum.py) ──────────────────────────────
 
@@ -342,7 +342,7 @@ def map_book_to_curriculum(book_id: str, domain_id: str, conn=None) -> list[dict
             thesis = research.get('thesis', '')
             key_terms = ', '.join(t.get('term', '') for t in research.get('key_terms', [])[:20])
 
-        if not call_llm:
+        if not call_claude_json:
             print('[curriculum_db] No LLM available for book mapping', flush=True)
             return None
 
@@ -353,14 +353,8 @@ def map_book_to_curriculum(book_id: str, domain_id: str, conn=None) -> list[dict
             curriculum_nodes='\n'.join(node_lines),
         )
 
-        raw = call_llm(prompt, model='gemini-2.5-flash', max_tokens=8192,
-                       response_mime_type='application/json')
-        if not raw:
-            return None
-
-        try:
-            mappings_raw = json.loads(raw)
-        except json.JSONDecodeError:
+        mappings_raw = call_claude_json(prompt, timeout=180)
+        if not mappings_raw:
             return None
         if not isinstance(mappings_raw, list):
             return None
