@@ -177,10 +177,16 @@ export default function VoiceElicitation() {
           {/* Prompt card */}
           <View style={styles.card}>
             <Text style={styles.domainLabel}>
-              {cand.domain_id?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).slice(0, 30) || 'Review'}
+              {cand.type === 'chapter_recall' && cand.book_title
+                ? cand.book_title.slice(0, 40)
+                : cand.domain_id?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()).slice(0, 30) || 'Review'}
             </Text>
 
-            <Text style={styles.promptLabel}>Tell me what you remember about…</Text>
+            <Text style={styles.promptLabel}>
+              {cand.type === 'chapter_recall'
+                ? 'What do you remember from…'
+                : 'Tell me what you remember about…'}
+            </Text>
             <Text style={styles.nodeTitle}>{cand.node_title}</Text>
 
             {phase === 'prompt' && (

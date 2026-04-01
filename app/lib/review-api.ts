@@ -156,6 +156,7 @@ export async function getCrossBookHamarquizen(
 // ── Voice elicitation (free recall) ─────────────────────────────────────────
 
 export interface ElicitationCandidate {
+  type?: 'chapter_recall';  // absent for standard curriculum nodes
   node_id: string;
   node_title: string;
   node_description: string;
@@ -163,6 +164,10 @@ export interface ElicitationCandidate {
   knowledge: string;
   confidence: number;
   elicitation_score: number;
+  book_id?: string;
+  book_title?: string;
+  chapter_number?: number;
+  chapter_title?: string;
 }
 
 export interface ElicitationResult {

@@ -1846,11 +1846,75 @@ def get_elicitation_candidates(domain_id: str | None = None, limit: int = 5, con
             for row in domain_rows:
                 candidates.extend(_elicitation_candidates_for_domain(row[0], conn))
 
+        # Add chapter recall candidates — "What do you remember from Chapter X?"
+        chapter_recalls = _chapter_recall_candidates(conn, limit=2)
+        candidates.extend(chapter_recalls)
+
         candidates.sort(key=lambda c: c['elicitation_score'], reverse=True)
         return candidates[:limit]
     finally:
         if own:
             conn.close()
+
+
+def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
+    """Generate chapter-specific recall prompts from knowledge_items sources.
+
+    Finds recent book chapters that have curriculum mappings and creates
+    prompts like "What do you remember from Chapter 5: The Founding of Syracuse?"
+    """
+    # Find distinct book+chapter combos from knowledge_items sources
+    rows = conn.execute("""
+        SELECT ki.curriculum_domain, ki.sources, pb.title as book_title
+        FROM knowledge_items ki
+        LEFT JOIN physical_books pb ON pb.id = json_extract(ki.sources, '$[0].book_id')
+        WHERE ki.sources LIKE '%chapter_number%'
+          AND ki.review_count <= 1
+        ORDER BY ki.created_at DESC
+        LIMIT 50
+    """).fetchall()
+
+    seen_chapters = set()
+    candidates = []
+    for r in rows:
+        try:
+            sources = json.loads(r['sources'])
+        except Exception:
+            continue
+        for s in sources:
+            ch_num = s.get('chapter_number')
+            ch_title = s.get('chapter_title', '')
+            book_id = s.get('book_id', '')
+            if not ch_num or not ch_title:
+                continue
+            key = f'{book_id}:{ch_num}'
+            if key in seen_chapters:
+                continue
+            seen_chapters.add(key)
+
+            book_title = r['book_title'] or book_id
+            candidates.append({
+                'type': 'chapter_recall',
+                'node_id': f'chapter:{book_id}:{ch_num}',
+                'node_title': f'Chapter {ch_num}: {ch_title}',
+                'node_description': f'What do you remember from Chapter {ch_num} of {book_title}? '
+                                   f'Speak freely about the key ideas, people, and events.',
+                'domain_id': r['curriculum_domain'],
+                'knowledge': 'engaged',
+                'confidence': 0.5,
+                'elicitation_score': 7.0,  # high priority
+                'book_id': book_id,
+                'book_title': book_title,
+                'chapter_number': ch_num,
+                'chapter_title': ch_title,
+            })
+
+            if len(candidates) >= limit:
+                break
+        if len(candidates) >= limit:
+            break
+
+    return candidates
 
 
 # ── Article-read curriculum updates ──────────────────────────────────────────
