@@ -250,14 +250,8 @@ The answer_guidance should be 2-3 sentences drawn from the curriculum definition
 
 {temporal_context}
 
-Also generate 3 follow-up research queries — interesting questions that go deeper into this concept.
-Each query should be specific enough for a web search and represent a different angle:
-1. A WHY or HOW question (causal depth)
-2. A comparison or connection to another era/place
-3. A surprising detail, debate, or modern relevance angle
-
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history","follow_up_queries":["query 1","query 2","query 3"]}}"""
+{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
 
 
 QUESTION_GEN_PROMPT = """Generate an analytical review question.
@@ -284,14 +278,8 @@ Lens options:
 
 Keep question under 20 words.
 
-Also generate 3 follow-up research queries — interesting questions that go deeper.
-Each should be specific enough for a web search and explore a different angle:
-1. A deeper causal or structural question
-2. A cross-cultural or cross-period comparison
-3. A surprising detail, historiographic debate, or modern relevance
-
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"...","follow_up_queries":["query 1","query 2","query 3"]}}"""
+{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
@@ -1074,14 +1062,33 @@ def generate_question(item_id: str, conn) -> dict:
 
     if isinstance(result, dict) and 'question' in result:
         result.setdefault('temporal_hook', temporal_hook)
-        return result
+    else:
+        result = {
+            'question': f'What was historically significant about {node_title}?',
+            'answer_guidance': source_text,
+            'temporal_hook': temporal_hook,
+            'curriculum_context': '',
+        }
 
-    return {
-        'question': f'What was historically significant about {node_title}?',
-        'answer_guidance': source_text,
-        'temporal_hook': temporal_hook,
-        'curriculum_context': '',
-    }
+    # Generate follow-up research queries (separate lightweight call)
+    if 'follow_up_queries' not in result:
+        try:
+            fq_prompt = (
+                f'Generate 3 research questions to explore "{node_title}" deeper. '
+                f'Context: {node_description[:200]}\n'
+                f'1. A WHY/HOW question (causal depth)\n'
+                f'2. A comparison to another era or place\n'
+                f'3. A surprising detail, debate, or modern relevance\n'
+                f'Output JSON array of 3 strings only: ["q1","q2","q3"]'
+            )
+            fq_raw = call_llm(fq_prompt, max_tokens=256, response_mime_type='application/json')
+            fq = _parse_json(fq_raw) if fq_raw else None
+            if isinstance(fq, list) and len(fq) >= 2:
+                result['follow_up_queries'] = fq[:3]
+        except Exception as e:
+            print(f'[review] follow-up gen failed for {node_title}: {e}', flush=True)
+
+    return result
 
 
 # ── Record answer ─────────────────────────────────────────────────────────────
