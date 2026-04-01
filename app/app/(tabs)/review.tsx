@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, Platform, Pressable, ScrollView,
-  StyleSheet, Text, View,
+  StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
@@ -65,6 +65,61 @@ const entityStyle = StyleSheet.create({
     textDecorationStyle: 'dotted',
     textDecorationColor: colors.textMuted,
   },
+});
+
+// ── Research Input ──────────────────────────────────────────────────
+
+function ResearchInput({ onSubmit }: { onSubmit: (query: string) => void }) {
+  const [text, setText] = useState('');
+  const [sent, setSent] = useState(false);
+
+  const handleSubmit = () => {
+    const q = text.trim();
+    if (!q) return;
+    onSubmit(q);
+    setSent(true);
+    setText('');
+  };
+
+  if (sent) {
+    return (
+      <View style={ri.container}>
+        <Text style={ri.sentText}>{'\uD83D\uDD0D'} Researching...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={ri.container}>
+      <TextInput
+        style={ri.input}
+        placeholder="Ask your own question..."
+        placeholderTextColor={colors.textMuted}
+        value={text}
+        onChangeText={setText}
+        onSubmitEditing={handleSubmit}
+        returnKeyType="send"
+      />
+      {text.trim().length > 0 && (
+        <Pressable style={ri.sendBtn} onPress={handleSubmit}>
+          <Text style={ri.sendText}>{'\uD83D\uDD0D'}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+const ri = StyleSheet.create({
+  container: { marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  input: {
+    flex: 1, fontFamily: fonts.reading, fontSize: 14, color: colors.textBody,
+    borderWidth: 1, borderColor: colors.rule, borderRadius: 4,
+    paddingHorizontal: 12, paddingVertical: 8,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
+  },
+  sendBtn: { padding: 8 },
+  sendText: { fontSize: 18 },
+  sentText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });
 
 // ── Review Card ─────────────────────────────────────────────────────
@@ -229,17 +284,20 @@ function ReviewCard({
             })}
           </View>
 
-          {/* Follow-up research queries */}
-          {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-            <View style={cs.followUpSection}>
-              <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-              {item.follow_up_queries.map((q, i) => (
-                <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                  <Text style={cs.followUpText}>{q}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          {/* Follow-up research queries + custom input */}
+          <View style={cs.followUpSection}>
+            {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+              <>
+                <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+                {item.follow_up_queries.map((q, i) => (
+                  <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                    <Text style={cs.followUpText}>{q}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+            <ResearchInput onSubmit={onResearch} />
+          </View>
         </View>
       )}
     </View>
@@ -333,17 +391,20 @@ function MicrolearningCard({
         </Pressable>
       )}
 
-      {/* Follow-up queries */}
-      {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-        <View style={cs.followUpSection}>
-          <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-          {item.follow_up_queries.map((q, i) => (
-            <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-              <Text style={cs.followUpText}>{q}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      {/* Follow-up queries + custom input */}
+      <View style={cs.followUpSection}>
+        {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+          <>
+            <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+            {item.follow_up_queries.map((q, i) => (
+              <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                <Text style={cs.followUpText}>{q}</Text>
+              </Pressable>
+            ))}
+          </>
+        )}
+        <ResearchInput onSubmit={onResearch} />
+      </View>
     </View>
   );
 }
