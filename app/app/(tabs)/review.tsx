@@ -76,6 +76,7 @@ function ResearchInput({ onSubmit }: { onSubmit: (query: string) => void }) {
   const handleSubmit = () => {
     const q = text.trim();
     if (!q) return;
+    logEvent('review_custom_query', { query: q });
     onSubmit(q);
     setSent(true);
     setText('');
@@ -139,6 +140,17 @@ function ReviewCard({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
+  const revealedAtRef = useRef(0);
+
+  const handleReveal = () => {
+    setRevealed(true);
+    revealedAtRef.current = Date.now();
+    logEvent('review_answer_revealed', {
+      question_id: item.question_id,
+      node_title: item.node_title,
+      domain: item.domain,
+    });
+  };
 
   const answerType = item.answer_type || 'concept';
   const typeLabel = answerType === 'date' ? 'Date'
@@ -195,7 +207,7 @@ function ReviewCard({
       {/* Reveal / Answer */}
       {!revealed ? (
         <View style={cs.actionRow}>
-          <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+          <Pressable style={cs.revealButton} onPress={handleReveal}>
             <Text style={cs.revealText}>Show answer</Text>
           </Pressable>
           <Pressable style={cs.skipButton} onPress={onSkip}>
@@ -529,6 +541,7 @@ export default function ReviewScreen() {
   const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
   const offsetRef = useRef(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const cardShownAtRef = useRef<number>(Date.now());
 
   const loadStream = useCallback(async (reset = true) => {
     if (reset) {
@@ -592,7 +605,24 @@ export default function ReviewScreen() {
     });
   }, [fadeAnim]);
 
+  // Log when a new card is shown
+  const logCardShown = useCallback((item: ResurfacingItem) => {
+    cardShownAtRef.current = Date.now();
+    logEvent('review_card_shown', {
+      type: item.type,
+      question_id: item.question_id,
+      domain: item.domain,
+      node_title: item.node_title,
+      review_count: item.review_count,
+      node_knowledge: item.node_knowledge,
+      has_follow_ups: (item.follow_up_queries?.length ?? 0) > 0,
+    });
+  }, []);
+
+  const timeOnCard = () => Math.round((Date.now() - cardShownAtRef.current) / 1000);
+
   const handleResult = async (item: ResurfacingItem, result: string) => {
+    const seconds = timeOnCard();
     if (item.question_id) {
       recordReviewResult(item.question_id, result).catch(e =>
         console.warn('[review] score failed:', e));
@@ -603,6 +633,8 @@ export default function ReviewScreen() {
         domain: item.domain,
         node_title: item.node_title,
         review_count: item.review_count,
+        time_seconds: seconds,
+        card_type: item.type,
       });
     }
     setTimeout(() => {
@@ -618,6 +650,8 @@ export default function ReviewScreen() {
       question_id: item.question_id,
       domain: item.domain,
       node_title: item.node_title,
+      time_seconds: timeOnCard(),
+      card_type: item.type,
     });
     animateTransition(() => {
       setCurrentIndex(i => i + 1);
@@ -626,6 +660,10 @@ export default function ReviewScreen() {
   };
 
   const handleEntityIntroContinue = () => {
+    logEvent('review_entity_intro_continue', {
+      entity_id: items[currentIndex]?.entity_id,
+      time_seconds: timeOnCard(),
+    });
     animateTransition(() => {
       setCurrentIndex(i => i + 1);
       maybeLoadMore();
@@ -650,6 +688,12 @@ export default function ReviewScreen() {
       });
     }).catch(e => console.warn('[review] research trigger failed:', e));
   };
+
+  // Log each new card shown
+  React.useEffect(() => {
+    const item = items[currentIndex];
+    if (item && tab === 'cards') logCardShown(item);
+  }, [currentIndex, items.length, tab]);
 
   const currentItem = items[currentIndex];
   const reviewedCount = currentIndex;
