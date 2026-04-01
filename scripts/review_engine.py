@@ -999,23 +999,58 @@ def generate_question(item_id: str, conn) -> dict:
         return {}
     item = dict(row)
 
-    # Serve from cache if available
-    if item.get('cached_question'):
-        try:
-            return json.loads(item['cached_question'])
-        except Exception:
-            pass
-
     domain_id = item.get('curriculum_domain') or 'sicily_history_culture_and_legacy'
     curriculum = load_curriculum(domain_id)
     knowledge_state = load_knowledge_states(domain_id)
 
     node = next((n for n in (curriculum or {}).get('nodes', [])
                  if n['id'] == item.get('curriculum_node_id')), None)
+
+    # ── Check key_facts FIRST (deterministic, no LLM) ────────────────────────
+    key_facts = []
+    if node:
+        try:
+            key_facts = json.loads(node.get('key_facts') or '[]')
+        except Exception:
+            key_facts = []
+
+    if key_facts:
+        try:
+            question_history = json.loads(item.get('question_history') or '[]')
+        except Exception:
+            question_history = []
+        review_count = item.get('review_count', 0) + 1
+
+        if review_count <= len(key_facts):
+            fact = _pick_key_fact(key_facts, question_history)
+            if fact:
+                node_title = node['title'] if node else ''
+                node_description = node.get('description', '') if node else ''
+                result = _key_fact_to_question(fact, node_title, node_description)
+                entities = fact.get('entities', [])
+                if entities:
+                    result['follow_up_queries'] = [
+                        f'Tell me more about {entities[0]}' if entities else '',
+                        f'What happened before {node_title}?',
+                        f'How does {node_title} connect to other periods?',
+                    ]
+                return result
+
+    # ── Serve from cache if no key_facts path applied ─────────────────────────
+    if item.get('cached_question'):
+        try:
+            cached = json.loads(item['cached_question'])
+            # If cached question has fact_id, it's from key_facts — serve it
+            # If not, it's an old LLM question — still serve as fallback
+            return cached
+        except Exception:
+            pass
+
+    # ── LLM path: reviews 3+ or no key_facts ────────────────────────────────
     node_title = node['title'] if node else item.get('curriculum_node_title', item.get('curriculum_node_id', ''))
     node_description = node.get('description', '') if node else ''
 
-    # Resolve source_text and temporal_hook from sources array (knowledge_items) or direct fields (review_items)
+    # Resolve source_text and temporal_hook
     if 'sources' in item and item['sources']:
         try:
             sources = json.loads(item['sources'])
@@ -1030,7 +1065,6 @@ def generate_question(item_id: str, conn) -> dict:
         temporal_hook = item.get('temporal_hook', '')
         lens = item.get('lens', 'SIGNIFICANCE')
 
-    # Parse question_history to know which facts have been tested
     try:
         question_history = json.loads(item.get('question_history') or '[]')
     except Exception:
@@ -1038,29 +1072,6 @@ def generate_question(item_id: str, conn) -> dict:
 
     review_count = item.get('review_count', 0) + 1
 
-    # ── Try key_facts (deterministic, no LLM) ────────────────────────────────
-    key_facts = []
-    if node:
-        try:
-            key_facts = json.loads(node.get('key_facts') or '[]')
-        except Exception:
-            key_facts = []
-
-    if key_facts and review_count <= len(key_facts):
-        fact = _pick_key_fact(key_facts, question_history)
-        if fact:
-            result = _key_fact_to_question(fact, node_title, node_description)
-            # Generate follow-up queries from key_facts entities (no LLM needed)
-            entities = fact.get('entities', [])
-            if entities:
-                result['follow_up_queries'] = [
-                    f'Tell me more about {entities[0]}' if entities else '',
-                    f'What happened before {node_title}?',
-                    f'How does {node_title} connect to other periods?',
-                ]
-            return result
-
-    # ── Reviews 3+ or no key_facts: use Claude ────────────────────────────────
     known = [n['title'] for n in (curriculum or {}).get('nodes', [])
              if knowledge_state.get(n['id'], {}).get('knowledge') in ('engaged', 'anchored')
              and n['id'] != item.get('curriculum_node_id')]
