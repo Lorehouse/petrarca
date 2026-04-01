@@ -18,6 +18,32 @@ if _api_key:
 else:
     _client = None
 
+# Cost logging (optional — available when limbic is on PYTHONPATH)
+try:
+    from limbic.cerebellum.cost_log import cost_log as _cost_log
+except ImportError:
+    _cost_log = None
+
+
+def _log_usage(response, model: str) -> None:
+    """Extract token usage from a genai response and log cost."""
+    if not _cost_log:
+        return
+    try:
+        um = response.usage_metadata
+        if not um:
+            return
+        _cost_log.log(
+            project="petrarca",
+            model=f"gemini/{model}",
+            prompt_tokens=um.prompt_token_count or 0,
+            completion_tokens=um.candidates_token_count or 0,
+            cached_tokens=um.cached_content_token_count or 0,
+            api_key_hint=_api_key[-4:] if _api_key else "",
+        )
+    except Exception:
+        pass
+
 
 def call_llm(prompt: str, *, model: str | None = None, max_tokens: int = 4096,
              system_instruction: str | None = None,
@@ -47,6 +73,7 @@ def call_llm(prompt: str, *, model: str | None = None, max_tokens: int = 4096,
             contents=prompt,
             config=config,
         )
+        _log_usage(response, use_model)
         return response.text.strip() if response.text else None
     except Exception as e:
         print(f"Gemini error ({use_model}): {e}", flush=True)
@@ -94,6 +121,7 @@ def call_chat(messages: list[dict], *, model: str | None = None,
             contents=contents,
             config=config,
         )
+        _log_usage(response, use_model)
         return response.text.strip() if response.text else None
     except Exception as e:
         print(f"Gemini chat error ({use_model}): {e}", flush=True)
@@ -130,6 +158,7 @@ def call_llm_tool(prompt: str, tool_declaration: "genai.types.FunctionDeclaratio
             contents=prompt,
             config=config,
         )
+        _log_usage(response, use_model)
 
         if not response.candidates or not response.candidates[0].content.parts:
             print(f"Gemini tool error ({use_model}): empty response", flush=True)
@@ -184,6 +213,7 @@ def call_vision(image_data: bytes, prompt: str, *, model: str | None = None,
             contents=contents,
             config=config,
         )
+        _log_usage(response, use_model)
         return response.text.strip() if response.text else None
     except Exception as e:
         print(f"Gemini vision error ({use_model}): {e}", flush=True)
@@ -210,6 +240,7 @@ def call_with_search(prompt: str, *, model: str | None = None,
             contents=prompt,
             config=config,
         )
+        _log_usage(response, use_model)
         return response.text.strip() if response.text else None
     except Exception as e:
         print(f"Gemini search error ({use_model}): {e}", flush=True)
