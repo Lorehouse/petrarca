@@ -666,6 +666,8 @@ MIGRATIONS = [
     "ALTER TABLE shared_entities ADD COLUMN aliases TEXT DEFAULT '[]'",
     "ALTER TABLE shared_entities ADD COLUMN date_start INTEGER",
     "ALTER TABLE shared_entities ADD COLUMN date_end INTEGER",
+    # key_facts: structured testable facts per curriculum node
+    "ALTER TABLE curriculum_nodes ADD COLUMN key_facts TEXT DEFAULT '[]'",
 ]
 
 

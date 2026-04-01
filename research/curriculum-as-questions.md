@@ -1,6 +1,6 @@
 # Curriculum as Structured Questions: Design Research
 
-*Session 41, April 1 2026*
+*Session 41 (initial), Session 42 (revised design + implementation)*
 
 ## Problem Statement
 
@@ -8,78 +8,97 @@ The review system generates vague conceptual questions ("What characterized...")
 
 ## Key Insight: Facts Are Load-Bearing Scaffolding
 
-E.D. Hirsch's Core Knowledge approach (confirmed by reading "What Your Sixth Grader Needs to Know") embeds factual knowledge in compelling narrative. The Core Knowledge Sequence (the specification) defines WHAT students should know; the books deliver HOW.
+E.D. Hirsch's Core Knowledge approach embeds factual knowledge in compelling narrative. The Core Knowledge Sequence defines WHAT students should know; the books deliver HOW.
 
 Our curriculum nodes already mirror this: rich prose descriptions with dates, names, and events embedded. What's missing is extracting those facts into structured, testable form.
 
 The user's framing: "If I know what happened in 1492 in Spain and Italy, that makes anything I read about that period so much more interesting." Facts are the scaffolding that makes deeper reading possible.
 
-## Reference Formats
+## Design Decisions (Session 42)
 
-### AP (College Board) — Most Structured
-Hierarchy: Period > Key Concept (KC) > Sub-points > Illustrative Examples
-```
-KC-1.1.I.A: "Italian Renaissance humanists, including Petrarch,
-             promoted a revival in classical literature..."
-```
-- Key Concepts are testable statements with specific names, dates, movements
-- Illustrative examples are optional depth (teachers choose which to cover)
-- Very specific about WHAT to know at each level
+### No Bloom Taxonomy
 
-### IB (International Baccalaureate) — Concept-Driven
-- "Understandings": declarative statements ("internal energy is...")
-- "Applications and Skills": action verbs (solve, calculate, explain)
-- "Linking Questions": cross-references between topics
-- Explicitly does NOT do facts-first — embeds facts in conceptual frameworks
-- **Not our model** — too skills-focused for knowledge scaffolding
+The original design used Bloom levels (`remember`, `understand`, `analyze`, `evaluate`) to gate question progression. **Dropped in session 42** because:
+- A "connection" question like "Himera was fought the same day as which Greek battle?" was classified as `understand` but it's pure recall
+- Bloom levels were being used as a proxy for dependency ordering, which is better handled by priority + type
+- The cognitive classification added complexity without changing behavior
 
-### Core Knowledge (E.D. Hirsch) — Knowledge-Rich
-- Specific factual knowledge organized by grade level
-- Narrative delivery (prose with embedded dates, names, events)
-- Cumulative: knowledge builds year over year
-- **Closest to our philosophy** — facts as shared cultural/intellectual scaffolding
+### No Explicit Dependencies (`depends_on`)
 
-## Proposed Schema: `key_facts` on Curriculum Nodes
+The original design had explicit `depends_on` arrays between facts. **Dropped** because:
+- Pattern-based ordering handles 90% of cases: `event → date → person → connection → significance` maps naturally to priority 1 → 2 → 3
+- "Don't ask when X happened if we don't know what X is" is a heuristic, not a per-fact dependency
+- Cross-node dependencies are already handled by `curriculum_prerequisites` (the DAG between nodes)
+- Entity intro cards handle the remaining edge case (unknown entities referenced in a question)
+- Getting the wrong answer is a learning opportunity, not a failure — the rich_answer teaches context
 
-Each curriculum node gets a `key_facts` JSON array, populated once at curriculum enrichment time:
+### Entity References on Every Fact
+
+Every key_fact has an `entities` array linking to `shared_entities`. This enables:
+- **Cross-curriculum dedup**: same entity + same fact type = test once, credit both curricula
+- **Entity exploration portals**: tap an entity → map, timeline, all facts about it, "tell me more"
+- **Entity intro cards**: system knows which entities a fact requires, can insert intros for unknown ones
+- **Depth tracking**: how many facts does the user know about entity X across all curricula?
+
+### Rich Cards from Structured Data (not just LLM prose)
+
+Every card flip is a learning opportunity. Rich context can often be composed from structured data:
+- **DATE facts**: mini-timeline from other known dates within ±100 years
+- **PLACE facts**: map pin from `shared_entities.latitude/longitude` + nearby known places
+- **PERSON facts**: entity card with dates, locations, per-curriculum lenses
+- **CONNECTION facts**: both entities side by side with knowledge states
+
+Pre-written `rich_answer` text is a fallback for significance/analytical facts where templates don't work. The client renders structured data when available, falls back to rich_answer text.
+
+### Growing Knowledge Map: Entities Accumulate Depth
+
+**Curricula are bounded** (that's the point — a teacher made deliberate choices). But **entities grow** as the user goes deeper.
+
+Three mechanisms:
+1. **Microlearning promotion**: when a microlearning card survives review (stability > 7 days), its core fact promotes to the entity
+2. **Book-evidence extraction**: when 3+ book chapters reference the same entity, extract additional facts from accumulated evidence
+3. **Auto-curriculum generation** (future): when entity depth is sufficient, generate a focused curriculum (e.g., "Plato: A Semester Course" from accumulated Plato knowledge)
+
+This means `shared_entities` can also have a `key_facts` column — entity-level facts that supplement curriculum-level facts.
+
+## Finalized Schema: `key_facts` on Curriculum Nodes
 
 ```json
 {
   "key_facts": [
     {
+      "id": "himera_date",
       "type": "date",
-      "question": "When was the Battle of Himera?",
-      "answer": "480 BC",
       "priority": 1,
-      "bloom": "remember"
+      "question": "In what year was the Battle of Himera fought?",
+      "answer": "480 BC — tradition holds it was fought on the very same day as the Battle of Salamis in Greece.",
+      "entities": ["himera", "gelon"]
     },
     {
-      "type": "person",
-      "question": "Who defeated the Carthaginians at Himera?",
-      "answer": "Gelon, tyrant of Syracuse",
-      "priority": 1,
-      "bloom": "remember"
-    },
-    {
+      "id": "himera_who",
       "type": "event",
-      "question": "What did Gelon build with the spoils of Himera?",
-      "answer": "Syracuse into a metropolis, including the Temple of Athena (columns still stand in Syracuse Cathedral)",
-      "priority": 2,
-      "bloom": "remember"
+      "priority": 1,
+      "question": "Who won the Battle of Himera and against whom?",
+      "answer": "The tyrant Gelon of Syracuse crushed a massive Carthaginian invasion on Sicily's north coast.",
+      "entities": ["gelon", "syracuse", "carthage", "himera"]
     },
     {
+      "id": "himera_salamis",
       "type": "connection",
-      "question": "The Battle of Himera was fought the same day as which mainland Greek battle?",
-      "answer": "Battle of Salamis (against Persia) — 480 BC",
       "priority": 2,
-      "bloom": "understand"
+      "question": "How does the Battle of Himera connect to events on mainland Greece?",
+      "answer": "Greek tradition held that Himera and Salamis occurred on the same day, as a coordinated Persian-Carthaginian assault on the Greek world.",
+      "rich_answer": "The synchronicity was probably propaganda — Sicilian Greeks claimed Himera happened on the very day of Salamis, framing themselves as co-defenders of the Greek world against 'barbarian' invasion. Whether literally true or not, the pairing embedded Sicilian Greeks firmly in the Panhellenic narrative.",
+      "entities": ["gelon", "himera", "carthage", "syracuse"]
     },
     {
+      "id": "himera_significance",
       "type": "significance",
-      "question": "Why did Himera matter for Sicilian Greek identity?",
-      "answer": "It let Sicilian Greeks claim they were defenders of Hellenism against the same existential threat (Persia/Carthage) that menaced mainland Greece",
       "priority": 3,
-      "bloom": "understand"
+      "question": "Why did Gelon's victory at Himera reinforce tyranny in Sicily?",
+      "answer": "The victory demonstrated that a strongman could save Greek civilization, intertwining tyranny with military glory in ways that scandalized democratic Athens.",
+      "rich_answer": "...",
+      "entities": ["gelon", "syracuse", "himera"]
     }
   ]
 }
@@ -91,114 +110,138 @@ Each curriculum node gets a `key_facts` JSON array, populated once at curriculum
 - **event**: What happened? What was the outcome?
 - **connection**: What was happening elsewhere? What came before/after?
 - **significance**: Why did this matter? (only after factual foundation is solid)
-- **comparison**: How does this compare to X? (review 3+)
 
 ### Priority Levels
-1. **Load-bearing**: The single most important fact. Test first. (date + key figure usually)
-2. **Framework**: Facts that connect this node to others. Test second.
-3. **Depth**: Significance, comparison, analysis. Test after priorities 1-2 are solid.
+1. **Load-bearing** (2-3 per node): The essential facts. Dates, key figures, key events. Short answers, no rich_answer needed.
+2. **Framework** (1-2 per node): Facts connecting this node to others. Include rich_answer for teaching moment.
+3. **Depth** (0-1 per node): Significance, long-term consequences. Include rich_answer.
 
-### Bloom Progression (Score-Gated)
-- **remember** (priority 1-2): Test until "knew" with stability > 7 days
-- **understand** (priority 3): Only unlock after remember facts are solid
-- **analyze** (LLM-generated): Only after understand is solid (stability > 14 days)
-- **evaluate** (LLM cross-curriculum): Only after analyze (stability > 30 days)
+### Ordering Heuristic (replaces Bloom gating)
+- Priority 1 before priority 2 before priority 3
+- Within same priority: event → date → person → connection → significance
+- Cross-node ordering via `curriculum_prerequisites` (existing DAG)
+- Entity intro cards inserted for unknown entities referenced in upcoming questions
 
 ## Enrichment Pipeline
 
-### One-Time Pass Per Curriculum
-1. Load all nodes for a curriculum
-2. For each node, pass `title + description + date_start + date_end + prerequisites` to LLM
-3. LLM extracts 3-6 key_facts in the structured format above
-4. Human review (optional but recommended for quality)
-5. Store in `key_facts` JSON column on `curriculum_nodes` table
+### Batch-by-Area Extraction
 
-### Why LLM-Assisted, Not Fully Manual
-- 719 nodes × 4-5 facts each = ~3,200 facts — too many to hand-write
-- Node descriptions already contain the facts in prose form
-- LLM extraction is reliable when the source is well-structured curriculum prose (not free-form book text)
-- The curriculum ALREADY defines what's important — LLM just reformats
+Curricula are processed in batches by level-1 area (not node-by-node, not full-curriculum-at-once):
+- Each batch: 6-14 related nodes + relevant entities from `shared_entities`
+- LLM sees enough context for cross-node connections within an area
+- Output is reviewable (~50-70 facts per batch)
+- Entity tagging uses canonical IDs from entity list; provisional IDs for unlisted entities
 
-### Why Not Fully Automated
-- Quality matters: a bad question tested 50 times is worse than no question
-- Review a sample (10-20 nodes per curriculum) to calibrate prompt quality
-- Can iterate the extraction prompt based on review
+### Script: `scripts/extract_key_facts.py`
+
+```bash
+# Extract one area (proof of concept)
+python extract_key_facts.py --curriculum sicily_history_culture_and_legacy --area 0 --entities /tmp/sicily_entities.json
+
+# Extract all areas
+python extract_key_facts.py --curriculum sicily_history_culture_and_legacy --entities /tmp/sicily_entities.json
+
+# Dry run (show prompt)
+python extract_key_facts.py --curriculum sicily_history_culture_and_legacy --area 0 --dry-run
+
+# Load results into SQLite
+python extract_key_facts.py --load results/sicily_key_facts.json
+```
+
+Uses `claude -p` for Opus quality. Results saved to `scripts/key_facts_results/`.
+
+### Sicily Greek Area: Proof of Concept Results (Session 42)
+
+Extracted 66 facts across 14 nodes (4.7 avg per node), 152 entity references.
+Quality assessment:
+- P1 facts are concrete dates/events/people — no vague "characterized by" questions
+- P2 connections are cross-node and cross-curriculum (Agathocles→Scipio, Archimedes→Cicero)
+- Entity tagging includes good provisional IDs for entities not yet in DB (dion, aeschylus, cicero, gorgias, thucydides)
+- rich_answer only on P2-3 facts as designed
 
 ## Question Generation: Deterministic for Facts, LLM for Analysis
 
 ### Reviews 1-2: Deterministic from `key_facts`
 ```python
-def get_question_for_review(node, review_count, last_score):
+def get_question_for_review(node, review_count, question_history):
     facts = node['key_facts']
-    # Pick highest priority fact not yet tested
-    # (tracked via question_history on knowledge_item)
+    # Pick highest priority untested fact
     for fact in sorted(facts, key=lambda f: f['priority']):
-        if fact['bloom'] == 'remember' and not already_tested(fact):
+        if fact['id'] not in question_history:
             return fact
-    # All remember facts tested — cycle through understand
+    # All facts tested — pick lowest-scoring for retry
     ...
 ```
 No LLM call needed. Instant. Deterministic. Reliable.
 
-### Reviews 3-4: LLM with Structured Context
-Pass the node's key_facts (which the user now knows) plus cross-curriculum context to LLM for analytical questions. The LLM BUILDS ON the factual foundation rather than trying to generate facts from prose.
+### Reviews 3+: LLM with Structured Context
+Pass the node's key_facts (which the user now knows) plus cross-curriculum context to LLM for analytical questions. The LLM BUILDS ON the factual foundation.
 
-### Reviews 5+: LLM Cross-Curriculum Synthesis
-When multiple related nodes across curricula are solid (stability > 30 days), generate synthesis questions that span the knowledge graph.
+## Four-Layer Data Architecture
+
+### Layer 1: Curriculum Structure (long-lived, rarely changes)
+- `curriculum_nodes` + `key_facts` — framework + testable facts
+- `curriculum_prerequisites` — DAG between nodes
+- `shared_entities` — people, places, events with coords, dates
+- `entity_curriculum_links` — entity↔node mapping with lenses
+
+### Layer 2: User Knowledge State (long-lived, slowly evolving)
+- `knowledge_states` — per-node: knowledge level, interest, confidence
+- `knowledge_items` — per-node review scheduling: stability, due date, sources, question_history
+
+### Layer 3: Content & Evidence (grows with pipeline + reading)
+- Articles, claims, embeddings, similarity pairs
+- Book chapters → node mapping → sources array on knowledge_items
+- Voice recall → analysis → knowledge state updates
+- Microlearning cards → entity-level depth accumulation
+
+### Layer 4: Review Card (ephemeral, generated per request)
+- `cached_question` on knowledge_items — regenerated when stale
+- Review stream assembly: scoring, ordering, domain interleaving
+- Entity span annotations, entity intro cards
+- Rich context composition from structured data
 
 ## Cross-Curriculum Integration
 
 ### Shared Facts via Entities
-The 25 cross-curriculum entities (Rome, Syracuse, Athens, etc.) already link nodes across curricula. When the same fact appears in multiple curricula (e.g., "Fall of Constantinople 1453" in both Byzantine and Islamic), it should be:
-- **Tested once** (whichever curriculum the user is studying first)
+The 54+ entities per curriculum link nodes across curricula. When the same fact appears in multiple curricula (e.g., "Fall of Constantinople 1453" in both Byzantine and Islamic), it should be:
+- **Tested once** (whichever curriculum the user encounters first)
 - **Cross-referenced**: "You know this from Byzantine history. In Islamic history, this same event is seen as..."
-- **Deduplicated in the review queue**: don't test the same date twice from two curricula
+- **Deduplicated in the review queue** via shared entity_ids on key_facts
 
-### User Inquiry Integration
-- **Microlearning cards** (from follow-up queries) enrich parent node's key_facts if the user demonstrates retention
-- **Voice recall wonderings** map to nearest curriculum node and create microlearning
-- **Tier 3 proposals** (rare): when inquiry clusters form far from any node, propose new curriculum expansion
-
-## Long-Term User Journeys
-
-### Active Reader (2-3 books/month)
-- Month 1-2: Factual recall dominates (dates, names, events)
-- Month 3-4: Analytical questions emerge as facts stabilize
-- Month 5-6: Cross-curriculum synthesis, capstone questions
-- FSRS steady state: ~20-30 due items/day despite growing corpus
-
-### Sporadic Reader (3-week gap)
-- Welcome-back triage: 10 curated items, not 80 overdue
-- Gap decay: stability × 0.5, not reset to 1.0
-- Frame positively: "45 solid facts maintained" not "82 overdue"
-
-### Deep Diver (heavy fractal exploration)
-- Auto-expire unreviewed microlearning after 14 days
-- Reanchor to curriculum after depth 3 in exploration chain
-- Soft inquiry budget per session
+### Entity Depth Accumulation
+When a user goes deep on a topic (multiple books, microlearning, voice recall), depth accumulates on the **entity**, not the curriculum node:
+1. Promoted microlearning facts → entity key_facts
+2. Book-evidence extraction → entity key_facts
+3. Future: auto-generate entity-focused curricula when depth is sufficient
 
 ## Implementation Plan
 
-### Phase 1: key_facts Enrichment (this session or next)
-1. Add `key_facts TEXT DEFAULT '[]'` column to `curriculum_nodes`
-2. Write extraction prompt + pipeline script
-3. Run on Sicily curriculum (70 nodes) as proof of concept
-4. Review quality, iterate prompt
-5. Run on remaining 8 curricula
+### Phase 1: key_facts Enrichment ← CURRENT (Session 42)
+1. ✅ Add `key_facts` column to `curriculum_nodes` (migration in db.py)
+2. ✅ Write `extract_key_facts.py` with batch-by-area approach
+3. ✅ Run on Sicily Greek area (14 nodes, 66 facts) — quality validated
+4. Run on remaining 6 Sicily areas
+5. Run on remaining 8 curricula (need entity data per curriculum)
+6. Load into server SQLite
 
 ### Phase 2: Deterministic Question Generation
 1. Modify `generate_question()` to use key_facts for reviews 1-2
-2. Track which facts have been tested in `question_history`
-3. Score-gate progression: don't escalate Bloom level until facts are solid
+2. Track which fact IDs have been tested in `question_history`
+3. Priority-gated progression: don't show P2 until P1 facts are known
 
-### Phase 3: Cross-Curriculum and Synthesis
-1. Deduplicate shared facts across curricula
-2. Generate bridge questions when related nodes are stable
-3. Capstone synthesis questions for mature knowledge clusters
+### Phase 3: Rich Card Rendering
+1. Structured data composition (timeline, map, entity cards) on client
+2. Fallback to rich_answer text when structured data insufficient
+
+### Phase 4: Cross-Curriculum and Entity Depth
+1. Deduplicate shared facts across curricula via entity IDs
+2. Microlearning promotion to entity key_facts
+3. Entity-focused auto-curriculum generation (when depth is sufficient)
 
 ## References
-- E.D. Hirsch, "Cultural Literacy" (1987) — the original case for shared factual knowledge
-- E.D. Hirsch, "What Your Sixth Grader Needs to Know" (1993) — Core Knowledge Series
-- Core Knowledge Sequence — the specification (coreknowledge.org)
-- AP European History Curriculum Framework — College Board (publicly available)
-- Design research agent analysis (session 41) — cross-curriculum, user journeys, Bloom progression
+- E.D. Hirsch, "Cultural Literacy" (1987)
+- Core Knowledge Sequence — coreknowledge.org
+- AP European History Curriculum Framework — College Board
+- Session 41 review consolidation memory
+- Session 34 overlapping curricula vision (`research/overlapping-curricula-vision.md`)
