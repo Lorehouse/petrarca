@@ -13,7 +13,6 @@ import {
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
-import DoubleRule from '../../components/DoubleRule';
 import EntitySheet from '../../components/EntitySheet';
 import AncientMap from '../../components/AncientMap';
 
@@ -526,11 +525,8 @@ function EntityIntroCard({
 
 // ── Main Screen ─────────────────────────────────────────────────────
 
-type Tab = 'cards' | 'voice';
-
 export default function ReviewScreen() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('cards');
   const [items, setItems] = useState<ResurfacingItem[]>([]);
   const [streamMeta, setStreamMeta] = useState<Partial<ReviewStreamResponse>>({});
   const [loading, setLoading] = useState(true);
@@ -580,8 +576,8 @@ export default function ReviewScreen() {
 
   useFocusEffect(useCallback(() => {
     setFeedbackContext({ screen: 'review' });
-    if (tab === 'cards') loadStream(true);
-  }, [tab]));
+    loadStream(true);
+  }, []));
 
   // Auto-load more when nearing end of items
   const maybeLoadMore = useCallback(() => {
@@ -692,8 +688,8 @@ export default function ReviewScreen() {
   // Log each new card shown
   React.useEffect(() => {
     const item = items[currentIndex];
-    if (item && tab === 'cards') logCardShown(item);
-  }, [currentIndex, items.length, tab]);
+    if (item) logCardShown(item);
+  }, [currentIndex, items.length]);
 
   const currentItem = items[currentIndex];
   const reviewedCount = currentIndex;
@@ -704,43 +700,20 @@ export default function ReviewScreen() {
   return (
     <View style={s.container}>
       <ScrollView contentContainerStyle={s.content}>
-        {/* Header */}
+        {/* Minimal top bar */}
         <View style={s.header}>
-          <View style={s.titleRow}>
-            <Text style={s.screenTitle}>Review</Text>
+          <View style={s.topActions}>
+            <Pressable onPress={() => router.push('/voice-elicitation')} style={s.voiceBtn}>
+              <Text style={s.voiceBtnText}>{'\uD83C\uDF99'} Voice</Text>
+            </Pressable>
             <Pressable onPress={() => setDrawerOpen(true)} style={s.drawerBtn}>
               <Text style={s.drawerBtnText}>{'\u2726'}</Text>
             </Pressable>
           </View>
-          <DoubleRule />
-
-          {/* Tab switcher */}
-          <View style={s.tabRow}>
-            <Pressable
-              style={[s.tabBtn, tab === 'cards' && s.tabBtnActive]}
-              onPress={() => setTab('cards')}
-            >
-              <Text style={[s.tabText, tab === 'cards' && s.tabTextActive]}>Cards</Text>
-            </Pressable>
-            <Pressable
-              style={[s.tabBtn, false && s.tabBtnActive]}
-              onPress={() => router.push('/voice-elicitation')}
-            >
-              <Text style={[s.tabText]}>Voice</Text>
-            </Pressable>
-          </View>
-
-          {tab === 'cards' && !loading && (
-            <Text style={s.statsLine}>
-              {reviewedCount > 0 ? `${reviewedCount} reviewed · ` : ''}
-              {dueCount} due · {totalCandidates} in pool · {domainCount} curricula
-            </Text>
-          )}
         </View>
 
-        {/* ── Cards tab ────────────────────────────────────────── */}
-        {tab === 'cards' && (
-          <>
+        {/* ── Card stream ──────────────────────────────────────── */}
+        <>
             {loading && (
               <View style={s.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.rubric} />
@@ -804,10 +777,7 @@ export default function ReviewScreen() {
                 <ActivityIndicator size="small" color={colors.textMuted} />
               </View>
             )}
-          </>
-        )}
-
-        {/* ── Voice tab: navigate immediately ─────────────────── */}
+        </>
       </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
@@ -884,17 +854,12 @@ const s = StyleSheet.create({
     paddingBottom: 60,
     ...(Platform.OS === 'web' ? { maxWidth: layout.readingMeasure + 2 * layout.screenPadding, width: '100%', alignSelf: 'center' as const } : {}),
   },
-  header: { paddingHorizontal: layout.screenPadding, paddingTop: Platform.OS === 'ios' ? 56 : 16, paddingBottom: 8 },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  screenTitle: { fontFamily: fonts.displaySemiBold, fontSize: 28, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  header: { paddingHorizontal: layout.screenPadding, paddingTop: Platform.OS === 'ios' ? 56 : 12, paddingBottom: 4 },
+  topActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
+  voiceBtn: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 },
+  voiceBtnText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textSecondary },
   drawerBtn: { padding: 8 },
   drawerBtnText: { fontSize: 18, color: colors.rubric },
-  tabRow: { flexDirection: 'row', gap: 0, marginTop: 12, marginBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
-  tabBtn: { paddingVertical: 8, paddingHorizontal: 20, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabBtnActive: { borderBottomColor: colors.rubric },
-  tabText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  tabTextActive: { color: colors.ink },
-  statsLine: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary, marginTop: 4 },
   loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.rubric, textAlign: 'center', paddingVertical: 20, paddingHorizontal: layout.screenPadding },
@@ -904,10 +869,4 @@ const s = StyleSheet.create({
   newSessionBtn: { marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 24, paddingVertical: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, alignItems: 'center' },
   newSessionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
   loadingMoreRow: { alignItems: 'center', paddingVertical: 16 },
-  // Voice tab
-  voiceSection: { paddingHorizontal: layout.screenPadding, paddingTop: 20 },
-  voiceTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 12, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
-  voiceDesc: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody, marginBottom: 20 },
-  voiceLaunchBtn: { borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 14, alignItems: 'center', backgroundColor: 'rgba(139,37,0,0.03)' },
-  voiceLaunchText: { fontFamily: fonts.body, fontSize: 15, color: colors.rubric },
 });

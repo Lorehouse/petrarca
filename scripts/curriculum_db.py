@@ -842,11 +842,32 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
             candidates.append((score, item))
 
-        # Sort by score (highest first)
-        candidates.sort(key=lambda x: x[0], reverse=True)
+        # ── Interleave domains for variety ───────────────────────────
+        # Group by domain, sort each group by score, then round-robin
+        from collections import defaultdict
+        domain_groups: dict[str, list] = defaultdict(list)
+        for score, item in candidates:
+            domain_groups[item['curriculum_domain']].append((score, item))
+        for g in domain_groups.values():
+            g.sort(key=lambda x: x[0], reverse=True)
+
+        # Round-robin across domains (largest groups first)
+        sorted_domains = sorted(domain_groups.keys(),
+                                key=lambda d: len(domain_groups[d]), reverse=True)
+        interleaved = []
+        idx = 0
+        while len(interleaved) < len(candidates):
+            added = False
+            for d in sorted_domains:
+                if idx < len(domain_groups[d]):
+                    interleaved.append(domain_groups[d][idx])
+                    added = True
+            if not added:
+                break
+            idx += 1
 
         # Apply offset and limit for infinite river pagination
-        selected = candidates[offset:offset + limit]
+        selected = interleaved[offset:offset + limit]
 
         # ── Build response items ─────────────────────────────────────────
         def _parse_json_safe(val, default=None):
