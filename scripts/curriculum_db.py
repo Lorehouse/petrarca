@@ -554,29 +554,10 @@ def get_coverage_report(domain_id: str, conn=None) -> dict | None:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# RETRIEVAL QUESTIONS
+# RETRIEVAL QUESTIONS — ARCHIVED
+# Table still exists with 19 Sicily questions but is no longer read/written.
+# Review stream now uses knowledge_items exclusively.
 # ═════════════════════════════════════════════════════════════════════════════
-
-def get_retrieval_questions(domain_id: str, node_id: str | None = None, conn=None) -> list[dict]:
-    """Get retrieval questions, optionally filtered by node."""
-    own = conn is None
-    if own:
-        conn = get_connection(readonly=True)
-    try:
-        if node_id:
-            rows = conn.execute(
-                'SELECT * FROM retrieval_questions WHERE domain_id = ? AND node_id = ?',
-                (domain_id, node_id)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                'SELECT * FROM retrieval_questions WHERE domain_id = ?',
-                (domain_id,)
-            ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        if own:
-            conn.close()
 
 
 def get_timeline(domain_id: str, conn=None) -> list[dict]:
@@ -1003,144 +984,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             conn.close()
 
 
-def generate_review_session(domain_filter: str | None = None, conn=None) -> dict:
-    """Legacy wrapper — delegates to generate_review_stream for backwards compat."""
-    result = generate_review_stream(domain_filter=domain_filter, limit=20, conn=conn)
-    # Map to old format expected by frontend
-    result['id'] = f'cr_{int(time.time())}'
-    result['total_questions_in_pool'] = result['total_items']
-    return result
-
-
-def record_review_result(question_id: str, result: str, session_id: str | None = None,
-                         conn=None):
-    """Record the result of answering a review question. Updates schedule + knowledge state."""
-    own = conn is None
-    if own:
-        conn = get_connection()
-    try:
-        now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        now_ms = int(time.time() * 1000)
-
-        # Insert into history
-        conn.execute(
-            'INSERT INTO review_history (question_id, result, reviewed_at, session_id) VALUES (?,?,?,?)',
-            (question_id, result, now, session_id)
-        )
-
-        # Upsert schedule
-        existing = conn.execute(
-            'SELECT review_count, stability_days FROM review_schedule WHERE question_id = ?',
-            (question_id,)
-        ).fetchone()
-
-        if existing:
-            count = existing['review_count']
-            stability = existing['stability_days']
-            # Map graded results to scheduling categories
-            is_strong = result in ('correct', 'exact_year', 'all_correct')
-            is_partial = result in ('partial', 'right_decade', 'mostly_right')
-            is_weak = result in ('right_century',)
-            # is_fail = result in ('wrong', 'missed')
-
-            if is_strong:
-                new_count = count + 1
-                new_stability = min(stability * 2.0, 365)
-            elif is_partial:
-                new_count = count + 1
-                new_stability = stability * 1.3
-            elif is_weak:
-                # Knows something but fuzzy — short interval to reinforce
-                new_count = count
-                new_stability = max(1.0, stability * 0.7)
-            else:  # wrong/missed
-                new_count = max(1, count - 1)
-                new_stability = max(1.0, stability * 0.4)
-
-            due_at = now_ms + int(new_stability * 24 * 3600 * 1000)
-            conn.execute(
-                '''UPDATE review_schedule
-                   SET review_count=?, last_reviewed_at=?, last_result=?,
-                       stability_days=?, due_at=?
-                   WHERE question_id=?''',
-                (new_count, now_ms, result, new_stability, due_at, question_id)
-            )
-        else:
-            is_strong = result in ('correct', 'exact_year', 'all_correct')
-            is_fail = result in ('wrong', 'missed')
-            stability = 1.0 if is_fail else (3.0 if is_strong else 1.5)
-            due_at = now_ms + int(stability * 24 * 3600 * 1000)
-            conn.execute(
-                '''INSERT INTO review_schedule
-                   (question_id, review_count, last_reviewed_at, last_result, stability_days, due_at)
-                   VALUES (?,?,?,?,?,?)''',
-                (question_id, 1, now_ms, result, stability, due_at)
-            )
-
-        # Update knowledge state for the node this question tests
-        q_row = conn.execute(
-            'SELECT domain_id, node_id FROM retrieval_questions WHERE id = ?',
-            (question_id,)
-        ).fetchone()
-        if q_row and q_row['node_id']:
-            # Graded confidence adjustments — date questions have finer granularity
-            confidence_delta = {
-                'correct': 0.05, 'exact_year': 0.08, 'all_correct': 0.06,
-                'partial': 0.0, 'right_decade': 0.02, 'mostly_right': 0.02,
-                'right_century': -0.02,
-                'wrong': -0.1, 'missed': -0.1,
-            }.get(result, 0)
-            ks = conn.execute(
-                'SELECT confidence FROM knowledge_states WHERE domain_id=? AND node_id=?',
-                (q_row['domain_id'], q_row['node_id'])
-            ).fetchone()
-            if ks:
-                new_conf = max(0.0, min(1.0, (ks['confidence'] or 0) + confidence_delta))
-                conn.execute(
-                    'UPDATE knowledge_states SET confidence=?, last_evidence=? WHERE domain_id=? AND node_id=?',
-                    (new_conf, now, q_row['domain_id'], q_row['node_id'])
-                )
-
-        if own:
-            conn.commit()
-    finally:
-        if own:
-            conn.close()
-
-
-def get_review_status(conn=None) -> dict:
-    """Get curriculum review stats."""
-    own = conn is None
-    if own:
-        conn = get_connection(readonly=True)
-    try:
-        total_q = conn.execute('SELECT COUNT(*) FROM retrieval_questions').fetchone()[0]
-        reviewed = conn.execute(
-            'SELECT COUNT(*) FROM review_schedule WHERE review_count > 0'
-        ).fetchone()[0]
-        correct = conn.execute(
-            "SELECT COUNT(*) FROM review_schedule WHERE last_result = 'correct'"
-        ).fetchone()[0]
-        wrong = conn.execute(
-            "SELECT COUNT(*) FROM review_schedule WHERE last_result = 'wrong'"
-        ).fetchone()[0]
-        total_reviews = conn.execute('SELECT COUNT(*) FROM review_history').fetchone()[0]
-
-        domains = conn.execute(
-            'SELECT DISTINCT domain_id FROM retrieval_questions'
-        ).fetchall()
-
-        return {
-            'total_retrieval_questions': total_q,
-            'reviewed_at_least_once': reviewed,
-            'last_correct': correct,
-            'last_wrong': wrong,
-            'total_reviews': total_reviews,
-            'domains': [d['domain_id'] for d in domains],
-        }
-    finally:
-        if own:
-            conn.close()
+# generate_review_session(), record_review_result(), get_review_status() removed —
+# retrieval_questions/review_schedule tables archived.
+# Scoring now goes through review_engine.record_answer() exclusively.
 
 
 # ═════════════════════════════════════════════════════════════════════════════

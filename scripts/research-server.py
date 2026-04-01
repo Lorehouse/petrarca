@@ -65,9 +65,8 @@ from curriculum_db import (
     load_knowledge_states, update_knowledge, get_coverage_report,
     map_book_to_curriculum, get_book_curriculum_context,
     import_assessment_answers,
-    get_retrieval_questions, get_timeline,
-    generate_review_session, generate_review_stream,
-    record_review_result, get_review_status,
+    get_timeline,
+    generate_review_stream,
 )
 # Functions not yet migrated to SQLite — still use JSON files
 from curriculum import (
@@ -3868,20 +3867,16 @@ JSON array only:"""
             self._send_json_response(500, {'error': str(e)})
 
     def _handle_curriculum_review_result(self):
-        """POST /curriculum/review/result — record result for a review question.
-
-        Now routes to review_engine.record_answer() for knowledge_items,
-        falls back to old record_review_result() for legacy retrieval_questions.
-        """
+        """POST /curriculum/review/result — record result for a review question."""
         content_length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(content_length))
         question_id = body.get('question_id')
-        result = body.get('result')  # 'knew', 'partly', 'missed' (or legacy: 'correct', 'partial', 'wrong')
+        result = body.get('result')
         if not question_id or not result:
             self._send_json_response(400, {'error': 'question_id and result required'})
             return
 
-        # Map legacy grading to knowledge_items scores if needed
+        # Map any legacy grading terms
         RESULT_MAP = {
             'correct': 'knew', 'partial': 'partly', 'wrong': 'missed',
             'exact_year': 'knew', 'right_decade': 'partly', 'right_century': 'partly',
@@ -3889,29 +3884,23 @@ JSON array only:"""
         }
         mapped_result = RESULT_MAP.get(result, result)
 
-        # Try knowledge_items first (the new unified path)
         from db import get_connection
+        from review_engine import record_answer
         conn = get_connection()
         try:
-            ki = conn.execute('SELECT id FROM knowledge_items WHERE id=?', (question_id,)).fetchone()
-            if ki:
-                from review_engine import record_answer
-                resp = record_answer(question_id, mapped_result, conn)
+            resp = record_answer(question_id, mapped_result, conn)
+            if resp:
                 self._send_json_response(200, {'status': 'recorded', **resp})
             else:
-                # Fall back to legacy retrieval_questions path
-                conn.close()
-                record_review_result(question_id, result)
-                self._send_json_response(200, {'status': 'recorded'})
+                self._send_json_response(404, {'error': f'item {question_id} not found'})
         except Exception as e:
-            conn.close()
             print(f'[review/result] Error: {e}', flush=True)
             import traceback; traceback.print_exc()
             self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
 
-    def _handle_curriculum_review_status(self):
-        """GET /curriculum/review/status — get curriculum review stats."""
-        self._send_json_response(200, get_review_status())
+    # _handle_curriculum_review_status removed — retrieval_questions table archived
 
     def _handle_microlearning_request(self):
         """POST /review/microlearning — trigger microlearning research for a query."""
@@ -5510,8 +5499,6 @@ JSON array only:"""
             return
         if self.path == '/book/resurfacing/status':
             return self._handle_resurfacing_status()
-        if self.path == '/curriculum/review/status':
-            return self._handle_curriculum_review_status()
         if self.path == '/entities' or self.path.startswith('/entities?'):
             return self._handle_entities_list()
         if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap'):
@@ -5519,9 +5506,7 @@ JSON array only:"""
         if self.path.startswith('/curriculum/review/timeline/'):
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
             return self._send_json_response(200, {'timeline': get_timeline(domain_id)})
-        if self.path.startswith('/curriculum/review/questions/'):
-            domain_id = self.path.split('/curriculum/review/questions/')[1].split('?')[0]
-            return self._send_json_response(200, {'questions': get_retrieval_questions(domain_id)})
+        # /curriculum/review/questions/ endpoint retired (retrieval_questions table archived)
         if self.path.startswith('/kindle/library'):
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):
