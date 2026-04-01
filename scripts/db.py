@@ -605,6 +605,30 @@ CREATE TABLE IF NOT EXISTS entity_curriculum_links (
     PRIMARY KEY (entity_id, domain_id, node_id)
 );
 
+-- Microlearning cards: research-driven short-form content in the review stream
+CREATE TABLE IF NOT EXISTS microlearning_cards (
+    id TEXT PRIMARY KEY,
+    query TEXT NOT NULL,
+    source_item_id TEXT,                -- knowledge_item that spawned this
+    source_node_id TEXT,
+    source_domain TEXT,
+    content TEXT NOT NULL,              -- 3-4 paragraph answer
+    question TEXT,                      -- assessment question about the content
+    answer_guidance TEXT,
+    follow_up_queries TEXT DEFAULT '[]', -- JSON array of 3 next queries
+    curriculum_nodes TEXT DEFAULT '[]',  -- JSON array of linked node_ids
+    entities TEXT DEFAULT '[]',          -- JSON array of entity references
+    status TEXT DEFAULT 'pending',       -- pending, processing, completed, failed
+    stability_days REAL DEFAULT 1.0,
+    due_at INTEGER DEFAULT 0,
+    last_reviewed_at INTEGER,
+    review_count INTEGER DEFAULT 0,
+    last_score TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ml_status ON microlearning_cards(status);
+CREATE INDEX IF NOT EXISTS idx_ml_due ON microlearning_cards(due_at);
+
 -- 20Q elicitation session logs
 CREATE TABLE IF NOT EXISTS elicitation_sessions (
     id TEXT PRIMARY KEY,

@@ -524,7 +524,7 @@ export interface ChapterInsights {
 // --- Resurfacing types ---
 
 export interface ResurfacingItem {
-  type: 'review' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
+  type: 'review' | 'microlearning' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
   // Review card fields (from knowledge_items)
   question_id?: string;
   question?: string;
@@ -538,6 +538,9 @@ export interface ResurfacingItem {
   temporal_hook?: string;
   curriculum_context?: string;
   anchors?: string[];
+  follow_up_queries?: string[];
+  content?: string;  // microlearning card body
+  query?: string;    // original research query
   review_count?: number;
   last_score?: string;
   stability_days?: number;

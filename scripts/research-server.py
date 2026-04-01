@@ -3913,6 +3913,35 @@ JSON array only:"""
         """GET /curriculum/review/status — get curriculum review stats."""
         self._send_json_response(200, get_review_status())
 
+    def _handle_microlearning_request(self):
+        """POST /review/microlearning — trigger microlearning research for a query."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        query = body.get('query', '').strip()
+        source_item_id = body.get('source_item_id')
+        source_node_id = body.get('source_node_id')
+        source_domain = body.get('source_domain')
+        if not query:
+            self._send_json_response(400, {'error': 'query required'})
+            return
+        try:
+            from review_engine import create_microlearning_request
+            card_id = create_microlearning_request(
+                query=query,
+                source_item_id=source_item_id,
+                source_node_id=source_node_id,
+                source_domain=source_domain,
+            )
+            self._send_json_response(202, {
+                'id': card_id,
+                'status': 'processing',
+                'query': query,
+            })
+        except Exception as e:
+            print(f'[microlearning] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
     def _handle_entities_list(self):
         """GET /entities?type=place — list entities, optionally filtered by type."""
         from urllib.parse import urlparse, parse_qs
@@ -4868,6 +4897,8 @@ JSON array only:"""
             return self._handle_curriculum_review_generate()
         if self.path == '/curriculum/review/result':
             return self._handle_curriculum_review_result()
+        if self.path == '/review/microlearning':
+            return self._handle_microlearning_request()
         if self.path == '/entity/tap':
             return self._handle_entity_tap()
         if self.path == '/book/process-kindle':

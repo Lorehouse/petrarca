@@ -415,6 +415,28 @@ export async function generateCurriculumReview(
   };
 }
 
+// --- Microlearning Research API ---
+
+export async function triggerMicrolearning(opts: {
+  query: string;
+  sourceItemId?: string;
+  sourceNodeId?: string;
+  sourceDomain?: string;
+}): Promise<{ id: string; status: string; query: string }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/microlearning`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: opts.query,
+      source_item_id: opts.sourceItemId,
+      source_node_id: opts.sourceNodeId,
+      source_domain: opts.sourceDomain,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Microlearning request failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Entity API ---
 
 export async function fetchEntityDetails(

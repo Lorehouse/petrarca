@@ -250,8 +250,14 @@ The answer_guidance should be 2-3 sentences drawn from the curriculum definition
 
 {temporal_context}
 
+Also generate 3 follow-up research queries — interesting questions that go deeper into this concept.
+Each query should be specific enough for a web search and represent a different angle:
+1. A WHY or HOW question (causal depth)
+2. A comparison or connection to another era/place
+3. A surprising detail, debate, or modern relevance angle
+
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history"}}"""
+{{"question":"...","answer_guidance":"2-3 sentences from the curriculum definition covering what a good answer should include","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"brief placement in the larger history","follow_up_queries":["query 1","query 2","query 3"]}}"""
 
 
 QUESTION_GEN_PROMPT = """Generate an analytical review question.
@@ -278,8 +284,14 @@ Lens options:
 
 Keep question under 20 words.
 
+Also generate 3 follow-up research queries — interesting questions that go deeper.
+Each should be specific enough for a web search and explore a different angle:
+1. A deeper causal or structural question
+2. A cross-cultural or cross-period comparison
+3. A surprising detail, historiographic debate, or modern relevance
+
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
+{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"...","follow_up_queries":["query 1","query 2","query 3"]}}"""
 
 
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
@@ -1153,6 +1165,138 @@ def record_answer(item_id: str, score: str, conn) -> dict:
     threading.Thread(target=_regen, daemon=True).start()
 
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
+
+
+# ── Microlearning research ────────────────────────────────────────────────────
+
+MICROLEARNING_PROMPT = """You are a knowledgeable historian and educator. Answer this research question
+concisely but richly, as a microlearning card for a reader studying history and culture.
+
+Research question: {query}
+
+Context — the learner was reviewing this curriculum concept:
+{node_title}: {node_description}
+
+Write:
+1. A clear, engaging answer in 3-4 SHORT paragraphs (total 150-250 words). Include specific
+   names, dates, and vivid details. Write for someone who already has basic knowledge
+   of the period — don't over-explain fundamentals.
+2. One assessment question about the content (test whether they absorbed the key insight)
+3. 3 follow-up research queries for going even deeper
+
+Output JSON only:
+{{"content":"the 3-4 paragraph answer","question":"assessment question about this content","answer_guidance":"1-2 sentence answer to the assessment question","follow_up_queries":["query1","query2","query3"]}}"""
+
+
+def create_microlearning_request(query: str, source_item_id: str | None = None,
+                                  source_node_id: str | None = None,
+                                  source_domain: str | None = None) -> str:
+    """Create a pending microlearning card and return its ID.
+
+    The actual research runs in a background thread.
+    """
+    from db import get_connection
+    card_id = f'ml_{int(time.time())}_{hash(query) % 10000:04d}'
+    now_ms = int(time.time() * 1000)
+
+    conn = get_connection()
+    conn.execute('''
+        INSERT OR IGNORE INTO microlearning_cards
+        (id, query, source_item_id, source_node_id, source_domain,
+         content, status, created_at)
+        VALUES (?, ?, ?, ?, ?, '', 'pending', ?)
+    ''', (card_id, query, source_item_id, source_node_id, source_domain, now_ms))
+    conn.commit()
+    conn.close()
+
+    # Run research in background
+    threading.Thread(
+        target=_run_microlearning_research,
+        args=(card_id, query, source_node_id, source_domain),
+        daemon=True
+    ).start()
+
+    return card_id
+
+
+def _run_microlearning_research(card_id: str, query: str,
+                                 node_id: str | None, domain_id: str | None):
+    """Background: run search + LLM, fill in the microlearning card."""
+    from db import get_connection
+    from gemini_llm import call_with_search, call_llm as gemini_call
+    try:
+        # Load node context if available
+        node_title = ''
+        node_description = ''
+        if node_id and domain_id:
+            conn = get_connection(readonly=True)
+            row = conn.execute(
+                'SELECT title, description FROM curriculum_nodes WHERE id=? AND domain_id=?',
+                (node_id, domain_id)
+            ).fetchone()
+            conn.close()
+            if row:
+                node_title = row['title']
+                node_description = row['description'] or ''
+
+        # Try Gemini with search grounding first for factual accuracy
+        search_result = None
+        try:
+            search_prompt = f"Research this question thoroughly: {query}"
+            if node_title:
+                search_prompt += f"\nContext: this relates to {node_title}"
+            search_result = call_with_search(search_prompt, max_tokens=2048)
+        except Exception as e:
+            print(f'[microlearning] search failed for {card_id}: {e}', flush=True)
+
+        # Generate structured microlearning card
+        prompt = MICROLEARNING_PROMPT.format(
+            query=query,
+            node_title=node_title or 'General history',
+            node_description=node_description or '(no curriculum context)',
+        )
+        if search_result:
+            prompt += f"\n\nSearch results to incorporate:\n{search_result[:2000]}"
+
+        raw = gemini_call(prompt, max_tokens=1024, response_mime_type='application/json')
+        result = json.loads(raw) if raw else None
+
+        if not result or 'content' not in result:
+            raise ValueError(f'Invalid response: {raw[:200] if raw else "empty"}')
+
+        # Update the card
+        now_ms = int(time.time() * 1000)
+        conn = get_connection()
+        conn.execute('''
+            UPDATE microlearning_cards SET
+                content=?, question=?, answer_guidance=?,
+                follow_up_queries=?, status='completed',
+                due_at=?
+            WHERE id=?
+        ''', (
+            result['content'],
+            result.get('question', ''),
+            result.get('answer_guidance', ''),
+            json.dumps(result.get('follow_up_queries', [])),
+            now_ms,  # due immediately
+            card_id,
+        ))
+        conn.commit()
+        conn.close()
+        print(f'[microlearning] completed {card_id}: {query[:60]}', flush=True)
+
+    except Exception as e:
+        print(f'[microlearning] failed {card_id}: {e}', flush=True)
+        import traceback; traceback.print_exc()
+        try:
+            conn = get_connection()
+            conn.execute(
+                "UPDATE microlearning_cards SET status='failed' WHERE id=?",
+                (card_id,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
 
 # ── Stats ──────────────────────────────────────────────────────────────────────

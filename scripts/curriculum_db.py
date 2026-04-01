@@ -903,8 +903,64 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'stability_days': item['stability_days'],
                 'node_knowledge': item['node_knowledge'],
                 'node_confidence': item['node_confidence'],
+                'follow_up_queries': _parse_json_safe(cq.get('follow_up_queries'), []),
             }
             items.append(card)
+
+        # ── Mix in completed microlearning cards ────────────────────────
+        try:
+            ml_rows = conn.execute('''
+                SELECT * FROM microlearning_cards
+                WHERE status = 'completed'
+                ORDER BY
+                    CASE WHEN review_count = 0 THEN 0 ELSE 1 END,
+                    created_at DESC
+                LIMIT ?
+            ''', (max(3, limit // 4),)).fetchall()
+
+            ml_items = []
+            for r in ml_rows:
+                ml = dict(r)
+                ml_items.append({
+                    'type': 'microlearning',
+                    'question_id': ml['id'],
+                    'question': ml.get('question') or '',
+                    'answer': ml.get('answer_guidance') or '',
+                    'rich_answer': ml.get('answer_guidance') or '',
+                    'answer_type': 'concept',
+                    'content': ml['content'],
+                    'query': ml['query'],
+                    'node_title': '',
+                    'domain': ml.get('source_domain') or '',
+                    'memory_hook': '',
+                    'temporal_hook': '',
+                    'curriculum_context': '',
+                    'anchors': [],
+                    'review_count': ml['review_count'] or 0,
+                    'last_score': ml.get('last_score'),
+                    'stability_days': ml.get('stability_days') or 1.0,
+                    'node_knowledge': 'mentioned',
+                    'node_confidence': 0.5,
+                    'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
+                })
+
+            # Interleave: insert microlearning cards every ~5 review cards
+            if ml_items:
+                merged = []
+                ml_idx = 0
+                for i, item in enumerate(items):
+                    merged.append(item)
+                    if (i + 1) % 5 == 0 and ml_idx < len(ml_items):
+                        merged.append(ml_items[ml_idx])
+                        ml_idx += 1
+                # Append remaining
+                while ml_idx < len(ml_items):
+                    merged.append(ml_items[ml_idx])
+                    ml_idx += 1
+                items = merged
+        except Exception as e:
+            # Table might not exist yet — graceful fallback
+            print(f'[review-stream] microlearning query failed: {e}', flush=True)
 
         # ── Entity annotations ───────────────────────────────────────────
         entity_index = _load_entity_index(conn)

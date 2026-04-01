@@ -8,6 +8,7 @@ import { colors, fonts, layout } from '../../design/tokens';
 import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/types';
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
+  triggerMicrolearning,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -73,11 +74,13 @@ function ReviewCard({
   onResult,
   onSkip,
   onEntityTap,
+  onResearch,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
   onEntityTap: (entityId: string) => void;
+  onResearch: (query: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
@@ -225,6 +228,120 @@ function ReviewCard({
               );
             })}
           </View>
+
+          {/* Follow-up research queries */}
+          {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+            <View style={cs.followUpSection}>
+              <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+              {item.follow_up_queries.map((q, i) => (
+                <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                  <Text style={cs.followUpText}>{q}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Microlearning Card ──────────────────────────────────────────────
+
+function MicrolearningCard({
+  item,
+  onResult,
+  onSkip,
+  onResearch,
+  onEntityTap,
+}: {
+  item: ResurfacingItem;
+  onResult: (result: string) => void;
+  onSkip: () => void;
+  onResearch: (query: string) => void;
+  onEntityTap: (entityId: string) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [graded, setGraded] = useState(false);
+
+  if (graded) {
+    return (
+      <View style={cs.card}>
+        <Text style={cs.responded}>Recorded {'\u2713'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={cs.card}>
+      {/* Header */}
+      <View style={cs.headerRow}>
+        <View style={ml.badge}>
+          <Text style={ml.badgeText}>Research</Text>
+        </View>
+        <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+      </View>
+
+      {/* Content */}
+      <AnnotatedText
+        text={item.content || ''}
+        spans={item.entity_spans?.content}
+        style={ml.content}
+        onEntityTap={onEntityTap}
+      />
+
+      {/* Assessment question */}
+      {item.question && !revealed ? (
+        <View>
+          <Text style={cs.question}>{item.question}</Text>
+          <View style={cs.actionRow}>
+            <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+              <Text style={cs.revealText}>Show answer</Text>
+            </Pressable>
+            <Pressable style={cs.skipButton} onPress={onSkip}>
+              <Text style={cs.skipText}>Skip {'\u2192'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : item.question && revealed ? (
+        <View>
+          <Text style={cs.question}>{item.question}</Text>
+          <View style={cs.answerBox}>
+            <Text style={cs.answerText}>{item.answer}</Text>
+          </View>
+          <View style={cs.gradeRow}>
+            {[
+              { value: 'knew', label: 'Got it', style: 'correct' as const },
+              { value: 'partly', label: 'Partly', style: 'partial' as const },
+              { value: 'missed', label: 'Missed', style: 'wrong' as const },
+            ].map(btn => (
+              <Pressable
+                key={btn.value}
+                style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
+                onPress={() => { onResult(btn.value); setGraded(true); }}
+              >
+                <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
+                  {btn.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : (
+        <Pressable style={cs.skipButton} onPress={onSkip}>
+          <Text style={cs.skipText}>Continue {'\u2192'}</Text>
+        </Pressable>
+      )}
+
+      {/* Follow-up queries */}
+      {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+        <View style={cs.followUpSection}>
+          <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+          {item.follow_up_queries.map((q, i) => (
+            <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+              <Text style={cs.followUpText}>{q}</Text>
+            </Pressable>
+          ))}
         </View>
       )}
     </View>
@@ -454,6 +571,25 @@ export default function ReviewScreen() {
     });
   };
 
+  const handleResearch = (query: string, item?: ResurfacingItem) => {
+    // Extract node context from the current card
+    const sourceNodeId = item?.question_id?.split(':').pop();
+    const sourceDomain = item?.domain;
+    triggerMicrolearning({
+      query,
+      sourceItemId: item?.question_id,
+      sourceNodeId,
+      sourceDomain,
+    }).then(resp => {
+      logEvent('review_research_triggered', {
+        query,
+        card_id: resp.id,
+        source_item: item?.question_id,
+        source_domain: sourceDomain,
+      });
+    }).catch(e => console.warn('[review] research trigger failed:', e));
+  };
+
   const currentItem = items[currentIndex];
   const reviewedCount = currentIndex;
   const dueCount = streamMeta.due_count ?? 0;
@@ -526,12 +662,22 @@ export default function ReviewScreen() {
                     item={currentItem}
                     onContinue={handleEntityIntroContinue}
                   />
+                ) : currentItem.type === 'microlearning' ? (
+                  <MicrolearningCard
+                    key={currentItem.question_id || `ml-${currentIndex}`}
+                    item={currentItem}
+                    onResult={(result) => handleResult(currentItem, result)}
+                    onSkip={() => handleSkip(currentItem)}
+                    onResearch={(q) => handleResearch(q, currentItem)}
+                    onEntityTap={setActiveEntityId}
+                  />
                 ) : (
                   <ReviewCard
                     key={currentItem.question_id || `q-${currentIndex}`}
                     item={currentItem}
                     onResult={(result) => handleResult(currentItem, result)}
                     onSkip={() => handleSkip(currentItem)}
+                    onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
                   />
                 )}
@@ -617,6 +763,16 @@ const cs = StyleSheet.create({
   gradeWrong: { borderColor: colors.rubric, backgroundColor: 'rgba(139,37,0,0.05)' },
   gradeWrongText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
   responded: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.claimNew, textAlign: 'center', paddingVertical: 12, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  followUpSection: { marginTop: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
+  followUpLabel: { fontFamily: fonts.uiMedium, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  followUpBtn: { paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, borderLeftColor: 'rgba(139,37,0,0.2)', backgroundColor: 'rgba(139,37,0,0.02)', borderRadius: 2 },
+  followUpText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.rubric },
+});
+
+const ml = StyleSheet.create({
+  badge: { backgroundColor: '#2a4a6a', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
+  badgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 16 },
 });
 
 const ic = StyleSheet.create({
