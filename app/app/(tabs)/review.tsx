@@ -723,10 +723,10 @@ export default function ReviewScreen() {
               <Text style={[s.tabText, tab === 'cards' && s.tabTextActive]}>Cards</Text>
             </Pressable>
             <Pressable
-              style={[s.tabBtn, tab === 'voice' && s.tabBtnActive]}
-              onPress={() => setTab('voice')}
+              style={[s.tabBtn, false && s.tabBtnActive]}
+              onPress={() => router.push('/voice-elicitation')}
             >
-              <Text style={[s.tabText, tab === 'voice' && s.tabTextActive]}>Voice</Text>
+              <Text style={[s.tabText]}>Voice</Text>
             </Pressable>
           </View>
 
@@ -807,22 +807,7 @@ export default function ReviewScreen() {
           </>
         )}
 
-        {/* ── Voice tab ────────────────────────────────────────── */}
-        {tab === 'voice' && (
-          <View style={s.voiceSection}>
-            <Text style={s.voiceTitle}>{'\u2726'} Voice Recall</Text>
-            <Text style={s.voiceDesc}>
-              Speak freely about a curriculum topic. The system will analyze what you
-              remembered, identify gaps, and capture any questions for research.
-            </Text>
-            <Pressable
-              style={s.voiceLaunchBtn}
-              onPress={() => router.push('/voice-elicitation')}
-            >
-              <Text style={s.voiceLaunchText}>Start free recall {'\u2192'}</Text>
-            </Pressable>
-          </View>
-        )}
+        {/* ── Voice tab: navigate immediately ─────────────────── */}
       </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />

@@ -213,9 +213,31 @@ export default function VoiceElicitation() {
 
   const cand = candidates[current];
 
+  function skipNode() {
+    logEvent('voice_elicitation_skipped', { node_id: cand?.node_id, node_title: cand?.node_title });
+    Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      const nextIdx = current + 1;
+      if (nextIdx >= candidates.length) {
+        setPhase('done');
+      } else {
+        setCurrent(nextIdx);
+        setResult(null);
+        setPhase('prompt');
+      }
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    });
+  }
+
   return (
     <View style={styles.container}>
-      {/* Progress */}
+      {/* Top bar: back + progress */}
+      <View style={styles.topBar}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>{'\u2190'} Back</Text>
+        </Pressable>
+        <Text style={styles.counter}>{current + 1} / {candidates.length}</Text>
+      </View>
+
       <View style={styles.progressOuter}>
         <View style={[styles.progressInner, { width: `${((current) / candidates.length) * 100}%` as any }]} />
       </View>
@@ -243,10 +265,15 @@ export default function VoiceElicitation() {
 
             {/* Recording state */}
             {phase === 'prompt' && (
-              <Pressable style={styles.recordBtn} onPress={startRecording}>
-                <Text style={styles.recordBtnIcon}>{'\u25CE'}</Text>
-                <Text style={styles.recordBtnText}>Start speaking</Text>
-              </Pressable>
+              <View>
+                <Pressable style={styles.recordBtn} onPress={startRecording}>
+                  <Text style={styles.recordBtnIcon}>{'\u25CE'}</Text>
+                  <Text style={styles.recordBtnText}>Start speaking</Text>
+                </Pressable>
+                <Pressable style={styles.skipBtn} onPress={skipNode}>
+                  <Text style={styles.skipBtnText}>Skip {'\u2192'}</Text>
+                </Pressable>
+              </View>
             )}
 
             {phase === 'recording' && (
@@ -341,7 +368,6 @@ export default function VoiceElicitation() {
             )}
           </View>
 
-          <Text style={styles.counter}>{current + 1} / {candidates.length}</Text>
         </Animated.View>
       </ScrollView>
     </View>
@@ -351,10 +377,19 @@ export default function VoiceElicitation() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.parchment },
   centered: { alignItems: 'center', justifyContent: 'center' },
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 12, paddingBottom: 8,
+  },
+  backBtn: { padding: 4 },
+  backBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
+    fontSize: 14, color: colors.rubric,
+  },
   progressOuter: { height: 3, backgroundColor: colors.rule },
   progressInner: { height: 3, backgroundColor: colors.rubric },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingTop: Platform.OS === 'ios' ? 60 : 20 },
+  scrollContent: { padding: 16, paddingTop: 12 },
 
   loadingText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
@@ -467,7 +502,12 @@ const styles = StyleSheet.create({
 
   counter: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
-    fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 4,
+    fontSize: 12, color: colors.textMuted, textAlign: 'center',
+  },
+  skipBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 8 },
+  skipBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
+    fontSize: 13, color: colors.textMuted,
   },
 
   // Summary screen
