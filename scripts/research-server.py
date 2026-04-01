@@ -66,7 +66,8 @@ from curriculum_db import (
     map_book_to_curriculum, get_book_curriculum_context,
     import_assessment_answers,
     get_retrieval_questions, get_timeline,
-    generate_review_session, record_review_result, get_review_status,
+    generate_review_session, generate_review_stream,
+    record_review_result, get_review_status,
 )
 # Functions not yet migrated to SQLite — still use JSON files
 from curriculum import (
@@ -3846,7 +3847,7 @@ JSON array only:"""
         self._send_json_response(200, get_status())
 
     def _handle_curriculum_review_generate(self):
-        """POST /curriculum/review/generate — generate a curriculum retrieval practice session."""
+        """POST /curriculum/review/generate — generate review stream from knowledge_items."""
         content_length = int(self.headers.get('Content-Length', 0))
         body = {}
         if content_length:
@@ -3855,25 +3856,58 @@ JSON array only:"""
             except (json.JSONDecodeError, ValueError):
                 pass
         domain = body.get('domain')
+        limit = body.get('limit', 20)
+        offset = body.get('offset', 0)
         try:
-            session = generate_review_session(domain_filter=domain)
-            self._send_json_response(200, session)
+            result = generate_review_stream(
+                domain_filter=domain, limit=limit, offset=offset)
+            self._send_json_response(200, result)
         except Exception as e:
             print(f'[curriculum/review] Error: {e}', flush=True)
             import traceback; traceback.print_exc()
             self._send_json_response(500, {'error': str(e)})
 
     def _handle_curriculum_review_result(self):
-        """POST /curriculum/review/result — record result for a review question."""
+        """POST /curriculum/review/result — record result for a review question.
+
+        Now routes to review_engine.record_answer() for knowledge_items,
+        falls back to old record_review_result() for legacy retrieval_questions.
+        """
         content_length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(content_length))
         question_id = body.get('question_id')
-        result = body.get('result')  # 'correct', 'partial', 'wrong'
+        result = body.get('result')  # 'knew', 'partly', 'missed' (or legacy: 'correct', 'partial', 'wrong')
         if not question_id or not result:
             self._send_json_response(400, {'error': 'question_id and result required'})
             return
-        record_review_result(question_id, result)
-        self._send_json_response(200, {'status': 'recorded'})
+
+        # Map legacy grading to knowledge_items scores if needed
+        RESULT_MAP = {
+            'correct': 'knew', 'partial': 'partly', 'wrong': 'missed',
+            'exact_year': 'knew', 'right_decade': 'partly', 'right_century': 'partly',
+            'all_correct': 'knew', 'mostly_right': 'partly',
+        }
+        mapped_result = RESULT_MAP.get(result, result)
+
+        # Try knowledge_items first (the new unified path)
+        from db import get_connection
+        conn = get_connection()
+        try:
+            ki = conn.execute('SELECT id FROM knowledge_items WHERE id=?', (question_id,)).fetchone()
+            if ki:
+                from review_engine import record_answer
+                resp = record_answer(question_id, mapped_result, conn)
+                self._send_json_response(200, {'status': 'recorded', **resp})
+            else:
+                # Fall back to legacy retrieval_questions path
+                conn.close()
+                record_review_result(question_id, result)
+                self._send_json_response(200, {'status': 'recorded'})
+        except Exception as e:
+            conn.close()
+            print(f'[review/result] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
 
     def _handle_curriculum_review_status(self):
         """GET /curriculum/review/status — get curriculum review stats."""

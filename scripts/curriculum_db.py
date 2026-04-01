@@ -782,149 +782,178 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
     return item
 
 
-def generate_review_session(domain_filter: str | None = None, conn=None) -> dict:
-    """Generate a curriculum retrieval practice session from the database."""
+def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
+                           offset: int = 0, conn=None) -> dict:
+    """Generate a stream of review cards from knowledge_items.
+
+    Returns an infinite-river style batch: no session boundary, client can
+    request more via offset.  Cards are sorted by priority (due + overdue first,
+    then never-reviewed, weighted by knowledge depth).
+    """
     own = conn is None
     if own:
         conn = get_connection()
     try:
         now_ms = int(time.time() * 1000)
+        soon = now_ms + 24 * 60 * 60 * 1000  # next 24h
 
-        # Query questions with their scheduling state
-        domain_clause = "AND rq.domain_id LIKE ?" if domain_filter else ""
+        # ── Query knowledge_items with knowledge_states ──────────────────
+        domain_clause = "AND ki.curriculum_domain LIKE ?" if domain_filter else ""
         params = [f'%{domain_filter}%'] if domain_filter else []
 
         rows = conn.execute(
-            f'''SELECT rq.id, rq.domain_id, rq.node_id, rq.question, rq.answer,
-                       rq.question_type, rq.node_title, rq.cluster_label,
-                       rq.answer_type, rq.level, rq.anchors, rq.memory_hook,
-                       rq.grading_options, rq.rich_answer,
-                       rs.review_count, rs.last_result, rs.due_at, rs.last_reviewed_at,
+            f'''SELECT ki.id, ki.curriculum_node_id, ki.curriculum_domain,
+                       ki.stability_days, ki.due_at, ki.last_reviewed_at,
+                       ki.last_score, ki.review_count, ki.sources,
+                       ki.cached_question, ki.created_at,
                        COALESCE(ks.knowledge, 'unknown') as node_knowledge,
-                       COALESCE(ks.confidence, 0) as node_confidence
-                FROM retrieval_questions rq
-                LEFT JOIN review_schedule rs ON rq.id = rs.question_id
-                LEFT JOIN knowledge_states ks ON ks.domain_id = rq.domain_id AND ks.node_id = rq.node_id
-                WHERE 1=1 {domain_clause}
-                ORDER BY
-                    CASE WHEN rs.review_count IS NULL OR rs.review_count = 0 THEN 0 ELSE 1 END,
-                    CASE WHEN rs.last_result = 'wrong' THEN 0 ELSE 1 END,
-                    COALESCE(rs.due_at, 0) ASC''',
+                       COALESCE(ks.confidence, 0) as node_confidence,
+                       cn.title as node_title, cn.description as node_description,
+                       cn.level as node_level, cn.date_start as node_date_start
+                FROM knowledge_items ki
+                LEFT JOIN knowledge_states ks
+                  ON ks.domain_id = ki.curriculum_domain
+                  AND ks.node_id = ki.curriculum_node_id
+                LEFT JOIN curriculum_nodes cn
+                  ON cn.id = ki.curriculum_node_id
+                  AND cn.domain_id = ki.curriculum_domain
+                WHERE 1=1 {domain_clause}''',
             params
         ).fetchall()
 
-        # Filter to due or new questions
-        # Prioritize questions about nodes you've actually studied
+        # ── Score and filter candidates ──────────────────────────────────
         candidates = []
         for r in rows:
-            review_count = r['review_count'] or 0
-            due_at = r['due_at'] or 0
-            node_knowledge = r['node_knowledge']
+            item = dict(r)
+            review_count = item['review_count'] or 0
+            due_at = item['due_at'] or 0
+            node_knowledge = item['node_knowledge']
 
-            # Skip questions about topics the user hasn't encountered yet
-            # (they can't retrieve what they never learned)
-            if node_knowledge == 'unknown' and r['question_type'] != 'temporal_ordering':
+            # Skip items with no knowledge state (never encountered the concept)
+            if node_knowledge == 'unknown':
                 continue
 
-            # Knowledge-weighted base score: studied nodes are more valuable to review
+            # Must have a cached question (or we can't show it)
+            if not item.get('cached_question'):
+                continue
+
+            # Knowledge-weighted base score
             knowledge_weight = {
-                'anchored': 8.0, 'engaged': 6.0, 'mentioned': 4.0, 'unknown': 1.0
+                'anchored': 8.0, 'engaged': 6.0, 'mentioned': 4.0,
             }.get(node_knowledge, 2.0)
 
             if review_count == 0:
-                # Never reviewed — high priority, weighted by knowledge
-                candidates.append((knowledge_weight + 2.0 + random.random(), dict(r)))
+                # Never reviewed — high priority
+                score = knowledge_weight + 2.0 + random.random()
             elif due_at <= now_ms:
-                # Due for review
+                # Overdue — highest priority
                 overdue_days = (now_ms - due_at) / (24 * 3600 * 1000)
-                score = knowledge_weight + min(overdue_days * 0.3, 5.0)
-                if r['last_result'] == 'wrong':
+                score = knowledge_weight + min(overdue_days * 0.3, 5.0) + 10.0
+                if item['last_score'] == 'missed':
                     score += 3.0
-                candidates.append((score, dict(r)))
-            # else: not due yet, skip
+            elif due_at <= soon:
+                # Due soon (next 24h)
+                score = knowledge_weight + 1.0
+            else:
+                # Not due yet — include with low priority for infinite river
+                days_until = (due_at - now_ms) / (24 * 3600 * 1000)
+                score = max(0.1, knowledge_weight - days_until * 0.5)
 
-        # Split by type
-        retrieval = [(s, q) for s, q in candidates if q['question_type'] != 'temporal_ordering']
-        ordering = [(s, q) for s, q in candidates if q['question_type'] == 'temporal_ordering']
+            candidates.append((score, item))
 
-        # Sort and select
-        retrieval.sort(key=lambda x: x[0], reverse=True)
-        ordering.sort(key=lambda x: x[0], reverse=True)
+        # Sort by score (highest first)
+        candidates.sort(key=lambda x: x[0], reverse=True)
 
-        selected_retrieval = [q for _, q in retrieval[:QUESTIONS_PER_SESSION]]
-        selected_ordering = [q for _, q in ordering[:ORDERING_PER_SESSION]]
+        # Apply offset and limit for infinite river pagination
+        selected = candidates[offset:offset + limit]
 
-        # Build response items
-        def _parse_json_field(val, default=None):
+        # ── Build response items ─────────────────────────────────────────
+        def _parse_json_safe(val, default=None):
             if val is None:
-                return default or []
+                return default
             if isinstance(val, (list, dict)):
                 return val
             try:
                 return json.loads(val)
             except (json.JSONDecodeError, TypeError):
-                return default or []
+                return default
 
         items = []
-        for q in selected_retrieval:
-            items.append({
-                'type': 'retrieval',
-                'question_id': q['id'],
-                'question': q['question'],
-                'answer': q['answer'],
-                'rich_answer': q.get('rich_answer') or q['answer'],
-                'question_type': q['question_type'],
-                'answer_type': q.get('answer_type') or 'concept',
-                'node_title': q['node_title'],
-                'domain': q['domain_id'],
-                'memory_hook': q.get('memory_hook'),
-                'anchors': _parse_json_field(q.get('anchors'), []),
-                'grading_options': _parse_json_field(q.get('grading_options'), []),
-            })
-        for q in selected_ordering:
-            items.append({
-                'type': 'temporal_ordering',
-                'question_id': q['id'],
-                'question': q['question'],
-                'answer': q['answer'],
-                'rich_answer': q.get('rich_answer') or q['answer'],
-                'answer_type': 'sequence',
-                'cluster_label': q['cluster_label'],
-                'domain': q['domain_id'],
-                'memory_hook': q.get('memory_hook'),
-                'anchors': _parse_json_field(q.get('anchors'), []),
-                'grading_options': _parse_json_field(q.get('grading_options'), []),
-            })
-        # Annotate items with entity spans for tappable entities in frontend
+        for _score, item in selected:
+            cq = _parse_json_safe(item['cached_question'], {})
+            if not cq or not cq.get('question'):
+                continue
+
+            card = {
+                'type': 'review',
+                'question_id': item['id'],  # knowledge_item id for scoring
+                'question': cq['question'],
+                'answer': cq.get('answer_guidance', ''),
+                'rich_answer': cq.get('rich_answer') or cq.get('answer_guidance', ''),
+                'answer_type': cq.get('answer_type', 'concept'),
+                'node_title': item.get('node_title') or item['curriculum_node_id'],
+                'node_description': item.get('node_description', ''),
+                'domain': item['curriculum_domain'],
+                'memory_hook': cq.get('memory_hook') or cq.get('temporal_hook', ''),
+                'temporal_hook': cq.get('temporal_hook', ''),
+                'curriculum_context': cq.get('curriculum_context', ''),
+                'anchors': _parse_json_safe(cq.get('anchors'), []),
+                'review_count': item['review_count'] or 0,
+                'last_score': item['last_score'],
+                'stability_days': item['stability_days'],
+                'node_knowledge': item['node_knowledge'],
+                'node_confidence': item['node_confidence'],
+            }
+            items.append(card)
+
+        # ── Entity annotations ───────────────────────────────────────────
         entity_index = _load_entity_index(conn)
         if entity_index:
             items = [_annotate_item_entities(item, entity_index) for item in items]
 
-        random.shuffle(items)
-
-        # Insert entity intro cards before questions with unknown entity dependencies
+        # Insert entity intro cards for unknown entities
         entity_knowledge = _load_entity_knowledge(conn)
         items = _build_entity_intro_items(items, entity_knowledge, conn)
 
-        count_domain_clause = "AND domain_id LIKE ?" if domain_filter else ""
-        total_questions = conn.execute(
-            f"SELECT COUNT(*) FROM retrieval_questions WHERE 1=1 {count_domain_clause}", params
+        # ── Stats ────────────────────────────────────────────────────────
+        total_items = conn.execute('SELECT COUNT(*) FROM knowledge_items').fetchone()[0]
+        total_with_question = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE cached_question IS NOT NULL'
+        ).fetchone()[0]
+        due_count = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?', (soon,)
         ).fetchone()[0]
 
-        intro_count = sum(1 for it in items if it.get('type') == 'entity_intro')
+        # Count by domain
+        domain_counts = {}
+        for r in conn.execute(
+            'SELECT curriculum_domain, COUNT(*) as c FROM knowledge_items GROUP BY curriculum_domain'
+        ).fetchall():
+            domain_counts[r['curriculum_domain']] = r['c']
+
         return {
-            'id': f'cr_{int(time.time())}',
             'items': items,
             'generated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'domain': domain_filter or 'all',
-            'retrieval_count': len(selected_retrieval),
-            'ordering_count': len(selected_ordering),
-            'intro_count': intro_count,
-            'total_questions_in_pool': total_questions,
+            'offset': offset,
+            'has_more': offset + limit < len(candidates),
+            'total_candidates': len(candidates),
+            'total_items': total_items,
+            'total_with_question': total_with_question,
+            'due_count': due_count,
+            'domain_counts': domain_counts,
         }
     finally:
         if own:
             conn.close()
+
+
+def generate_review_session(domain_filter: str | None = None, conn=None) -> dict:
+    """Legacy wrapper — delegates to generate_review_stream for backwards compat."""
+    result = generate_review_stream(domain_filter=domain_filter, limit=20, conn=conn)
+    # Map to old format expected by frontend
+    result['id'] = f'cr_{int(time.time())}'
+    result['total_questions_in_pool'] = result['total_items']
+    return result
 
 
 def record_review_result(question_id: str, result: str, session_id: str | None = None,
