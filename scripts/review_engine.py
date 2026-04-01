@@ -1007,10 +1007,17 @@ def generate_question(item_id: str, conn) -> dict:
                  if n['id'] == item.get('curriculum_node_id')), None)
 
     # ── Check key_facts FIRST (deterministic, no LLM) ────────────────────────
+    # key_facts live in SQLite (not in curriculum JSON files), so query DB directly
     key_facts = []
-    if node:
+    node_id = item.get('curriculum_node_id')
+    if node_id and domain_id:
         try:
-            key_facts = json.loads(node.get('key_facts') or '[]')
+            kf_row = conn.execute(
+                'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+                (node_id, domain_id)
+            ).fetchone()
+            if kf_row and kf_row['key_facts']:
+                key_facts = json.loads(kf_row['key_facts'])
         except Exception:
             key_facts = []
 
