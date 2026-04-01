@@ -63,3 +63,4 @@ scripts/pipeline-tests/sessions/
 .env
 kindle-email-attachments/
 scripts/data/
+scripts/key_facts_results/
