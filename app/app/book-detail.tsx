@@ -650,7 +650,7 @@ export default function BookDetailScreen() {
           </View>
         )}
         {reviewDueCount > 0 && (
-          <Pressable onPress={() => router.push('/review-session')} style={styles.reviewBadge}>
+          <Pressable onPress={() => router.push('/(tabs)/review')} style={styles.reviewBadge}>
             <Text style={styles.reviewBadgeText}>
               {'\u2726'} {reviewDueCount} review item{reviewDueCount !== 1 ? 's' : ''} due
             </Text>
@@ -771,17 +771,17 @@ export default function BookDetailScreen() {
         currentChapter={book.current_chapter || undefined}
       />
 
-      {/* Hamarquizen review for finished books */}
+      {/* Deep review for finished books */}
       {book.reading_status === 'finished' && (
         <View style={styles.hamarquizenSection}>
           <Pressable
             style={styles.hamarquizenBtn}
             onPress={() => {
-              logEvent('hamarquizen_started', { book_id: book.id, title: book.title });
+              logEvent('book_review_started', { book_id: book.id, title: book.title });
               router.push(`/hamarquizen?book_id=${book.id}` as any);
             }}
           >
-            <Text style={styles.hamarquizenBtnText}>{'\u2726'} Hamarquizen Review</Text>
+            <Text style={styles.hamarquizenBtnText}>{'\u2726'} Book Review</Text>
             <Text style={styles.hamarquizenSubtext}>PRIME {'\u2192'} READ {'\u2192'} TEST micro-lessons</Text>
           </Pressable>
         </View>
