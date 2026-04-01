@@ -732,8 +732,8 @@ export default function ReviewScreen() {
 
           {tab === 'cards' && !loading && (
             <Text style={s.statsLine}>
-              {reviewedCount > 0 ? `${reviewedCount} reviewed  \u00b7  ` : ''}
-              {dueCount} due  \u00b7  {totalCandidates} in pool  \u00b7  {domainCount} curricula
+              {reviewedCount > 0 ? `${reviewedCount} reviewed · ` : ''}
+              {dueCount} due · {totalCandidates} in pool · {domainCount} curricula
             </Text>
           )}
         </View>
