@@ -900,6 +900,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'node_knowledge': item['node_knowledge'],
                 'node_confidence': item['node_confidence'],
                 'follow_up_queries': _parse_json_safe(cq.get('follow_up_queries'), []),
+                'fact_id': cq.get('fact_id', ''),
+                'entities': cq.get('entities', []),
             }
             items.append(card)
 
