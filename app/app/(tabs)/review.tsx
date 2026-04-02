@@ -153,6 +153,10 @@ function ReviewCard({
 
   const answerType = item.answer_type || 'concept';
   const typeLabel = answerType === 'date' ? 'Date'
+    : answerType === 'person' ? 'Person'
+    : answerType === 'event' ? 'Event'
+    : answerType === 'connection' ? 'Connection'
+    : answerType === 'significance' ? 'Significance'
     : answerType === 'name' ? 'Identity'
     : answerType === 'sequence' ? 'Timeline'
     : 'Concept';

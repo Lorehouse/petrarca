@@ -530,7 +530,7 @@ export interface ResurfacingItem {
   question?: string;
   answer?: string;
   rich_answer?: string;
-  answer_type?: 'date' | 'name' | 'concept' | 'sequence';
+  answer_type?: 'date' | 'name' | 'concept' | 'sequence' | 'person' | 'event' | 'connection' | 'significance';
   node_title?: string;
   node_description?: string;
   domain?: string;
