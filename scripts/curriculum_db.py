@@ -835,8 +835,11 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 score = max(0.1, knowledge_weight - days_until * 0.5)
 
             # Boost concrete factual questions (date/event/person) over abstract ones
-            cq = _parse_json_safe(item.get('cached_question'), {})
-            fact_type = cq.get('answer_type', '')
+            try:
+                cq_data = json.loads(item.get('cached_question') or '{}')
+            except (json.JSONDecodeError, TypeError):
+                cq_data = {}
+            fact_type = cq_data.get('answer_type', '')
             if fact_type in ('date', 'event', 'person'):
                 score += 2.0  # prefer factual scaffolding
             elif fact_type in ('significance', 'connection'):
