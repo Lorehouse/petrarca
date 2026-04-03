@@ -639,6 +639,22 @@ CREATE TABLE IF NOT EXISTS elicitation_sessions (
     nodes_assessed INTEGER DEFAULT 0,
     responses TEXT DEFAULT '[]'
 );
+
+-- Voice transcript log: every voice interaction persisted for analysis
+CREATE TABLE IF NOT EXISTS voice_transcripts (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,              -- 'elicitation' | 'review_memo' | 'feedback' | 'book_note'
+    node_id TEXT,
+    domain_id TEXT,
+    node_title TEXT,
+    transcript TEXT NOT NULL,
+    audio_bytes INTEGER,
+    llm_result TEXT,                   -- full JSON from LLM analysis
+    microlearning_triggered TEXT DEFAULT '[]',
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vt_source ON voice_transcripts(source);
+CREATE INDEX IF NOT EXISTS idx_vt_created ON voice_transcripts(created_at);
 """
 
 MIGRATIONS = [

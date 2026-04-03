@@ -21,6 +21,30 @@ from curriculum import (
 )
 
 DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
+
+
+def _log_voice_transcript(source: str, node_id: str, domain_id: str,
+                          node_title: str, transcript: str, audio_bytes: int,
+                          llm_result: dict, ml_triggered: list):
+    """Persist every voice transcript for later analysis."""
+    try:
+        from db import get_connection
+        conn = get_connection()
+        vt_id = f'vt_{int(time.time())}_{hash(transcript) % 10000:04d}'
+        conn.execute(
+            '''INSERT OR IGNORE INTO voice_transcripts
+               (id, source, node_id, domain_id, node_title, transcript,
+                audio_bytes, llm_result, microlearning_triggered, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            (vt_id, source, node_id, domain_id, node_title, transcript,
+             audio_bytes, json.dumps(llm_result) if llm_result else None,
+             json.dumps([m.get('id', m) for m in ml_triggered]) if ml_triggered else '[]',
+             int(time.time() * 1000)),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[voice-log] Failed to persist transcript: {e}', flush=True)
 SCRIPT_DIR = Path(__file__).parent
 BOOK_RESEARCH_DIR = SCRIPT_DIR / 'data' / 'book_research'
 
@@ -1707,7 +1731,7 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
         except Exception as e:
             print(f'[voice→ml] memo trigger failed: {e}', flush=True)
 
-    return {
+    result = {
         'transcript': transcript,
         'remembered': extracted.get('remembered', ''),
         'suggested_score': score,
@@ -1715,6 +1739,17 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
         'follow_ups_created': follow_ups,
         'microlearning_triggered': ml_triggered,
     }
+
+    _log_voice_transcript(
+        source='review_memo', node_id=item.get('curriculum_node_id', ''),
+        domain_id=item.get('curriculum_domain', ''),
+        node_title=item.get('curriculum_node_title', ''),
+        transcript=transcript,
+        audio_bytes=audio_path.stat().st_size if audio_path.exists() else 0,
+        llm_result=extracted, ml_triggered=ml_triggered,
+    )
+
+    return result
 
 
 # ── Voice elicitation (free recall) ─────────────────────────────────────────
@@ -1893,6 +1928,15 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             print(f'[voice→ml] missed trigger failed: {e}', flush=True)
 
     result['microlearning_triggered'] = ml_triggered
+
+    # Persist transcript for later analysis
+    _log_voice_transcript(
+        source='elicitation', node_id=node_id, domain_id=domain_id,
+        node_title=node['title'], transcript=transcript,
+        audio_bytes=audio_path.stat().st_size if audio_path.exists() else 0,
+        llm_result=result, ml_triggered=ml_triggered,
+    )
+
     return result
 
 
