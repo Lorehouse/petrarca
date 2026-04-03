@@ -80,6 +80,7 @@ export default function VoiceElicitation() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [processingCount, setProcessingCount] = useState(0);
   const [completedResults, setCompletedResults] = useState<Array<{ node: string; result: ElicitationResult }>>([]);
+  const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savedUriRef = useRef<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -426,12 +427,61 @@ export default function VoiceElicitation() {
                 </Text>
               </View>
             )}
-            {completedResults.slice(-3).map((cr, i) => (
-              <Text key={i} style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.claimNew }}>
-                {'\u2713'} {cr.node}: {cr.result.coverage_pct}% coverage
-                {cr.result.microlearning_triggered?.length ? ` + ${cr.result.microlearning_triggered.length} research` : ''}
-              </Text>
-            ))}
+            {completedResults.slice(-3).map((cr, i) => {
+              const idx = completedResults.length - 3 + i;
+              const realIdx = Math.max(0, idx);
+              const expanded = expandedResultIdx === realIdx;
+              const r = cr.result;
+              return (
+                <View key={i}>
+                  <Pressable
+                    onPress={() => setExpandedResultIdx(expanded ? null : realIdx)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  >
+                    <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.claimNew }}>
+                      {'\u2713'} {cr.node}: {r.coverage_pct}% coverage
+                      {r.microlearning_triggered?.length ? ` + ${r.microlearning_triggered.length} research` : ''}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted }}>
+                      {expanded ? '\u25B4' : '\u25BE'}
+                    </Text>
+                  </Pressable>
+                  {expanded && (
+                    <View style={{ paddingLeft: 12, paddingTop: 6, paddingBottom: 8, gap: 6 }}>
+                      {r.captured?.length > 0 && (
+                        <View>
+                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.claimNew, marginBottom: 2 }}>CAPTURED</Text>
+                          {r.captured.map((c: string, ci: number) => (
+                            <Text key={ci} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textBody, lineHeight: 17 }}>{'\u2022'} {c}</Text>
+                          ))}
+                        </View>
+                      )}
+                      {r.missed?.length > 0 && (
+                        <View>
+                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>MISSED</Text>
+                          {r.missed.map((m: string, mi: number) => (
+                            <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {m}</Text>
+                          ))}
+                        </View>
+                      )}
+                      {r.interesting?.length > 0 && (
+                        <View>
+                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: '#1e5f8a', marginBottom: 2 }}>INTERESTING</Text>
+                          {r.interesting.map((x: string, xi: number) => (
+                            <Text key={xi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {x}</Text>
+                          ))}
+                        </View>
+                      )}
+                      {r.feedback_summary && (
+                        <Text style={{ fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>
+                          {r.feedback_summary}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
