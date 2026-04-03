@@ -156,6 +156,16 @@ All research lives in `research/` directory:
 - `research/experiment-log.md` — Append-only log of all experiments and prototypes
 - `research/ux-redesign-spec.md` — 2 rounds of mockup feedback, approved interaction models
 
+## Working on This Codebase
+
+This project is exploratory — started from a hunch, evolved through 40+ sessions in many directions. That means:
+
+1. **There is stale code and data.** Dead imports, unused tables, deprecated modules, JSON files that nothing reads. Don't assume everything exists for a reason. If you see something that looks wrong, verify it's still used before building on it.
+2. **Trace data flows before changing them.** Before modifying any pipeline, grep the actual imports and verify: where does data get written? Where does the consumer read? Are they the same store? This project has had critical bugs from write/read mismatches.
+3. **Test endpoints before telling the user to test.** After server changes, curl the endpoint with realistic data. After client changes, deploy mobile (`deploy.sh`) and verify the bundle compiles. "It should work" is not verification.
+4. **Clean up what you touch.** If you find dead code, unused imports, or stale data while working on something, remove it. Don't leave it for the next agent to be misled by. This is especially important for deprecated module imports (e.g., `curriculum.py` vs `curriculum_db.py`).
+5. **Diagnose before patching.** When something fails, read the full error, check what's concurrent, understand the architecture. One correct fix beats four incremental attempts that each introduce new bugs.
+
 ## Critical Rules
 
 ### 1. Research Organization
