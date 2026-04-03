@@ -162,6 +162,7 @@ export interface ElicitationCandidate {
   node_title: string;
   node_description: string;
   domain_id: string;
+  domain_title?: string;
   knowledge: string;
   confidence: number;
   elicitation_score: number;

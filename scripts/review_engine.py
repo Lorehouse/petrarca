@@ -1962,6 +1962,10 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
     if not curriculum:
         return []
 
+    # Get domain title
+    row = conn.execute('SELECT title FROM curriculum_domains WHERE id = ?', (domain_id,)).fetchone()
+    domain_title = row['title'] if row else domain_id.replace('_', ' ').title()
+
     rows = conn.execute("""
         SELECT node_id, knowledge, confidence
         FROM knowledge_states
@@ -1993,6 +1997,7 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
             'node_title': node['title'],
             'node_description': node['description'],
             'domain_id': domain_id,
+            'domain_title': domain_title,
             'knowledge': knowledge,
             'confidence': confidence,
             'elicitation_score': round(score, 2),

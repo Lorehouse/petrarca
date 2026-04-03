@@ -410,7 +410,7 @@ export default function VoiceElicitation() {
             <Text style={styles.domainLabel}>
               {cand.type === 'chapter_recall' && cand.book_title
                 ? cand.book_title.slice(0, 40)
-                : cand.domain_id?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()).slice(0, 30) || 'Review'}
+                : cand.domain_title || 'Review'}
             </Text>
 
             <Text style={styles.promptLabel}>
@@ -420,7 +420,7 @@ export default function VoiceElicitation() {
             </Text>
             <Text style={styles.nodeTitle}>{cand.node_title}</Text>
 
-            {phase === 'prompt' && (
+            {phase === 'prompt' && cand.type === 'chapter_recall' && (
               <Text style={styles.nodeDesc}>{cand.node_description}</Text>
             )}
 
