@@ -198,7 +198,16 @@ All research lives in `research/` directory:
 - Design tokens are in `design/tokens/` — always use these rather than hardcoding values
 - Existing mockups for reference: `app/mockups/` (feed/reader variants), `app/preview-mockups/` (landing page)
 
-### 6. Code & Development
+### 6. Data Store Discipline — CRITICAL
+- **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
+- **NEVER import from `curriculum.py`** for knowledge reads/writes — use `curriculum_db.py`
+- `curriculum.py` is ONLY for curriculum generation and graph utilities (no runtime data)
+- `curriculum_db.py` is for ALL runtime reads/writes: `update_knowledge()`, `load_knowledge_states()`, `load_curriculum()`
+- **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.
+- **After ANY client-side change**, deploy mobile: `bash ~/src/expo/scripts/deploy.sh petrarca`
+- This was a critical bug (session 43): voice elicitation wrote to JSON files while review stream read from SQLite — knowledge updates were invisible to scheduling
+
+### 7. Code & Development
 - Branch prefix: `sh/` for all GitHub branches
 - No test plans or checklists in PR descriptions
 - Commit after every significant change
