@@ -128,7 +128,7 @@ export default function VoiceElicitation() {
     setPhase('loading');
     try {
       const domainId = params.domain_id || undefined;
-      const { candidates: cands } = await getElicitationCandidates(domainId, 5);
+      const { candidates: cands } = await getElicitationCandidates(domainId, 10);
       if (cands.length === 0) {
         setPhase('done');
         return;
