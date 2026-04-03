@@ -670,8 +670,10 @@ export default function ReviewScreen() {
     });
   };
 
+  const [researchingQuery, setResearchingQuery] = useState<string | null>(null);
+
   const handleResearch = (query: string, item?: ResurfacingItem) => {
-    // Extract node context from the current card
+    setResearchingQuery(query);
     const sourceNodeId = item?.question_id?.split(':').pop();
     const sourceDomain = item?.domain;
     triggerMicrolearning({
@@ -686,7 +688,12 @@ export default function ReviewScreen() {
         source_item: item?.question_id,
         source_domain: sourceDomain,
       });
-    }).catch(e => console.warn('[review] research trigger failed:', e));
+      // Clear after brief confirmation
+      setTimeout(() => setResearchingQuery(null), 2000);
+    }).catch(e => {
+      console.warn('[review] research trigger failed:', e);
+      setResearchingQuery(null);
+    });
   };
 
   // Log each new card shown
@@ -732,6 +739,15 @@ export default function ReviewScreen() {
                 <Text style={s.emptyTitle}>{'\u2726'} All caught up</Text>
                 <Text style={s.emptySubtitle}>
                   No review items yet. Read more books and articles to build your review pool!
+                </Text>
+              </View>
+            )}
+
+            {researchingQuery && (
+              <View style={s.researchToast}>
+                <ActivityIndicator size="small" color={colors.rubric} style={{ marginRight: 8 }} />
+                <Text style={s.researchToastText} numberOfLines={1}>
+                  Researching: {researchingQuery}
                 </Text>
               </View>
             )}
@@ -867,6 +883,8 @@ const s = StyleSheet.create({
   loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.rubric, textAlign: 'center', paddingVertical: 20, paddingHorizontal: layout.screenPadding },
+  researchToast: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: layout.screenPadding, backgroundColor: colors.parchmentDark, borderRadius: 4, marginBottom: 12, marginHorizontal: layout.screenPadding },
+  researchToastText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textSecondary, flex: 1, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   emptyState: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 12, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   emptySubtitle: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
