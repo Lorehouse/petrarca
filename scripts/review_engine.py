@@ -1896,10 +1896,10 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             for ki in ki_rows:
                 update_knowledge(domain_id, ki['curriculum_node_id'],
                                  knowledge=knowledge_level, confidence=confidence,
-                                 source=f'voice_chapter_recall:{book_id}:{chapter_num}')  # opens own conn
+                                 source=f'voice_chapter_recall:{book_id}:{chapter_num}', conn=conn)
     else:
         update_knowledge(domain_id, node_id, knowledge=knowledge_level,
-                         confidence=confidence, source='voice_elicitation')  # opens own conn
+                         confidence=confidence, source='voice_elicitation', conn=conn)
 
     # Update knowledge_items if one exists for this node
     now_ms = int(time.time() * 1000)

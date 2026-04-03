@@ -333,6 +333,29 @@ export default function VoiceElicitation() {
             </View>
           ))}
           <Pressable
+            style={[styles.recordBtn, { marginHorizontal: 0 }]}
+            onPress={async () => {
+              // Retry all sequentially to avoid lock contention
+              const items = [...pendingUploads];
+              for (const p of items) {
+                const fakeCand: ElicitationCandidate = {
+                  node_id: p.nodeId, node_title: p.nodeTitle, node_description: '',
+                  domain_id: p.domainId, knowledge: 'engaged', confidence: 0.5, elicitation_score: 0,
+                };
+                setProcessingCount(c => c + 1);
+                setPendingUploads(prev => prev.filter(u => u.audioUri !== p.audioUri));
+                try {
+                  await uploadElicitation(p.audioUri, fakeCand);
+                  await clearPendingUpload(p.audioUri);
+                } catch {
+                  setProcessingCount(c => Math.max(0, c - 1));
+                }
+              }
+            }}
+          >
+            <Text style={styles.recordBtnText}>Retry all ({pendingUploads.length})</Text>
+          </Pressable>
+          <Pressable
             style={{ paddingVertical: 16, alignItems: 'center' }}
             onPress={() => { setPendingUploads([]); loadCandidates(); }}
           >
