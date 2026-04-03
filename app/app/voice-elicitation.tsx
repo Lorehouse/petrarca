@@ -210,12 +210,15 @@ export default function VoiceElicitation() {
     }
   }
 
-  async function uploadElicitation(uri: string) {
-    const cand = candidates[current];
-    const nodeTitle = cand?.node_title || 'Unknown';
+  async function uploadElicitation(uri: string, overrideCand?: ElicitationCandidate) {
+    const cand = overrideCand || candidates[current];
+    if (!cand?.node_id) {
+      throw new Error('No candidate context for upload');
+    }
+    const nodeTitle = cand.node_title || 'Unknown';
     try {
       logEvent('voice_elicitation_submitted', {
-        node_id: cand?.node_id, duration_s: recordingDuration,
+        node_id: cand.node_id, duration_s: recordingDuration,
       });
       const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
       if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
@@ -298,9 +301,15 @@ export default function VoiceElicitation() {
                       confidence: 0.5,
                       elicitation_score: 0,
                     };
-                    setCandidates([fakeCand]);
-                    setCurrent(0);
-                    await uploadElicitation(p.audioUri);
+                    setProcessingCount(c => c + 1);
+                    uploadElicitation(p.audioUri, fakeCand).then(async () => {
+                      await clearPendingUpload(p.audioUri);
+                      const remaining = pendingUploads.filter(u => u.audioUri !== p.audioUri);
+                      setPendingUploads(remaining);
+                      if (remaining.length === 0) loadCandidates();
+                    }).catch(() => {
+                      setProcessingCount(c => Math.max(0, c - 1));
+                    });
                   }}
                 >
                   <Text style={styles.recordBtnText}>Retry upload</Text>
