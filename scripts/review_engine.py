@@ -2174,15 +2174,28 @@ def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
     prompts like "What do you remember from Chapter 5: The Founding of Syracuse?"
     """
     # Find distinct book+chapter combos from knowledge_items sources
+    # Note: don't use json_extract in JOINs — unreliable with varying JSON structures.
+    # Look up book titles in Python instead (same pattern as get_review_queue).
     rows = conn.execute("""
-        SELECT ki.curriculum_domain, ki.sources, pb.title as book_title
+        SELECT ki.curriculum_domain, ki.sources
         FROM knowledge_items ki
-        LEFT JOIN physical_books pb ON pb.id = json_extract(ki.sources, '$[0].book_id')
         WHERE ki.sources LIKE '%chapter_number%'
           AND ki.review_count <= 1
         ORDER BY ki.created_at DESC
         LIMIT 50
     """).fetchall()
+
+    # Build book title cache
+    book_titles: dict[str, str] = {}
+    for r in rows:
+        try:
+            for s in json.loads(r['sources'] or '[]'):
+                bid = s.get('book_id', '')
+                if bid and bid not in book_titles:
+                    bt_row = conn.execute('SELECT title FROM physical_books WHERE id = ?', (bid,)).fetchone()
+                    book_titles[bid] = bt_row['title'] if bt_row else ''
+        except Exception:
+            pass
 
     # Exclude chapters already elicited
     already_elicited = set()
@@ -2213,7 +2226,7 @@ def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
                 continue
             seen_chapters.add(key)
 
-            book_title = r['book_title'] or book_id
+            book_title = book_titles.get(book_id, '') or book_id
             candidates.append({
                 'type': 'chapter_recall',
                 'node_id': f'chapter:{book_id}:{ch_num}',
