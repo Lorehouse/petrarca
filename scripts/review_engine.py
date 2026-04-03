@@ -1720,31 +1720,65 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
 # ── Voice elicitation (free recall) ─────────────────────────────────────────
 
 def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, transcribe_fn) -> dict:
-    """Run voice free-recall elicitation for a curriculum node.
+    """Run voice free-recall elicitation for a curriculum node or chapter recall.
 
     User speaks freely about what they know about a topic.
     System transcribes, compares against node definition + book sources, gives rich feedback.
     """
-    # Load curriculum and find node
-    curriculum = load_curriculum(domain_id)
-    if not curriculum:
-        return {'error': f'Curriculum {domain_id} not found'}
+    # Handle chapter recall pseudo-nodes (chapter:{book_id}:{chapter_number})
+    is_chapter_recall = node_id.startswith('chapter:')
+    if is_chapter_recall:
+        parts = node_id.split(':')
+        book_id = parts[1] if len(parts) > 1 else ''
+        chapter_num = parts[2] if len(parts) > 2 else ''
+        # Look up chapter title and book from knowledge_items sources
+        book_title = ''
+        chapter_title = ''
+        chapter_source_texts = []
+        rows = conn.execute(
+            "SELECT sources FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
+            (domain_id, f'%{book_id}%')
+        ).fetchall()
+        for r in rows:
+            try:
+                sources = json.loads(r['sources'])
+                for s in sources:
+                    if str(s.get('chapter_number', '')) == str(chapter_num) and s.get('book_id') == book_id:
+                        chapter_title = chapter_title or s.get('chapter_title', '')
+                        book_title = book_title or s.get('book_title', book_id)
+                        if s.get('source_text'):
+                            chapter_source_texts.append(s['source_text'])
+            except Exception:
+                pass
+        node = {
+            'id': node_id,
+            'title': f'Chapter {chapter_num}: {chapter_title}' if chapter_title else f'Chapter {chapter_num}',
+            'description': f'What do you remember from Chapter {chapter_num} of {book_title}? Key ideas, people, events, and arguments.',
+        }
+    else:
+        # Standard curriculum node
+        curriculum = load_curriculum(domain_id)
+        if not curriculum:
+            return {'error': f'Curriculum {domain_id} not found'}
 
-    node = None
-    for n in curriculum.get('nodes', []):
-        if n['id'] == node_id:
-            node = n
-            break
-    if not node:
-        return {'error': f'Node {node_id} not found'}
+        node = None
+        for n in curriculum.get('nodes', []):
+            if n['id'] == node_id:
+                node = n
+                break
+        if not node:
+            return {'error': f'Node {node_id} not found'}
 
     # Transcribe
     transcript = transcribe_fn(audio_path)
     if not transcript:
         return {'error': 'Transcription failed'}
 
-    # Gather all book sources for this node from knowledge_items
-    sources_text = _gather_node_sources(node_id, domain_id, conn)
+    # Gather sources — for chapter recall, use the chapter source texts we already found
+    if is_chapter_recall and chapter_source_texts:
+        sources_text = '\n'.join(chapter_source_texts[:5])
+    else:
+        sources_text = _gather_node_sources(node_id, domain_id, conn)
 
     # Run LLM analysis
     prompt = VOICE_ELICITATION_PROMPT.format(
@@ -1758,8 +1792,8 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     if not isinstance(result, dict):
         result = {}
 
-    # Generate temporal hook for this node
-    temporal_hook = _generate_temporal_hook(node, domain_id, conn)
+    # Generate temporal hook (skip for chapter recall — no curriculum node to anchor)
+    temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
     result['temporal_hook'] = temporal_hook
     result['node_title'] = node['title']
     result['node_description'] = node['description']
@@ -1787,13 +1821,14 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         except Exception:
             pass
 
-    # Update knowledge state based on coverage
+    # Update knowledge state based on coverage (skip for chapter recall pseudo-nodes)
     coverage = result.get('coverage_pct', 50)
     score = result.get('suggested_score', 'partly')
-    knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
-    confidence = coverage / 100.0
-    update_knowledge(domain_id, node_id, knowledge=knowledge_level,
-                     confidence=confidence, source='voice_elicitation')
+    if not is_chapter_recall:
+        knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
+        confidence = coverage / 100.0
+        update_knowledge(domain_id, node_id, knowledge=knowledge_level,
+                         confidence=confidence, source='voice_elicitation')
 
     # Update knowledge_items if one exists for this node
     now_ms = int(time.time() * 1000)
