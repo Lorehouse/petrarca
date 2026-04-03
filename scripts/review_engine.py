@@ -2018,13 +2018,12 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
 
     states = {r[0]: {'knowledge': r[1], 'confidence': r[2]} for r in rows}
 
-    # Exclude nodes with a voice transcript in the last 24h
-    recent_cutoff = int(time.time() * 1000) - 24 * 3600 * 1000
+    # Exclude nodes that already have a voice transcript (elicitation is mapping, not drilling)
     recent_nodes = set()
     try:
         recent_rows = conn.execute(
-            "SELECT node_id FROM voice_transcripts WHERE domain_id = ? AND created_at > ?",
-            (domain_id, recent_cutoff)
+            "SELECT node_id FROM voice_transcripts WHERE domain_id = ? AND source = 'elicitation'",
+            (domain_id,)
         ).fetchall()
         recent_nodes = {r[0] for r in recent_rows}
     except Exception:
