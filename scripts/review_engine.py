@@ -2159,6 +2159,16 @@ def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
         LIMIT 50
     """).fetchall()
 
+    # Exclude chapters already elicited
+    already_elicited = set()
+    try:
+        elicited_rows = conn.execute(
+            "SELECT node_id FROM voice_transcripts WHERE source = 'elicitation' AND node_id LIKE 'chapter:%'"
+        ).fetchall()
+        already_elicited = {r[0] for r in elicited_rows}
+    except Exception:
+        pass
+
     seen_chapters = set()
     candidates = []
     for r in rows:
@@ -2172,8 +2182,9 @@ def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
             book_id = s.get('book_id', '')
             if not ch_num or not ch_title:
                 continue
+            node_id = f'chapter:{book_id}:{ch_num}'
             key = f'{book_id}:{ch_num}'
-            if key in seen_chapters:
+            if key in seen_chapters or node_id in already_elicited:
                 continue
             seen_chapters.add(key)
 
