@@ -534,6 +534,7 @@ export interface ResurfacingItem {
   node_title?: string;
   node_description?: string;
   domain?: string;
+  domain_id?: string;
   memory_hook?: string;
   temporal_hook?: string;
   curriculum_context?: string;

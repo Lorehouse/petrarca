@@ -682,7 +682,7 @@ export default function ReviewScreen() {
   const handleResearch = (query: string, item?: ResurfacingItem) => {
     addResearchToast(query);
     const sourceNodeId = item?.question_id?.split(':').pop();
-    const sourceDomain = (item as any)?.domain_id || item?.domain;
+    const sourceDomain = item?.domain_id || item?.domain;
     triggerMicrolearning({
       query,
       sourceItemId: item?.question_id,
