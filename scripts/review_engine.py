@@ -17,8 +17,9 @@ from pathlib import Path
 
 from claude_llm import call_claude, call_claude_json, call_claude_or_gemini, call_claude_search
 from curriculum import (
-    load_curriculum, load_knowledge_states, update_knowledge,
+    load_curriculum, load_knowledge_states,
 )
+from curriculum_db import update_knowledge
 
 DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
 
@@ -1868,12 +1869,24 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         except Exception:
             pass
 
-    # Update knowledge state based on coverage (skip for chapter recall pseudo-nodes)
+    # Update knowledge state based on coverage
     coverage = result.get('coverage_pct', 50)
     score = result.get('suggested_score', 'partly')
-    if not is_chapter_recall:
-        knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
-        confidence = coverage / 100.0
+    knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
+    confidence = coverage / 100.0
+
+    if is_chapter_recall:
+        # Chapter recall covers multiple nodes — update all knowledge_items for this book+chapter
+        if book_id and chapter_num:
+            ki_rows = conn.execute(
+                "SELECT id, curriculum_node_id FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
+                (domain_id, f'%"chapter_number": {chapter_num}%' if chapter_num else f'%{book_id}%')
+            ).fetchall()
+            for ki in ki_rows:
+                update_knowledge(domain_id, ki['curriculum_node_id'],
+                                 knowledge=knowledge_level, confidence=confidence,
+                                 source=f'voice_chapter_recall:{book_id}:{chapter_num}')
+    else:
         update_knowledge(domain_id, node_id, knowledge=knowledge_level,
                          confidence=confidence, source='voice_elicitation')
 
