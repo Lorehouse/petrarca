@@ -17,7 +17,7 @@ import {
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
 
-type Phase = 'loading' | 'prompt' | 'recording' | 'processing' | 'feedback' | 'retry' | 'pending_retry' | 'done';
+type Phase = 'loading' | 'prompt' | 'recording' | 'paused' | 'processing' | 'feedback' | 'retry' | 'pending_retry' | 'done';
 
 interface PendingUpload {
   audioUri: string;
@@ -208,6 +208,43 @@ export default function VoiceElicitation() {
       setRetryError(String(e));
       setPhase('retry');
     }
+  }
+
+  async function pauseRecording() {
+    if (!recording) return;
+    try {
+      await recording.pauseAsync();
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      setPhase('paused');
+    } catch (e) {
+      console.error('Pause failed:', e);
+    }
+  }
+
+  async function resumeRecording() {
+    if (!recording) return;
+    try {
+      await recording.startAsync();
+      timerRef.current = setInterval(() => setRecordingDuration(d => d + 1), 1000);
+      setPhase('recording');
+    } catch (e) {
+      console.error('Resume failed:', e);
+    }
+  }
+
+  async function dismissRecording() {
+    if (!recording) return;
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    try {
+      await recording.stopAndUnloadAsync();
+    } catch { /* already stopped */ }
+    setRecording(null);
+    setRecordingDuration(0);
+    setPhase('prompt');
+    logEvent('voice_elicitation_dismissed', {
+      node_id: candidates[current]?.node_id,
+      duration_s: recordingDuration,
+    });
   }
 
   async function uploadElicitation(uri: string, overrideCand?: ElicitationCandidate) {
@@ -562,15 +599,27 @@ export default function VoiceElicitation() {
               </View>
             )}
 
-            {phase === 'recording' && (
+            {(phase === 'recording' || phase === 'paused') && (
               <View style={styles.recordingArea}>
-                <Text style={styles.recordingTimer}>
+                <Text style={[styles.recordingTimer, phase === 'paused' && { color: colors.textMuted }]}>
                   {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
                 </Text>
-                <Text style={styles.recordingHint}>Speak freely — what do you remember?</Text>
+                <Text style={styles.recordingHint}>
+                  {phase === 'paused' ? 'Paused' : 'Speak freely \u2014 what do you remember?'}
+                </Text>
                 <Pressable style={styles.stopBtn} onPress={stopAndProcess}>
                   <Text style={styles.stopBtnText}>{'\u25A0'} Done speaking</Text>
                 </Pressable>
+                <View style={styles.recordingSecondaryRow}>
+                  <Pressable style={styles.secondaryBtn} onPress={phase === 'paused' ? resumeRecording : pauseRecording}>
+                    <Text style={styles.secondaryBtnText}>
+                      {phase === 'paused' ? '\u25B6 Resume' : '\u275A\u275A Pause'}
+                    </Text>
+                  </Pressable>
+                  <Pressable style={styles.secondaryBtn} onPress={dismissRecording}>
+                    <Text style={[styles.secondaryBtnText, { color: '#cc4444' }]}>Discard</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
 
@@ -743,6 +792,16 @@ const styles = StyleSheet.create({
   stopBtnText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
     fontSize: 14, color: '#cc4444', fontWeight: '500',
+  },
+  recordingSecondaryRow: {
+    flexDirection: 'row', gap: 24, marginTop: 16, alignItems: 'center',
+  },
+  secondaryBtn: {
+    paddingVertical: 8, paddingHorizontal: 12,
+  },
+  secondaryBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
+    fontSize: 13, color: colors.textSecondary, fontWeight: '500',
   },
 
   processingArea: { alignItems: 'center', paddingVertical: 30 },
