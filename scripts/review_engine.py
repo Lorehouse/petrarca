@@ -1770,7 +1770,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             return {'error': f'Node {node_id} not found'}
 
     # Transcribe
+    print(f'[voice-elicit] Transcribing {audio_path} ({audio_path.stat().st_size} bytes)...', flush=True)
     transcript = transcribe_fn(audio_path)
+    print(f'[voice-elicit] Transcript: {repr(transcript[:200]) if transcript else "EMPTY"}', flush=True)
     if not transcript:
         return {'error': 'Transcription failed'}
 
@@ -1779,6 +1781,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         sources_text = '\n'.join(chapter_source_texts[:5])
     else:
         sources_text = _gather_node_sources(node_id, domain_id, conn)
+    print(f'[voice-elicit] Sources: {len(sources_text)} chars', flush=True)
 
     # Run LLM analysis
     prompt = VOICE_ELICITATION_PROMPT.format(
@@ -1789,7 +1792,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     )
 
     result = call_claude_json(prompt, timeout=180)
+    print(f'[voice-elicit] LLM result type={type(result).__name__}, keys={list(result.keys()) if isinstance(result, dict) else "N/A"}', flush=True)
     if not isinstance(result, dict):
+        print(f'[voice-elicit] LLM returned non-dict: {repr(str(result)[:200])}', flush=True)
         result = {}
 
     # Generate temporal hook (skip for chapter recall — no curriculum node to anchor)
