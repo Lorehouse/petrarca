@@ -110,6 +110,10 @@ export default function VoiceElicitation() {
         node_id: cand.node_id, duration_s: recordingDuration,
       });
       const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
+      // Validate response — empty/error results should trigger retry, not show empty feedback
+      if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
+        throw new Error('Server returned empty analysis — may need retry');
+      }
       setResult(res);
       setPhase('feedback');
       logEvent('voice_elicitation_result', {
