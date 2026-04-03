@@ -65,22 +65,35 @@ def call_claude(prompt: str, *, timeout: int = 180, retries: int = 1,
 
 def call_claude_json(prompt: str, *, timeout: int = 180, retries: int = 1,
                      model: str | None = None) -> dict | list | None:
-    """Call Claude and parse JSON from the response.
+    """Call Claude and parse JSON from the response. Falls back to Gemini on failure.
 
     Claude doesn't have a JSON-only output mode, so this:
     1. Appends "Output JSON only." if not already in the prompt
     2. Extracts JSON from the response (handles markdown fences, preamble text)
-    3. Returns parsed dict/list or None on failure
+    3. Falls back to Gemini if Claude fails (auth expiry, timeout, etc.)
+    4. Returns parsed dict/list or None on failure
     """
     # Nudge toward JSON if the prompt doesn't already ask for it
     if 'json' not in prompt.lower()[-100:]:
         prompt = prompt.rstrip() + '\n\nOutput JSON only.'
 
     raw = call_claude(prompt, timeout=timeout, retries=retries, model=model)
-    if not raw:
-        return None
+    if raw:
+        result = extract_json(raw)
+        if result is not None:
+            return result
 
-    return extract_json(raw)
+    # Fallback to Gemini
+    print('[call_claude_json] Claude failed, falling back to Gemini', flush=True)
+    try:
+        from gemini_llm import call_llm
+        raw = call_llm(prompt, max_tokens=4096, response_mime_type='application/json')
+        if raw:
+            return extract_json(raw)
+    except Exception as e:
+        print(f'[call_claude_json] Gemini fallback also failed: {e}', flush=True)
+
+    return None
 
 
 def extract_json(text: str) -> dict | list | None:

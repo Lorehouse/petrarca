@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from claude_llm import call_claude, call_claude_json, call_claude_or_gemini
+from claude_llm import call_claude, call_claude_json, call_claude_or_gemini, call_claude_search
 from curriculum import (
     load_curriculum, load_knowledge_states, update_knowledge,
 )
