@@ -250,28 +250,7 @@ export default function BookDetailScreen() {
         if (!cancelled) setResearchLoading(false);
       }
 
-      // Check if we should show Story So Far (last interaction > 48 hours)
-      const hoursSinceLastInteraction = (Date.now() - book.last_interaction_at) / 3600000;
-      if (hoursSinceLastInteraction >= 48 && !cancelled) {
-        try {
-          const briefing = await getStorySoFar(
-            book.id, book.title, book.author,
-            book.current_chapter || undefined,
-            book.current_page || undefined,
-            book.page_count || undefined,
-            captures.map(c => ({
-              text: c.text, ocr_text: c.ocr_text, transcript: c.transcript,
-              chapter: c.chapter, page_number: c.page_number,
-              extracted_ideas: c.extracted_ideas,
-            })),
-          );
-          if (!cancelled) {
-            setStorySoFar(briefing);
-            setShowStorySoFar(true);
-            logEvent('story_so_far_shown', { book_id: book.id, days_since_last: Math.round(hoursSinceLastInteraction / 24) });
-          }
-        } catch { /* ignore */ }
-      }
+      // Story So Far disabled — not useful in practice
     })();
 
     return () => { cancelled = true; };
