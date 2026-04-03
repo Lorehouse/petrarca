@@ -469,6 +469,33 @@ export async function processKindleBooks(max: number = 10): Promise<void> {
   });
 }
 
+export interface KindleRecentBook {
+  key: string;
+  title: string;
+  author: string;
+  cover_url: string;
+  progress_pct: number;
+  status: string;
+  category: string | null;
+  last_seen: string;
+  first_seen: string;
+}
+
+export async function fetchKindleRecentlyStarted(): Promise<KindleRecentBook[]> {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/kindle/recently-started`);
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  return data.books || [];
+}
+
+export async function dismissKindleBook(key: string): Promise<void> {
+  await fetch(`${RESEARCH_BASE}/kindle/curate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates: [{ key, status: 'skipped' }] }),
+  });
+}
+
 export async function includeKindleBook(key: string): Promise<{
   book: PhysicalBook;
   captures: BookCapture[];

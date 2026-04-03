@@ -3373,6 +3373,42 @@ Return ONLY valid JSON.""",
         except json.JSONDecodeError:
             self._send_json_response(200, {'books': {}})
 
+    def _handle_kindle_recently_started(self):
+        """GET /kindle/recently-started — books with reading progress, not yet tracked or dismissed."""
+        if not KINDLE_DATA_PATH.exists():
+            self._send_json_response(200, {'books': []})
+            return
+        try:
+            data = json.loads(KINDLE_DATA_PATH.read_text())
+        except json.JSONDecodeError:
+            self._send_json_response(200, {'books': []})
+            return
+
+        results = []
+        for key, book in data.get('books', {}).items():
+            if book.get('added_to_petrarca'):
+                continue
+            if book.get('status') in ('skipped', 'read'):
+                continue
+            progress = book.get('progress', {})
+            pct = progress.get('pct', 0)
+            if not pct or pct <= 0 or pct >= 95:
+                continue
+            results.append({
+                'key': key,
+                'title': book.get('title_resolved') or book.get('title', ''),
+                'author': book.get('author', ''),
+                'cover_url': book.get('cover_url', ''),
+                'progress_pct': pct,
+                'status': book.get('status', 'unreviewed'),
+                'category': book.get('category'),
+                'last_seen': book.get('last_seen', ''),
+                'first_seen': book.get('first_seen', ''),
+            })
+
+        results.sort(key=lambda b: b.get('progress_pct', 0), reverse=True)
+        self._send_json_response(200, {'books': results})
+
     def _handle_kindle_curate(self):
         """POST /kindle/curate — update curation fields for Kindle books.
 
@@ -5507,6 +5543,8 @@ JSON array only:"""
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
             return self._send_json_response(200, {'timeline': get_timeline(domain_id)})
         # /curriculum/review/questions/ endpoint retired (retrieval_questions table archived)
+        if self.path == '/kindle/recently-started':
+            return self._handle_kindle_recently_started()
         if self.path.startswith('/kindle/library'):
             return self._handle_kindle_library_get()
         if self.path.startswith('/kindle/highlights'):

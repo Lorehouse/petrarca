@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, Platform,
   ActivityIndicator, Animated,
@@ -7,8 +7,12 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import { logEvent } from '../../data/logger';
-import { getPhysicalBooks, getBookCaptures, archiveBook } from '../../data/book-store';
+import { getPhysicalBooks, getBookCaptures, archiveBook, addPhysicalBook } from '../../data/book-store';
 import { useBookStoreVersion } from '../../data/use-book-store';
+import {
+  fetchKindleRecentlyStarted, dismissKindleBook, includeKindleBook,
+  type KindleRecentBook,
+} from '../../lib/book-api';
 import type { PhysicalBook } from '../../data/types';
 import { colors, fonts, type, layout } from '../../design/tokens';
 import DoubleRule from '../../components/DoubleRule';
@@ -155,25 +159,103 @@ const bookStyles = StyleSheet.create({
   swipeActionText: { fontFamily: fonts.ui, fontSize: 13, color: colors.parchment },
 });
 
-type FilterMode = 'active' | 'all' | 'archived';
+function KindleRow({ book, onTrack, onDismiss }: {
+  book: KindleRecentBook;
+  onTrack: () => void;
+  onDismiss: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [acting, setActing] = useState(false);
+  const isWeb = Platform.OS === 'web';
+  const pct = Math.round(book.progress_pct);
+
+  return (
+    <Pressable
+      style={[bookStyles.row, isWeb && hovered && bookStyles.rowHovered]}
+      onPress={onTrack}
+      {...(isWeb ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as any : {})}
+    >
+      <View style={bookStyles.coverWrap}>
+        {book.cover_url ? (
+          <Image source={{ uri: book.cover_url }} style={bookStyles.cover} />
+        ) : (
+          <View style={bookStyles.coverPlaceholder}>
+            <Text style={bookStyles.coverInitial}>{book.title.charAt(0)}</Text>
+          </View>
+        )}
+      </View>
+      <View style={bookStyles.info}>
+        <Text style={bookStyles.title} numberOfLines={2}>{book.title}</Text>
+        <Text style={bookStyles.author}>{book.author}</Text>
+        <View style={bookStyles.metaRow}>
+          <Text style={bookStyles.status}>{pct}% read on Kindle</Text>
+        </View>
+        <ProgressBar current={pct} total={100} />
+      </View>
+      <View style={kindleActionStyles.actions}>
+        {acting ? (
+          <ActivityIndicator size="small" color={colors.rubric} />
+        ) : (
+          <>
+            <Pressable style={kindleActionStyles.trackButton} onPress={(e) => {
+              e.stopPropagation(); setActing(true); onTrack();
+            }}>
+              <Text style={kindleActionStyles.trackText}>Track</Text>
+            </Pressable>
+            <Pressable style={kindleActionStyles.dismissButton} onPress={(e) => {
+              e.stopPropagation(); setActing(true); onDismiss();
+            }}>
+              <Text style={kindleActionStyles.dismissText}>×</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+const kindleActionStyles = StyleSheet.create({
+  actions: { width: 72, alignItems: 'flex-end', justifyContent: 'center', gap: 6 },
+  trackButton: { borderWidth: 1, borderColor: colors.rubric, borderRadius: 2, paddingVertical: 5, paddingHorizontal: 12 },
+  trackText: { fontFamily: fonts.ui, fontSize: 12, color: colors.rubric },
+  dismissButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.parchmentDark, alignItems: 'center', justifyContent: 'center' },
+  dismissText: { fontFamily: fonts.ui, fontSize: 16, color: colors.textMuted, lineHeight: 18 },
+});
+
+type FilterMode = 'active' | 'all' | 'archived' | 'kindle';
 
 export default function LibraryScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterMode>('active');
   const [refreshKey, setRefreshKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [kindleBooks, setKindleBooks] = useState<KindleRecentBook[]>([]);
+  const [kindleLoading, setKindleLoading] = useState(false);
 
   // Re-read books when screen is focused
   useFocusEffect(useCallback(() => {
     setRefreshKey(k => k + 1);
     setFeedbackContext({ screen: 'library' });
+    // Prefetch kindle recently-started for badge count
+    fetchKindleRecentlyStarted().then(setKindleBooks).catch(() => {});
   }, []));
+
+  // Fetch kindle books when tab selected
+  useEffect(() => {
+    if (filter === 'kindle') {
+      setKindleLoading(true);
+      fetchKindleRecentlyStarted()
+        .then(setKindleBooks)
+        .catch(() => {})
+        .finally(() => setKindleLoading(false));
+    }
+  }, [filter, refreshKey]);
 
   const storeVersion = useBookStoreVersion();
   const allBooks = useMemo(() => getPhysicalBooks(), [refreshKey, storeVersion]);
 
   const books = useMemo(() => {
-    // Always exclude archived (soft-deleted) books
+    if (filter === 'kindle') return []; // Kindle tab shows its own list
     const visible = allBooks.filter(b => b.reading_status !== 'archived');
     if (filter === 'active') {
       return visible.filter(b => b.reading_status !== 'finished');
@@ -207,12 +289,6 @@ export default function LibraryScreen() {
             }}>
               <Text style={styles.revisitButtonText}>{'\u2726'} Revisit</Text>
             </Pressable>
-            <Pressable style={styles.revisitButton} onPress={() => {
-              logEvent('library_kindle_tap');
-              router.push('/kindle-curation' as any);
-            }}>
-              <Text style={styles.revisitButtonText}>Kindle</Text>
-            </Pressable>
             <Pressable style={styles.addButton} onPress={() => {
               logEvent('library_add_book_tap');
               router.push('/add-book' as any);
@@ -229,13 +305,14 @@ export default function LibraryScreen() {
         </View>
         <DoubleRule />
         <View style={styles.filterRow}>
-          {(['active', 'all', 'archived'] as FilterMode[]).map(mode => (
+          {(['active', 'all', 'archived', 'kindle'] as FilterMode[]).map(mode => (
             <Pressable key={mode} style={styles.filterTab} onPress={() => {
               logEvent('library_filter_change', { filter: mode });
               setFilter(mode);
             }}>
               <Text style={[styles.filterText, filter === mode && styles.filterTextActive]}>
-                {mode === 'active' ? 'Reading' : mode === 'all' ? 'All' : 'Finished'}
+                {mode === 'active' ? 'Reading' : mode === 'all' ? 'All' : mode === 'archived' ? 'Finished' : 'Kindle'}
+                {mode === 'kindle' && kindleBooks.length > 0 ? ` (${kindleBooks.length})` : ''}
               </Text>
               {filter === mode && <View style={styles.filterDot} />}
             </Pressable>
@@ -243,7 +320,40 @@ export default function LibraryScreen() {
         </View>
       </View>
 
-      {books.length === 0 ? (
+      {filter === 'kindle' ? (
+        kindleLoading ? (
+          <View style={styles.empty}>
+            <ActivityIndicator size="small" color={colors.rubric} />
+          </View>
+        ) : kindleBooks.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>{'\u2726'}</Text>
+            <Text style={styles.emptyTitle}>No new Kindle books</Text>
+            <Text style={styles.emptySubtitle}>Books you start reading on Kindle will appear here</Text>
+          </View>
+        ) : (
+          kindleBooks.map(kb => (
+            <KindleRow key={kb.key} book={kb}
+              onTrack={async () => {
+                logEvent('kindle_track_book', { key: kb.key, title: kb.title });
+                try {
+                  const result = await includeKindleBook(kb.key);
+                  addPhysicalBook(result.book);
+                  setKindleBooks(prev => prev.filter(b => b.key !== kb.key));
+                  setFilter('active');
+                } catch (e) {
+                  console.error('Failed to track kindle book:', e);
+                }
+              }}
+              onDismiss={async () => {
+                logEvent('kindle_dismiss_book', { key: kb.key, title: kb.title });
+                await dismissKindleBook(kb.key);
+                setKindleBooks(prev => prev.filter(b => b.key !== kb.key));
+              }}
+            />
+          ))
+        )
+      ) : books.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>{'\u2726'}</Text>
           <Text style={styles.emptyTitle}>No books here yet</Text>
