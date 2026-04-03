@@ -1,10 +1,10 @@
 """
-Curriculum-based knowledge mapping system.
+Curriculum generation, graph utilities, and elicitation.
 
 Generates hierarchical curricula for humanities domains, maps books against them,
-tracks user knowledge states, and runs adaptive "20 Questions" elicitation sessions.
+and runs adaptive "20 Questions" elicitation sessions.
 
-Data stored in /opt/petrarca/data/curricula/
+Runtime knowledge state reads/writes are in curriculum_db.py (SQLite-backed).
 """
 
 import json
@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from gemini_llm import call_llm
+from curriculum_db import load_curriculum, list_curricula, load_knowledge_states, update_knowledge
 
 
 def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str | None:
@@ -216,201 +217,8 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
     return curriculum
 
 
-def load_curriculum(domain_id: str) -> dict | None:
-    """Load a curriculum by ID."""
-    path = DATA_DIR / f"{domain_id}.json"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        return json.load(f)
 
-
-def list_curricula() -> list[dict]:
-    """List all available curricula (metadata only)."""
-    skip_prefixes = ("knowledge_", "elicit_", "mappings_", "self_report",
-                     "cross_curriculum", "curriculum_embeddings", "entity_index",
-                     "article_curriculum", "place_hierarchy")
-    results = []
-    all_files = list(DATA_DIR.glob("*.json"))
-    for path in all_files:
-        if any(path.stem.startswith(p) for p in skip_prefixes):
-            continue
-        try:
-            with open(path) as f:
-                data = json.load(f)
-            if not isinstance(data, dict) or "id" not in data or "nodes" not in data:
-                continue
-            results.append({
-                "id": data["id"],
-                "title": data["title"],
-                "depth": data.get("depth", "introductory"),
-                "node_count": data.get("node_count", len(data.get("nodes", []))),
-                "generated_at": data.get("generated_at"),
-            })
-        except Exception as e:
-            print(f'[curriculum] Skipping {path.name}: {e}', flush=True)
-    return results
-
-
-# ─────────────────────────────────────────────
-# Knowledge state tracking
-# ─────────────────────────────────────────────
-
-def _knowledge_path(domain_id: str) -> Path:
-    return DATA_DIR / f"knowledge_{domain_id}.json"
-
-
-def load_knowledge_states(domain_id: str) -> dict[str, dict]:
-    """Load knowledge states for a domain. Returns {node_id: state_dict}."""
-    path = _knowledge_path(domain_id)
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def save_knowledge_states(domain_id: str, states: dict[str, dict]):
-    """Save knowledge states for a domain."""
-    path = _knowledge_path(domain_id)
-    with open(path, 'w') as f:
-        json.dump(states, f, indent=2)
-
-
-def update_knowledge(domain_id: str, node_id: str,
-                     knowledge: str | None = None,
-                     interest: str | None = None,
-                     confidence: float | None = None,
-                     source: str | None = None) -> dict:
-    """Update knowledge state for a single node."""
-    states = load_knowledge_states(domain_id)
-
-    if node_id not in states:
-        states[node_id] = {
-            "knowledge": "unknown",
-            "interest": "none",
-            "confidence": 0.0,
-            "sources": [],
-            "last_assessed": None,
-        }
-
-    state = states[node_id]
-    if knowledge:
-        state["knowledge"] = knowledge
-    if interest:
-        state["interest"] = interest
-    if confidence is not None:
-        state["confidence"] = confidence
-    if source and source not in state.get("sources", []):
-        state.setdefault("sources", []).append(source)
-    state["last_assessed"] = datetime.now().isoformat()
-
-    save_knowledge_states(domain_id, states)
-    return state
-
-
-# Mapping from self-report familiarity levels to knowledge states.
-# v1 (5-level): unknown, heard_of, know_basics, could_explain, know_deeply
-# v2 (3-level): new_to_me, knew_some, knew_all
-FAMILIARITY_TO_KNOWLEDGE = {
-    # v1 format
-    "unknown": ("unknown", 0.0),
-    "heard_of": ("mentioned", 0.4),
-    "know_basics": ("engaged", 0.6),
-    "could_explain": ("anchored", 0.8),
-    "know_deeply": ("anchored", 0.95),
-    # v2 format
-    "new_to_me": ("unknown", 0.0),
-    "knew_some": ("engaged", 0.6),
-    "knew_all": ("anchored", 0.9),
-}
-
-INTEREST_TO_CANONICAL = {
-    # v1
-    "core": "core",
-    "curious": "curious",
-    "none": "none",
-    # v2
-    "interested": "curious",
-    "star": "core",
-    "skip": "none",
-}
-
-
-def import_self_report(domain_id: str, self_report_path: str | Path) -> dict:
-    """Import a self-report JSON file into canonical knowledge states.
-
-    Returns summary: {imported, skipped, total, by_level}.
-    """
-    with open(self_report_path) as f:
-        report = json.load(f)
-
-    answers = report.get("answers", {})
-    states = load_knowledge_states(domain_id)
-    now = datetime.now().isoformat()
-    imported = 0
-    by_level = {}
-
-    for node_id, answer in answers.items():
-        fam = answer.get("familiarity", "unknown")
-        interest_raw = answer.get("interest", "none")
-
-        knowledge, confidence = FAMILIARITY_TO_KNOWLEDGE.get(fam, ("unknown", 0.0))
-        interest = INTEREST_TO_CANONICAL.get(interest_raw, "curious")
-
-        states[node_id] = {
-            "knowledge": knowledge,
-            "interest": interest,
-            "confidence": confidence,
-            "sources": ["self_report"],
-            "last_assessed": now,
-        }
-        imported += 1
-        by_level[knowledge] = by_level.get(knowledge, 0) + 1
-
-    save_knowledge_states(domain_id, states)
-    return {
-        "imported": imported,
-        "total": len(answers),
-        "by_level": by_level,
-        "domain_id": domain_id,
-    }
-
-
-def import_assessment_answers(domain_id: str, answers: dict) -> dict:
-    """Import assessment answers dict (from HTML UI) directly into knowledge states.
-
-    answers: {node_id: {familiarity, interest, ...}}
-    Returns summary.
-    """
-    states = load_knowledge_states(domain_id)
-    now = datetime.now().isoformat()
-    imported = 0
-    by_level = {}
-
-    for node_id, answer in answers.items():
-        fam = answer.get("familiarity", "unknown")
-        interest_raw = answer.get("interest", "none")
-
-        knowledge, confidence = FAMILIARITY_TO_KNOWLEDGE.get(fam, ("unknown", 0.0))
-        interest = INTEREST_TO_CANONICAL.get(interest_raw, "curious")
-
-        states[node_id] = {
-            "knowledge": knowledge,
-            "interest": interest,
-            "confidence": confidence,
-            "sources": ["self_report"],
-            "last_assessed": now,
-        }
-        imported += 1
-        by_level[knowledge] = by_level.get(knowledge, 0) + 1
-
-    save_knowledge_states(domain_id, states)
-    return {
-        "imported": imported,
-        "total": len(answers),
-        "by_level": by_level,
-        "domain_id": domain_id,
-    }
+# load_curriculum() and list_curricula() imported from curriculum_db (SQLite-backed)
 
 
 # ─────────────────────────────────────────────

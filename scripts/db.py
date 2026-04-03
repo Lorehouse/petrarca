@@ -53,82 +53,6 @@ CREATE TABLE IF NOT EXISTS project_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_project_notes_project ON project_notes(project_id);
 
--- Feedback
-CREATE TABLE IF NOT EXISTS feedback (
-    id TEXT PRIMARY KEY,
-    timestamp TEXT NOT NULL,
-    context TEXT NOT NULL,
-    text TEXT DEFAULT '',
-    screenshot_file TEXT,
-    audio_file TEXT,
-    transcript TEXT,
-    transcript_error TEXT,
-    voice_routing TEXT
-);
-
--- Voice/text notes
-CREATE TABLE IF NOT EXISTS notes (
-    id TEXT PRIMARY KEY,
-    article_id TEXT DEFAULT '',
-    article_title TEXT DEFAULT '',
-    topics TEXT DEFAULT '[]',
-    status TEXT DEFAULT 'transcribing',
-    transcript TEXT,
-    actions TEXT DEFAULT '[]',
-    voice_routing TEXT,
-    created_at INTEGER,
-    extra TEXT DEFAULT '{}'
-);
-
--- Scrape reports
-CREATE TABLE IF NOT EXISTS scrape_reports (
-    article_id TEXT PRIMARY KEY,
-    url TEXT,
-    title TEXT,
-    reported_at TEXT NOT NULL,
-    status TEXT DEFAULT 'pending'
-);
-
--- Media log
-CREATE TABLE IF NOT EXISTS media_items (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT '',
-    source TEXT DEFAULT '',
-    url TEXT,
-    date_consumed TEXT,
-    duration INTEGER,
-    description TEXT DEFAULT '',
-    extra TEXT DEFAULT '{}'
-);
-
--- Chat conversations
-CREATE TABLE IF NOT EXISTS chat_conversations (
-    id TEXT PRIMARY KEY,
-    created_at TEXT,
-    updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id TEXT NOT NULL REFERENCES chat_conversations(id),
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_chat_conv ON chat_messages(conversation_id);
-
--- Research results
-CREATE TABLE IF NOT EXISTS research_results (
-    id TEXT PRIMARY KEY,
-    type TEXT DEFAULT 'research',
-    status TEXT NOT NULL,
-    data TEXT NOT NULL,
-    requested_at INTEGER,
-    completed_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_research_status ON research_results(status);
-
 -- Physical books
 CREATE TABLE IF NOT EXISTS physical_books (
     id TEXT PRIMARY KEY,
@@ -178,67 +102,6 @@ CREATE TABLE IF NOT EXISTS book_captures (
     upload_status TEXT DEFAULT 'pending'
 );
 CREATE INDEX IF NOT EXISTS idx_captures_book ON book_captures(book_id);
-
--- Kindle library
-CREATE TABLE IF NOT EXISTS kindle_books (
-    key TEXT PRIMARY KEY,
-    asin TEXT,
-    book_id TEXT,
-    title TEXT NOT NULL DEFAULT '',
-    author TEXT DEFAULT '',
-    cover_url TEXT,
-    progress TEXT DEFAULT '{}',
-    first_seen TEXT,
-    last_seen TEXT,
-    status TEXT DEFAULT 'unreviewed',
-    finished_date TEXT,
-    last_read TEXT,
-    purchase_date TEXT,
-    language TEXT,
-    publisher TEXT,
-    is_sideloaded INTEGER DEFAULT 0,
-    category TEXT,
-    added_to_petrarca INTEGER DEFAULT 0,
-    epub_path TEXT,
-    title_resolved TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_kindle_status ON kindle_books(status);
-CREATE INDEX IF NOT EXISTS idx_kindle_category ON kindle_books(category);
-
-CREATE TABLE IF NOT EXISTS kindle_sync_meta (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    sync_count INTEGER DEFAULT 0,
-    last_sync TEXT
-);
-
-CREATE TABLE IF NOT EXISTS kindle_highlights (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_key TEXT NOT NULL,
-    text TEXT NOT NULL,
-    location TEXT,
-    color TEXT,
-    synced_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_kh_book ON kindle_highlights(book_key);
-
-CREATE TABLE IF NOT EXISTS kindle_notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_key TEXT NOT NULL,
-    text TEXT NOT NULL,
-    location TEXT,
-    synced_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_kn_book ON kindle_notes(book_key);
-
-CREATE TABLE IF NOT EXISTS kindle_highlight_books (
-    key TEXT PRIMARY KEY,
-    asin TEXT,
-    title TEXT DEFAULT '',
-    author TEXT DEFAULT '',
-    cover_url TEXT,
-    first_sync TEXT,
-    last_sync TEXT
-);
 
 -- ===== Content Pipeline Tables (replaces JSON files) =====
 
@@ -538,42 +401,6 @@ CREATE TABLE IF NOT EXISTS book_curriculum_mappings (
 CREATE INDEX IF NOT EXISTS idx_bcm_book ON book_curriculum_mappings(book_id);
 CREATE INDEX IF NOT EXISTS idx_bcm_node ON book_curriculum_mappings(domain_id, node_id);
 
--- Retrieval practice questions per curriculum node
--- node_id can be empty for cross-node questions (e.g. temporal_ordering spanning multiple nodes)
-CREATE TABLE IF NOT EXISTS retrieval_questions (
-    id TEXT PRIMARY KEY,
-    domain_id TEXT NOT NULL,
-    node_id TEXT NOT NULL DEFAULT '',
-    question TEXT NOT NULL,
-    answer TEXT NOT NULL,
-    question_type TEXT DEFAULT 'event',
-    node_title TEXT DEFAULT '',
-    cluster_label TEXT,
-    generated_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_rq_domain ON retrieval_questions(domain_id);
-CREATE INDEX IF NOT EXISTS idx_rq_node ON retrieval_questions(domain_id, node_id);
-
--- Review scheduling state per question
-CREATE TABLE IF NOT EXISTS review_schedule (
-    question_id TEXT PRIMARY KEY REFERENCES retrieval_questions(id),
-    review_count INTEGER DEFAULT 0,
-    last_reviewed_at INTEGER,
-    last_result TEXT,
-    stability_days REAL DEFAULT 1.0,
-    due_at INTEGER DEFAULT 0
-);
-
--- Review answer history (append-only log)
-CREATE TABLE IF NOT EXISTS review_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_id TEXT NOT NULL REFERENCES retrieval_questions(id),
-    result TEXT NOT NULL,
-    reviewed_at TEXT NOT NULL,
-    session_id TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_rh_question ON review_history(question_id);
-
 -- Timeline entries per domain
 CREATE TABLE IF NOT EXISTS timeline_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -629,17 +456,6 @@ CREATE TABLE IF NOT EXISTS microlearning_cards (
 CREATE INDEX IF NOT EXISTS idx_ml_status ON microlearning_cards(status);
 CREATE INDEX IF NOT EXISTS idx_ml_due ON microlearning_cards(due_at);
 
--- 20Q elicitation session logs
-CREATE TABLE IF NOT EXISTS elicitation_sessions (
-    id TEXT PRIMARY KEY,
-    domain_id TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    questions_asked INTEGER DEFAULT 0,
-    nodes_assessed INTEGER DEFAULT 0,
-    responses TEXT DEFAULT '[]'
-);
-
 -- Voice transcript log: every voice interaction persisted for analysis
 CREATE TABLE IF NOT EXISTS voice_transcripts (
     id TEXT PRIMARY KEY,
@@ -664,14 +480,6 @@ MIGRATIONS = [
     "ALTER TABLE physical_books ADD COLUMN finished_date TEXT",
     "ALTER TABLE physical_books ADD COLUMN category TEXT",
     "ALTER TABLE physical_books ADD COLUMN progress_percent REAL",
-    # v2 question system: richer question metadata
-    "ALTER TABLE retrieval_questions ADD COLUMN answer_type TEXT DEFAULT 'concept'",
-    "ALTER TABLE retrieval_questions ADD COLUMN level INTEGER DEFAULT 1",
-    "ALTER TABLE retrieval_questions ADD COLUMN anchors TEXT DEFAULT '[]'",
-    "ALTER TABLE retrieval_questions ADD COLUMN memory_hook TEXT",
-    "ALTER TABLE retrieval_questions ADD COLUMN prerequisite_questions TEXT DEFAULT '[]'",
-    "ALTER TABLE retrieval_questions ADD COLUMN grading_options TEXT DEFAULT '[]'",
-    "ALTER TABLE retrieval_questions ADD COLUMN rich_answer TEXT",
     # Entity context system: enrich shared_entities for tappable review card entities
     "ALTER TABLE shared_entities ADD COLUMN description TEXT",
     "ALTER TABLE shared_entities ADD COLUMN entity_type TEXT",

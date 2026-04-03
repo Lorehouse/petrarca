@@ -16,8 +16,7 @@ import time
 from pathlib import Path
 
 from claude_llm import call_claude, call_claude_json, call_claude_or_gemini, call_claude_search
-from curriculum import load_curriculum
-from curriculum_db import update_knowledge, load_knowledge_states
+from curriculum_db import load_curriculum, list_curricula, update_knowledge, load_knowledge_states
 
 DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
 
@@ -68,7 +67,6 @@ def detect_curriculum(book_title: str, book_topics: list) -> str:
     of every available curriculum. Falls back to Sicily if nothing scores above 0.35.
     Returns the single best-matching domain_id.
     """
-    from curriculum import list_curricula, load_curriculum
     curricula = list_curricula()
     if not curricula:
         return 'sicily_history_culture_and_legacy'
@@ -123,7 +121,6 @@ def suggest_curricula_for_book(book_title: str, book_topics: list) -> list[dict]
     Used to suggest which curriculum(a) to map a new book against,
     and to surface gaps where no curriculum exists yet.
     """
-    from curriculum import list_curricula, load_curriculum
     curricula = list_curricula()
     if not curricula:
         return []
