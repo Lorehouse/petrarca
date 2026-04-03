@@ -244,9 +244,11 @@ export default function ReviewSession() {
           const result = await sendVoiceMemo(card.item.id, uri).catch(() => null);
           setProcessingVoice(false);
           if (result?.suggested_score) {
+            const mlCount = result.microlearning_triggered?.length || 0;
+            const mlNote = mlCount ? ` · ${mlCount} research card${mlCount > 1 ? 's' : ''} triggered` : '';
             Alert.alert(
               '◎ Voice memo processed',
-              `Suggested: ${result.suggested_score}${result.follow_ups_created?.length ? ` · ${result.follow_ups_created.length} follow-ups added` : ''}`,
+              `Suggested: ${result.suggested_score}${result.follow_ups_created?.length ? ` · ${result.follow_ups_created.length} follow-ups` : ''}${mlNote}`,
               [
                 { text: `Use "${result.suggested_score}"`, onPress: () => score(result.suggested_score as any) },
                 { text: 'Score manually' },

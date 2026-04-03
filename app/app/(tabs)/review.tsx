@@ -670,12 +670,19 @@ export default function ReviewScreen() {
     });
   };
 
-  const [researchingQuery, setResearchingQuery] = useState<string | null>(null);
+  const [researchingQueries, setResearchingQueries] = useState<string[]>([]);
+
+  const addResearchToast = (query: string) => {
+    setResearchingQueries(prev => [...prev, query]);
+    setTimeout(() => {
+      setResearchingQueries(prev => prev.filter(q => q !== query));
+    }, 3000);
+  };
 
   const handleResearch = (query: string, item?: ResurfacingItem) => {
-    setResearchingQuery(query);
+    addResearchToast(query);
     const sourceNodeId = item?.question_id?.split(':').pop();
-    const sourceDomain = item?.domain;
+    const sourceDomain = item?.domain_id || item?.domain;
     triggerMicrolearning({
       query,
       sourceItemId: item?.question_id,
@@ -688,11 +695,8 @@ export default function ReviewScreen() {
         source_item: item?.question_id,
         source_domain: sourceDomain,
       });
-      // Clear after brief confirmation
-      setTimeout(() => setResearchingQuery(null), 2000);
     }).catch(e => {
       console.warn('[review] research trigger failed:', e);
-      setResearchingQuery(null);
     });
   };
 
@@ -743,12 +747,16 @@ export default function ReviewScreen() {
               </View>
             )}
 
-            {researchingQuery && (
-              <View style={s.researchToast}>
-                <ActivityIndicator size="small" color={colors.rubric} style={{ marginRight: 8 }} />
-                <Text style={s.researchToastText} numberOfLines={1}>
-                  Researching: {researchingQuery}
-                </Text>
+            {researchingQueries.length > 0 && (
+              <View style={s.researchToastStack}>
+                {researchingQueries.map((q, i) => (
+                  <View key={`${q}-${i}`} style={s.researchToast}>
+                    <ActivityIndicator size="small" color={colors.rubric} style={{ marginRight: 8 }} />
+                    <Text style={s.researchToastText} numberOfLines={1}>
+                      Researching: {q}
+                    </Text>
+                  </View>
+                ))}
               </View>
             )}
 
@@ -883,7 +891,8 @@ const s = StyleSheet.create({
   loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.rubric, textAlign: 'center', paddingVertical: 20, paddingHorizontal: layout.screenPadding },
-  researchToast: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: layout.screenPadding, backgroundColor: colors.parchmentDark, borderRadius: 4, marginBottom: 12, marginHorizontal: layout.screenPadding },
+  researchToastStack: { gap: 6, marginBottom: 12, marginHorizontal: layout.screenPadding },
+  researchToast: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: layout.screenPadding, backgroundColor: colors.parchmentDark, borderRadius: 4 },
   researchToastText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textSecondary, flex: 1, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   emptyState: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, color: colors.ink, marginBottom: 12, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },

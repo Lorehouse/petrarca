@@ -358,6 +358,18 @@ export default function VoiceElicitation() {
                   </View>
                 )}
 
+                {result.microlearning_triggered && result.microlearning_triggered.length > 0 && (
+                  <View style={styles.feedbackSection}>
+                    <Text style={[styles.feedbackLabel, { color: colors.rubric }]}>{'\u2726'} RESEARCHING NOW</Text>
+                    {result.microlearning_triggered.map((m, i) => (
+                      <Text key={i} style={[styles.feedbackItem, { color: colors.textSecondary, fontStyle: 'italic' }]}>{'\u21BB'} {m.query}</Text>
+                    ))}
+                    <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
+                      These will appear as research cards in your review stream.
+                    </Text>
+                  </View>
+                )}
+
                 {/* Next button */}
                 <Pressable style={styles.nextBtn} onPress={nextNode}>
                   <Text style={styles.nextBtnText}>

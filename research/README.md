@@ -58,6 +58,11 @@ Master index of all research documents. **Always update this file when adding ne
 | [reading-companion-process-design.md](reading-companion-process-design.md) | **PROCESS DESIGN**: How the reading companion flows during active book reading — temporal hooks (4 types, priority order), 3 interaction moments (chapter complete card, cross-book review, map old book), chapter dropdown semantics, pre-reading book scan, rapid feedback calibration pattern, integration with Amygdala. Active design doc for long-term iteration. | Active |
 | [entity-profiles-design.md](entity-profiles-design.md) | **DESIGN SKETCH**: Entity profiles as lightweight knowledge structures for historical figures — person≡period duality, 4-layer scaffold (identity/context/connections/significance), question generation from key_facts + cross-curriculum bridges + reading triggers, proto-curriculum growth pattern, implementation plan. Examples: Roger II, Karl XII, Frederick II. | Active |
 
+## Voice & Microlearning
+| Document | Description | Status |
+|----------|-------------|--------|
+| [voice-microlearning-integration.md](voice-microlearning-integration.md) | **DESIGN**: Voice → microlearning bridge — 3 integration points (elicitation wonderings, review memo questions, feedback research_request), auto-trigger with rate limits, dedup, response shape changes, client toast UX, what NOT to auto-trigger. Implementation order: elicitation first (purest signal), then review memos, then feedback routing. | Active |
+
 ## Knowledge Retention
 | Document | Description | Status |
 |----------|-------------|--------|

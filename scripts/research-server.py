@@ -301,6 +301,30 @@ def _route_and_enrich_feedback(feedback_id: str, transcript: str, context: dict)
             conn.close()
             print(f'[voice-routing] Auto-created project note {note_id} for project {routing["project_id"]}', flush=True)
 
+        # Auto-trigger microlearning for research requests
+        if routing.get('intent') == 'research_request':
+            try:
+                from review_engine import create_microlearning_request
+                query = routing.get('cleaned_text', transcript)
+                source_domain = context.get('domain', '')
+                source_node = context.get('node_id', '')
+                card_id = create_microlearning_request(
+                    query=query,
+                    source_node_id=source_node or None,
+                    source_domain=source_domain or None,
+                )
+                # Store reference in feedback meta
+                if meta_path.exists():
+                    try:
+                        meta = json.loads(meta_path.read_text())
+                        meta['microlearning_card_id'] = card_id
+                        meta_path.write_text(json.dumps(meta, indent=2))
+                    except Exception:
+                        pass
+                print(f'[voice→ml] feedback research → {card_id}: {query[:60]}', flush=True)
+            except Exception as e:
+                print(f'[voice→ml] feedback research trigger failed: {e}', flush=True)
+
     except Exception as e:
         print(f'[voice-routing] Background routing failed for {feedback_id}: {e}', flush=True)
 

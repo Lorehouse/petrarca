@@ -73,6 +73,7 @@ export async function sendVoiceMemo(itemId: string, audioUri: string): Promise<{
   transcript: string;
   suggested_score: string;
   follow_ups_created: Array<{ id: string; question: string }>;
+  microlearning_triggered?: Array<{ id: string; query: string }>;
 }> {
   const form = new FormData();
   form.append('item_id', itemId);
@@ -183,6 +184,7 @@ export interface ElicitationResult {
   node_description: string;
   transcript: string;
   research_triggers: Array<{ id: string; question: string }>;
+  microlearning_triggered?: Array<{ id: string; query: string }>;
 }
 
 export async function getElicitationCandidates(

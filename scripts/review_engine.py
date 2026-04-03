@@ -1691,12 +1691,29 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
         follow_ups.append({'id': child_id, 'question': question})
 
     conn.commit()
+
+    # Trigger microlearning for research-worthy questions
+    ml_triggered = []
+    for question in extracted.get('questions', [])[:2]:
+        try:
+            card_id = create_microlearning_request(
+                query=question,
+                source_item_id=item_id,
+                source_node_id=item.get('curriculum_node_id'),
+                source_domain=item.get('curriculum_domain'),
+            )
+            ml_triggered.append({'id': card_id, 'query': question})
+            print(f'[voice→ml] memo question → {card_id}: {question[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice→ml] memo trigger failed: {e}', flush=True)
+
     return {
         'transcript': transcript,
         'remembered': extracted.get('remembered', ''),
         'suggested_score': score,
         'connections': extracted.get('connections', []),
         'follow_ups_created': follow_ups,
+        'microlearning_triggered': ml_triggered,
     }
 
 
@@ -1794,6 +1811,48 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     conn.commit()
 
     result['research_triggers'] = research_triggers
+
+    # Trigger microlearning for wonderings, research triggers, and top missed fact
+    ml_triggered = []
+    # Wonderings → microlearning (purest signal — user literally said "I wonder...")
+    for w in wonderings[:2]:
+        try:
+            card_id = create_microlearning_request(
+                query=w, source_node_id=node_id, source_domain=domain_id,
+            )
+            ml_triggered.append({'id': card_id, 'query': w})
+            print(f'[voice→ml] wondering → {card_id}: {w[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice→ml] wondering trigger failed: {e}', flush=True)
+
+    # Explicit research triggers from LLM extraction
+    for trigger in result.get('research_triggers_raw', result.get('research_triggers', []))[:2]:
+        q = trigger.get('question', '') if isinstance(trigger, dict) else str(trigger)
+        if q and q not in [m['query'] for m in ml_triggered]:
+            try:
+                card_id = create_microlearning_request(
+                    query=q, source_node_id=node_id, source_domain=domain_id,
+                )
+                ml_triggered.append({'id': card_id, 'query': q})
+                print(f'[voice→ml] research trigger → {card_id}: {q[:60]}', flush=True)
+            except Exception as e:
+                print(f'[voice→ml] research trigger failed: {e}', flush=True)
+
+    # Top missed critical fact → targeted microlearning
+    missed = result.get('missed', [])
+    if missed and len(ml_triggered) < 3:
+        most_important = missed[0] if isinstance(missed[0], str) else str(missed[0])
+        q = f'Why is this important to know: {most_important}'
+        try:
+            card_id = create_microlearning_request(
+                query=q, source_node_id=node_id, source_domain=domain_id,
+            )
+            ml_triggered.append({'id': card_id, 'query': q})
+            print(f'[voice→ml] missed fact → {card_id}: {q[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice→ml] missed trigger failed: {e}', flush=True)
+
+    result['microlearning_triggered'] = ml_triggered
     return result
 
 
