@@ -957,13 +957,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
                 })
 
-            # Interleave: insert microlearning cards every ~5 review cards
+            # Interleave: insert microlearning cards every ~3 review cards
             if ml_items:
                 merged = []
                 ml_idx = 0
                 for i, item in enumerate(items):
                     merged.append(item)
-                    if (i + 1) % 5 == 0 and ml_idx < len(ml_items):
+                    if (i + 1) % 3 == 0 and ml_idx < len(ml_items):
                         merged.append(ml_items[ml_idx])
                         ml_idx += 1
                 # Append remaining

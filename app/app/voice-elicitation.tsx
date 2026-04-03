@@ -472,6 +472,14 @@ export default function VoiceElicitation() {
                           ))}
                         </View>
                       )}
+                      {(r.microlearning_triggered ?? []).length > 0 && (
+                        <View>
+                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>{'\u2726'} RESEARCHING</Text>
+                          {(r.microlearning_triggered ?? []).map((m: { id: string; query: string }, mi: number) => (
+                            <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17, fontStyle: 'italic' }}>{'\u21BB'} {m.query}</Text>
+                          ))}
+                        </View>
+                      )}
                       {r.feedback_summary && (
                         <Text style={{ fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>
                           {r.feedback_summary}

@@ -1059,12 +1059,15 @@ def generate_question(item_id: str, conn) -> dict:
                 node_description = node.get('description', '') if node else ''
                 result = _key_fact_to_question(fact, node_title, node_description)
                 entities = fact.get('entities', [])
-                if entities:
-                    result['follow_up_queries'] = [
-                        f'Tell me more about {entities[0]}' if entities else '',
-                        f'What happened before {node_title}?',
-                        f'How does {node_title} connect to other periods?',
-                    ]
+                # Generate specific follow-up queries from the fact context
+                entity_name = entities[0].replace('_', ' ').title() if entities else ''
+                fact_q = fact.get('question', '')
+                fact_a = fact.get('answer', '')
+                result['follow_up_queries'] = [
+                    f'Why did {entity_name} matter beyond {node_title}?' if entity_name else f'What were the long-term consequences of {node_title}?',
+                    f'What was happening elsewhere when {fact_a[:50].rstrip()}?' if fact_a else f'What was the wider context around {node_title}?',
+                    f'What would a contemporary have found most surprising about {entity_name or node_title}?',
+                ]
                 return result
 
     # ── Serve from cache if no key_facts path applied ─────────────────────────
@@ -1167,11 +1170,15 @@ def generate_question(item_id: str, conn) -> dict:
     if 'follow_up_queries' not in result:
         try:
             fq_prompt = (
-                f'Generate 3 research questions to explore "{node_title}" deeper. '
-                f'Context: {node_description[:200]}\n'
-                f'1. A WHY/HOW question (causal depth)\n'
-                f'2. A comparison to another era or place\n'
-                f'3. A surprising detail, debate, or modern relevance\n'
+                f'A history reader just reviewed "{node_title}": {node_description[:150]}\n\n'
+                f'Generate 3 questions that would make them genuinely curious — the kind that make you '
+                f'go "wait, really?" or "I never thought about it that way." Be specific, name real '
+                f'people/places/events. NO generic templates like "How does X connect to Y?" or '
+                f'"Tell me more about X."\n\n'
+                f'Examples of good questions:\n'
+                f'- "Did Archimedes\' war machines actually work, or was Polybius exaggerating?"\n'
+                f'- "Why did Syracuse back Carthage when every other Sicilian city backed Rome?"\n'
+                f'- "What happened to the Arab poets who wrote for Norman kings after Frederick II died?"\n\n'
                 f'Output JSON array of 3 strings only: ["q1","q2","q3"]'
             )
             fq = call_claude_json(fq_prompt, timeout=60, model='sonnet')
