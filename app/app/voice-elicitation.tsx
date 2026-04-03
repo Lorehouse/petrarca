@@ -6,7 +6,7 @@ import {
 import { Audio } from 'expo-av';
 import { documentDirectory, makeDirectoryAsync, copyAsync } from 'expo-file-system/legacy';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { colors } from '../design/tokens';
+import { colors, fonts } from '../design/tokens';
 import {
   getElicitationCandidates, sendVoiceElicitation,
   ElicitationCandidate, ElicitationResult,
