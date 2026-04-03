@@ -16,10 +16,8 @@ import time
 from pathlib import Path
 
 from claude_llm import call_claude, call_claude_json, call_claude_or_gemini, call_claude_search
-from curriculum import (
-    load_curriculum, load_knowledge_states,
-)
-from curriculum_db import update_knowledge
+from curriculum import load_curriculum
+from curriculum_db import update_knowledge, load_knowledge_states
 
 DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
 

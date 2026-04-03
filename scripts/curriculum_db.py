@@ -208,9 +208,17 @@ def update_knowledge(domain_id: str, node_id: str,
         ).fetchone()
 
         if existing:
-            cur_knowledge = knowledge or existing['knowledge']
+            # Knowledge level only upgrades, never downgrades
+            KNOWLEDGE_ORDER = {'unknown': 0, 'mentioned': 1, 'engaged': 2, 'anchored': 3}
+            if knowledge:
+                new_level = KNOWLEDGE_ORDER.get(knowledge, 0)
+                old_level = KNOWLEDGE_ORDER.get(existing['knowledge'], 0)
+                cur_knowledge = knowledge if new_level >= old_level else existing['knowledge']
+            else:
+                cur_knowledge = existing['knowledge']
             cur_interest = interest or existing['interest']
-            cur_confidence = confidence if confidence is not None else existing['confidence']
+            # Confidence: take the higher value
+            cur_confidence = max(confidence or 0.0, existing['confidence'] or 0.0)
             cur_layer = highest_layer if highest_layer is not None else existing['highest_layer']
             sources = existing['source_summary']
             if isinstance(sources, str):
