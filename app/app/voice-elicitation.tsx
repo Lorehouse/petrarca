@@ -4,7 +4,10 @@ import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import { documentDirectory, makeDirectoryAsync, copyAsync } from 'expo-file-system/legacy';
+import {
+  documentDirectory, makeDirectoryAsync, copyAsync,
+  readDirectoryAsync, deleteAsync, readAsStringAsync, writeAsStringAsync,
+} from 'expo-file-system/legacy';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, fonts } from '../design/tokens';
 import {
@@ -14,7 +17,47 @@ import {
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
 
-type Phase = 'loading' | 'prompt' | 'recording' | 'processing' | 'feedback' | 'retry' | 'done';
+type Phase = 'loading' | 'prompt' | 'recording' | 'processing' | 'feedback' | 'retry' | 'pending_retry' | 'done';
+
+interface PendingUpload {
+  audioUri: string;
+  nodeId: string;
+  domainId: string;
+  nodeTitle: string;
+  recordedAt: number;
+}
+
+const PENDING_DIR = `${documentDirectory}voice-elicitation/`;
+const PENDING_META = `${documentDirectory}voice-elicitation/pending.json`;
+
+async function savePendingUpload(upload: PendingUpload) {
+  await makeDirectoryAsync(PENDING_DIR, { intermediates: true }).catch(() => {});
+  let pending: PendingUpload[] = [];
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    pending = JSON.parse(raw);
+  } catch { /* no file yet */ }
+  pending.push(upload);
+  await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
+}
+
+async function clearPendingUpload(audioUri: string) {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    const filtered = pending.filter(p => p.audioUri !== audioUri);
+    await writeAsStringAsync(PENDING_META, JSON.stringify(filtered));
+  } catch { /* ignore */ }
+}
+
+async function loadPendingUploads(): Promise<PendingUpload[]> {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
 
 export default function VoiceElicitation() {
   const router = useRouter();
@@ -27,15 +70,26 @@ export default function VoiceElicitation() {
   const [results, setResults] = useState<Array<{ node: string; score: string }>>([]);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [retryError, setRetryError] = useState('');
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savedUriRef = useRef<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     setFeedbackContext({ screen: 'voice-elicitation' });
-    loadCandidates();
+    checkPendingThenLoad();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
+
+  async function checkPendingThenLoad() {
+    const pending = await loadPendingUploads();
+    if (pending.length > 0) {
+      setPendingUploads(pending);
+      setPhase('pending_retry');
+    } else {
+      loadCandidates();
+    }
+  }
 
   async function loadCandidates() {
     setPhase('loading');
@@ -87,11 +141,20 @@ export default function VoiceElicitation() {
 
       // Save to persistent location before uploading
       const ts = Date.now();
-      const persistDir = `${documentDirectory}voice-elicitation/`;
-      await makeDirectoryAsync(persistDir, { intermediates: true }).catch(() => {});
-      const savedPath = `${persistDir}elicit_${ts}.m4a`;
+      await makeDirectoryAsync(PENDING_DIR, { intermediates: true }).catch(() => {});
+      const savedPath = `${PENDING_DIR}elicit_${ts}.m4a`;
       await copyAsync({ from: tempUri, to: savedPath });
       savedUriRef.current = savedPath;
+
+      // Track as pending before upload attempt
+      const cand = candidates[current];
+      await savePendingUpload({
+        audioUri: savedPath,
+        nodeId: cand.node_id,
+        domainId: cand.domain_id,
+        nodeTitle: cand.node_title,
+        recordedAt: ts,
+      });
 
       await uploadElicitation(savedPath);
     } catch (e) {
@@ -114,6 +177,8 @@ export default function VoiceElicitation() {
       if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
         throw new Error('Server returned empty analysis — may need retry');
       }
+      // Upload succeeded — clear from pending
+      await clearPendingUpload(uri);
       setResult(res);
       setPhase('feedback');
       logEvent('voice_elicitation_result', {
@@ -157,6 +222,69 @@ export default function VoiceElicitation() {
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator color={colors.rubric} />
         <Text style={styles.loadingText}>Finding topics for recall…</Text>
+      </View>
+    );
+  }
+
+  if (phase === 'pending_retry') {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.header, { paddingBottom: 16 }]}>
+          <Text style={styles.headerTitle}>{'\u2726'} Unsent Recordings</Text>
+          <Text style={[styles.loadingText, { marginTop: 8 }]}>
+            {pendingUploads.length} recording{pendingUploads.length > 1 ? 's' : ''} saved but not uploaded.
+          </Text>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 12 }}>
+          {pendingUploads.map((p, i) => (
+            <View key={p.audioUri} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 16, borderWidth: 1, borderColor: colors.rule }}>
+              <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.ink, marginBottom: 4 }}>{p.nodeTitle}</Text>
+              <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>
+                Recorded {new Date(p.recordedAt).toLocaleString()}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable
+                  style={[styles.recordBtn, { flex: 1 }]}
+                  onPress={async () => {
+                    // Set up context for upload
+                    savedUriRef.current = p.audioUri;
+                    const fakeCand: ElicitationCandidate = {
+                      node_id: p.nodeId,
+                      node_title: p.nodeTitle,
+                      node_description: '',
+                      domain_id: p.domainId,
+                      knowledge: 'engaged',
+                      confidence: 0.5,
+                      elicitation_score: 0,
+                    };
+                    setCandidates([fakeCand]);
+                    setCurrent(0);
+                    await uploadElicitation(p.audioUri);
+                  }}
+                >
+                  <Text style={styles.recordBtnText}>Retry upload</Text>
+                </Pressable>
+                <Pressable
+                  style={{ paddingVertical: 12, paddingHorizontal: 16 }}
+                  onPress={async () => {
+                    await clearPendingUpload(p.audioUri);
+                    const remaining = pendingUploads.filter(u => u.audioUri !== p.audioUri);
+                    setPendingUploads(remaining);
+                    if (remaining.length === 0) loadCandidates();
+                  }}
+                >
+                  <Text style={{ fontFamily: fonts.ui, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' }}>Discard</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+          <Pressable
+            style={{ paddingVertical: 16, alignItems: 'center' }}
+            onPress={() => { setPendingUploads([]); loadCandidates(); }}
+          >
+            <Text style={{ fontFamily: fonts.ui, fontSize: 13, color: colors.rubric }}>Skip to new topics</Text>
+          </Pressable>
+        </ScrollView>
       </View>
     );
   }
