@@ -270,6 +270,11 @@ export default function VoiceElicitation() {
     );
   }
 
+  if (phase === 'pending_retry' && pendingUploads.length === 0) {
+    // All retried — move to normal flow
+    loadCandidates();
+  }
+
   if (phase === 'pending_retry') {
     return (
       <View style={styles.container}>
@@ -302,11 +307,10 @@ export default function VoiceElicitation() {
                       elicitation_score: 0,
                     };
                     setProcessingCount(c => c + 1);
+                    // Remove from pending list immediately and show processing
+                    setPendingUploads(prev => prev.filter(u => u.audioUri !== p.audioUri));
                     uploadElicitation(p.audioUri, fakeCand).then(async () => {
                       await clearPendingUpload(p.audioUri);
-                      const remaining = pendingUploads.filter(u => u.audioUri !== p.audioUri);
-                      setPendingUploads(remaining);
-                      if (remaining.length === 0) loadCandidates();
                     }).catch(() => {
                       setProcessingCount(c => Math.max(0, c - 1));
                     });
