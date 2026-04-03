@@ -1816,9 +1816,14 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         if not node:
             return {'error': f'Node {node_id} not found'}
 
+    # Gather sources BEFORE closing connection
+    if is_chapter_recall and chapter_source_texts:
+        sources_text = '\n'.join(chapter_source_texts[:5])
+    else:
+        sources_text = _gather_node_sources(node_id, domain_id, conn)
+
     # Close connection before slow work (transcription + LLM) to avoid write lock
     conn.close()
-    conn = None  # force errors if accidentally used during slow work
 
     # Transcribe
     print(f'[voice-elicit] Transcribing {audio_path} ({audio_path.stat().st_size} bytes)...', flush=True)
@@ -1826,12 +1831,6 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     print(f'[voice-elicit] Transcript: {repr(transcript[:200]) if transcript else "EMPTY"}', flush=True)
     if not transcript:
         return {'error': 'Transcription failed'}
-
-    # Gather sources — for chapter recall, use the chapter source texts we already found
-    if is_chapter_recall and chapter_source_texts:
-        sources_text = '\n'.join(chapter_source_texts[:5])
-    else:
-        sources_text = _gather_node_sources(node_id, domain_id, conn)
     print(f'[voice-elicit] Sources: {len(sources_text)} chars', flush=True)
 
     # Run LLM analysis
@@ -1848,8 +1847,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         print(f'[voice-elicit] LLM returned non-dict: {repr(str(result)[:200])}', flush=True)
         result = {}
 
-    # Reopen connection for writes (closed before slow work above)
+    # Reopen connection for writes — use longer timeout for robustness
     conn = get_connection()
+    conn.execute('PRAGMA busy_timeout = 60000')  # 60s wait for lock
 
     # Generate temporal hook (skip for chapter recall — no curriculum node to anchor)
     temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
