@@ -638,6 +638,27 @@ export default function BookDetailScreen() {
                 >
                   <Text style={styles.chapterActionText}>Review this chapter</Text>
                 </Pressable>
+                <Pressable
+                  style={styles.chapterActionBtn}
+                  onPress={() => {
+                    const chNum = selectedChapter.replace(/^Ch (\d+):.*/, '$1');
+                    const chTitle = selectedChapter.replace(/^Ch \d+:\s*/, '');
+                    logEvent('chapter_recall_from_book', { book_id: book.id, chapter: chNum });
+                    router.push({
+                      pathname: '/voice-elicitation',
+                      params: {
+                        chapter_recall: '1',
+                        book_id: book.id,
+                        book_title: book.title,
+                        chapter_number: chNum,
+                        chapter_title: chTitle,
+                        domain_id: book.topics?.[0] ? '' : '',
+                      },
+                    } as any);
+                  }}
+                >
+                  <Text style={styles.chapterActionText}>{'\u25CE'} Recall this chapter</Text>
+                </Pressable>
               </View>
             )}
           </>

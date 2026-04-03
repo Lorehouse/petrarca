@@ -61,7 +61,14 @@ async function loadPendingUploads(): Promise<PendingUpload[]> {
 
 export default function VoiceElicitation() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ domain_id?: string }>();
+  const params = useLocalSearchParams<{
+    domain_id?: string;
+    chapter_recall?: string;
+    book_id?: string;
+    book_title?: string;
+    chapter_number?: string;
+    chapter_title?: string;
+  }>();
   const [candidates, setCandidates] = useState<ElicitationCandidate[]>([]);
   const [current, setCurrent] = useState(0);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -84,6 +91,30 @@ export default function VoiceElicitation() {
   }, []);
 
   async function checkPendingThenLoad() {
+    // Direct chapter recall from book detail
+    if (params.chapter_recall === '1' && params.book_id && params.chapter_number) {
+      const chNum = params.chapter_number;
+      const chTitle = params.chapter_title || '';
+      const bookTitle = params.book_title || '';
+      const cand: ElicitationCandidate = {
+        type: 'chapter_recall',
+        node_id: `chapter:${params.book_id}:${chNum}`,
+        node_title: `Chapter ${chNum}: ${chTitle}`,
+        node_description: `What do you remember from Chapter ${chNum} of ${bookTitle}? Speak freely about the key ideas, people, and events.`,
+        domain_id: params.domain_id || '',
+        knowledge: 'engaged',
+        confidence: 0.5,
+        elicitation_score: 0,
+        book_id: params.book_id,
+        book_title: bookTitle,
+        chapter_number: parseInt(chNum, 10),
+        chapter_title: chTitle,
+      };
+      setCandidates([cand]);
+      setPhase('prompt');
+      return;
+    }
+
     const pending = await loadPendingUploads();
     if (pending.length > 0) {
       setPendingUploads(pending);
