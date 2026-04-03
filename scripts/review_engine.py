@@ -1162,12 +1162,15 @@ def generate_question(item_id: str, conn) -> dict:
 # ── Record answer ─────────────────────────────────────────────────────────────
 
 def record_answer(item_id: str, score: str, conn) -> dict:
-    # Look up in knowledge_items first; fall back to review_items (exploration/voice)
+    # Look up in knowledge_items first; fall back to review_items, then microlearning_cards
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
     table = 'knowledge_items'
     if row is None:
         row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
         table = 'review_items'
+    if row is None:
+        row = conn.execute('SELECT * FROM microlearning_cards WHERE id=?', (item_id,)).fetchone()
+        table = 'microlearning_cards'
     if not row:
         return {}
     item = dict(row)
@@ -1180,16 +1183,32 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
     next_due = now + int(new_stability * 24 * 60 * 60 * 1000)
 
-    # Clear cached question — knowledge state has changed, regenerate for next session
-    conn.execute(f"""
-        UPDATE {table} SET stability_days=?, due_at=?, last_reviewed_at=?,
-          last_score=?, review_count=review_count+1, cached_question=NULL
-        WHERE id=?
-    """, (new_stability, next_due, now, score, item_id))
+    if table == 'microlearning_cards':
+        # Microlearning cards: update FSRS fields (no cached_question to clear)
+        conn.execute("""
+            UPDATE microlearning_cards SET stability_days=?, due_at=?, last_reviewed_at=?,
+              last_score=?, review_count=review_count+1
+            WHERE id=?
+        """, (new_stability, next_due, now, score, item_id))
+        print(f'[review] microlearning {item_id}: {score} → stability={new_stability:.1f}d, next_due in {new_stability:.1f}d', flush=True)
 
-    if item.get('curriculum_domain') and item.get('curriculum_node_id'):
+        # Update knowledge state if microlearning card has curriculum context
+        if item.get('source_domain') and item.get('source_node_id'):
+            knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
+            update_knowledge(item['source_domain'], item['source_node_id'],
+                             knowledge=knowledge_val, confidence=confidence_val,
+                             source=f"microlearning:{item_id}")
+    else:
+        # Regular knowledge_items / review_items
+        conn.execute(f"""
+            UPDATE {table} SET stability_days=?, due_at=?, last_reviewed_at=?,
+              last_score=?, review_count=review_count+1, cached_question=NULL
+            WHERE id=?
+        """, (new_stability, next_due, now, score, item_id))
+
+    # Knowledge state update for non-microlearning items
+    if table != 'microlearning_cards' and item.get('curriculum_domain') and item.get('curriculum_node_id'):
         knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
-        # Determine source book/chapter for the curriculum update note
         if table == 'knowledge_items':
             try:
                 sources = json.loads(item.get('sources') or '[]')
@@ -1205,14 +1224,16 @@ def record_answer(item_id: str, score: str, conn) -> dict:
                          knowledge=knowledge_val, confidence=confidence_val,
                          source=f"review:{src_book}:{src_chapter}")
 
-    if score == 'missed' and item.get('curriculum_domain') and item.get('curriculum_node_id'):
-        curriculum = load_curriculum(item['curriculum_domain'])
+    # Reschedule dependents on miss (applies to all card types with curriculum context)
+    domain = item.get('curriculum_domain') or item.get('source_domain')
+    node_id = item.get('curriculum_node_id') or item.get('source_node_id')
+    if score == 'missed' and domain and node_id:
+        curriculum = load_curriculum(domain)
         if curriculum:
-            dep_ids = get_dependent_node_ids(item['curriculum_node_id'], curriculum)
+            dep_ids = get_dependent_node_ids(node_id, curriculum)
             if dep_ids:
                 soon = now + 24 * 60 * 60 * 1000
                 ph = ','.join('?' * len(dep_ids))
-                # Reschedule dependents in both tables
                 conn.execute(
                     f"UPDATE knowledge_items SET stability_days=1.0, due_at=? WHERE curriculum_node_id IN ({ph}) AND (last_score IS NULL OR last_score != 'knew')",
                     [soon] + dep_ids,
@@ -1224,20 +1245,21 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
     conn.commit()
 
-    # Background re-generation — pre-cache question for next session
-    def _regen():
-        try:
-            from db import get_connection as _conn
-            c = _conn()
-            q = generate_question(item_id, c)
-            c.execute(f'UPDATE {table} SET cached_question=? WHERE id=?',
-                      (json.dumps(q), item_id))
-            c.commit()
-            c.close()
-            print(f'[review] re-generated question for {table} item {item_id}', flush=True)
-        except Exception as e:
-            print(f'[review] re-gen failed for {table} item {item_id}: {e}', flush=True)
-    threading.Thread(target=_regen, daemon=True).start()
+    # Background re-generation — pre-cache question for next session (not for microlearning)
+    if table != 'microlearning_cards':
+        def _regen():
+            try:
+                from db import get_connection as _conn
+                c = _conn()
+                q = generate_question(item_id, c)
+                c.execute(f'UPDATE {table} SET cached_question=? WHERE id=?',
+                          (json.dumps(q), item_id))
+                c.commit()
+                c.close()
+                print(f'[review] re-generated question for {table} item {item_id}', flush=True)
+            except Exception as e:
+                print(f'[review] re-gen failed for {table} item {item_id}: {e}', flush=True)
+        threading.Thread(target=_regen, daemon=True).start()
 
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
 
