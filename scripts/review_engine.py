@@ -1358,7 +1358,7 @@ def _run_microlearning_research(card_id: str, query: str,
         result = call_claude_json(prompt, timeout=120)
 
         if not result or 'content' not in result:
-            raise ValueError(f'Invalid response: {raw[:200] if raw else "empty"}')
+            raise ValueError(f'Invalid response: {str(result)[:200] if result else "empty"}')
 
         # Update the card
         now_ms = int(time.time() * 1000)
