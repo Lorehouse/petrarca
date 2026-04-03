@@ -19,6 +19,9 @@ import re
 import subprocess
 import time
 
+# Strip CLAUDECODE env var to allow nested invocation from Claude Code sessions
+_CLEAN_ENV = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
 
 def call_claude(prompt: str, *, timeout: int = 180, retries: int = 1,
                 model: str | None = None) -> str | None:
@@ -41,7 +44,7 @@ def call_claude(prompt: str, *, timeout: int = 180, retries: int = 1,
         try:
             result = subprocess.run(
                 cmd, input=prompt, capture_output=True, text=True,
-                timeout=timeout,
+                timeout=timeout, env=_CLEAN_ENV,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
@@ -127,7 +130,7 @@ def call_claude_search(prompt: str, *, timeout: int = 180,
     try:
         result = subprocess.run(
             cmd, input=prompt, capture_output=True, text=True,
-            timeout=timeout,
+            timeout=timeout, env=_CLEAN_ENV,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
