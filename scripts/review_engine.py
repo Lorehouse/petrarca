@@ -2018,6 +2018,18 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
 
     states = {r[0]: {'knowledge': r[1], 'confidence': r[2]} for r in rows}
 
+    # Exclude nodes with a voice transcript in the last 24h
+    recent_cutoff = int(time.time() * 1000) - 24 * 3600 * 1000
+    recent_nodes = set()
+    try:
+        recent_rows = conn.execute(
+            "SELECT node_id FROM voice_transcripts WHERE domain_id = ? AND created_at > ?",
+            (domain_id, recent_cutoff)
+        ).fetchall()
+        recent_nodes = {r[0] for r in recent_rows}
+    except Exception:
+        pass  # table might not exist yet
+
     candidates = []
     for node in curriculum.get('nodes', []):
         if node['level'] < 2:
@@ -2028,6 +2040,8 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
 
         if knowledge == 'unknown':
             continue  # nothing to recall
+        if node['id'] in recent_nodes:
+            continue  # already recalled recently
 
         # Score: prefer medium confidence (peak at 0.5)
         score = 1.0 - abs(confidence - 0.5) * 2  # peaks at 0.5
