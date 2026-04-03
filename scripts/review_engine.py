@@ -1765,7 +1765,13 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
 
     User speaks freely about what they know about a topic.
     System transcribes, compares against node definition + book sources, gives rich feedback.
+
+    conn can be None — the function manages its own connections to avoid holding
+    the write lock during slow operations (transcription + LLM).
     """
+    from db import get_connection
+    if conn is None:
+        conn = get_connection()
     # Handle chapter recall pseudo-nodes (chapter:{book_id}:{chapter_number})
     is_chapter_recall = node_id.startswith('chapter:')
     if is_chapter_recall:
@@ -1810,8 +1816,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         if not node:
             return {'error': f'Node {node_id} not found'}
 
-    # Release connection before slow work (transcription + LLM) to avoid lock
-    conn.commit()
+    # Close connection before slow work (transcription + LLM) to avoid write lock
+    conn.close()
+    conn = None  # force errors if accidentally used during slow work
 
     # Transcribe
     print(f'[voice-elicit] Transcribing {audio_path} ({audio_path.stat().st_size} bytes)...', flush=True)
@@ -1840,6 +1847,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     if not isinstance(result, dict):
         print(f'[voice-elicit] LLM returned non-dict: {repr(str(result)[:200])}', flush=True)
         result = {}
+
+    # Reopen connection for writes (closed before slow work above)
+    conn = get_connection()
 
     # Generate temporal hook (skip for chapter recall — no curriculum node to anchor)
     temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
@@ -1905,6 +1915,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
 
     conn.commit()
+    conn.close()
 
     result['research_triggers'] = research_triggers
 

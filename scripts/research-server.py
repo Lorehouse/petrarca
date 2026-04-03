@@ -4719,21 +4719,16 @@ JSON array only:"""
             tmp.write(audio_field.file.read())
             audio_path = Path(tmp.name)
         try:
-            from db import get_connection
-            conn = get_connection()
-            try:
-                print(f'[voice-elicit] Processing: node={node_id}, domain={domain_id[:30]}, audio={audio_path.stat().st_size} bytes', flush=True)
-                result = run_voice_elicitation(node_id, domain_id, audio_path, conn, transcribe_on_server)
-                print(f'[voice-elicit] Result: coverage={result.get("coverage_pct", "?")}%, captured={len(result.get("captured", []))}, ml_triggered={len(result.get("microlearning_triggered", []))}', flush=True)
-                if result.get('error'):
-                    print(f'[voice-elicit] Error in result: {result["error"]}', flush=True)
-                self._send_json_response(200, result)
-            except Exception as e:
-                print(f'[voice-elicit] Exception: {e}', flush=True)
-                import traceback; traceback.print_exc()
-                self._send_json_response(500, {'error': str(e)})
-            finally:
-                conn.close()
+            print(f'[voice-elicit] Processing: node={node_id}, domain={domain_id[:30]}, audio={audio_path.stat().st_size} bytes', flush=True)
+            result = run_voice_elicitation(node_id, domain_id, audio_path, None, transcribe_on_server)
+            print(f'[voice-elicit] Result: coverage={result.get("coverage_pct", "?")}%, captured={len(result.get("captured", []))}, ml_triggered={len(result.get("microlearning_triggered", []))}', flush=True)
+            if result.get('error'):
+                print(f'[voice-elicit] Error in result: {result["error"]}', flush=True)
+            self._send_json_response(200, result)
+        except Exception as e:
+            print(f'[voice-elicit] Exception: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
         finally:
             audio_path.unlink(missing_ok=True)
 
