@@ -2001,7 +2001,7 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
     return candidates
 
 
-def get_elicitation_candidates(domain_id: str | None = None, limit: int = 5, conn=None) -> list[dict]:
+def get_elicitation_candidates(domain_id: str | None = None, limit: int = 8, conn=None) -> list[dict]:
     """Get curriculum nodes suitable for voice elicitation.
 
     Prioritizes: medium-confidence nodes (engaged, 0.3-0.7) where voice recall
@@ -2031,10 +2031,43 @@ def get_elicitation_candidates(domain_id: str | None = None, limit: int = 5, con
 
         # Add chapter recall candidates — "What do you remember from Chapter X?"
         chapter_recalls = _chapter_recall_candidates(conn, limit=2)
-        candidates.extend(chapter_recalls)
 
-        candidates.sort(key=lambda c: c['elicitation_score'], reverse=True)
-        return candidates[:limit]
+        # Interleave domains for variety (don't let one domain dominate)
+        from collections import defaultdict
+        domain_groups: dict[str, list] = defaultdict(list)
+        for c in candidates:
+            domain_groups[c['domain_id']].append(c)
+        for g in domain_groups.values():
+            g.sort(key=lambda c: c['elicitation_score'], reverse=True)
+
+        interleaved = []
+        sorted_domains = sorted(domain_groups.keys(),
+                                key=lambda d: len(domain_groups[d]), reverse=True)
+        idx = 0
+        while len(interleaved) < len(candidates):
+            added = False
+            for d in sorted_domains:
+                if idx < len(domain_groups[d]):
+                    interleaved.append(domain_groups[d][idx])
+                    added = True
+            if not added:
+                break
+            idx += 1
+
+        # Mix in chapter recalls (max 2, interspersed)
+        result = []
+        ch_idx = 0
+        for i, c in enumerate(interleaved):
+            if i > 0 and i % 3 == 0 and ch_idx < len(chapter_recalls):
+                result.append(chapter_recalls[ch_idx])
+                ch_idx += 1
+            result.append(c)
+        # Append remaining chapter recalls
+        while ch_idx < len(chapter_recalls):
+            result.append(chapter_recalls[ch_idx])
+            ch_idx += 1
+
+        return result[:limit]
     finally:
         if own:
             conn.close()
@@ -2085,7 +2118,7 @@ def _chapter_recall_candidates(conn, limit: int = 2) -> list[dict]:
                 'domain_id': r['curriculum_domain'],
                 'knowledge': 'engaged',
                 'confidence': 0.5,
-                'elicitation_score': 7.0,  # high priority
+                'elicitation_score': 1.5,  # slightly above curriculum nodes
                 'book_id': book_id,
                 'book_title': book_title,
                 'chapter_number': ch_num,

@@ -71,6 +71,8 @@ export default function VoiceElicitation() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [retryError, setRetryError] = useState('');
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [processingCount, setProcessingCount] = useState(0);
+  const [completedResults, setCompletedResults] = useState<Array<{ node: string; result: ElicitationResult }>>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savedUriRef = useRef<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -156,7 +158,19 @@ export default function VoiceElicitation() {
         recordedAt: ts,
       });
 
-      await uploadElicitation(savedPath);
+      // Upload in background — don't block, move to next topic immediately
+      const candTitle = cand.node_title;
+      setProcessingCount(c => c + 1);
+      uploadElicitation(savedPath).then(async () => {
+        await clearPendingUpload(savedPath);
+      }).catch(() => {
+        // Stays in pending for retry next time
+        setProcessingCount(c => Math.max(0, c - 1));
+      });
+
+      // Immediately advance to next topic
+      setRecordingDuration(0);
+      nextNode();
     } catch (e) {
       console.error('Recording save/upload failed:', e);
       setRetryError(String(e));
@@ -165,33 +179,28 @@ export default function VoiceElicitation() {
   }
 
   async function uploadElicitation(uri: string) {
-    setPhase('processing');
-    setRetryError('');
+    const cand = candidates[current];
+    const nodeTitle = cand?.node_title || 'Unknown';
     try {
-      const cand = candidates[current];
       logEvent('voice_elicitation_submitted', {
-        node_id: cand.node_id, duration_s: recordingDuration,
+        node_id: cand?.node_id, duration_s: recordingDuration,
       });
       const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
-      // Validate response — empty/error results should trigger retry, not show empty feedback
       if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
-        throw new Error('Server returned empty analysis — may need retry');
+        throw new Error('Server returned empty analysis');
       }
-      // Upload succeeded — clear from pending
-      await clearPendingUpload(uri);
-      setResult(res);
-      setPhase('feedback');
+      setProcessingCount(c => Math.max(0, c - 1));
+      setCompletedResults(prev => [...prev, { node: nodeTitle, result: res }]);
       logEvent('voice_elicitation_result', {
-        node_id: cand.node_id, coverage_pct: res.coverage_pct,
+        node_id: cand?.node_id, coverage_pct: res.coverage_pct,
         captured_count: res.captured?.length || 0,
         missed_count: res.missed?.length || 0,
-        interesting_count: res.interesting?.length || 0,
-        wonderings_count: res.wonderings?.length || 0,
       });
     } catch (e) {
       console.error('Upload failed:', e);
-      setRetryError(String(e));
-      setPhase('retry');
+      setProcessingCount(c => Math.max(0, c - 1));
+      // Don't change phase — stays in pending.json for retry
+      throw e;
     }
   }
 
@@ -375,6 +384,26 @@ export default function VoiceElicitation() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {/* Background processing indicator */}
+        {(processingCount > 0 || completedResults.length > 0) && (
+          <View style={{ paddingHorizontal: 4, paddingBottom: 10, gap: 4 }}>
+            {processingCount > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color={colors.rubric} />
+                <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted }}>
+                  Processing {processingCount} recording{processingCount > 1 ? 's' : ''}...
+                </Text>
+              </View>
+            )}
+            {completedResults.slice(-3).map((cr, i) => (
+              <Text key={i} style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.claimNew }}>
+                {'\u2713'} {cr.node}: {cr.result.coverage_pct}% coverage
+                {cr.result.microlearning_triggered?.length ? ` + ${cr.result.microlearning_triggered.length} research` : ''}
+              </Text>
+            ))}
+          </View>
+        )}
+
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Prompt card */}
           <View style={styles.card}>
