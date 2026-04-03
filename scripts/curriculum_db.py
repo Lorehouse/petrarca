@@ -784,7 +784,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                        COALESCE(ks.knowledge, 'unknown') as node_knowledge,
                        COALESCE(ks.confidence, 0) as node_confidence,
                        cn.title as node_title, cn.description as node_description,
-                       cn.level as node_level, cn.date_start as node_date_start
+                       cn.level as node_level, cn.date_start as node_date_start,
+                       cd.title as domain_title
                 FROM knowledge_items ki
                 LEFT JOIN knowledge_states ks
                   ON ks.domain_id = ki.curriculum_domain
@@ -792,6 +793,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 LEFT JOIN curriculum_nodes cn
                   ON cn.id = ki.curriculum_node_id
                   AND cn.domain_id = ki.curriculum_domain
+                LEFT JOIN curriculum_domains cd
+                  ON cd.id = ki.curriculum_domain
                 WHERE 1=1 {domain_clause}''',
             params
         ).fetchall()
@@ -900,7 +903,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'answer_type': cq.get('answer_type', 'concept'),
                 'node_title': item.get('node_title') or item['curriculum_node_id'],
                 'node_description': item.get('node_description', ''),
-                'domain': item['curriculum_domain'],
+                'domain': item.get('domain_title') or item['curriculum_domain'],
+                'domain_id': item['curriculum_domain'],
                 'memory_hook': cq.get('memory_hook') or cq.get('temporal_hook', ''),
                 'temporal_hook': cq.get('temporal_hook', ''),
                 'curriculum_context': cq.get('curriculum_context', ''),
