@@ -929,6 +929,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             items.append(card)
 
         # ── Mix in completed microlearning cards ────────────────────────
+        # Never-reviewed cards go to the FRONT (high value — from voice
+        # elicitation: missed facts, wonderings, curiosity questions).
+        # Already-reviewed cards interleave normally.
         try:
             ml_rows = conn.execute('''
                 SELECT * FROM microlearning_cards
@@ -939,10 +942,11 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 LIMIT ?
             ''', (max(3, limit // 4),)).fetchall()
 
-            ml_items = []
+            new_ml = []
+            seen_ml = []
             for r in ml_rows:
                 ml = dict(r)
-                ml_items.append({
+                card = {
                     'type': 'microlearning',
                     'question_id': ml['id'],
                     'question': ml.get('question') or '',
@@ -963,22 +967,29 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'node_knowledge': 'mentioned',
                     'node_confidence': 0.5,
                     'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
-                })
+                }
+                if (ml['review_count'] or 0) == 0:
+                    new_ml.append(card)
+                else:
+                    seen_ml.append(card)
 
-            # Interleave: insert microlearning cards every ~3 review cards
-            if ml_items:
+            # New microlearning → front of queue
+            # Already-reviewed → interleave every ~3 review cards
+            if seen_ml:
                 merged = []
                 ml_idx = 0
                 for i, item in enumerate(items):
                     merged.append(item)
-                    if (i + 1) % 3 == 0 and ml_idx < len(ml_items):
-                        merged.append(ml_items[ml_idx])
+                    if (i + 1) % 3 == 0 and ml_idx < len(seen_ml):
+                        merged.append(seen_ml[ml_idx])
                         ml_idx += 1
-                # Append remaining
-                while ml_idx < len(ml_items):
-                    merged.append(ml_items[ml_idx])
+                while ml_idx < len(seen_ml):
+                    merged.append(seen_ml[ml_idx])
                     ml_idx += 1
                 items = merged
+
+            if new_ml:
+                items = new_ml + items
         except Exception as e:
             # Table might not exist yet — graceful fallback
             print(f'[review-stream] microlearning query failed: {e}', flush=True)
