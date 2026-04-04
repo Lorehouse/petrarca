@@ -30,7 +30,6 @@ export interface EntityIndex {
 }
 
 type SubTab = 'timeline' | 'persons' | 'places';
-type ViewMode = 'entity' | 'cross';
 type EntityType = 'place' | 'person';
 
 // --- Domain colors ---
@@ -141,7 +140,6 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
   const [data, setData] = useState<EntityIndex | null>(null);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<SubTab>('timeline');
-  const [mode, setMode] = useState<ViewMode>(initialEntity ? 'entity' : 'entity');
   const [entityType, setEntityType] = useState<EntityType>(initialEntityType || 'place');
   const [selectedEntity, setSelectedEntity] = useState<string | null>(initialEntity || null);
   const [expandedCenturies, setExpandedCenturies] = useState<Set<number>>(new Set());
@@ -179,36 +177,48 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
   useEffect(() => {
     if (initialYear && data) {
       setSubTab('timeline');
-      setMode('cross');
+      setSelectedEntity(null); // show all domains for a year focus
       const century = getCentury(initialYear);
       setExpandedCenturies(new Set([century]));
     }
   }, [initialYear, data]);
 
-  // Entity list for current type
+  // Combined entity list for timeline pills (top places + persons by frequency)
   const entityList = useMemo(() => {
     if (!data) return [];
-    const index = entityType === 'place' ? data.places_index : data.persons_index;
-    return Object.entries(index)
-      .map(([name, nodeIds]) => ({ name, count: nodeIds.length }))
-      .filter(e => e.count >= 2)
-      .sort((a, b) => b.count - a.count);
-  }, [data, entityType]);
+    const all: { name: string; count: number; type: EntityType }[] = [];
+    for (const [name, ids] of Object.entries(data.places_index)) {
+      if (ids.length >= 3 && ids.length <= 80) all.push({ name, count: ids.length, type: 'place' });
+    }
+    for (const [name, ids] of Object.entries(data.persons_index)) {
+      if (ids.length >= 3) all.push({ name, count: ids.length, type: 'person' });
+    }
+    return all.sort((a, b) => b.count - a.count).slice(0, 30);
+  }, [data]);
 
-  // Timeline sections (grouped by century)
-  const sections = useMemo(() => {
+  // Timeline: filtered nodes, optionally grouped by century
+  const filteredNodes = useMemo(() => {
     if (!data) return [];
     let filtered: TimelineNode[];
-    if (mode === 'entity' && selectedEntity) {
-      const index = entityType === 'place' ? data.places_index : data.persons_index;
-      const nodeIds = new Set(index[selectedEntity] || []);
+    if (selectedEntity) {
+      // Check both indices for the entity
+      const placeIds = data.places_index[selectedEntity] || [];
+      const personIds = data.persons_index[selectedEntity] || [];
+      const nodeIds = new Set([...placeIds, ...personIds]);
       filtered = data.nodes.filter(n => nodeIds.has(n.id) && n.time_span);
     } else {
       filtered = data.nodes.filter(n => n.time_span);
     }
-    filtered.sort((a, b) => (a.time_span![0]) - (b.time_span![0]));
+    return filtered.sort((a, b) => (a.time_span![0]) - (b.time_span![0]));
+  }, [data, selectedEntity]);
+
+  // Use flat list when few events, century groups when many
+  const useFlatLayout = filteredNodes.length <= 15;
+
+  const sections = useMemo(() => {
+    if (useFlatLayout) return [];
     const groups = new Map<number, TimelineNode[]>();
-    for (const node of filtered) {
+    for (const node of filteredNodes) {
       const c = getCentury(node.time_span![0]);
       if (!groups.has(c)) groups.set(c, []);
       groups.get(c)!.push(node);
@@ -216,7 +226,7 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
     return Array.from(groups.entries())
       .sort((a, b) => a[0] - b[0])
       .map(([century, nodes]) => ({ century, label: centuryLabel(century), nodes }));
-  }, [data, mode, entityType, selectedEntity]);
+  }, [filteredNodes, useFlatLayout]);
 
   const toggleCentury = useCallback((century: number) => {
     setExpandedCenturies(prev => {
@@ -234,7 +244,7 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
     } else {
       setExpandedCenturies(new Set());
     }
-  }, [selectedEntity, mode, sections.length]);
+  }, [selectedEntity, sections.length]);
 
   if (loading) {
     return (
@@ -247,28 +257,37 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
 
   if (!data) return <Text style={s.errorText}>Could not load knowledge data</Text>;
 
-  const totalNodes = sections.reduce((sum, sec) => sum + sec.nodes.length, 0);
-  const knownCount = sections.reduce(
-    (sum, sec) => sum + sec.nodes.filter(n => n.knowledge !== 'unknown').length, 0,
+  const totalNodes = filteredNodes.length;
+  const knownCount = filteredNodes.filter(n => n.knowledge !== 'unknown').length;
+
+  const showDomain = !selectedEntity;
+
+  const renderEvent = (node: TimelineNode) => (
+    <TimelineEvent key={node.id} node={node} showDomain={showDomain}
+      isSelected={selectedNode?.id === node.id}
+      onPress={() => {
+        setSelectedNode(selectedNode?.id === node.id ? null : node);
+        logEvent('explorer_tap_event', { node_id: node.id });
+      }}
+      onGenerateCard={(query) => {
+        triggerMicrolearning({ query, sourceNodeId: node.id, sourceDomain: node.curriculum })
+          .then(r => logEvent('explorer_generate_card', { node_id: node.id, card_id: r.id }))
+          .catch(e => console.warn('[explorer] microlearning failed:', e));
+      }}
+      onViewInMap={() => router.push(`/knowledge-map?domain=${node.curriculum}&node=${node.id}` as any)}
+      onSelectEntity={(name) => { setSelectedEntity(name); setSelectedNode(null); }}
+    />
   );
 
   return (
     <ScrollView contentContainerStyle={s.scrollContent}>
-      {/* Sub-tabs */}
+      {/* Sub-tabs: Timeline / Persons / Places */}
       <View style={s.subTabRow}>
         {(['timeline', 'persons', 'places'] as SubTab[]).map(tab => (
-          <Pressable
-            key={tab}
-            style={[s.subTab, subTab === tab && s.subTabActive]}
-            onPress={() => setSubTab(tab)}
-          >
+          <Pressable key={tab} style={[s.subTab, subTab === tab && s.subTabActive]}
+            onPress={() => setSubTab(tab)}>
             <Text style={[s.subTabText, subTab === tab && s.subTabTextActive]}>
               {tab === 'timeline' ? 'Timeline' : tab === 'persons' ? 'Persons' : 'Places'}
-            </Text>
-            <Text style={[s.subTabCount, subTab === tab && s.subTabCountActive]}>
-              {tab === 'timeline' ? totalNodes
-                : tab === 'persons' ? Object.keys(data.persons_index).length
-                : Object.keys(data.places_index).length}
             </Text>
           </Pressable>
         ))}
@@ -277,47 +296,33 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
       {/* ── Timeline sub-tab ── */}
       {subTab === 'timeline' && (
         <>
-          {/* Mode toggle */}
-          <View style={s.modeRow}>
-            <Pressable style={[s.modeTab, mode === 'entity' && s.modeTabActive]} onPress={() => setMode('entity')}>
-              <Text style={[s.modeText, mode === 'entity' && s.modeTextActive]}>By Entity</Text>
+          {/* Entity pills — one row, "All" + mixed places/persons */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.entityPills}>
+            <Pressable style={[s.pill, !selectedEntity && s.pillActive]}
+              onPress={() => { setSelectedEntity(null); setSelectedNode(null); }}>
+              <Text style={[s.pillText, !selectedEntity && s.pillTextActive]}>All</Text>
             </Pressable>
-            <Pressable style={[s.modeTab, mode === 'cross' && s.modeTabActive]} onPress={() => setMode('cross')}>
-              <Text style={[s.modeText, mode === 'cross' && s.modeTextActive]}>All Domains</Text>
-            </Pressable>
-          </View>
+            {entityList.map(e => (
+              <Pressable key={e.name} style={[s.pill, selectedEntity === e.name && s.pillActive]}
+                onPress={() => { setSelectedEntity(e.name); setEntityType(e.type); setSelectedNode(null); }}>
+                <Text style={[s.pillText, selectedEntity === e.name && s.pillTextActive]}>{e.name}</Text>
+                <Text style={[s.pillCount, selectedEntity === e.name && s.pillCountActive]}>{e.count}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
 
-          {mode === 'entity' && (
-            <>
-              <View style={s.entityTypeRow}>
-                <Pressable style={[s.typeChip, entityType === 'place' && s.typeChipActive]}
-                  onPress={() => { setEntityType('place'); setSelectedEntity(null); }}>
-                  <Text style={[s.typeChipText, entityType === 'place' && s.typeChipTextActive]}>Places</Text>
-                </Pressable>
-                <Pressable style={[s.typeChip, entityType === 'person' && s.typeChipActive]}
-                  onPress={() => { setEntityType('person'); setSelectedEntity(null); }}>
-                  <Text style={[s.typeChipText, entityType === 'person' && s.typeChipTextActive]}>Persons</Text>
-                </Pressable>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.entityPills}>
-                {entityList.map(e => (
-                  <Pressable key={e.name} style={[s.pill, selectedEntity === e.name && s.pillActive]}
-                    onPress={() => { setSelectedEntity(e.name); setSelectedNode(null); }}>
-                    <Text style={[s.pillText, selectedEntity === e.name && s.pillTextActive]}>{e.name}</Text>
-                    <Text style={[s.pillCount, selectedEntity === e.name && s.pillCountActive]}>{e.count}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>
-          )}
-
-          {selectedEntity && mode === 'entity' && (
+          {/* Summary line */}
+          {totalNodes > 0 && (
             <Text style={s.entitySummary}>
-              {selectedEntity} · {totalNodes} events · {knownCount} known
+              {selectedEntity || 'All domains'} · {totalNodes} events · {knownCount} known
             </Text>
           )}
 
-          {sections.map(section => {
+          {/* Flat layout for sparse entities (≤15 events) */}
+          {useFlatLayout && filteredNodes.length > 0 && filteredNodes.map(renderEvent)}
+
+          {/* Grouped layout for dense entities (>15 events) */}
+          {!useFlatLayout && sections.map(section => {
             const isExpanded = expandedCenturies.has(section.century);
             const sectionKnown = section.nodes.filter(n => n.knowledge !== 'unknown').length;
             return (
@@ -339,31 +344,14 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
                     }]} />;
                   })}
                 </View>
-                {isExpanded && section.nodes.map(node => (
-                  <TimelineEvent key={node.id} node={node} showDomain={mode === 'cross'}
-                    isSelected={selectedNode?.id === node.id}
-                    onPress={() => {
-                      setSelectedNode(selectedNode?.id === node.id ? null : node);
-                      logEvent('explorer_tap_event', { node_id: node.id });
-                    }}
-                    onGenerateCard={(query) => {
-                      triggerMicrolearning({ query, sourceNodeId: node.id, sourceDomain: node.curriculum })
-                        .then(r => logEvent('explorer_generate_card', { node_id: node.id, card_id: r.id }))
-                        .catch(e => console.warn('[explorer] microlearning failed:', e));
-                    }}
-                    onViewInMap={() => router.push(`/knowledge-map?domain=${node.curriculum}&node=${node.id}` as any)}
-                    onSelectEntity={(name) => { setSelectedEntity(name); setSelectedNode(null); }}
-                  />
-                ))}
+                {isExpanded && section.nodes.map(renderEvent)}
               </View>
             );
           })}
 
-          {sections.length === 0 && (
+          {totalNodes === 0 && (
             <View style={s.emptyWrap}>
-              <Text style={s.emptyText}>
-                {!selectedEntity ? 'Select an entity above' : 'No dated events found'}
-              </Text>
+              <Text style={s.emptyText}>No dated events found</Text>
             </View>
           )}
         </>
@@ -378,7 +366,6 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
           onSelectEntity={(name) => {
             setSelectedEntity(name);
             setEntityType('person');
-            setMode('entity');
             setSubTab('timeline');
           }}
         />
@@ -393,7 +380,6 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
           onSelectEntity={(name) => {
             setSelectedEntity(name);
             setEntityType('place');
-            setMode('entity');
             setSubTab('timeline');
           }}
         />
@@ -536,26 +522,10 @@ const s = StyleSheet.create({
 
   // Sub-tabs
   subTabRow: { flexDirection: 'row', marginHorizontal: layout.screenPadding, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  subTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10 },
-  subTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric },
+  subTab: { flex: 1, alignItems: 'center', paddingVertical: 8 },
+  subTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric, marginBottom: -1 },
   subTabText: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted },
   subTabTextActive: { color: colors.rubric },
-  subTabCount: { fontFamily: fonts.ui, fontSize: 9, color: colors.textMuted },
-  subTabCountActive: { color: colors.rubric },
-
-  // Mode toggle
-  modeRow: { flexDirection: 'row', marginHorizontal: layout.screenPadding, marginTop: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  modeTab: { flex: 1, paddingVertical: 7, alignItems: 'center' },
-  modeTabActive: { borderBottomWidth: 2, borderBottomColor: colors.ink },
-  modeText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
-  modeTextActive: { color: colors.ink },
-
-  // Entity type chips
-  entityTypeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: layout.screenPadding, marginTop: spacing.sm },
-  typeChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.rule },
-  typeChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
-  typeChipText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textSecondary },
-  typeChipTextActive: { color: colors.parchment },
 
   // Entity pills
   entityPills: { paddingHorizontal: layout.screenPadding, paddingVertical: spacing.sm, gap: 6 },

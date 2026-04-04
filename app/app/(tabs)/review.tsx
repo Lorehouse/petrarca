@@ -271,9 +271,20 @@ function ReviewCard({
         <Text style={cs.domainLabel} numberOfLines={1}>{domainLabel}</Text>
       </View>
 
-      {/* Node title (context) */}
+      {/* Node title (context) + timeline link */}
       {revealed && item.node_title ? (
-        <Text style={cs.nodeTitle}>{item.node_title}</Text>
+        <View style={cs.nodeTitleRow}>
+          <Text style={[cs.nodeTitle, { flex: 1, marginBottom: 0 }]}>{item.node_title}</Text>
+          {onDateTap && (
+            <Pressable onPress={() => {
+              // Find a date in the card content to anchor the timeline
+              const dates = detectDates(item.rich_answer || item.answer || item.node_title || '');
+              onDateTap(dates.length > 0 ? dates[0].year : 0);
+            }} hitSlop={8} style={cs.timelineLink}>
+              <Text style={cs.timelineLinkText}>✦ Timeline</Text>
+            </Pressable>
+          )}
+        </View>
       ) : null}
 
       {/* Question */}
@@ -906,7 +917,7 @@ export default function ReviewScreen() {
 
   const handleDateTap = useCallback((year: number) => {
     logEvent('review_date_tap', { year });
-    setExploreYear(year);
+    setExploreYear(year || undefined);
     setExploreEntity(undefined);
     setActiveTab('explore');
   }, []);
@@ -953,30 +964,25 @@ export default function ReviewScreen() {
   return (
     <View style={s.container}>
       <ScrollView ref={scrollRef} contentContainerStyle={s.content}>
-        {/* Top bar with drawer */}
-        <View style={s.header}>
-          <View style={s.topActions}>
-            <View />
-            <Pressable onPress={() => setDrawerOpen(true)} style={s.drawerBtn}>
-              <Text style={s.drawerBtnText}>{'\u2726'}</Text>
-            </Pressable>
+        {/* ── Compact header: tabs + drawer button ── */}
+        <View style={s.reviewHeader}>
+          <View style={s.reviewTabRow}>
+            {(['cards', 'voice', 'explore'] as ReviewTab[]).map(tab => (
+              <Pressable key={tab} style={[s.reviewTab, activeTab === tab && s.reviewTabActive]}
+                onPress={() => {
+                  if (tab === 'voice') { router.push('/voice-elicitation' as any); return; }
+                  setActiveTab(tab);
+                  logEvent('review_tab_switch', { tab });
+                }}>
+                <Text style={[s.reviewTabText, activeTab === tab && s.reviewTabTextActive]}>
+                  {tab === 'cards' ? 'Cards' : tab === 'voice' ? 'Voice' : 'Explore'}
+                </Text>
+              </Pressable>
+            ))}
           </View>
-        </View>
-
-        {/* ── Tab bar ── */}
-        <View style={s.reviewTabRow}>
-          {(['cards', 'voice', 'explore'] as ReviewTab[]).map(tab => (
-            <Pressable key={tab} style={[s.reviewTab, activeTab === tab && s.reviewTabActive]}
-              onPress={() => {
-                if (tab === 'voice') { router.push('/voice-elicitation' as any); return; }
-                setActiveTab(tab);
-                logEvent('review_tab_switch', { tab });
-              }}>
-              <Text style={[s.reviewTabText, activeTab === tab && s.reviewTabTextActive]}>
-                {tab === 'cards' ? 'Cards' : tab === 'voice' ? 'Voice' : 'Explore'}
-              </Text>
-            </Pressable>
-          ))}
+          <Pressable onPress={() => setDrawerOpen(true)} style={s.drawerBtn} hitSlop={8}>
+            <Text style={s.drawerBtnText}>{'\u2726'}</Text>
+          </Pressable>
         </View>
 
         {/* ── Card stream ──────────────────────────────────────── */}
@@ -1088,6 +1094,9 @@ const cs = StyleSheet.create({
   typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   domainLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, flex: 1 },
   nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  timelineLink: { paddingVertical: 2, paddingHorizontal: 6 },
+  timelineLinkText: { fontFamily: fonts.ui, fontSize: 10, color: colors.rubric },
   question: { fontFamily: fonts.reading, fontSize: 18, lineHeight: 26, color: colors.ink, marginBottom: 16 },
   actionRow: { flexDirection: 'row', gap: 10 },
   revealButton: { flex: 1, borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, paddingVertical: 12, alignItems: 'center' },
@@ -1166,7 +1175,7 @@ const s = StyleSheet.create({
   topActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
   voiceBtn: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 },
   voiceBtnText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textSecondary },
-  drawerBtn: { padding: 8 },
+  drawerBtn: { paddingHorizontal: 12, paddingVertical: 8 },
   drawerBtnText: { fontSize: 18, color: colors.rubric },
   loadingContainer: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   loadingText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
@@ -1177,10 +1186,18 @@ const s = StyleSheet.create({
   newSessionBtn: { marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 24, paddingVertical: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, alignItems: 'center' },
   newSessionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
   loadingMoreRow: { alignItems: 'center', paddingVertical: 16 },
-  // Review tab bar (Cards / Voice / Explore)
-  reviewTabRow: { flexDirection: 'row', marginHorizontal: layout.screenPadding, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  reviewTab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  reviewTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric },
+  // Review header: tabs + drawer in one compact row
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 4 : 4,
+    paddingLeft: layout.screenPadding,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.rule,
+  },
+  reviewTabRow: { flexDirection: 'row', flex: 1 },
+  reviewTab: { paddingVertical: 10, paddingHorizontal: 16 },
+  reviewTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric, marginBottom: -1 },
   reviewTabText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted },
   reviewTabTextActive: { color: colors.rubric },
 });
