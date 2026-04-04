@@ -741,6 +741,21 @@ def build_entity_index() -> dict:
     events_idx: dict[str, list] = {}
     all_places: list[str] = []
 
+    # Build a lookup of entity data from JSON files (entity tags live in JSON, not SQLite)
+    _json_entities: dict[str, dict[str, dict]] = {}  # domain_id -> node_id -> entities
+    for json_path in DATA_DIR.glob('*.json'):
+        try:
+            raw = json.loads(json_path.read_text())
+            if not isinstance(raw, dict) or 'id' not in raw or 'nodes' not in raw:
+                continue
+            did = raw['id']
+            _json_entities[did] = {}
+            for n in raw.get('nodes', []):
+                if 'entities' in n:
+                    _json_entities[did][n['id']] = n['entities']
+        except Exception:
+            continue
+
     for meta in curricula_list:
         domain_id = meta['id']
         curriculum = load_curriculum(domain_id)
@@ -754,9 +769,11 @@ def build_entity_index() -> dict:
             'title': curriculum.get('title', domain_id),
         })
 
+        json_ents = _json_entities.get(domain_id, {})
         for node in curriculum.get('nodes', []):
             state = states.get(node['id'], {})
-            entities = node.get('entities', {})
+            # Merge: prefer JSON entity data (tags written there), fall back to SQLite node data
+            entities = json_ents.get(node['id'], node.get('entities', {}))
 
             flat = {
                 'id': node['id'],
