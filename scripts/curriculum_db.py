@@ -792,6 +792,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                        ki.stability_days, ki.due_at, ki.last_reviewed_at,
                        ki.last_score, ki.review_count, ki.sources,
                        ki.cached_question, ki.created_at,
+                       ki.triggered_follow_ups,
                        COALESCE(ks.knowledge, 'unknown') as node_knowledge,
                        COALESCE(ks.confidence, 0) as node_confidence,
                        cn.title as node_title, cn.description as node_description,
@@ -926,6 +927,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'node_knowledge': item['node_knowledge'],
                 'node_confidence': item['node_confidence'],
                 'follow_up_queries': _parse_json_safe(cq.get('follow_up_queries'), []),
+                'triggered_follow_ups': _parse_json_safe(item.get('triggered_follow_ups'), []),
                 'fact_id': cq.get('fact_id', ''),
                 'entities': cq.get('entities', []),
             }
@@ -1023,6 +1025,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'node_knowledge': 'mentioned',
                     'node_confidence': 0.5,
                     'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
+                    'triggered_follow_ups': _parse_json_safe(ml.get('triggered_follow_ups'), []),
                     'entities': entities_raw,
                     'entity_spans': {'content': ml_spans} if ml_spans else {},
                 }
@@ -1032,6 +1035,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             due_quiz_rows = conn.execute('''
                 SELECT mq.*, mc.content, mc.query as card_query,
                        mc.entities, mc.follow_up_queries as card_follow_ups,
+                       mc.triggered_follow_ups as card_triggered_follow_ups,
                        mc.source_domain
                 FROM microlearning_quizzes mq
                 JOIN microlearning_cards mc ON mc.id = mq.card_id
@@ -1066,6 +1070,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'node_knowledge': 'mentioned',
                     'node_confidence': 0.5,
                     'follow_up_queries': json.loads(q.get('card_follow_ups') or '[]'),
+                    'triggered_follow_ups': _parse_json_safe(q.get('card_triggered_follow_ups'), []),
                     'entities': entities_raw,
                     'entity_spans': {'content': ml_spans} if ml_spans else {},
                 })
@@ -1193,6 +1198,199 @@ def import_assessment_answers(domain_id: str, answers: dict, conn=None) -> dict:
         if own:
             conn.commit()
         return {'imported': imported, 'total': len(answers), 'by_level': by_level}
+    finally:
+        if own:
+            conn.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# KNOWLEDGE ATLAS DATA
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_knowledge_atlas_data(conn=None) -> dict:
+    """Build complete knowledge atlas data for web visualization.
+
+    Aggregates all curricula, nodes with knowledge states, shared entities,
+    books with curriculum mappings, and article counts into a single payload.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        curricula = []
+        all_node_count = 0
+        knowledge_dist = {'unknown': 0, 'mentioned': 0, 'engaged': 0, 'anchored': 0}
+
+        for meta in list_curricula(conn=conn):
+            domain_id = meta['id']
+            curriculum = load_curriculum(domain_id, conn=conn)
+            if not curriculum:
+                continue
+            states = load_knowledge_states(domain_id, conn=conn)
+
+            # Key facts counts per node
+            facts_rows = conn.execute(
+                'SELECT id, key_facts FROM curriculum_nodes WHERE domain_id = ?',
+                (domain_id,)
+            ).fetchall()
+            facts_count = {}
+            for r in facts_rows:
+                kf = r['key_facts']
+                if kf and kf != '[]':
+                    try:
+                        facts_count[r['id']] = len(json.loads(kf))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            # Book mappings per node
+            book_rows = conn.execute('''
+                SELECT bcm.node_id, bcm.coverage, pb.id as book_id, pb.title as book_title
+                FROM book_curriculum_mappings bcm
+                JOIN physical_books pb ON pb.id = bcm.book_id
+                WHERE bcm.domain_id = ?
+            ''', (domain_id,)).fetchall()
+            node_books: dict[str, list] = {}
+            for br in book_rows:
+                node_books.setdefault(br['node_id'], []).append({
+                    'id': br['book_id'], 'title': br['book_title'], 'coverage': br['coverage'],
+                })
+
+            # Article counts per node
+            article_rows = conn.execute('''
+                SELECT node_id, COUNT(DISTINCT article_id) as cnt
+                FROM article_curriculum_nodes WHERE domain_id = ?
+                GROUP BY node_id
+            ''', (domain_id,)).fetchall()
+            node_articles = {r['node_id']: r['cnt'] for r in article_rows}
+
+            domain_stats = {'unknown': 0, 'mentioned': 0, 'engaged': 0, 'anchored': 0}
+            nodes = []
+            for node in curriculum['nodes']:
+                state = states.get(node['id'], {})
+                knowledge = state.get('knowledge', 'unknown')
+                domain_stats[knowledge] = domain_stats.get(knowledge, 0) + 1
+                knowledge_dist[knowledge] = knowledge_dist.get(knowledge, 0) + 1
+                all_node_count += 1
+
+                nodes.append({
+                    'id': node['id'],
+                    'title': node['title'],
+                    'description': node.get('description', ''),
+                    'parent_id': node.get('parent_id'),
+                    'level': node.get('level', 2),
+                    'obscurity': node.get('obscurity', 2),
+                    'date_start': node.get('date_start'),
+                    'date_end': node.get('date_end'),
+                    'knowledge': knowledge,
+                    'interest': state.get('interest', 'none'),
+                    'confidence': state.get('confidence', 0),
+                    'key_facts_count': facts_count.get(node['id'], 0),
+                    'prerequisites': node.get('prerequisites', []),
+                    'books': node_books.get(node['id'], []),
+                    'article_count': node_articles.get(node['id'], 0),
+                })
+
+            curricula.append({
+                'id': domain_id,
+                'title': curriculum['title'],
+                'description': curriculum.get('description', ''),
+                'depth': curriculum.get('depth', ''),
+                'node_count': len(nodes),
+                'nodes': nodes,
+                'stats': domain_stats,
+            })
+
+        # Shared entities with curriculum links and knowledge
+        entity_rows = conn.execute('''
+            SELECT entity_id, name, entity_type, description, modern_name,
+                   nexus_score, date_start, date_end, aliases
+            FROM shared_entities ORDER BY nexus_score DESC
+        ''').fetchall()
+
+        entity_links = conn.execute('''
+            SELECT ecl.entity_id, ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
+                   cn.title as node_title, cd.title as domain_title,
+                   COALESCE(ks.knowledge, 'unknown') as knowledge
+            FROM entity_curriculum_links ecl
+            JOIN curriculum_nodes cn ON cn.domain_id = ecl.domain_id AND cn.id = ecl.node_id
+            JOIN curriculum_domains cd ON cd.id = ecl.domain_id
+            LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+        ''').fetchall()
+
+        entity_link_map: dict[str, list] = {}
+        entity_knowledge: dict[str, str] = {}
+        rank = {'unknown': 0, 'mentioned': 1, 'engaged': 2, 'anchored': 3}
+        for el in entity_links:
+            eid = el['entity_id']
+            entity_link_map.setdefault(eid, []).append({
+                'domain_id': el['domain_id'], 'domain_title': el['domain_title'],
+                'node_id': el['node_id'], 'node_title': el['node_title'],
+                'lens_title': el['lens_title'], 'knowledge': el['knowledge'],
+            })
+            if rank.get(el['knowledge'], 0) > rank.get(entity_knowledge.get(eid, 'unknown'), 0):
+                entity_knowledge[eid] = el['knowledge']
+
+        entities = []
+        for er in entity_rows:
+            eid = er['entity_id']
+            entities.append({
+                'id': eid, 'name': er['name'], 'entity_type': er['entity_type'],
+                'description': er['description'], 'modern_name': er['modern_name'],
+                'nexus_score': er['nexus_score'] or 0,
+                'date_start': er['date_start'], 'date_end': er['date_end'],
+                'knowledge': entity_knowledge.get(eid, 'unknown'),
+                'curriculum_links': entity_link_map.get(eid, []),
+            })
+
+        # Books with curriculum mappings
+        book_rows = conn.execute('''
+            SELECT id, title, author, reading_status, significance, cover_url
+            FROM physical_books ORDER BY title
+        ''').fetchall()
+
+        book_mapping_rows = conn.execute('''
+            SELECT bcm.book_id, bcm.domain_id, bcm.node_id, bcm.coverage,
+                   cn.title as node_title, cd.title as domain_title
+            FROM book_curriculum_mappings bcm
+            JOIN curriculum_nodes cn ON cn.domain_id = bcm.domain_id AND cn.id = bcm.node_id
+            JOIN curriculum_domains cd ON cd.id = bcm.domain_id
+        ''').fetchall()
+        book_map: dict[str, list] = {}
+        for bm in book_mapping_rows:
+            book_map.setdefault(bm['book_id'], []).append({
+                'domain_id': bm['domain_id'], 'domain_title': bm['domain_title'],
+                'node_id': bm['node_id'], 'node_title': bm['node_title'],
+                'coverage': bm['coverage'],
+            })
+
+        books = []
+        for br in book_rows:
+            mappings = book_map.get(br['id'], [])
+            if mappings:
+                books.append({
+                    'id': br['id'], 'title': br['title'], 'author': br['author'],
+                    'reading_status': br['reading_status'], 'significance': br['significance'],
+                    'cover_url': br['cover_url'], 'curriculum_mappings': mappings,
+                })
+
+        # Article stats
+        article_stats = conn.execute('''
+            SELECT COUNT(DISTINCT article_id) as cnt FROM article_curriculum_nodes
+        ''').fetchone()
+
+        return {
+            'curricula': curricula,
+            'entities': entities,
+            'books': books,
+            'stats': {
+                'total_nodes': all_node_count,
+                'total_entities': len(entities),
+                'total_books': len(books),
+                'total_curricula': len(curricula),
+                'knowledge_distribution': knowledge_dist,
+                'articles_mapped': article_stats['cnt'] if article_stats else 0,
+            },
+        }
     finally:
         if own:
             conn.close()

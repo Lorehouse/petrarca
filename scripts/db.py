@@ -520,6 +520,9 @@ MIGRATIONS = [
     "ALTER TABLE shared_entities ADD COLUMN date_end INTEGER",
     # key_facts: structured testable facts per curriculum node
     "ALTER TABLE curriculum_nodes ADD COLUMN key_facts TEXT DEFAULT '[]'",
+    # Durable tracking of triggered follow-up queries
+    "ALTER TABLE knowledge_items ADD COLUMN triggered_follow_ups TEXT DEFAULT '[]'",
+    "ALTER TABLE microlearning_cards ADD COLUMN triggered_follow_ups TEXT DEFAULT '[]'",
 ]
 
 
