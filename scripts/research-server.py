@@ -4124,6 +4124,7 @@ JSON array only:"""
 
             # Collect microlearning backlinks for this entity
             ml_backlinks = []
+            eid_lower = entity_id.lower()
             try:
                 ml_rows = conn.execute(
                     "SELECT id, query, content, entities, source_domain "
@@ -4132,7 +4133,7 @@ JSON array only:"""
                 ).fetchall()
                 for ml in ml_rows:
                     entities_data = json.loads(ml['entities'] or '[]')
-                    if any(e.get('canonical') == entity_id for e in entities_data):
+                    if any(e.get('canonical', '').lower() == eid_lower for e in entities_data):
                         ml_backlinks.append({
                             'card_id': ml['id'],
                             'query': ml['query'],
@@ -4168,7 +4169,7 @@ JSON array only:"""
                 for ml in ml_rows:
                     entities_data = json.loads(ml['entities'] or '[]')
                     for e in entities_data:
-                        if e.get('canonical') == entity_id:
+                        if e.get('canonical', '').lower() == eid_lower:
                             entity_meta = e
                             break
                     if entity_meta:

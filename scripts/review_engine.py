@@ -1416,11 +1416,12 @@ def _find_related_entities(entity_id: str, entity_name: str, entity_type: str,
             (f'%{entity_id}%',)
         ).fetchall()
         co_entities = {}
+        eid_lower = entity_id.lower()
         for row in ml_rows:
             ents = json.loads(row['entities'] or '[]')
             for e in ents:
                 cid = e.get('canonical', '')
-                if cid and cid != entity_id and cid not in co_entities:
+                if cid and cid.lower() != eid_lower and cid not in co_entities:
                     co_entities[cid] = {'name': e['name'], 'type': e.get('type', 'concept'),
                                         'relation': 'co-mentioned in research'}
         seen = {r['name'] for r in related}
