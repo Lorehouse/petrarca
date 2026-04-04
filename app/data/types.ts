@@ -532,6 +532,7 @@ export interface MicrolearningQuiz {
 export interface ResurfacingItem {
   type: 'review' | 'microlearning' | 'microlearning_quiz' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
   // Review card fields (from knowledge_items)
+  title?: string;  // prominent card title (with dates)
   question_id?: string;
   question?: string;
   answer?: string;

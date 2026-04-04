@@ -1765,10 +1765,11 @@ def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                content=?, follow_up_queries=?, entities=?,
+                title=?, content=?, follow_up_queries=?, entities=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
+            result.get('title', entity_name),
             result['content'],
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),
@@ -1889,10 +1890,11 @@ def _run_microlearning_research(card_id: str, query: str,
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                content=?, follow_up_queries=?, entities=?, entity_spans=?,
+                title=?, content=?, follow_up_queries=?, entities=?, entity_spans=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
+            result.get('title', query[:60]),
             result['content'],
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),

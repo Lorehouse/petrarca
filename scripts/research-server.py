@@ -3729,6 +3729,99 @@ JSON array only:"""
             'total': total,
         })
 
+    def _handle_kindle_scan_epubs(self):
+        """POST /kindle/scan-epubs — scan server EPUB directory and match to kindle_books."""
+        epub_dir = Path('/opt/petrarca/data/epubs')
+        if not epub_dir.exists():
+            self._send_json_response(200, {'scanned': 0, 'matched': 0, 'unmatched': []})
+            return
+
+        import re
+        from zipfile import ZipFile
+        from db import get_connection as _get_conn
+
+        # Scan EPUB files and extract metadata
+        epubs = []
+        for epub_path in epub_dir.glob('*.epub'):
+            title, author = '', ''
+            try:
+                with ZipFile(epub_path) as z:
+                    for name in z.namelist():
+                        if name.endswith('.opf'):
+                            content = z.read(name).decode('utf-8', errors='replace')
+                            m = re.search(r'<dc:title[^>]*>([^<]+)</dc:title>', content)
+                            if m:
+                                title = m.group(1).strip()
+                            m = re.search(r'<dc:creator[^>]*>([^<]+)</dc:creator>', content)
+                            if m:
+                                author = m.group(1).strip()
+                            break
+            except Exception:
+                pass
+
+            epubs.append({
+                'filename': epub_path.name,
+                'server_path': str(epub_path),
+                'title': title or epub_path.stem,
+                'author': author,
+                'size_bytes': epub_path.stat().st_size,
+            })
+
+        if not epubs:
+            self._send_json_response(200, {'scanned': 0, 'matched': 0, 'unmatched': []})
+            return
+
+        conn = _get_conn()
+
+        # Insert into available_epubs
+        for e in epubs:
+            conn.execute(
+                'INSERT OR REPLACE INTO available_epubs (filename, server_path, title, author, size_bytes, uploaded_at) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (e['filename'], e['server_path'], e['title'], e['author'], e['size_bytes'],
+                 datetime.now(timezone.utc).isoformat())
+            )
+
+        # Match against kindle_books by title (case-insensitive containment)
+        matched = 0
+        unmatched = []
+        for e in epubs:
+            if not e['title']:
+                unmatched.append(e['filename'])
+                continue
+
+            # Try matching: kindle title contains epub title or vice versa
+            row = conn.execute(
+                'SELECT key FROM kindle_books '
+                'WHERE epub_path IS NULL AND '
+                '(LOWER(title) LIKE ? OR LOWER(title_resolved) LIKE ? '
+                ' OR ? LIKE \'%\' || LOWER(title) || \'%\')',
+                (f'%{e["title"].lower()}%', f'%{e["title"].lower()}%', e['title'].lower())
+            ).fetchone()
+
+            if row:
+                conn.execute(
+                    'UPDATE kindle_books SET epub_path=? WHERE key=?',
+                    (e['server_path'], row['key'])
+                )
+                conn.execute(
+                    'UPDATE available_epubs SET kindle_book_key=? WHERE server_path=?',
+                    (row['key'], e['server_path'])
+                )
+                matched += 1
+            else:
+                unmatched.append(f"{e['title']} ({e['filename']})")
+
+        conn.commit()
+        conn.close()
+
+        print(f'[kindle/scan-epubs] Scanned {len(epubs)}, matched {matched}', flush=True)
+        self._send_json_response(200, {
+            'scanned': len(epubs),
+            'matched': matched,
+            'unmatched': unmatched[:50],
+        })
+
     def _handle_book_sync_save(self):
         """POST /book/sync — save books + captures to server (client → server).
         Writes directly to SQLite. Client wins for same ID (UPSERT).

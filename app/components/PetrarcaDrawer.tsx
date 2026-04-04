@@ -125,6 +125,11 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             onPress={() => navigate('projects', '/projects')}
           />
           <NavItem
+            title="Kindle Library"
+            subtitle="Browse & manage your full Kindle library"
+            onPress={() => navigate('kindle_browse', '/kindle-browse')}
+          />
+          <NavItem
             title="Reading Trails"
             subtitle="Follow threads of ideas"
             onPress={() => navigate('trails', '/trails')}

@@ -512,7 +512,12 @@ function MicrolearningCard({
           <Text style={ml.dismissText}>Not interested</Text>
         </Pressable>
       </View>
-      <Text style={cs.domainLabel}>{item.query}</Text>
+      {item.title ? (
+        <Text style={ml.cardTitle}>{item.title}</Text>
+      ) : null}
+      {(!item.title || item.title !== item.query) ? (
+        <Text style={cs.domainLabel}>{item.query}</Text>
+      ) : null}
 
       {/* Content */}
       <AnnotatedText
@@ -641,7 +646,11 @@ function MicrolearningQuizCard({
         <View style={ml.badge}>
           <Text style={ml.badgeText}>Review</Text>
         </View>
-        <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+        {item.title ? (
+          <Text style={ml.quizCardTitle} numberOfLines={1}>{item.title}</Text>
+        ) : (
+          <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+        )}
       </View>
 
       <Text style={cs.question}>{item.question}</Text>
@@ -1210,6 +1219,8 @@ const cs = StyleSheet.create({
 const ml = StyleSheet.create({
   badge: { backgroundColor: '#2a4a6a', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
   badgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  cardTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, lineHeight: 26, color: colors.ink, marginBottom: 4, marginTop: 4, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  quizCardTitle: { fontFamily: fonts.displaySemiBold, fontSize: 13, color: colors.ink, flex: 1, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 16 },
   revealedContent: { borderLeftWidth: 2, borderLeftColor: colors.rule, paddingLeft: 14, marginTop: 12, marginBottom: 14 },
   revealedLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },

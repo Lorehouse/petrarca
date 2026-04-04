@@ -321,14 +321,26 @@ export default function LibraryScreen() {
       </View>
 
       {filter === 'kindle' ? (
-        kindleLoading ? (
+        <>
+        <Pressable
+          style={{ paddingHorizontal: layout.screenPadding, paddingVertical: 10 }}
+          onPress={() => {
+            logEvent('kindle_browse_all_tap');
+            router.push('/kindle-browse' as any);
+          }}
+        >
+          <Text style={{ fontFamily: Platform.OS === 'web' ? "'EB Garamond', Georgia, serif" : 'EBGaramond', fontSize: 15, color: colors.rubric }}>
+            Browse full Kindle library {'\u203A'}
+          </Text>
+        </Pressable>
+        {kindleLoading ? (
           <View style={styles.empty}>
             <ActivityIndicator size="small" color={colors.rubric} />
           </View>
         ) : kindleBooks.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>{'\u2726'}</Text>
-            <Text style={styles.emptyTitle}>No new Kindle books</Text>
+            <Text style={styles.emptyTitle}>No recently started Kindle books</Text>
             <Text style={styles.emptySubtitle}>Books you start reading on Kindle will appear here</Text>
           </View>
         ) : (
@@ -352,7 +364,8 @@ export default function LibraryScreen() {
               }}
             />
           ))
-        )
+        )}
+        </>
       ) : books.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>{'\u2726'}</Text>
