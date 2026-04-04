@@ -445,6 +445,7 @@ CREATE TABLE IF NOT EXISTS microlearning_cards (
     follow_up_queries TEXT DEFAULT '[]', -- JSON array of 3 next queries
     curriculum_nodes TEXT DEFAULT '[]',  -- JSON array of linked node_ids
     entities TEXT DEFAULT '[]',          -- JSON array of entity references
+    entity_spans TEXT DEFAULT '{}',      -- JSON: {field: [{start,end,entity_id,name,entity_type}]}
     status TEXT DEFAULT 'pending',       -- pending, processing, completed, failed
     stability_days REAL DEFAULT 1.0,
     due_at INTEGER DEFAULT 0,

@@ -1814,6 +1814,11 @@ def _run_microlearning_research(card_id: str, query: str,
         # Extract entities and compute text spans
         entities = result.get('entities', [])
         entity_spans = _compute_entity_spans(result['content'], entities)
+        spans_json = json.dumps({'content': [
+            {'start': s['start'], 'end': s['end'], 'entity_id': s['entity_id'],
+             'name': s['name'], 'entity_type': s['entity_type']}
+            for s in entity_spans
+        ]}) if entity_spans else '{}'
 
         # Update the card
         now_ms = int(time.time() * 1000)
@@ -1826,13 +1831,14 @@ def _run_microlearning_research(card_id: str, query: str,
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                content=?, follow_up_queries=?, entities=?,
+                content=?, follow_up_queries=?, entities=?, entity_spans=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
             result['content'],
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),
+            spans_json,
             now_ms,
             card_id,
         ))

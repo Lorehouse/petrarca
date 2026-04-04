@@ -15,6 +15,7 @@ import AncientMap from './AncientMap';
 interface Props {
   entityId: string | null;
   onClose: () => void;
+  onExploreEntity?: (entityName: string) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -32,7 +33,7 @@ const KNOWLEDGE_COLORS: Record<string, string> = {
   unknown: colors.textFaint,
 };
 
-export default function EntitySheet({ entityId, onClose }: Props) {
+export default function EntitySheet({ entityId, onClose, onExploreEntity }: Props) {
   const [entity, setEntity] = useState<EntityDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [tapped, setTapped] = useState<false | 'unknown' | 'interested' | 'loading'>(false);
@@ -269,6 +270,17 @@ export default function EntitySheet({ entityId, onClose }: Props) {
                 </View>
               ) : null}
 
+              {/* View in timeline */}
+              {onExploreEntity && entity.name && (
+                <Pressable style={es.timelineBtn} onPress={() => {
+                  logEvent('entity_view_timeline', { entity_id: entityId, name: entity.name });
+                  onClose();
+                  onExploreEntity(entity.name);
+                }}>
+                  <Text style={es.timelineBtnText}>✦ View in timeline</Text>
+                </Pressable>
+              )}
+
               {/* Action buttons */}
               <View style={es.researchActions}>
                 {!questions && !questionsLoading ? (
@@ -488,6 +500,20 @@ const es = StyleSheet.create({
   },
   questionTriggeredText: {
     color: colors.claimNew,
+  },
+  timelineBtn: {
+    paddingVertical: 10,
+    borderRadius: 4,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.ink,
+    marginBottom: 10,
+  },
+  timelineBtnText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.parchment,
   },
   // Action buttons
   researchActions: {

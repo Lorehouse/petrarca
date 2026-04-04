@@ -15,7 +15,7 @@ import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import EntitySheet from '../../components/EntitySheet';
 import AncientMap from '../../components/AncientMap';
-import KnowledgeExplorer from '../../components/KnowledgeExplorer';
+import KnowledgeExplorer, { detectDates } from '../../components/KnowledgeExplorer';
 
 type ReviewTab = 'cards' | 'voice' | 'explore';
 
@@ -26,32 +26,63 @@ function AnnotatedText({
   spans,
   style,
   onEntityTap,
+  onDateTap,
 }: {
   text: string;
   spans?: EntitySpan[];
   style: any;
   onEntityTap: (entityId: string) => void;
+  onDateTap?: (year: number) => void;
 }) {
-  if (!spans || spans.length === 0) {
+  // Build a unified list of tappable ranges: entity spans + detected dates
+  type TapSpan = { start: number; end: number; type: 'entity'; entityId: string }
+                | { start: number; end: number; type: 'date'; year: number };
+  const allSpans: TapSpan[] = [];
+
+  if (spans) {
+    for (const sp of spans) {
+      allSpans.push({ start: sp.start, end: sp.end, type: 'entity', entityId: sp.entity_id });
+    }
+  }
+  if (onDateTap) {
+    for (const dt of detectDates(text)) {
+      // Skip if overlapping with an entity span
+      const overlaps = allSpans.some(s => dt.start < s.end && dt.end > s.start);
+      if (!overlaps) {
+        allSpans.push({ start: dt.start, end: dt.end, type: 'date', year: dt.year });
+      }
+    }
+  }
+
+  if (allSpans.length === 0) {
     return <Text style={style}>{text}</Text>;
   }
+
+  // Sort by position
+  allSpans.sort((a, b) => a.start - b.start);
 
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
-  for (const span of spans) {
+  for (const span of allSpans) {
     if (span.start > cursor) {
       parts.push(<Text key={`t-${cursor}`}>{text.slice(cursor, span.start)}</Text>);
     }
-    parts.push(
-      <Text
-        key={`e-${span.start}`}
-        style={entityStyle.tappable}
-        onPress={() => onEntityTap(span.entity_id)}
-      >
-        {text.slice(span.start, span.end)}
-      </Text>
-    );
+    if (span.type === 'entity') {
+      parts.push(
+        <Text key={`e-${span.start}`} style={entityStyle.tappable}
+          onPress={() => onEntityTap(span.entityId)}>
+          {text.slice(span.start, span.end)}
+        </Text>
+      );
+    } else {
+      parts.push(
+        <Text key={`d-${span.start}`} style={entityStyle.dateTappable}
+          onPress={() => onDateTap!(span.year)}>
+          {text.slice(span.start, span.end)}
+        </Text>
+      );
+    }
     cursor = span.end;
   }
   if (cursor < text.length) {
@@ -66,6 +97,12 @@ const entityStyle = StyleSheet.create({
     textDecorationLine: 'underline',
     textDecorationStyle: 'dotted',
     textDecorationColor: colors.textMuted,
+  },
+  dateTappable: {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+    textDecorationColor: colors.rubric,
+    color: colors.rubric,
   },
 });
 
@@ -162,12 +199,14 @@ function ReviewCard({
   onResult,
   onSkip,
   onEntityTap,
+  onDateTap,
   onResearch,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
   onEntityTap: (entityId: string) => void;
+  onDateTap: (year: number) => void;
   onResearch: (query: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -259,6 +298,7 @@ function ReviewCard({
               spans={item.entity_spans?.rich_answer}
               style={cs.answerText}
               onEntityTap={onEntityTap}
+              onDateTap={onDateTap}
             />
           </View>
 
@@ -271,6 +311,7 @@ function ReviewCard({
                 spans={item.entity_spans?.memory_hook}
                 style={cs.hookText}
                 onEntityTap={onEntityTap}
+                onDateTap={onDateTap}
               />
             </View>
           ) : null}
@@ -353,6 +394,7 @@ function MicrolearningCard({
   onResult,
   onResearch,
   onEntityTap,
+  onDateTap,
 }: {
   item: ResurfacingItem;
   onComplete: () => void;
@@ -361,6 +403,7 @@ function MicrolearningCard({
   onResult: (quizId: string, result: string) => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
+  onDateTap: (year: number) => void;
 }) {
   const quizzes = item.quizzes || (item.question ? [{ id: item.question_id || '', question: item.question, answer: item.answer || '' }] : []);
   const [revealedQuizzes, setRevealedQuizzes] = useState<Set<string>>(new Set());
@@ -404,6 +447,7 @@ function MicrolearningCard({
         spans={item.entity_spans?.content}
         style={ml.content}
         onEntityTap={onEntityTap}
+        onDateTap={onDateTap}
       />
 
       {/* All quizzes */}
@@ -491,12 +535,14 @@ function MicrolearningQuizCard({
   onSkip,
   onResearch,
   onEntityTap,
+  onDateTap,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
+  onDateTap: (year: number) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
@@ -543,6 +589,7 @@ function MicrolearningQuizCard({
               spans={item.entity_spans?.content}
               style={ml.content}
               onEntityTap={onEntityTap}
+              onDateTap={onDateTap}
             />
           </View>
 
@@ -857,6 +904,20 @@ export default function ReviewScreen() {
     });
   };
 
+  const handleDateTap = useCallback((year: number) => {
+    logEvent('review_date_tap', { year });
+    setExploreYear(year);
+    setExploreEntity(undefined);
+    setActiveTab('explore');
+  }, []);
+
+  const handleExploreEntity = useCallback((entityId: string) => {
+    logEvent('review_explore_entity', { entity_id: entityId });
+    setExploreEntity(entityId);
+    setExploreYear(undefined);
+    setActiveTab('explore');
+  }, []);
+
   const handleResearch = (query: string, item?: ResurfacingItem) => {
     const sourceNodeId = item?.question_id?.split(':').pop();
     const sourceDomain = item?.domain_id || item?.domain;
@@ -956,6 +1017,7 @@ export default function ReviewScreen() {
                     onDismissQuiz={handleDismissQuiz}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
+                    onDateTap={handleDateTap}
                   />
                 ) : currentItem.type === 'microlearning_quiz' ? (
                   <MicrolearningQuizCard
@@ -965,6 +1027,7 @@ export default function ReviewScreen() {
                     onSkip={() => handleSkip(currentItem)}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
+                    onDateTap={handleDateTap}
                   />
                 ) : (
                   <ReviewCard
@@ -974,6 +1037,7 @@ export default function ReviewScreen() {
                     onSkip={() => handleSkip(currentItem)}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
+                    onDateTap={handleDateTap}
                   />
                 )}
               </Animated.View>
@@ -1006,7 +1070,8 @@ export default function ReviewScreen() {
       </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
-      <EntitySheet entityId={activeEntityId} onClose={() => setActiveEntityId(null)} />
+      <EntitySheet entityId={activeEntityId} onClose={() => setActiveEntityId(null)}
+        onExploreEntity={handleExploreEntity} />
     </View>
   );
 }

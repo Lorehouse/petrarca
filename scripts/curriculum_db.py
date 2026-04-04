@@ -761,7 +761,10 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
             if spans:
                 all_spans[field] = spans
     if all_spans:
-        item['entity_spans'] = all_spans
+        # Merge with existing entity_spans (e.g., microlearning 'content' spans)
+        existing = item.get('entity_spans') or {}
+        existing.update(all_spans)
+        item['entity_spans'] = existing
     return item
 
 
