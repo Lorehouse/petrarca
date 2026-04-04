@@ -1522,61 +1522,65 @@ def generate_entity_questions(entity_id: str, entity_name: str,
     return [f'What was the historical significance of {entity_name}?']
 
 
-def _normalize_for_dedup(text: str) -> set[str]:
-    """Extract content words for duplicate detection."""
-    import re
-    words = set(re.findall(r'[a-z]{3,}', text.lower()))
-    # Remove common stop words
-    words -= {'the', 'was', 'were', 'what', 'when', 'who', 'how', 'did', 'why',
-              'which', 'that', 'this', 'from', 'with', 'for', 'and', 'not', 'has',
-              'had', 'have', 'been', 'its', 'their', 'about', 'does', 'between'}
-    return words
+def _find_duplicate_quiz(question: str, existing: list[tuple[str, 'numpy.ndarray']],
+                         model, threshold: float = 0.82) -> str | None:
+    """Check if a question is semantically duplicate of an existing one.
 
-
-def _is_duplicate_quiz(question: str, existing_questions: list[str],
-                       threshold: float = 0.6) -> str | None:
-    """Check if a question is a near-duplicate of an existing one.
-
+    Uses MiniLM embeddings via limbic.amygdala with the calibrated 0.82 cosine
+    threshold (same as KNOWN for claim similarity).
     Returns the matching question text if duplicate, None otherwise.
-    Uses Jaccard similarity on content words.
     """
-    new_words = _normalize_for_dedup(question)
-    if len(new_words) < 2:
+    import numpy as np
+    if not existing:
         return None
-    for existing in existing_questions:
-        ex_words = _normalize_for_dedup(existing)
-        if len(ex_words) < 2:
+    new_vec = model.embed(question)
+    new_norm = np.linalg.norm(new_vec)
+    if new_norm < 1e-9:
+        return None
+    for ex_text, ex_vec in existing:
+        ex_norm = np.linalg.norm(ex_vec)
+        if ex_norm < 1e-9:
             continue
-        intersection = new_words & ex_words
-        union = new_words | ex_words
-        similarity = len(intersection) / len(union) if union else 0
-        if similarity >= threshold:
-            return existing
+        cos = float(np.dot(new_vec, ex_vec) / (new_norm * ex_norm))
+        if cos >= threshold:
+            return ex_text
     return None
 
 
 def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
-    """Store quiz questions, skipping near-duplicates of existing quizzes and key_facts."""
+    """Store quiz questions, skipping semantic duplicates via limbic embeddings."""
     now_ms = int(time.time() * 1000)
 
-    # Collect existing questions to check against
-    existing_questions = []
-    # From other microlearning quizzes
-    for row in conn.execute(
-        "SELECT question FROM microlearning_quizzes WHERE status='active'"
-    ).fetchall():
-        existing_questions.append(row['question'])
-    # From key_facts on curriculum nodes
+    # Load embedding model for dedup
+    model = None
+    existing_embedded: list[tuple[str, any]] = []
     try:
+        from limbic.amygdala import EmbeddingModel
+        model = EmbeddingModel()
+
+        # Collect and embed existing questions
+        existing_texts = []
         for row in conn.execute(
-            "SELECT key_facts FROM curriculum_nodes WHERE key_facts IS NOT NULL AND key_facts != '[]'"
+            "SELECT question FROM microlearning_quizzes WHERE status='active'"
         ).fetchall():
-            facts = json.loads(row['key_facts'] or '[]')
-            for f in facts:
-                if f.get('question'):
-                    existing_questions.append(f['question'])
-    except Exception:
-        pass
+            existing_texts.append(row['question'])
+        try:
+            for row in conn.execute(
+                "SELECT key_facts FROM curriculum_nodes "
+                "WHERE key_facts IS NOT NULL AND key_facts != '[]'"
+            ).fetchall():
+                facts = json.loads(row['key_facts'] or '[]')
+                for f in facts:
+                    if f.get('question'):
+                        existing_texts.append(f['question'])
+        except Exception:
+            pass
+
+        if existing_texts:
+            vecs = model.embed_batch(existing_texts)
+            existing_embedded = list(zip(existing_texts, vecs))
+    except Exception as e:
+        print(f'[quiz-dedup] embedding init failed, skipping dedup: {e}', flush=True)
 
     stored = 0
     skipped = 0
@@ -1586,12 +1590,13 @@ def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
         if not question:
             continue
 
-        # Check for duplicates
-        dup = _is_duplicate_quiz(question, existing_questions)
-        if dup:
-            print(f'[quiz-dedup] skipping duplicate: "{question[:60]}" ~ "{dup[:60]}"', flush=True)
-            skipped += 1
-            continue
+        # Check for semantic duplicates
+        if model and existing_embedded:
+            dup = _find_duplicate_quiz(question, existing_embedded, model)
+            if dup:
+                print(f'[quiz-dedup] skipping: "{question[:50]}" ~ "{dup[:50]}"', flush=True)
+                skipped += 1
+                continue
 
         quiz_id = f'{card_id}_q{i}'
         conn.execute('''
@@ -1600,13 +1605,15 @@ def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
              review_count, created_at)
             VALUES (?, ?, ?, ?, 'active', 1.0, ?, 0, ?)
         ''', (quiz_id, card_id, question, answer, now_ms, now_ms))
-        existing_questions.append(question)  # prevent intra-batch dupes
+        # Add to existing pool so intra-batch dupes are caught too
+        if model:
+            existing_embedded.append((question, model.embed(question)))
         stored += 1
 
     if skipped:
-        print(f'[quiz-dedup] {stored} stored, {skipped} skipped for card {card_id}', flush=True)
+        print(f'[quiz-dedup] {stored} stored, {skipped} skipped for {card_id}', flush=True)
 
-    # Backfill legacy fields with first quiz
+    # Backfill legacy fields with first stored quiz
     if quizzes:
         first = quizzes[0]
         conn.execute(
