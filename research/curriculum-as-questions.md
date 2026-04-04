@@ -217,22 +217,32 @@ When a user goes deep on a topic (multiple books, microlearning, voice recall), 
 
 ## Implementation Plan
 
-### Phase 1: key_facts Enrichment ← CURRENT (Session 42)
+### Phase 1: key_facts Enrichment — COMPLETE (Session 42-43)
 1. ✅ Add `key_facts` column to `curriculum_nodes` (migration in db.py)
 2. ✅ Write `extract_key_facts.py` with batch-by-area approach
-3. ✅ Run on Sicily Greek area (14 nodes, 66 facts) — quality validated
-4. Run on remaining 6 Sicily areas
-5. Run on remaining 8 curricula (need entity data per curriculum)
-6. Load into server SQLite
+3. ✅ Run on all 7 Sicily areas (70 nodes, 299 facts, 668 entity refs)
+4. ✅ Load into server SQLite AND curriculum JSON
+5. ✅ Regenerate cached_questions from key_facts for all 35 Sicily knowledge_items
+6. Run on remaining 8 curricula (need entity data per curriculum)
 
-### Phase 2: Deterministic Question Generation
-1. Modify `generate_question()` to use key_facts for reviews 1-2
-2. Track which fact IDs have been tested in `question_history`
-3. Priority-gated progression: don't show P2 until P1 facts are known
+### Phase 2: Deterministic Question Generation — COMPLETE (Session 42)
+1. ✅ `generate_question()` uses key_facts deterministically for early reviews
+2. ✅ Key_facts checked FIRST, before stale cached_question (fixed priority bug)
+3. ✅ Key_facts loaded from SQLite directly (not curriculum JSON)
+4. ✅ Reviews 3+: Claude with mastered key_facts as context
+5. ✅ Gemini→Claude migration: all 11 review_engine call sites switched
+6. ✅ `claude_llm.py` module: call_claude, call_claude_json, call_claude_search
+7. Track which fact IDs have been tested in `question_history` (not yet wired in record_answer)
+
+### Phase 2b: Review Stream Scoring — COMPLETE (Session 42)
+1. ✅ Stream scorer boosts date/event/person types (+2.0) over significance/connection (-1.0)
+2. ✅ Badge labels: person, event, connection, significance mapped (was all "Concept")
+3. ✅ fact_id and entities forwarded from cached_question to stream response
 
 ### Phase 3: Rich Card Rendering
 1. Structured data composition (timeline, map, entity cards) on client
 2. Fallback to rich_answer text when structured data insufficient
+3. Entity profiles (see `research/entity-profiles-design.md`)
 
 ### Phase 4: Cross-Curriculum and Entity Depth
 1. Deduplicate shared facts across curricula via entity IDs
