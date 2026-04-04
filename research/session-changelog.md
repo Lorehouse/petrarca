@@ -1,6 +1,37 @@
 # Knowledge System Implementation Status
 
-**Date**: April 1, 2026 (last updated — session 41: review system consolidation + fractal exploration)
+**Date**: April 4, 2026 (last updated — session 44: multi-quiz microlearning + entity research)
+
+## Session 44: Multi-Quiz Microlearning, Entity Research, Review Stream Fix (April 4, 2026)
+
+### Review Stream Fix
+- **Root cause**: ALL 253 knowledge_items had `cached_question = NULL` — zero regular review cards could be served. Only 5 microlearning cards showed before "no more cards."
+- **Batch generation**: New `POST /review/batch-generate` endpoint populated questions for all 109 eligible items.
+- **Dynamic ML limit**: When regular items are sparse (<3), ML cards fill the whole batch. Fixed `has_more` pagination to count ML cards.
+
+### Multi-Quiz Microlearning Cards
+- **`microlearning_quizzes` table**: Each quiz independently FSRS-scheduled. ML card = content container, quizzes = review atoms.
+- **Prompt**: Updated to generate 3-5 specific factual questions per card (date, person, event, consequence, connection).
+- **First encounter**: Content shown, then all quizzes stacked with per-quiz Show answer / Skip / Grade. "Complete →" button to advance.
+- **Re-review**: Individual quiz shown first (`microlearning_quiz` card type), full content revealed as answer.
+- **Dismiss**: Per-quiz "Skip", per-card "Not interested" (top) + "Dismiss card" (bottom).
+
+### Quiz Dedup (limbic MiniLM)
+- New quizzes checked against existing quizzes + curriculum key_facts using MiniLM 384d cosine at 0.82 threshold.
+- All matches logged with similarity score for calibration review (~Apr 18).
+- Verified: caught "When was Battle of Himera?" duplicate at 0.907, let through different-angle questions at 0.77-0.81.
+
+### Entity Research System
+- **"3 questions" button**: Claude Sonnet generates research queries informed by temporally/spatially related entities.
+- **"Research this" button**: Triggers rich entity profile ML card with connections to same-period/same-region entities.
+- **Entity markup**: LLM annotates people/places/events/concepts with canonical IDs in ML card content → tappable spans.
+- **Backlinks**: Entity lookup shows "In your research" with ML cards mentioning that entity. Dynamic entities for IDs not in shared_entities.
+- **Caching**: Entity research stored as ML cards, available on subsequent entity opens.
+
+### Other
+- Scroll to top on card transitions.
+- Backfilled 37 legacy ML cards with quiz rows.
+- Cleaned up 3 failed + 1 pending ML cards.
 
 ## Session 41: Review System Consolidation + Fractal Exploration (March 30 – April 1, 2026)
 

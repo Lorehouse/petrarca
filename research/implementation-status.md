@@ -56,7 +56,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | Unified card stream (Cards/Voice tabs). knowledge_items as data source. Fractal exploration. |
+| Review | `(tabs)/review.tsx` | Unified card stream. Multi-quiz ML cards (3-5 quizzes each, independently scheduled). Entity research. Fractal exploration. |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -258,11 +258,11 @@
 
 **Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities`, `entity_curriculum_links`
 
-**Review & Microlearning**: `review_items`, `microlearning_cards`
+**Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes`
 
 **Other**: `projects`, `project_notes`, `voice_transcripts`
 
-**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)` (one claim ID in multiple articles). `knowledge_items` is the review data source (replaces archived `retrieval_questions`). `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
+**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)` (one claim ID in multiple articles). `knowledge_items` is the review data source (replaces archived `retrieval_questions`). `microlearning_quizzes` holds individual quiz questions from ML cards, each independently FSRS-scheduled — the ML card is a content container, quizzes are the review units. `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
 
 ## Algorithm Parameters (experiment-validated)
 
@@ -277,6 +277,12 @@
 - Calibrated on 18 human + 300 LLM-rated pairs: AUROC=0.930, 94% accuracy, ρ=0.818
 - **Briefing card**: 0.52, **Feed ranking**: 0.49, **Dedup**: 0.64
 - Ground truth: `scripts/ground-truth/`, config: `threshold_config.json`
+
+### Quiz Dedup
+- MiniLM 384d cosine via limbic, threshold ≥ 0.82 (same as claim KNOWN)
+- Checked against all existing `microlearning_quizzes` + curriculum `key_facts`
+- Similarity scores logged: `journalctl -u petrarca-research | grep quiz-dedup`
+- Calibration review scheduled ~2026-04-18
 
 ### Curriculum Mapping
 - Article claim → curriculum node: ≥ 0.65 cosine (broader than claim-claim)
