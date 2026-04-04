@@ -832,6 +832,18 @@ def build_entity_index() -> dict:
                 if nid not in expanded_places_idx[parent]:
                     expanded_places_idx[parent].append(nid)
 
+    # Build name → entity_id mapping from shared_entities
+    name_to_entity_id: dict[str, str] = {}
+    try:
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        rows = conn.execute('SELECT entity_id, name FROM shared_entities').fetchall()
+        for r in rows:
+            name_to_entity_id[r['name']] = r['entity_id']
+        conn.close()
+    except Exception:
+        pass
+
     index = {
         'nodes': all_nodes,
         'persons_index': persons_idx,
@@ -839,6 +851,7 @@ def build_entity_index() -> dict:
         'events_index': events_idx,
         'place_hierarchy': place_hierarchy,
         'curricula': curricula_meta,
+        'name_to_entity_id': name_to_entity_id,
     }
 
     index_path = DATA_DIR / 'entity_index.json'

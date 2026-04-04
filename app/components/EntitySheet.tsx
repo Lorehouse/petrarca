@@ -11,6 +11,7 @@ import {
 } from '../lib/book-api';
 import { logEvent } from '../data/logger';
 import AncientMap from './AncientMap';
+import ExplorerCapture from './ExplorerCapture';
 
 interface Props {
   entityId: string | null;
@@ -125,6 +126,13 @@ export default function EntitySheet({ entityId, onClose, onExploreEntity }: Prop
         entityId, entity.name, entity.entity_type, entity.description);
     } catch (e) {
       console.warn('[entity] research failed:', e);
+    }
+  };
+
+  const handleCaptureComplete = () => {
+    // Refresh entity details to show new notes
+    if (entityId) {
+      fetchEntityDetails(entityId).then(setEntity).catch(() => {});
     }
   };
 
@@ -244,6 +252,20 @@ export default function EntitySheet({ entityId, onClose, onExploreEntity }: Prop
                   ))}
                 </View>
               ) : null}
+
+              {/* User notes + capture */}
+              <View style={es.notesSection}>
+                <Text style={es.sectionLabel}>What I know</Text>
+                {entity.notes && entity.notes.length > 0 && entity.notes.map(n => (
+                  <Text key={n.id} style={es.noteText}>{n.note}</Text>
+                ))}
+                <ExplorerCapture
+                  mode="entity"
+                  entityId={entityId}
+                  entityName={entity.name}
+                  onCaptureComplete={handleCaptureComplete}
+                />
+              </View>
 
               {/* Wikipedia link */}
               {entity.wikipedia_url ? (
@@ -465,6 +487,19 @@ const es = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 16,
     ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  notesSection: {
+    marginBottom: 16,
+  },
+  noteText: {
+    fontFamily: fonts.reading,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textBody,
+    marginBottom: 4,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(139,37,0,0.15)',
   },
   wikiLink: {
     marginBottom: 16,

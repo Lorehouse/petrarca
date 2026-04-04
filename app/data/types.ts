@@ -616,6 +616,12 @@ export interface MicrolearningBacklink {
   domain?: string;
 }
 
+export interface EntityNote {
+  id: number;
+  note: string;
+  created_at: number;
+}
+
 export interface EntityDetails {
   entity_id: string;
   name: string;
@@ -632,6 +638,7 @@ export interface EntityDetails {
   nexus_score: number;
   curriculum_links: EntityCurriculumLink[];
   microlearning_backlinks?: MicrolearningBacklink[];
+  notes?: EntityNote[];
 }
 
 export interface EntityCurriculumLink {

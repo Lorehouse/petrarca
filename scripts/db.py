@@ -432,6 +432,15 @@ CREATE TABLE IF NOT EXISTS entity_curriculum_links (
     PRIMARY KEY (entity_id, domain_id, node_id)
 );
 
+-- User notes about entities: free-text "what I know" per entity
+CREATE TABLE IF NOT EXISTS entity_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id TEXT NOT NULL,
+    note TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_en_entity ON entity_notes(entity_id);
+
 -- Microlearning cards: research-driven short-form content in the review stream
 CREATE TABLE IF NOT EXISTS microlearning_cards (
     id TEXT PRIMARY KEY,

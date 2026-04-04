@@ -511,6 +511,19 @@ export async function recordEntityTap(
   return resp.json();
 }
 
+export async function saveEntityNote(
+  entityId: string,
+  note: string,
+): Promise<{ status: string; entity_id: string; created_at: number }> {
+  const resp = await fetch(`${RESEARCH_BASE}/entity/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entity_id: entityId, note }),
+  });
+  if (!resp.ok) throw new Error(`Save note failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Kindle Processing API ---
 
 export async function processKindleBooks(max: number = 10): Promise<void> {

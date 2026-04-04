@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Platform, ActivityIndicator, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, fonts, type, layout, spacing } from '../design/tokens';
 import { logEvent } from '../data/logger';
 import { RESEARCH_BASE } from '../lib/chat-api';
-import { triggerMicrolearning } from '../lib/book-api';
+import { triggerMicrolearning, fetchEntityDetails } from '../lib/book-api';
+import { EntityDetails } from '../data/types';
+import EntitySheet from './EntitySheet';
+import ExplorerCapture, { CaptureResult } from './ExplorerCapture';
 
 // --- Types (exported for reuse) ---
 
@@ -27,6 +30,7 @@ export interface EntityIndex {
   events_index: Record<string, string[]>;
   place_hierarchy: Record<string, { parent: string | null; type: string }>;
   curricula: { id: string; short_name: string; title: string }[];
+  name_to_entity_id?: Record<string, string>;
 }
 
 type SubTab = 'timeline' | 'persons' | 'places';
@@ -144,6 +148,10 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
   const [selectedEntity, setSelectedEntity] = useState<string | null>(initialEntity || null);
   const [expandedCenturies, setExpandedCenturies] = useState<Set<number>>(new Set());
   const [selectedNode, setSelectedNode] = useState<TimelineNode | null>(null);
+  const [entityDetails, setEntityDetails] = useState<EntityDetails | null>(null);
+  const [entityDetailsLoading, setEntityDetailsLoading] = useState(false);
+  const [sheetEntityId, setSheetEntityId] = useState<string | null>(null);
+  const [captureExpanded, setCaptureExpanded] = useState(false);
 
   useEffect(() => {
     logEvent('explorer_open', { initial_entity: initialEntity, initial_year: initialYear });
@@ -182,6 +190,34 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
       setExpandedCenturies(new Set([century]));
     }
   }, [initialYear, data]);
+
+  // Fetch entity details when a person is selected
+  useEffect(() => {
+    if (!selectedEntity || !data || entityType !== 'person') {
+      setEntityDetails(null);
+      return;
+    }
+    const entityId = data.name_to_entity_id?.[selectedEntity];
+    if (!entityId) {
+      setEntityDetails(null);
+      return;
+    }
+    setEntityDetailsLoading(true);
+    fetchEntityDetails(entityId)
+      .then(setEntityDetails)
+      .catch(() => setEntityDetails(null))
+      .finally(() => setEntityDetailsLoading(false));
+  }, [selectedEntity, entityType, data]);
+
+  const handleCaptureComplete = useCallback((result: CaptureResult) => {
+    if (result.notes_saved > 0 && entityDetails) {
+      // Refresh entity details to show new notes
+      const entityId = data?.name_to_entity_id?.[selectedEntity || ''];
+      if (entityId) {
+        fetchEntityDetails(entityId).then(setEntityDetails).catch(() => {});
+      }
+    }
+  }, [entityDetails, data, selectedEntity]);
 
   // Combined entity list for timeline pills (top places + persons by frequency)
   const entityList = useMemo(() => {
@@ -294,6 +330,26 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
         ))}
       </View>
 
+      {/* Centralized capture bar */}
+      <View style={s.captureBar}>
+        {captureExpanded ? (
+          <View style={s.captureExpandedWrap}>
+            <View style={s.captureHeaderRow}>
+              <Text style={s.captureLabel}>Capture</Text>
+              <Pressable onPress={() => setCaptureExpanded(false)} hitSlop={8}>
+                <Text style={s.captureClose}>✕</Text>
+              </Pressable>
+            </View>
+            <ExplorerCapture mode="general" placeholder="Note, question, or voice recording…" />
+          </View>
+        ) : (
+          <Pressable style={s.captureCollapsedBtn} onPress={() => setCaptureExpanded(true)}>
+            <View style={s.captureMicIcon} />
+            <Text style={s.captureCollapsedText}>Capture a note or question…</Text>
+          </Pressable>
+        )}
+      </View>
+
       {/* ── Timeline sub-tab ── */}
       {subTab === 'timeline' && (
         <>
@@ -313,10 +369,83 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
           </ScrollView>
 
           {/* Summary line */}
-          {totalNodes > 0 && (
+          {totalNodes > 0 && !entityDetails && (
             <Text style={s.entitySummary}>
               {selectedEntity || 'All domains'} · {totalNodes} events · {knownCount} known
             </Text>
+          )}
+
+          {/* Inline person card when filtering by a person */}
+          {selectedEntity && entityType === 'person' && (
+            <View style={s.personCard}>
+              {entityDetailsLoading ? (
+                <ActivityIndicator size="small" color={colors.rubric} style={{ padding: 12 }} />
+              ) : entityDetails ? (
+                <>
+                  <View style={s.personCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.personCardName}>{entityDetails.name}</Text>
+                      {entityDetails.date_start != null && (
+                        <Text style={s.personCardDates}>
+                          {entityDetails.date_start < 0 ? `${Math.abs(entityDetails.date_start)} BC` : `${entityDetails.date_start} AD`}
+                          {entityDetails.date_end != null ? ` – ${entityDetails.date_end < 0 ? `${Math.abs(entityDetails.date_end)} BC` : `${entityDetails.date_end} AD`}` : ''}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={s.personCardStats}>
+                      <Text style={s.personCardStatNum}>{totalNodes}</Text>
+                      <Text style={s.personCardStatLabel}>events</Text>
+                      <Text style={[s.personCardStatNum, { marginTop: 2 }]}>{knownCount}</Text>
+                      <Text style={s.personCardStatLabel}>known</Text>
+                    </View>
+                  </View>
+                  {entityDetails.description && (
+                    <Text style={s.personCardDesc}>{entityDetails.description}</Text>
+                  )}
+
+                  {/* Existing notes */}
+                  {entityDetails.notes && entityDetails.notes.length > 0 && (
+                    <View style={s.notesSection}>
+                      <Text style={s.notesSectionLabel}>What I know</Text>
+                      {entityDetails.notes.map(n => (
+                        <Text key={n.id} style={s.noteText}>{n.note}</Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Voice/text capture */}
+                  <View style={s.personCardCapture}>
+                    <ExplorerCapture
+                      mode="entity"
+                      entityId={entityDetails.entity_id}
+                      entityName={entityDetails.name}
+                      onCaptureComplete={handleCaptureComplete}
+                    />
+                  </View>
+
+                  {/* Actions */}
+                  <View style={s.personCardActions}>
+                    <Pressable style={s.personCardBtn} onPress={() => {
+                      setSheetEntityId(entityDetails.entity_id);
+                      logEvent('explorer_open_entity_sheet', { entity_id: entityDetails.entity_id });
+                    }}>
+                      <Text style={s.personCardBtnText}>Full profile →</Text>
+                    </Pressable>
+                    {entityDetails.wikipedia_url && (
+                      <Pressable style={[s.personCardBtn, s.personCardBtnSecondary]} onPress={() => {
+                        Linking.openURL(entityDetails.wikipedia_url!);
+                      }}>
+                        <Text style={[s.personCardBtnText, s.personCardBtnTextSecondary]}>Wikipedia</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </>
+              ) : (
+                <Text style={s.entitySummary}>
+                  {selectedEntity} · {totalNodes} events · {knownCount} known
+                </Text>
+              )}
+            </View>
           )}
 
           {/* Flat layout for sparse entities (≤15 events) */}
@@ -387,6 +516,17 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
       )}
 
       <View style={{ height: 40 }} />
+
+      {/* Entity Sheet modal */}
+      <EntitySheet
+        entityId={sheetEntityId}
+        onClose={() => setSheetEntityId(null)}
+        onExploreEntity={(name) => {
+          setSelectedEntity(name);
+          setSheetEntityId(null);
+          setSubTab('timeline');
+        }}
+      />
     </ScrollView>
   );
 }
@@ -589,4 +729,35 @@ const s = StyleSheet.create({
   // Empty
   emptyWrap: { padding: 32, alignItems: 'center' },
   emptyText: { fontFamily: fonts.readingItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+
+  // Inline person card
+  personCard: { marginHorizontal: layout.screenPadding, marginBottom: 10, padding: 12, backgroundColor: 'rgba(139,37,0,0.03)', borderLeftWidth: 2, borderLeftColor: colors.rubric, borderRadius: 2 },
+  personCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  personCardName: { fontFamily: fonts.displaySemiBold, fontSize: 18, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  personCardDates: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  personCardStats: { alignItems: 'center', paddingLeft: 12 },
+  personCardStatNum: { fontFamily: fonts.displaySemiBold, fontSize: 16, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  personCardStatLabel: { fontFamily: fonts.ui, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  personCardDesc: { fontFamily: fonts.reading, fontSize: 14, lineHeight: 20, color: colors.textBody, marginTop: 8 },
+  personCardActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  personCardBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 2, backgroundColor: colors.ink },
+  personCardBtnSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.rule },
+  personCardBtnText: { fontFamily: fonts.ui, fontSize: 11, color: colors.parchment },
+  personCardBtnTextSecondary: { color: colors.textSecondary },
+
+  // Notes
+  notesSection: { marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
+  notesSectionLabel: { fontFamily: fonts.uiMedium, fontSize: 9, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  noteText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.textBody, marginBottom: 4 },
+  personCardCapture: { marginTop: 10 },
+
+  // Centralized capture bar
+  captureBar: { marginHorizontal: layout.screenPadding, marginBottom: 8 },
+  captureCollapsedBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.02)' },
+  captureMicIcon: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.rubric },
+  captureCollapsedText: { fontFamily: fonts.reading, fontSize: 13, color: colors.textMuted },
+  captureExpandedWrap: { padding: 12, borderWidth: 1, borderColor: colors.rubric, borderRadius: 2, backgroundColor: 'rgba(139,37,0,0.02)' },
+  captureHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  captureLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.rubric, textTransform: 'uppercase', letterSpacing: 0.8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  captureClose: { fontSize: 16, color: colors.textMuted, padding: 4 },
 });
