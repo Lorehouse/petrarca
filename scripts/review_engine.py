@@ -1522,19 +1522,77 @@ def generate_entity_questions(entity_id: str, entity_name: str,
     return [f'What was the historical significance of {entity_name}?']
 
 
-def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
-    """Store quiz questions from an ML card into microlearning_quizzes table.
+def _normalize_for_dedup(text: str) -> set[str]:
+    """Extract content words for duplicate detection."""
+    import re
+    words = set(re.findall(r'[a-z]{3,}', text.lower()))
+    # Remove common stop words
+    words -= {'the', 'was', 'were', 'what', 'when', 'who', 'how', 'did', 'why',
+              'which', 'that', 'this', 'from', 'with', 'for', 'and', 'not', 'has',
+              'had', 'have', 'been', 'its', 'their', 'about', 'does', 'between'}
+    return words
 
-    Also backfills the legacy question/answer_guidance fields on the card
-    with the first quiz for backwards compatibility.
+
+def _is_duplicate_quiz(question: str, existing_questions: list[str],
+                       threshold: float = 0.6) -> str | None:
+    """Check if a question is a near-duplicate of an existing one.
+
+    Returns the matching question text if duplicate, None otherwise.
+    Uses Jaccard similarity on content words.
     """
+    new_words = _normalize_for_dedup(question)
+    if len(new_words) < 2:
+        return None
+    for existing in existing_questions:
+        ex_words = _normalize_for_dedup(existing)
+        if len(ex_words) < 2:
+            continue
+        intersection = new_words & ex_words
+        union = new_words | ex_words
+        similarity = len(intersection) / len(union) if union else 0
+        if similarity >= threshold:
+            return existing
+    return None
+
+
+def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
+    """Store quiz questions, skipping near-duplicates of existing quizzes and key_facts."""
     now_ms = int(time.time() * 1000)
+
+    # Collect existing questions to check against
+    existing_questions = []
+    # From other microlearning quizzes
+    for row in conn.execute(
+        "SELECT question FROM microlearning_quizzes WHERE status='active'"
+    ).fetchall():
+        existing_questions.append(row['question'])
+    # From key_facts on curriculum nodes
+    try:
+        for row in conn.execute(
+            "SELECT key_facts FROM curriculum_nodes WHERE key_facts IS NOT NULL AND key_facts != '[]'"
+        ).fetchall():
+            facts = json.loads(row['key_facts'] or '[]')
+            for f in facts:
+                if f.get('question'):
+                    existing_questions.append(f['question'])
+    except Exception:
+        pass
+
     stored = 0
+    skipped = 0
     for i, q in enumerate(quizzes):
         question = q.get('question', '').strip()
         answer = q.get('answer', '').strip()
         if not question:
             continue
+
+        # Check for duplicates
+        dup = _is_duplicate_quiz(question, existing_questions)
+        if dup:
+            print(f'[quiz-dedup] skipping duplicate: "{question[:60]}" ~ "{dup[:60]}"', flush=True)
+            skipped += 1
+            continue
+
         quiz_id = f'{card_id}_q{i}'
         conn.execute('''
             INSERT OR IGNORE INTO microlearning_quizzes
@@ -1542,7 +1600,11 @@ def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
              review_count, created_at)
             VALUES (?, ?, ?, ?, 'active', 1.0, ?, 0, ?)
         ''', (quiz_id, card_id, question, answer, now_ms, now_ms))
+        existing_questions.append(question)  # prevent intra-batch dupes
         stored += 1
+
+    if skipped:
+        print(f'[quiz-dedup] {stored} stored, {skipped} skipped for card {card_id}', flush=True)
 
     # Backfill legacy fields with first quiz
     if quizzes:

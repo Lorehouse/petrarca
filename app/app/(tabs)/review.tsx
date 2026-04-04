@@ -323,18 +323,18 @@ function ReviewCard({
 
 function MicrolearningCard({
   item,
-  onResult,
-  onSkip,
+  onComplete,
   onDismissCard,
   onDismissQuiz,
+  onResult,
   onResearch,
   onEntityTap,
 }: {
   item: ResurfacingItem;
-  onResult: (quizId: string, result: string) => void;
-  onSkip: () => void;
+  onComplete: () => void;
   onDismissCard: () => void;
   onDismissQuiz: (quizId: string) => void;
+  onResult: (quizId: string, result: string) => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
 }) {
@@ -342,18 +342,6 @@ function MicrolearningCard({
   const [revealedQuizzes, setRevealedQuizzes] = useState<Set<string>>(new Set());
   const [gradedQuizzes, setGradedQuizzes] = useState<Set<string>>(new Set());
   const [dismissedQuizzes, setDismissedQuizzes] = useState<Set<string>>(new Set());
-  const [done, setDone] = useState(false);
-
-  const allHandled = quizzes.length > 0 && quizzes.every(
-    q => gradedQuizzes.has(q.id) || dismissedQuizzes.has(q.id));
-
-  // Auto-advance when all quizzes handled
-  React.useEffect(() => {
-    if (allHandled && !done) {
-      setDone(true);
-      setTimeout(onSkip, 800);
-    }
-  }, [allHandled]);
 
   const handleReveal = (quizId: string) => {
     setRevealedQuizzes(prev => new Set(prev).add(quizId));
@@ -452,7 +440,7 @@ function MicrolearningCard({
         </View>
       )}
 
-      {/* Follow-ups + bottom dismiss */}
+      {/* Follow-ups */}
       <View style={cs.followUpSection}>
         {item.follow_up_queries && item.follow_up_queries.length > 0 && (
           <>
@@ -465,8 +453,15 @@ function MicrolearningCard({
           </>
         )}
         <ResearchInput onSubmit={onResearch} />
-        <Pressable style={ml.dismissBtn} onPress={onDismissCard}>
-          <Text style={ml.dismissText}>Dismiss entire card</Text>
+      </View>
+
+      {/* Bottom actions: Complete + Dismiss */}
+      <View style={ml.bottomActions}>
+        <Pressable style={ml.completeBtn} onPress={onComplete}>
+          <Text style={ml.completeBtnText}>Complete {'\u2192'}</Text>
+        </Pressable>
+        <Pressable onPress={onDismissCard} hitSlop={8}>
+          <Text style={ml.dismissText}>Dismiss card</Text>
         </Pressable>
       </View>
     </View>
@@ -691,6 +686,7 @@ export default function ReviewScreen() {
   const offsetRef = useRef(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAtRef = useRef<number>(Date.now());
+  const scrollRef = useRef<ScrollView>(null);
 
   const loadStream = useCallback(async (reset = true) => {
     if (reset) {
@@ -746,6 +742,7 @@ export default function ReviewScreen() {
       useNativeDriver: true,
     }).start(() => {
       callback();
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 200,
@@ -895,7 +892,7 @@ export default function ReviewScreen() {
 
   return (
     <View style={s.container}>
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView ref={scrollRef} contentContainerStyle={s.content}>
         {/* Minimal top bar */}
         <View style={s.header}>
           <View style={s.topActions}>
@@ -954,7 +951,7 @@ export default function ReviewScreen() {
                     key={currentItem.question_id || `ml-${currentIndex}`}
                     item={currentItem}
                     onResult={(quizId, result) => handleQuizResult(quizId, result)}
-                    onSkip={() => handleSkip(currentItem)}
+                    onComplete={() => handleSkip(currentItem)}
                     onDismissCard={() => handleDismissCard(currentItem)}
                     onDismissQuiz={handleDismissQuiz}
                     onResearch={(q) => handleResearch(q, currentItem)}
@@ -1066,6 +1063,9 @@ const ml = StyleSheet.create({
   quizGraded: { paddingVertical: 4, marginBottom: 8 },
   quizDismissed: { paddingVertical: 4, marginBottom: 8, opacity: 0.5 },
   quizDismissedText: { fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
+  bottomActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
+  completeBtn: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: colors.rubric, borderRadius: 4, backgroundColor: 'rgba(139,37,0,0.04)' },
+  completeBtnText: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric },
 });
 
 const ic = StyleSheet.create({
