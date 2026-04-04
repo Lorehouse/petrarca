@@ -58,6 +58,7 @@ PROJECTS_PATH = Path(os.environ.get('PROJECTS_PATH', '/opt/petrarca/data/project
 PROJECTS_MEDIA_DIR = Path(os.environ.get('PROJECTS_MEDIA_DIR', '/opt/petrarca/data/projects'))
 PHOTO_OCR_QUEUE_PATH = Path(os.environ.get('PHOTO_OCR_QUEUE_PATH', '/opt/petrarca/data/photo_ocr_queue.json'))
 VOICE_ELICIT_CACHE_DIR = Path(os.environ.get('VOICE_ELICIT_CACHE_DIR', '/opt/petrarca/data/voice_elicit_cache'))
+EXPLORE_CAPTURE_CACHE_DIR = Path(os.environ.get('EXPLORE_CAPTURE_CACHE_DIR', '/opt/petrarca/data/explore_capture_cache'))
 
 from server_log import log_server_event
 # Core curriculum functions from SQLite-backed module
@@ -68,6 +69,7 @@ from curriculum_db import (
     import_assessment_answers,
     get_timeline,
     generate_review_stream,
+    get_knowledge_atlas_data,
 )
 # Functions not yet migrated to SQLite — still use JSON files
 from curriculum import (
@@ -102,6 +104,7 @@ BOOK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 VOICE_ELICIT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+EXPLORE_CAPTURE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -4082,6 +4085,63 @@ JSON array only:"""
             import traceback; traceback.print_exc()
             self._send_json_response(500, {'error': str(e)})
 
+    def _handle_follow_up_trigger(self):
+        """POST /review/follow-up/trigger — durably record a follow-up query was triggered."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        item_id = body.get('item_id', '').strip()
+        query = body.get('query', '').strip()
+        if not item_id or not query:
+            self._send_json_response(400, {'error': 'item_id and query required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            for table in ('knowledge_items', 'microlearning_cards'):
+                row = conn.execute(f'SELECT triggered_follow_ups FROM {table} WHERE id=?',
+                                   (item_id,)).fetchone()
+                if row:
+                    triggered = json.loads(row['triggered_follow_ups'] or '[]')
+                    if query not in triggered:
+                        triggered.append(query)
+                    conn.execute(f'UPDATE {table} SET triggered_follow_ups=? WHERE id=?',
+                                 (json.dumps(triggered), item_id))
+                    conn.commit()
+                    self._send_json_response(200, {'triggered': triggered})
+                    return
+            self._send_json_response(404, {'error': 'item not found'})
+        except Exception as e:
+            print(f'[follow-up-trigger] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
+    def _handle_follow_up_generate(self):
+        """POST /review/follow-up/generate — generate 3 new follow-up queries on demand."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        node_title = body.get('node_title', '').strip()
+        node_description = body.get('node_description', '').strip()
+        fact_context = body.get('fact_context', '').strip()
+        exclude = body.get('exclude', [])
+        if not node_title:
+            self._send_json_response(400, {'error': 'node_title required'})
+            return
+        try:
+            from review_engine import _generate_follow_up_queries
+            extra = ''
+            if exclude:
+                extra = '\n\nDo NOT repeat or rephrase these already-asked questions:\n' + \
+                    '\n'.join(f'- {q}' for q in exclude[:10])
+            fqs = _generate_follow_up_queries(
+                node_title, node_description,
+                fact_context + extra if extra else fact_context,
+            )
+            self._send_json_response(200, {'follow_up_queries': fqs})
+        except Exception as e:
+            print(f'[follow-up-generate] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+
     def _handle_entities_list(self):
         """GET /entities?type=place — list entities, optionally filtered by type."""
         from urllib.parse import urlparse, parse_qs
@@ -4262,12 +4322,14 @@ JSON array only:"""
         """POST /explore/capture — voice or text capture, routed to entities + research.
 
         Accepts either:
-          - multipart/form-data with 'audio' file + form fields (entity_id, entity_name, mode)
+          - multipart/form-data with 'audio' file + form fields (entity_id, entity_name, mode, request_id)
           - application/json with {text, entity_id, entity_name, mode}
 
+        Supports idempotent retries via request_id (24h cache, same pattern as voice-elicit).
         Pipeline: transcribe (if audio) → analyze → save notes → trigger research → return results.
         """
         import cgi
+        import io
         content_type = self.headers.get('Content-Type', '')
 
         entity_id = None
@@ -4275,17 +4337,18 @@ JSON array only:"""
         mode = 'general'
         input_text = None
         audio_path = None
+        request_id = ''
 
+        # Parse request — read body once, buffer for multipart (same as voice-elicit)
         if 'multipart/form-data' in content_type:
-            environ = {
-                'REQUEST_METHOD': 'POST',
-                'CONTENT_TYPE': content_type,
-                'CONTENT_LENGTH': self.headers.get('Content-Length', '0'),
-            }
-            form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ=environ)
+            length = int(self.headers.get('Content-Length', 0))
+            raw_data = self.rfile.read(length)
+            environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
+            form = cgi.FieldStorage(fp=io.BytesIO(raw_data), environ=environ, keep_blank_values=True)
             entity_id = form.getvalue('entity_id', None)
             entity_name = form.getvalue('entity_name', None)
             mode = form.getvalue('mode', 'general')
+            request_id = form.getvalue('request_id', '')
 
             if 'audio' in form:
                 capture_id = f'exc_{int(time.time())}'
@@ -4306,23 +4369,51 @@ JSON array only:"""
             self._send_json_response(400, {'error': 'No audio or text provided'})
             return
 
-        # Return 202 immediately, process synchronously for now (< 30s typical)
-        # For voice: transcribe first
+        # --- Idempotent cache check (24h TTL, same pattern as voice-elicit) ---
+        cache_path = None
+        if request_id:
+            cache_path = EXPLORE_CAPTURE_CACHE_DIR / f'{request_id}.json'
+            if cache_path.exists():
+                age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+                if age_hours > 24:
+                    cache_path.unlink(missing_ok=True)
+                else:
+                    try:
+                        cached = json.loads(cache_path.read_text())
+                        print(f'[explore/capture] Cache hit for {request_id}', flush=True)
+                        if audio_path:
+                            audio_path.unlink(missing_ok=True)
+                        self._send_json_response(200, cached)
+                        return
+                    except Exception:
+                        pass  # corrupted cache, re-process
+
+        # --- Transcribe audio ---
         transcript = input_text or ''
         if audio_path:
             try:
+                print(f'[explore/capture] Transcribing: {audio_path.stat().st_size} bytes, '
+                      f'entity={entity_id}, mode={mode}, request_id={request_id}', flush=True)
                 transcript = transcribe_on_server(audio_path)
             except Exception as e:
+                print(f'[explore/capture] Transcription failed: {e}', flush=True)
                 self._send_json_response(500, {'error': f'Transcription failed: {e}'})
                 return
+            finally:
+                audio_path.unlink(missing_ok=True)
+
             if not transcript:
-                self._send_json_response(200, {
+                empty_result = {
                     'status': 'completed', 'transcript': '',
                     'notes_saved': 0, 'research_triggered': [], 'entities_detected': [],
-                })
+                }
+                if cache_path:
+                    try: cache_path.write_text(json.dumps(empty_result))
+                    except Exception: pass
+                self._send_json_response(200, empty_result)
                 return
 
-        # Analyze with LLM: extract knowledge claims and research queries
+        # --- LLM analysis ---
         from gemini_llm import call_llm
         from db import get_connection
 
@@ -4363,7 +4454,7 @@ Return JSON:
         queries = analysis.get('queries', [])
         entities_mentioned = analysis.get('entities_mentioned', [])
 
-        # Save knowledge claims as entity notes
+        # --- Save notes (fast DB write, no lock held during slow work above) ---
         conn = get_connection()
         now_ms = int(time.time() * 1000)
         notes_saved = 0
@@ -4376,7 +4467,6 @@ Return JSON:
             notes_saved += 1
 
         # For general mode: route to detected entities
-        target_entity_ids = []
         if mode == 'general' and entities_mentioned:
             rows = conn.execute(
                 'SELECT entity_id, name FROM shared_entities WHERE name IN ({})'.format(
@@ -4384,7 +4474,6 @@ Return JSON:
                 ), entities_mentioned
             ).fetchall()
             for r in rows:
-                target_entity_ids.append(r['entity_id'])
                 if claims:
                     note_text = '\n'.join(f'• {c}' for c in claims)
                     conn.execute(
@@ -4395,10 +4484,9 @@ Return JSON:
         conn.commit()
         conn.close()
 
-        # Trigger research for queries
+        # --- Trigger research (background threads, non-blocking) ---
         from review_engine import create_microlearning_request
         research_triggered = []
-        # Get a curriculum node from the entity for context
         source_node_id = None
         source_domain = None
         if entity_id:
@@ -4417,30 +4505,44 @@ Return JSON:
                 query, source_node_id=source_node_id, source_domain=source_domain)
             research_triggered.append({'card_id': card_id, 'query': query})
 
-        # Log voice transcript if audio was used
-        if audio_path:
-            try:
-                conn = get_connection()
-                conn.execute(
-                    '''INSERT INTO voice_transcripts
-                       (id, source, node_id, domain_id, node_title, transcript, audio_bytes, llm_result, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (f'exc_{int(time.time())}', 'explore_capture',
-                     source_node_id, source_domain, entity_name or 'general',
-                     transcript, audio_path.stat().st_size if audio_path.exists() else 0,
-                     json.dumps(analysis), now_ms))
-                conn.commit()
-                conn.close()
-            except Exception as e:
-                print(f'[explore/capture] Failed to log transcript: {e}', flush=True)
+        # --- Log transcript ---
+        try:
+            conn = get_connection()
+            conn.execute(
+                '''INSERT INTO voice_transcripts
+                   (id, source, node_id, domain_id, node_title, transcript, audio_bytes, llm_result, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (request_id or f'exc_{int(time.time())}', 'explore_capture',
+                 source_node_id, source_domain, entity_name or 'general',
+                 transcript, 0, json.dumps(analysis), now_ms))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f'[explore/capture] Failed to log transcript: {e}', flush=True)
 
-        self._send_json_response(200, {
+        # --- Build result, cache BEFORE sending (connection may drop) ---
+        result = {
             'status': 'completed',
             'transcript': transcript,
             'notes_saved': notes_saved,
             'research_triggered': research_triggered,
             'entities_detected': entities_mentioned,
-        })
+        }
+
+        if cache_path:
+            try:
+                cache_path.write_text(json.dumps(result))
+            except Exception:
+                pass
+
+        # --- Send response (handle mobile connection drops) ---
+        try:
+            self._send_json_response(200, result)
+        except (ConnectionResetError, BrokenPipeError):
+            if cache_path:
+                print(f'[explore/capture] Client disconnected but result cached as {request_id}', flush=True)
+            else:
+                print(f'[explore/capture] Client disconnected, result lost (no request_id)', flush=True)
 
     def _handle_entity_notes_save(self):
         """POST /entity/notes — save a user note about an entity."""
@@ -5225,6 +5327,22 @@ Return JSON:
         if not node_id:
             self._send_json_response(400, {'error': 'Missing node_id'})
             return
+        # Auto-detect domain_id for chapter/book node_ids
+        if not domain_id and (node_id.startswith('chapter:') or node_id.startswith('book:')):
+            parts = node_id.split(':')
+            book_id = parts[1] if len(parts) > 1 else ''
+            if book_id:
+                from db import get_connection as gc
+                tmp = gc(readonly=True)
+                try:
+                    row = tmp.execute(
+                        "SELECT DISTINCT curriculum_domain FROM knowledge_items WHERE sources LIKE ? LIMIT 1",
+                        (f'%{book_id}%',)
+                    ).fetchone()
+                    if row:
+                        domain_id = row['curriculum_domain']
+                finally:
+                    tmp.close()
         from db import get_connection
         conn = get_connection()
         try:
@@ -5233,7 +5351,7 @@ Return JSON:
                 update_knowledge(domain_id, node_id, knowledge='unknown', confidence=0.8,
                                  source='voice_elicit_know_nothing', conn=conn)
             conn.commit()
-            print(f'[voice-elicit] Know nothing: node={node_id}, domain={domain_id}', flush=True)
+            print(f'[voice-elicit] Know nothing: node={node_id}, domain={domain_id or "(none)"}', flush=True)
             self._send_json_response(200, {'ok': True})
         finally:
             conn.close()
@@ -5443,6 +5561,10 @@ Return JSON:
             return self._handle_microlearning_request()
         if self.path == '/review/microlearning/dismiss':
             return self._handle_microlearning_dismiss()
+        if self.path == '/review/follow-up/trigger':
+            return self._handle_follow_up_trigger()
+        if self.path == '/review/follow-up/generate':
+            return self._handle_follow_up_generate()
         if self.path == '/review/batch-generate':
             return self._handle_review_batch_generate()
         if self.path == '/entity/tap':
@@ -6101,6 +6223,15 @@ Return JSON:
             return self._serve_curriculum_timeline_html()
         if self.path == '/curriculum/entity-index':
             return self._send_json_response(200, get_entity_index())
+        if self.path == '/knowledge/atlas':
+            return self._serve_html_file('knowledge_atlas.html')
+        if self.path == '/knowledge/atlas-data':
+            conn = get_connection(readonly=True)
+            try:
+                data = get_knowledge_atlas_data(conn=conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
         if self.path.startswith('/curriculum/generate/status'):
             from urllib.parse import urlparse, parse_qs
             job_id = parse_qs(urlparse(self.path).query).get('id', [''])[0]

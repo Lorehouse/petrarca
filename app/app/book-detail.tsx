@@ -663,11 +663,8 @@ export default function BookDetailScreen() {
             router.push({
               pathname: '/voice-elicitation',
               params: {
-                chapter_recall: '1',
                 book_id: book.id,
                 book_title: book.title,
-                chapter_number: '',
-                chapter_title: '',
                 domain_id: '',
                 book_recall: '1',
               },
