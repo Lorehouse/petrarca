@@ -237,9 +237,10 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
     });
   }, []);
 
-  // Auto-expand when entity changes
+  // Auto-expand when entity changes — always expand for specific entities,
+  // only collapse for unfiltered "All" view with many centuries
   useEffect(() => {
-    if (sections.length > 0 && sections.length <= 8) {
+    if (selectedEntity || (sections.length > 0 && sections.length <= 8)) {
       setExpandedCenturies(new Set(sections.map(s => s.century)));
     } else {
       setExpandedCenturies(new Set());
@@ -478,14 +479,14 @@ function TimelineEvent({ node, showDomain, isSelected, onPress, onGenerateCard, 
           {isSelected && <Text style={s.eventDesc}>{node.description}</Text>}
           {isSelected && (
             <View style={s.entityTags}>
-              {[...node.entities.persons, ...node.entities.places].slice(0, 5).map(e => (
+              {[...(node.entities.persons || []), ...(node.entities.places || [])].slice(0, 5).map(e => (
                 <Pressable key={e} onPress={() => onSelectEntity(e)} hitSlop={4}>
                   <Text style={s.entityTag}>{e}</Text>
                 </Pressable>
               ))}
             </View>
           )}
-          {isSelected && node.entities.events.length > 0 && (
+          {isSelected && (node.entities.events || []).length > 0 && (
             <View style={s.connectionBanner}>
               <Text style={s.connectionLabel}>Related events</Text>
               {node.entities.events.map(e => <Text key={e} style={s.connectionText}>{e}</Text>)}
