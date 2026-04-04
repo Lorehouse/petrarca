@@ -331,16 +331,7 @@ function ReviewCard({
 
           {/* Follow-up research queries + custom input */}
           <View style={cs.followUpSection}>
-            {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-              <>
-                <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-                {item.follow_up_queries.map((q, i) => (
-                  <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                    <Text style={cs.followUpText}>{q}</Text>
-                  </Pressable>
-                ))}
-              </>
-            )}
+            <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
@@ -472,16 +463,7 @@ function MicrolearningCard({
 
       {/* Follow-ups */}
       <View style={cs.followUpSection}>
-        {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-          <>
-            <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-            {item.follow_up_queries.map((q, i) => (
-              <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                <Text style={cs.followUpText}>{q}</Text>
-              </Pressable>
-            ))}
-          </>
-        )}
+        <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
         <ResearchInput onSubmit={onResearch} />
       </View>
 
@@ -580,16 +562,7 @@ function MicrolearningQuizCard({
           </View>
 
           <View style={cs.followUpSection}>
-            {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-              <>
-                <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-                {item.follow_up_queries.map((q, i) => (
-                  <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                    <Text style={cs.followUpText}>{q}</Text>
-                  </Pressable>
-                ))}
-              </>
-            )}
+            <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
@@ -1050,7 +1023,9 @@ const cs = StyleSheet.create({
   followUpSection: { marginTop: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
   followUpLabel: { fontFamily: fonts.uiMedium, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   followUpBtn: { paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, borderLeftColor: 'rgba(139,37,0,0.2)', backgroundColor: 'rgba(139,37,0,0.02)', borderRadius: 2 },
+  followUpBtnTapped: { borderLeftColor: colors.textMuted, backgroundColor: 'rgba(176,168,152,0.06)' },
   followUpText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.rubric },
+  followUpTextTapped: { color: colors.textMuted, fontFamily: fonts.readingItalic, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });
 
 const ml = StyleSheet.create({
