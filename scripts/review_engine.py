@@ -1537,13 +1537,21 @@ def _find_duplicate_quiz(question: str, existing: list[tuple[str, 'numpy.ndarray
     new_norm = np.linalg.norm(new_vec)
     if new_norm < 1e-9:
         return None
+    best_score, best_text = 0.0, None
     for ex_text, ex_vec in existing:
         ex_norm = np.linalg.norm(ex_vec)
         if ex_norm < 1e-9:
             continue
         cos = float(np.dot(new_vec, ex_vec) / (new_norm * ex_norm))
-        if cos >= threshold:
-            return ex_text
+        if cos > best_score:
+            best_score, best_text = cos, ex_text
+    # Log top match for calibration review
+    if best_text:
+        print(f'[quiz-dedup] best match ({best_score:.3f}): '
+              f'"{question[:50]}" ~ "{best_text[:50]}"'
+              f'{" → DUPLICATE" if best_score >= threshold else ""}', flush=True)
+    if best_score >= threshold:
+        return best_text
     return None
 
 
