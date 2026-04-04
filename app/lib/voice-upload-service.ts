@@ -1,0 +1,123 @@
+/**
+ * Background service for retrying failed voice elicitation uploads.
+ *
+ * Call `startVoiceUploadService()` once at app startup. It listens for
+ * AppState "active" transitions and retries any pending uploads that were
+ * saved to disk but never confirmed by the server.
+ */
+
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import {
+  documentDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync,
+} from 'expo-file-system/legacy';
+import { sendVoiceElicitation, ElicitationResult } from './review-api';
+import { logEvent } from '../data/logger';
+
+const PENDING_DIR = `${documentDirectory}voice-elicitation/`;
+const PENDING_META = `${documentDirectory}voice-elicitation/pending.json`;
+
+interface PendingUpload {
+  audioUri: string;
+  nodeId: string;
+  domainId: string;
+  nodeTitle: string;
+  recordedAt: number;
+  requestId: string;
+}
+
+type UploadResultListener = (nodeTitle: string, success: boolean, result?: ElicitationResult) => void;
+const listeners: Set<UploadResultListener> = new Set();
+
+export function onVoiceUploadResult(fn: UploadResultListener): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
+function notifyListeners(nodeTitle: string, success: boolean, result?: ElicitationResult) {
+  for (const fn of listeners) {
+    try { fn(nodeTitle, success, result); } catch { /* ignore */ }
+  }
+}
+
+let serviceStarted = false;
+let retrying = false;
+
+export function startVoiceUploadService() {
+  if (serviceStarted || Platform.OS === 'web') return;
+  serviceStarted = true;
+
+  // Retry on app foreground
+  AppState.addEventListener('change', (state: AppStateStatus) => {
+    if (state === 'active') {
+      retryPendingUploads();
+    }
+  });
+
+  // Also retry once at startup
+  retryPendingUploads();
+}
+
+async function loadPending(): Promise<PendingUpload[]> {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function savePending(items: PendingUpload[]) {
+  await makeDirectoryAsync(PENDING_DIR, { intermediates: true }).catch(() => {});
+  await writeAsStringAsync(PENDING_META, JSON.stringify(items));
+}
+
+async function retryPendingUploads() {
+  if (retrying) return;
+  retrying = true;
+
+  try {
+    const pending = await loadPending();
+    if (pending.length === 0) return;
+
+    // Backfill requestId for old entries
+    for (const p of pending) {
+      if (!p.requestId) p.requestId = `elicit_${p.recordedAt}_${p.nodeId.slice(0, 40)}`;
+    }
+
+    console.log(`[voice-upload-service] Retrying ${pending.length} pending upload(s)`);
+    const remaining: PendingUpload[] = [];
+
+    for (const p of pending) {
+      try {
+        const res = await sendVoiceElicitation(p.nodeId, p.domainId, p.audioUri, p.requestId);
+        if (res && (res.captured?.length || res.missed?.length || res.feedback_summary)) {
+          logEvent('voice_upload_auto_retry_success', {
+            node_id: p.nodeId, request_id: p.requestId,
+          });
+          notifyListeners(p.nodeTitle, true, res);
+        } else {
+          remaining.push(p);
+        }
+      } catch (e) {
+        console.log(`[voice-upload-service] Retry failed for ${p.nodeTitle}: ${e}`);
+        // Keep entries less than 48h old for future retry
+        const ageHours = (Date.now() - p.recordedAt) / (1000 * 3600);
+        if (ageHours < 48) {
+          remaining.push(p);
+        } else {
+          logEvent('voice_upload_expired', { node_id: p.nodeId, age_hours: Math.round(ageHours) });
+          notifyListeners(p.nodeTitle, false);
+        }
+      }
+    }
+
+    await savePending(remaining);
+    if (remaining.length < pending.length) {
+      console.log(`[voice-upload-service] ${pending.length - remaining.length} upload(s) succeeded, ${remaining.length} remaining`);
+    }
+  } catch (e) {
+    console.error('[voice-upload-service] Error:', e);
+  } finally {
+    retrying = false;
+  }
+}

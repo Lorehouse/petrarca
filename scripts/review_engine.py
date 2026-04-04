@@ -2284,75 +2284,98 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         print(f'[voice-elicit] LLM returned non-dict: {repr(str(result)[:200])}', flush=True)
         result = {}
 
-    # Reopen connection for writes — use longer timeout for robustness
-    conn = get_connection()
-    conn.execute('PRAGMA busy_timeout = 60000')  # 60s wait for lock
-
-    # Generate temporal hook (skip for chapter recall — no curriculum node to anchor)
-    temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
-    result['temporal_hook'] = temporal_hook
+    # Populate result metadata (no DB needed)
     result['node_title'] = node['title']
     result['node_description'] = node['description']
     result['transcript'] = transcript
 
-    # Process "wonderings" — create research triggers
-    wonderings = result.get('wonderings', [])
+    # DB writes with retry — the expensive work (transcription + LLM) is done,
+    # so we retry only the cheap write portion if the DB is locked.
+    import sqlite3
     research_triggers = []
-    for w in wonderings[:3]:
-        trigger_id = f'wonder_{node_id}_{int(time.time() * 1000)}'
+    max_write_attempts = 3
+    for attempt in range(max_write_attempts):
         try:
+            conn = get_connection()
+            conn.execute('PRAGMA busy_timeout = 60000')  # 60s wait for lock
+
+            # Generate temporal hook (skip for chapter recall)
+            temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
+            result['temporal_hook'] = temporal_hook
+
+            # Process "wonderings" — create research triggers
+            wonderings = result.get('wonderings', [])
+            research_triggers = []
+            for w in wonderings[:3]:
+                trigger_id = f'wonder_{node_id}_{int(time.time() * 1000)}'
+                try:
+                    conn.execute("""
+                        INSERT INTO review_items
+                          (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
+                           source_text, lens, stability_days, due_at, review_count, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        trigger_id, 'voice_followup',
+                        domain_id, node_id, node['title'],
+                        w, 'SIGNIFICANCE', 1.0,
+                        int(time.time() * 1000) + 4 * 3600 * 1000,  # due in 4h
+                        0, int(time.time() * 1000),
+                    ))
+                    research_triggers.append({'id': trigger_id, 'question': w})
+                except Exception:
+                    pass
+
+            # Update knowledge state based on coverage
+            coverage = result.get('coverage_pct', 50)
+            score = result.get('suggested_score', 'partly')
+            knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
+            confidence = coverage / 100.0
+
+            if is_chapter_recall:
+                if book_id and chapter_num:
+                    ki_rows = conn.execute(
+                        "SELECT id, curriculum_node_id FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
+                        (domain_id, f'%"chapter_number": {chapter_num}%' if chapter_num else f'%{book_id}%')
+                    ).fetchall()
+                    for ki in ki_rows:
+                        update_knowledge(domain_id, ki['curriculum_node_id'],
+                                         knowledge=knowledge_level, confidence=confidence,
+                                         source=f'voice_chapter_recall:{book_id}:{chapter_num}', conn=conn)
+            else:
+                update_knowledge(domain_id, node_id, knowledge=knowledge_level,
+                                 confidence=confidence, source='voice_elicitation', conn=conn)
+
+            now_ms = int(time.time() * 1000)
+            stability_mult = {'knew': 2.5, 'partly': 1.5, 'missed': 0.4}.get(score, 1.0)
             conn.execute("""
-                INSERT INTO review_items
-                  (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
-                   source_text, lens, stability_days, due_at, review_count, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
-            """, (
-                trigger_id, 'voice_followup',
-                domain_id, node_id, node['title'],
-                w, 'SIGNIFICANCE', 1.0,
-                int(time.time() * 1000) + 4 * 3600 * 1000,  # due in 4h
-                0, int(time.time() * 1000),
-            ))
-            research_triggers.append({'id': trigger_id, 'question': w})
-        except Exception:
-            pass
+                UPDATE knowledge_items
+                SET last_score = ?, last_reviewed_at = ?,
+                    stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
+                    due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
+                    review_count = review_count + 1,
+                    cached_question = NULL
+                WHERE curriculum_node_id = ? AND curriculum_domain = ?
+            """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
 
-    # Update knowledge state based on coverage
-    coverage = result.get('coverage_pct', 50)
-    score = result.get('suggested_score', 'partly')
-    knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
-    confidence = coverage / 100.0
-
-    if is_chapter_recall:
-        # Chapter recall covers multiple nodes — update all knowledge_items for this book+chapter
-        if book_id and chapter_num:
-            ki_rows = conn.execute(
-                "SELECT id, curriculum_node_id FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
-                (domain_id, f'%"chapter_number": {chapter_num}%' if chapter_num else f'%{book_id}%')
-            ).fetchall()
-            for ki in ki_rows:
-                update_knowledge(domain_id, ki['curriculum_node_id'],
-                                 knowledge=knowledge_level, confidence=confidence,
-                                 source=f'voice_chapter_recall:{book_id}:{chapter_num}', conn=conn)
-    else:
-        update_knowledge(domain_id, node_id, knowledge=knowledge_level,
-                         confidence=confidence, source='voice_elicitation', conn=conn)
-
-    # Update knowledge_items if one exists for this node
-    now_ms = int(time.time() * 1000)
-    stability_mult = {'knew': 2.5, 'partly': 1.5, 'missed': 0.4}.get(score, 1.0)
-    conn.execute("""
-        UPDATE knowledge_items
-        SET last_score = ?, last_reviewed_at = ?,
-            stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
-            due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
-            review_count = review_count + 1,
-            cached_question = NULL
-        WHERE curriculum_node_id = ? AND curriculum_domain = ?
-    """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
-
-    conn.commit()
-    conn.close()
+            conn.commit()
+            conn.close()
+            break  # success
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e) and attempt < max_write_attempts - 1:
+                print(f'[voice-elicit] DB locked on write attempt {attempt + 1}, retrying in {5 * (attempt + 1)}s...', flush=True)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                time.sleep(5 * (attempt + 1))
+            else:
+                print(f'[voice-elicit] DB write failed after {attempt + 1} attempts: {e}', flush=True)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                # Don't raise — return the LLM result even if writes failed
+                break
 
     result['research_triggers'] = research_triggers
 

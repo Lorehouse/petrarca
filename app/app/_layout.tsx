@@ -6,8 +6,10 @@ import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { initStore } from '../data/store';
 import { startNewSession } from '../data/logger';
+import { startVoiceUploadService } from '../lib/voice-upload-service';
 import { colors } from '../design/tokens/colors';
 import FeedbackCapture from '../components/FeedbackCapture';
+import VoiceUploadToast from '../components/VoiceUploadToast';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,6 +47,7 @@ export default function RootLayout() {
       } catch (e) {
         console.warn('[layout] Init error, proceeding anyway:', e);
       }
+      startVoiceUploadService();
       setReady(true);
       await SplashScreen.hideAsync();
     })();
@@ -81,6 +84,7 @@ export default function RootLayout() {
         <Stack.Screen name="+not-found" />
       </Stack>
       <FeedbackCapture />
+      <VoiceUploadToast />
     </SafeAreaView>
   );
 }
