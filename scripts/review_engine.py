@@ -329,9 +329,11 @@ LEARNER'S RECALL (transcribed speech):
 Compare the learner's recall against the topic definition and book sources. Identify:
 
 1. CAPTURED: Specific facts or concepts from the definition/sources that the learner mentioned (even if imprecisely). Be generous — paraphrases count.
-2. MISSED: Important facts from the definition/sources that were NOT mentioned. Focus on the 2-3 most important omissions, not every detail.
+2. MISSED: The 2-3 most structurally important omissions — facts that serve as scaffolding for understanding the broader topic (key dates, actors, causal relationships). Prefer load-bearing facts over colorful details.
 3. INTERESTING: Things the learner said that go BEYOND the sources — personal connections, questions, hypotheses, links to other topics. These are valuable signals.
 4. WONDERINGS: Any "I wonder..." or questioning statements — these are research triggers.
+
+If the learner demonstrates extensive knowledge about adjacent or broader topics beyond the node definition, acknowledge this in feedback_summary and give partial credit in coverage_pct for related knowledge that connects to this topic.
 
 Output JSON:
 {{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["question1"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
@@ -2299,6 +2301,23 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     else:
         sources_text = _gather_node_sources(node_id, domain_id, conn) if domain_id else ''
 
+    # Dedup: if this exact audio was already processed for this node, return cached result
+    audio_size = audio_path.stat().st_size if audio_path.exists() else 0
+    if audio_size > 0:
+        existing = conn.execute(
+            "SELECT llm_result FROM voice_transcripts WHERE node_id = ? AND audio_bytes = ? AND source = 'elicitation' LIMIT 1",
+            (node_id, audio_size)
+        ).fetchone()
+        if existing and existing['llm_result']:
+            try:
+                cached = json.loads(existing['llm_result'])
+                cached['from_cache'] = True
+                print(f'[voice-elicit] Dedup hit: node={node_id}, audio={audio_size} bytes — returning cached result', flush=True)
+                conn.close()
+                return cached
+            except (json.JSONDecodeError, TypeError):
+                pass
+
     # Close connection before slow work (transcription + LLM) to avoid write lock
     conn.close()
 
@@ -2308,6 +2327,22 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     print(f'[voice-elicit] Transcript: {repr(transcript[:200]) if transcript else "EMPTY"}', flush=True)
     if not transcript:
         return {'error': 'Transcription failed'}
+
+    # Quality gate: reject very short/interrupted recordings
+    word_count = len(transcript.split())
+    if word_count < 15:
+        print(f'[voice-elicit] Too short ({word_count} words), skipping LLM analysis', flush=True)
+        return {
+            'error': 'too_short',
+            'transcript': transcript,
+            'word_count': word_count,
+            'node_title': node['title'],
+            'feedback_summary': 'Recording too short for analysis. Try speaking for at least 30 seconds about what you remember.',
+            'captured': [], 'missed': [], 'interesting': [], 'wonderings': [],
+            'coverage_pct': 0, 'suggested_score': 'missed',
+            'research_triggers': [], 'microlearning_triggered': [],
+        }
+
     print(f'[voice-elicit] Sources: {len(sources_text)} chars', flush=True)
 
     # Run LLM analysis
@@ -2343,10 +2378,18 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             temporal_hook = '' if (is_chapter_recall or is_book_recall) else _generate_temporal_hook(node, domain_id, conn)
             result['temporal_hook'] = temporal_hook
 
-            # Process "wonderings" — create research triggers
+            # Process "wonderings" — create research triggers (with dedup)
             wonderings = result.get('wonderings', [])
             research_triggers = []
             for w in wonderings[:3]:
+                # Skip if this exact wondering already exists for this node
+                existing_q = conn.execute(
+                    "SELECT id FROM review_items WHERE item_type = 'voice_followup' AND curriculum_node_id = ? AND source_text = ?",
+                    (node_id, w)
+                ).fetchone()
+                if existing_q:
+                    research_triggers.append({'id': existing_q['id'], 'question': w, 'existing': True})
+                    continue
                 trigger_id = f'wonder_{node_id}_{int(time.time() * 1000)}'
                 try:
                     conn.execute("""
