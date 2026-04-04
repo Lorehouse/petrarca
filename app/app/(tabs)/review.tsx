@@ -519,14 +519,27 @@ function MicrolearningCard({
         <Text style={cs.domainLabel}>{item.query}</Text>
       ) : null}
 
-      {/* Content */}
-      <AnnotatedText
-        text={item.content || ''}
-        spans={item.entity_spans?.content}
-        style={ml.content}
-        onEntityTap={onEntityTap}
-        onDateTap={onDateTap}
-      />
+      {/* Content — use sections if available, otherwise flat content */}
+      {item.sections && item.sections.length > 0 ? (
+        <View>
+          {item.sections.map((sec, i) => (
+            <View key={i} style={i > 0 ? ml.sectionBlock : undefined}>
+              {sec.heading ? (
+                <Text style={ml.sectionHeading}>{sec.heading}</Text>
+              ) : null}
+              <Text style={ml.content}>{sec.text}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <AnnotatedText
+          text={item.content || ''}
+          spans={item.entity_spans?.content}
+          style={ml.content}
+          onEntityTap={onEntityTap}
+          onDateTap={onDateTap}
+        />
+      )}
 
       {/* All quizzes */}
       {quizzes.length > 0 && (
@@ -1221,7 +1234,9 @@ const ml = StyleSheet.create({
   badgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   cardTitle: { fontFamily: fonts.displaySemiBold, fontSize: 20, lineHeight: 26, color: colors.ink, marginBottom: 4, marginTop: 4, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   quizCardTitle: { fontFamily: fonts.displaySemiBold, fontSize: 13, color: colors.ink, flex: 1, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
-  content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 16 },
+  content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 12 },
+  sectionBlock: { marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(139,37,0,0.08)' },
+  sectionHeading: { fontFamily: fonts.uiMedium, fontSize: 11, color: colors.rubric, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   revealedContent: { borderLeftWidth: 2, borderLeftColor: colors.rule, paddingLeft: 14, marginTop: 12, marginBottom: 14 },
   revealedLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },

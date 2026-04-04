@@ -570,6 +570,8 @@ MIGRATIONS = [
     "ALTER TABLE microlearning_cards ADD COLUMN triggered_follow_ups TEXT DEFAULT '[]'",
     # Card title (with dates) for prominent display
     "ALTER TABLE microlearning_cards ADD COLUMN title TEXT",
+    # Structured sections for formatted display
+    "ALTER TABLE microlearning_cards ADD COLUMN sections TEXT DEFAULT '[]'",
     # Kindle books new columns (added when kindle_books table already existed)
     "ALTER TABLE kindle_books ADD COLUMN progress_pct REAL DEFAULT 0",
     "ALTER TABLE kindle_books ADD COLUMN current_position INTEGER DEFAULT 0",

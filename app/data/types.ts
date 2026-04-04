@@ -548,7 +548,8 @@ export interface ResurfacingItem {
   anchors?: string[];
   follow_up_queries?: string[];
   triggered_follow_ups?: string[];  // durably tracked: queries already triggered
-  content?: string;  // microlearning card body
+  content?: string;  // microlearning card body (plain text for entity spans)
+  sections?: { heading: string | null; text: string }[];  // structured display
   query?: string;    // original research query
   quizzes?: MicrolearningQuiz[];  // multiple quizzes per ML card
   card_id?: string;  // parent card ID for individual quiz review

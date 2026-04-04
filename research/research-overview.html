@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca — Research Overview & Connections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Cormorant+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dk: #f0ece2;
+  --parchment-deep: #e8e3d7;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --rubric-bg: rgba(139,37,0,0.06);
+  --body: #333;
+  --secondary: #6a6458;
+  --muted: #b0a898;
+  --rule: #e4dfd4;
+  --rule-dk: #2a2420;
+  --green: #2a7a4a;
+  --green-bg: rgba(42,122,74,0.08);
+  --olive: #6a8a4a;
+  --gold: #92600e;
+  --gold-bg: rgba(146,96,14,0.07);
+  --blue: #2a4a6a;
+  --blue-bg: rgba(42,74,106,0.06);
+  --purple: #5a3a7a;
+  --purple-bg: rgba(90,58,122,0.06);
+  --teal: #2a6a6a;
+  --teal-bg: rgba(42,106,106,0.06);
+  --sidebar-w: 240px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16.5px}
+body{font-family:'EB Garamond',Georgia,serif;background:var(--parchment);color:var(--body);line-height:1.72;-webkit-font-smoothing:antialiased}
+
+/* Paper grain */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background-image:url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");opacity:0.5}
+
+/* === LAYOUT === */
+.wrap{display:flex;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;overflow-y:auto;background:var(--parchment-dk);border-right:1px solid var(--rule);padding:1.8rem 1rem 3rem;z-index:100;scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+.main{margin-left:var(--sidebar-w);flex:1;max-width:820px;padding:0 2.8rem 5rem}
+
+/* Sidebar */
+.sb-title{font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--rubric);letter-spacing:.03em}
+.sb-sub{font-size:.68rem;color:var(--muted);font-variant:small-caps;letter-spacing:.1em;margin-bottom:1.4rem;padding-bottom:.8rem;border-bottom:2px double var(--rule)}
+.sidebar nav a{display:block;font-size:.78rem;color:var(--secondary);text-decoration:none;padding:.25rem 0 .25rem .5rem;border-left:2px solid transparent;transition:all .15s;line-height:1.35}
+.sidebar nav a:hover,.sidebar nav a.active{color:var(--rubric);border-left-color:var(--rubric)}
+.nav-hd{font-family:'Cormorant SC',serif;font-size:.62rem;letter-spacing:.12em;color:var(--muted);margin-top:1rem;margin-bottom:.2rem;text-transform:uppercase}
+
+/* === TITLE === */
+.title-block{padding:3.5rem 0 2.5rem;border-bottom:3px double var(--rule-dk);margin-bottom:2.5rem;text-align:center}
+.title-block .orn{color:var(--rubric);font-size:1.2rem;letter-spacing:.8em;margin-bottom:1.8rem}
+.title-block h1{font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:300;color:var(--ink);line-height:1.2;letter-spacing:.015em}
+.title-block h1 em{font-weight:600;font-style:italic;color:var(--rubric)}
+.title-block .sub{font-family:'Cormorant SC',serif;font-size:.92rem;letter-spacing:.14em;color:var(--secondary);margin-top:.4rem}
+.title-block .intro{max-width:600px;margin:2rem auto 0;font-size:.92rem;color:var(--secondary);line-height:1.7;text-align:left}
+
+/* === SECTIONS === */
+section{padding-top:2rem;margin-bottom:2.5rem}
+.sec-marker{font-family:'Cormorant SC',serif;font-size:.68rem;letter-spacing:.18em;color:var(--rubric);text-transform:uppercase;margin-bottom:.3rem}
+h2{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:400;color:var(--ink);border-bottom:2px double var(--rule-dk);padding-bottom:.5rem;margin-bottom:1.3rem;line-height:1.25}
+h3{font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:500;color:var(--ink);margin-top:1.6rem;margin-bottom:.5rem}
+h3::before{content:'✦ ';color:var(--rubric);font-size:.65em}
+h4{font-family:'EB Garamond',serif;font-size:1rem;font-weight:600;color:var(--rubric);margin-top:1.2rem;margin-bottom:.4rem;font-variant:small-caps;letter-spacing:.04em}
+p{margin-bottom:.9rem;font-size:.95rem}
+hr.dbl{border:none;border-top:2px double var(--rule-dk);margin:2.5rem 0}
+hr.thin{border:none;border-top:1px solid var(--rule);margin:1.2rem 0}
+.orn-center{text-align:center;color:var(--rubric);font-size:.85rem;letter-spacing:.5em;margin:2rem 0}
+
+/* === INSIGHT BOXES === */
+.insight{border-left:3px solid var(--rubric);background:var(--rubric-bg);padding:1rem 1.2rem;margin:1.2rem 0;border-radius:0 3px 3px 0;font-size:.92rem}
+.insight.green{border-left-color:var(--green);background:var(--green-bg)}
+.insight.blue{border-left-color:var(--blue);background:var(--blue-bg)}
+.insight.gold{border-left-color:var(--gold);background:var(--gold-bg)}
+.insight-lbl{font-family:'Cormorant SC',serif;font-size:.72rem;letter-spacing:.12em;color:inherit;margin-bottom:.4rem;text-transform:uppercase}
+.insight .insight-lbl{color:var(--rubric)}
+.insight.green .insight-lbl{color:var(--green)}
+.insight.blue .insight-lbl{color:var(--blue)}
+.insight.gold .insight-lbl{color:var(--gold)}
+.insight p:last-child{margin-bottom:0}
+
+/* === TAGS === */
+.tag{display:inline-block;font-size:.65rem;font-family:'Cormorant SC',serif;letter-spacing:.06em;padding:.1rem .45rem;border-radius:2px;margin-right:.3rem;vertical-align:middle}
+.tag-cog{background:var(--rubric-bg);color:var(--rubric);border:1px solid rgba(139,37,0,.15)}
+.tag-hist{background:var(--gold-bg);color:var(--gold);border:1px solid rgba(146,96,14,.15)}
+.tag-multi{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(42,74,106,.15)}
+.tag-tool{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(90,58,122,.15)}
+.tag-meas{background:var(--green-bg);color:var(--green);border:1px solid rgba(42,122,74,.15)}
+.tag-voice{background:var(--teal-bg);color:var(--teal);border:1px solid rgba(42,106,106,.15)}
+.tag-sys{background:var(--parchment-deep);color:var(--secondary);border:1px solid var(--rule)}
+
+/* === FINDING CARDS === */
+.finding{padding:.7rem 0;border-bottom:1px solid var(--rule)}
+.finding:last-child{border-bottom:none}
+.finding-title{font-weight:600;color:var(--ink);font-size:.95rem}
+.finding-body{font-size:.88rem;color:var(--secondary);margin-top:.2rem;line-height:1.55}
+.finding-cite{font-size:.78rem;color:var(--muted);font-style:italic}
+
+/* === RESEARCHER CARDS === */
+.conv-group{margin:1.2rem 0}
+.conv-topic{font-family:'Cormorant Garamond',serif;font-size:1.05rem;font-weight:500;color:var(--ink);padding:.4rem .7rem;background:var(--parchment-dk);border-left:3px solid var(--rubric);margin-bottom:.5rem}
+.person{display:flex;gap:.8rem;padding:.5rem 0;border-bottom:1px solid var(--rule)}
+.person:last-child{border-bottom:none}
+.person-info{flex:1;min-width:0}
+.person-name{font-weight:600;color:var(--ink);font-size:.92rem}
+.person-inst{font-size:.76rem;color:var(--rubric)}
+.person-does{font-size:.82rem;color:var(--secondary);margin-top:.1rem}
+.person-discuss{font-size:.78rem;color:var(--muted);font-style:italic;margin-top:.15rem}
+
+/* === BUILD NEXT === */
+.build-item{padding:.9rem 0;border-bottom:1px solid var(--rule)}
+.build-item:last-child{border-bottom:none}
+.build-q{font-family:'Cormorant Garamond',serif;font-size:1.08rem;font-weight:500;color:var(--ink);font-style:italic}
+.build-answer{font-size:.9rem;color:var(--secondary);margin-top:.3rem;line-height:1.6}
+.build-answer strong{color:var(--ink)}
+
+/* === EXPERIMENT CARDS === */
+.exp{border:1px solid var(--rule);border-radius:3px;padding:.9rem 1.1rem;margin:.8rem 0;background:var(--parchment);position:relative}
+.exp-num{position:absolute;top:.6rem;right:.8rem;font-family:'Cormorant SC',serif;font-size:.72rem;letter-spacing:.06em;color:var(--muted)}
+.exp-title{font-family:'Cormorant Garamond',serif;font-size:1.05rem;font-weight:500;color:var(--ink);margin-bottom:.3rem;padding-right:2rem}
+.exp-body{font-size:.88rem;color:var(--secondary);line-height:1.55}
+.exp-row{display:flex;gap:1rem;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--rule);font-size:.82rem}
+.exp-row dt{color:var(--rubric);font-variant:small-caps;letter-spacing:.04em;font-weight:600;flex-shrink:0;width:70px}
+.exp-row dd{color:var(--secondary)}
+
+/* === CHARTS === */
+.stacked{display:flex;height:26px;border-radius:3px;overflow:hidden;margin:.5rem 0}
+.stacked-seg{display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#fff;font-weight:500}
+.legend{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.4rem}
+.legend-item{display:flex;align-items:center;gap:.25rem;font-size:.72rem;color:var(--secondary)}
+.legend-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+
+.bar-chart{display:flex;flex-direction:column;gap:.4rem;margin:1rem 0}
+.bar-row{display:flex;align-items:center;gap:.5rem}
+.bar-lbl{width:130px;font-size:.76rem;color:var(--secondary);text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:18px;background:var(--parchment-dk);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;background:var(--rubric);transition:width 1.2s cubic-bezier(.22,1,.36,1)}
+.bar-val{font-size:.68rem;color:var(--muted);min-width:32px;flex-shrink:0}
+
+/* === TABLES === */
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.88rem}
+th{font-family:'Cormorant SC',serif;font-weight:500;letter-spacing:.05em;text-align:left;color:var(--ink);border-bottom:2px solid var(--rule-dk);padding:.4rem .6rem}
+td{padding:.35rem .6rem;border-bottom:1px solid var(--rule);vertical-align:top}
+ul,ol{margin:.6rem 0;padding-left:1.3rem}
+li{margin-bottom:.3rem;font-size:.92rem}
+li::marker{color:var(--rubric)}
+
+/* === BACK TO TOP === */
+.btt{position:fixed;bottom:1.5rem;right:1.5rem;width:36px;height:36px;background:var(--parchment-dk);border:1px solid var(--rule);border-radius:50%;display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--rubric);font-size:1rem;opacity:0;transition:opacity .3s;z-index:100}
+.btt.vis{opacity:1}
+.btt:hover{background:var(--rubric-bg)}
+
+/* === MOBILE === */
+.mob-hdr{display:none;position:fixed;top:0;left:0;right:0;height:48px;background:var(--parchment-dk);border-bottom:1px solid var(--rule);z-index:200;align-items:center;padding:0 1rem;gap:.8rem}
+.mob-btn{background:none;border:none;font-size:1.1rem;color:var(--rubric);cursor:pointer}
+.mob-t{font-family:'Cormorant Garamond',serif;font-size:.95rem;color:var(--rubric);font-weight:600}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:150}
+.overlay.open{display:block}
+
+@media(max-width:860px){
+  .mob-hdr{display:flex}
+  .sidebar{transform:translateX(-100%);transition:transform .3s;z-index:200;box-shadow:none}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 16px rgba(0,0,0,.08)}
+  .main{margin-left:0;padding:56px 1rem 4rem;max-width:100%}
+  .title-block{padding:1.5rem 0}
+  .title-block h1{font-size:1.8rem}
+}
+@media print{
+  .sidebar,.mob-hdr,.btt,.overlay{display:none!important}
+  .main{margin-left:0;max-width:100%;padding:0}
+  body{font-size:10.5pt}
+  body::after{display:none}
+  h2{break-before:page}
+  .insight,.exp{break-inside:avoid}
+}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+section{animation:fadeIn .4s ease both}
+</style>
+</head>
+<body>
+
+<div class="mob-hdr">
+  <button class="mob-btn" onclick="document.getElementById('sb').classList.toggle('open');document.getElementById('ov').classList.toggle('open')">✦</button>
+  <span class="mob-t">Petrarca Research</span>
+</div>
+<div class="overlay" id="ov" onclick="this.classList.remove('open');document.getElementById('sb').classList.remove('open')"></div>
+
+<aside class="sidebar" id="sb">
+  <div class="sb-title">Petrarca</div>
+  <div class="sb-sub">Research Map · April 2026</div>
+  <nav>
+    <div class="nav-hd">The Research</div>
+    <a href="#landscape">Research Landscape</a>
+    <a href="#cog">How People Learn</a>
+    <a href="#hist">How Historians Think</a>
+    <a href="#multi">Reading Across Sources</a>
+    <a href="#tools">Tools for Thought</a>
+    <a href="#measure">Measuring Knowledge</a>
+    <a href="#voice-tech">Voice &amp; NLP</a>
+    <a href="#system">What's Built</a>
+    <div class="nav-hd">People</div>
+    <a href="#people">Researchers to Talk To</a>
+    <div class="nav-hd">What to Build</div>
+    <a href="#build">Learning Improvements</a>
+    <a href="#experiments">Experiments</a>
+  </nav>
+</aside>
+
+<div class="wrap">
+<main class="main">
+
+<div class="title-block" id="top">
+  <div class="orn">✦ ✦ ✦</div>
+  <h1>What I've Learned About <em>Learning</em></h1>
+  <div class="sub">85+ Research Documents · One Reader's Knowledge Map</div>
+  <div class="intro">
+    Over 47 sessions, Petrarca accumulated a research base covering cognitive science, reading comprehension, knowledge tracing, historical thinking, voice assessment, and tools for thought. This page organizes everything by <em>what it means for making reading better</em> — and who else is thinking about the same problems.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PART I: THE RESEARCH LANDSCAPE                             -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<section id="landscape">
+  <div class="sec-marker">Part I</div>
+  <h2>The Research Landscape</h2>
+  <p>Everything below is distilled from 85+ documents in <code>research/</code>, organized by what question it answers.</p>
+</section>
+
+<!-- 1. HOW PEOPLE LEARN -->
+<section id="cog">
+  <h3>How People Learn</h3>
+  <p class="finding-cite">Cognitive science foundations — what actually works for retaining complex knowledge</p>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Free recall beats cued recall for deep knowledge</div>
+    <div class="finding-body">Karpicke &amp; Blunt (2011, <em>Science</em>): retrieval practice outperformed concept mapping. Free recall promotes both relational AND item-specific processing. Cued recall (quiz questions) promotes only item-specific processing. <strong>Implication: spoken narratives are the best review format for historical knowledge, not quiz cards.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Gist memory lasts months; verbatim memory lasts days</div>
+    <div class="finding-body">Brainerd &amp; Reyna's Fuzzy-Trace Theory: "the Pirenne thesis reshaped medieval historiography" (gist) persists for months. "The book was published in 1937" (verbatim) decays in weeks. <strong>The FSRS should use different stability parameters: dates at 14 days, causal frameworks at 45 days.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Desirable difficulties: spacing, interleaving, retrieval</div>
+    <div class="finding-body">Bjork &amp; Bjork (2011): conditions that slow apparent learning optimize long-term retention. Interleaved practice produced 43% better delayed performance (Rohrer &amp; Taylor 2007). <strong>Review should interleave across domains, not block by topic.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Expert knowledge is organized, not just bigger</div>
+    <div class="finding-body">Chi, Feltovich &amp; Glaser (1981): experts categorize by deep principles; novices by surface features. Schneider et al. (1989): domain expertise predicted recall better than IQ. <strong>Track knowledge structure, not just knowledge amount.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Tests cause learning, not just measure it</div>
+    <div class="finding-body">Roediger &amp; Karpicke (2006): practice tests → 50% more retention than repeated study. The "forward effect": testing material A improves learning of material B. Even failed retrieval attempts help (Arnold &amp; McDermott 2013). <strong>Every quiz card is a learning event.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Comprehension before memory</div>
+    <div class="finding-body">Matuschak's 2023 pivot: "What seems like a problem of forgetting is sometimes a problem of never having understood." Quantum Country: after 95 minutes of review, ~95% retention across 2+ weeks. <strong>Ensure understanding at encoding time, not just schedule review.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-cog">Cognitive</span> Self-explanation is powerful: g=0.55 across 64 studies</div>
+    <div class="finding-body">Meta-analysis of self-explanation effect. Voice note-taking produces higher conceptual understanding than typing (Kang et al. 2020). Production effect: speaking aloud improves memory 10-20%. <strong>Voice is the ideal capture and review modality.</strong></div>
+  </div>
+</section>
+
+<!-- 2. HOW HISTORIANS THINK -->
+<section id="hist">
+  <h3>How Historians Think</h3>
+  <p class="finding-cite">What "understanding history" actually means — beyond dates and names</p>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-hist">History</span> The sourcing heuristic distinguishes experts</div>
+    <div class="finding-body">Sam Wineburg (2001): historians immediately check attribution (who, when, for whom) before engaging with content. Students dive in directly. Historical thinking is "unnatural" — requires actively suppressing presentism. <strong>The system should eventually track whether users contextualize, not just recall.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-hist">History</span> Seixas' Big Six assessment benchmarks</div>
+    <div class="finding-body">Historical significance, primary source evidence, continuity &amp; change, cause &amp; consequence, historical perspectives, ethical dimensions. Each has graduated benchmarks from naive to sophisticated. <strong>Voice recall can be scored against these dimensions, not just factual coverage.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-hist">History</span> The AP Complexity Point</div>
+    <div class="finding-body">Awarded for explaining nuance, multiple causation, cross-period connections, qualifying arguments. This is the clearest operational definition of what distinguishes deep historical understanding from competent recall. <strong>The gold standard for "anchored" knowledge — can you demonstrate complexity?</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-hist">History</span> Epistemic progression: Copier → Subjectivist → Criterialist</div>
+    <div class="finding-body">Maggioni's three stances toward historical knowledge. Copiers treat sources as transparent windows. Subjectivists see all views as equally valid. Criterialists evaluate evidence using disciplinary criteria. <strong>Track epistemic sophistication, not just factual knowledge.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-hist">History</span> Shemilt's big picture framework (4 levels)</div>
+    <div class="finding-body">From "timeline of events" to "multidimensional narrative with causal structure." Maps directly to Petrarca's knowledge levels: a timeline = mentioned; causal narrative = anchored. <strong>Use voice timeline tasks to assess which level the user has reached.</strong></div>
+  </div>
+</section>
+
+<!-- 3. READING ACROSS SOURCES -->
+<section id="multi">
+  <h3>Reading Across Sources</h3>
+  <p class="finding-cite">What happens when you read multiple books and articles on the same topic</p>
+
+  <div class="insight green">
+    <div class="insight-lbl">Core Validation</div>
+    <p>A 2024 experiment (186 participants, <em>Instructional Science</em>): <strong>multiple text reading produces significantly better long-term retention than rereading</strong>, with only slight decline between 1-day and 1-week tests. Rereading groups developed false confidence. Multiple-text groups maintained accurate metacognitive calibration. This validates Petrarca's entire approach.</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-multi">Multi-doc</span> The Documents Model (Perfetti, Rouet &amp; Britt, 1999)</div>
+    <div class="finding-body">Multiple-document reading requires two representations beyond single-text: an <strong>Integrated Mental Model</strong> (unified understanding) and an <strong>Intertext Model</strong> (who said what, how sources relate). Without scaffolding, readers produce a "mush model" — losing source attribution. <strong>Petrarca's claim-level tracking with source metadata directly addresses this.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-multi">Multi-doc</span> Disagreement triggers deeper processing</div>
+    <div class="finding-body">D-ISC model (Braasch &amp; Bråten 2017): when sources disagree, readers build richer mental representations. More source attention, more text-switching, better memory for attribution. <strong>Flag discrepancies between books as enriching opportunities, not errors.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-multi">Multi-doc</span> Epistemic beliefs shape everything</div>
+    <div class="finding-body">Bråten (UiO): readers believing knowledge is complex produce cross-text elaborations; those believing knowledge is simple produce single-text paraphrases. <strong>The "hooks" philosophy inherently treats knowledge as complex and interconnected.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-multi">Multi-doc</span> Context/purpose shapes processing more than text</div>
+    <div class="finding-body">RESOLV model (Rouet &amp; Britt 2017): same texts in a university-seminar context triggers dramatically more source comparison, conflict acknowledgment, and corroboration than personal context. <strong>UI framing matters — the review screen should activate "scholarly" processing standards.</strong></div>
+  </div>
+</section>
+
+<!-- 4. TOOLS FOR THOUGHT -->
+<section id="tools">
+  <h3>Tools for Thought</h3>
+  <p class="finding-cite">What's been built before, what worked, what didn't</p>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-tool">System</span> Matuschak's mnemonic medium: 95% retention, 95 minutes</div>
+    <div class="finding-body">Quantum Country: 112 embedded prompts across 4 essays on quantum computing. After 1.5 hours of review, retention holds 9+ weeks. "Programmable attention" — SRS as "a cron for your mind." Salience prompts keep ideas top-of-mind, not just retrievable. <strong>Petrarca extends this to multiple sources, not one text.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-tool">System</span> ALEKS: convergence in ~25 questions</div>
+    <div class="finding-body">Knowledge Space Theory (Doignon &amp; Falmagne 1985): despite millions of possible knowledge states, ALEKS converges in ~25 adaptive questions. 4-5 million students annually. <strong>Proves you can assess a complex structured domain quickly with the right structure.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-tool">System</span> GENCAT: generative adaptive testing with LLMs (Feb 2026)</div>
+    <div class="finding-body">Feng &amp; Lan (UMass): Generative IRT predicts/generates student open-ended responses, not just correctness. DPO alignment with IRT parameters. 4.32% AUC improvement over traditional CAT. <strong>Closest existing system to Petrarca's voice assessment approach.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-tool">System</span> No existing system does what Petrarca does</div>
+    <div class="finding-body">Extensive literature survey confirmed: no system tracks reader knowledge across multiple books and articles over months using reading behavior + structured review + free recall. Closest: ALEKS (single domain), Readwise (highlights only), iSTART (single text). <strong>The combination is genuinely novel.</strong></div>
+  </div>
+</section>
+
+<!-- 5. MEASURING KNOWLEDGE -->
+<section id="measure">
+  <h3>Measuring Knowledge</h3>
+  <p class="finding-cite">How to know whether the system is actually working</p>
+
+  <div class="insight">
+    <div class="insight-lbl">The Pathfinder Insight</div>
+    <p>Goldsmith, Johnson &amp; Acton (1991): similarity between a student's knowledge network and an expert's network correlates with exam performance at <strong>r = .74</strong>. The Petrarca curriculum already IS the expert concept map. The gap between the reader's demonstrated structure (from voice recall) and the curriculum graph is the learning target. <strong>Convergence over time is the single best measure.</strong></p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-meas">Measure</span> Kintsch's three levels of understanding</div>
+    <div class="finding-body">Surface form ("the book said…") → Textbase (correct propositions) → Situation model (causal reasoning, cross-source connections, counterfactuals). Detectable in voice transcripts via causal language, perspective-taking, counterfactuals. <strong>Quality score per node, not just binary "mentioned."</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-meas">Measure</span> CMU KLI: Facts / Skills / Principles</div>
+    <div class="finding-body">Koedinger, Corbett &amp; Perfetti: three types of knowledge components. Facts (direct associations), Skills (nonverbal mappings — like sequencing events), Principles (verbal rationale — like "imperial overextension leads to decline"). <strong>key_facts only test facts. Need sequencing tasks (skills) and "why" questions (principles).</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-meas">Measure</span> SNAFU: semantic networks from free recall</div>
+    <div class="finding-body">Zemla &amp; Austerweil (Memory &amp; Cognition 2026): free recall data reveals memory organization structure. Quantifies clustering, connectivity, and organizational quality. Python tool, open source. <strong>Apply directly to voice transcripts to extract and quantify knowledge structure.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-meas">Measure</span> FActScore: atomic claim verification</div>
+    <div class="finding-body">Decompose transcript into atomic claims, verify each against curriculum/knowledge base. Score = % of supported claims. Core (2024) filters trivially obvious claims to prevent score inflation. <strong>The right way to score factual accuracy of voice dumps.</strong></div>
+  </div>
+</section>
+
+<!-- 6. VOICE & NLP -->
+<section id="voice-tech">
+  <h3>Voice &amp; NLP Technology</h3>
+  <p class="finding-cite">What's practically usable today for scoring spoken knowledge</p>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-voice">Voice</span> Soniox: multilingual streaming, $0.12/hr</div>
+    <div class="finding-body">60+ languages in a single model. Automatic code-switching (Norwegian↔English mid-sentence). Sub-200ms latency for streaming. Already integrated in Petrarca.</div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-voice">Voice</span> NYU Voice AI: Council of LLMs (α=0.86)</div>
+    <div class="finding-body">Ipeirotis &amp; Rizakos (March 2026): three LLMs independently score, then deliberate, then Claude synthesizes. Krippendorff's α = 0.86 after deliberation. $0.42/exam vs ~$750 human. <strong>The scoring architecture for voice sweeps.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-voice">Voice</span> CoTAL prompting: 94.7% agreement with experts</div>
+    <div class="finding-body">Cohn et al. (2025): Evidence-Centered Design + Chain-of-Thought + rubric alignment. The LLM quotes student responses, ties to rubric items, pinpoints proficiency and difficulty. <strong>Best prompt engineering pattern for voice assessment.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-voice">Voice</span> Self-reported confidence is cheapest calibration</div>
+    <div class="finding-body">Vasquez Ferrer et al. (2026): prompting the LLM for a 1-10 confidence score → lowest Expected Calibration Error (0.166). One LLM call, not five. 86% of predictions exceed 0.8 confidence. <strong>Use for selective human escalation.</strong></div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-title"><span class="tag tag-voice">Voice</span> Practical scoring pipeline</div>
+    <div class="finding-body">Soniox (transcription) → spaCy NER (entity extraction) → key_facts comparison (coverage) → SemScore (embedding similarity to curriculum nodes) → Claude + rubric (holistic assessment: accuracy, coverage, depth, coherence, gaps) → update knowledge_states.</div>
+  </div>
+</section>
+
+<!-- 7. WHAT'S BUILT -->
+<section id="system">
+  <h3>What Petrarca Has Built</h3>
+
+  <div class="chart-container" style="margin:1rem 0">
+    <div style="font-family:'Cormorant SC',serif;font-size:.78rem;letter-spacing:.08em;color:var(--secondary);margin-bottom:.4rem">Knowledge States (247 nodes assessed)</div>
+    <div class="stacked">
+      <div class="stacked-seg" style="flex:23;background:var(--green)">23</div>
+      <div class="stacked-seg" style="flex:69;background:var(--olive)">69</div>
+      <div class="stacked-seg" style="flex:64;background:var(--gold)">64</div>
+      <div class="stacked-seg" style="flex:91;background:var(--rule);color:var(--muted)">91</div>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>Anchored (23)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--olive)"></span>Engaged (69)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--gold)"></span>Mentioned (64)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--rule)"></span>Unknown (91)</span>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Component</th><th>Scale</th><th>Gap</th></tr>
+    <tr><td>Curricula</td><td>9 domains, 719 nodes</td><td>4 domains have no key_facts</td></tr>
+    <tr><td>Articles</td><td>262 articles, 4,776 claims</td><td>Only 68 nodes linked (9.5%)</td></tr>
+    <tr><td>Books</td><td>27 books, 380 node mappings</td><td>17 captures total</td></tr>
+    <tr><td>Entities</td><td>261 entities, 511 links</td><td>Profiles unimplemented</td></tr>
+    <tr><td>Review</td><td>253 knowledge_items</td><td>Only 20 reviewed (8%)</td></tr>
+    <tr><td>Voice</td><td>11 transcripts</td><td>No scoring pipeline yet</td></tr>
+    <tr><td>ML Quizzes</td><td>61 quizzes, 44 cards</td><td>6 reviewed (10%)</td></tr>
+  </table>
+
+  <div class="bar-chart">
+    <div style="font-family:'Cormorant SC',serif;font-size:.78rem;letter-spacing:.08em;color:var(--secondary);margin-bottom:.3rem">Knowledge Items by Domain</div>
+    <div class="bar-row"><span class="bar-lbl">Ancient Greece</span><div class="bar-track"><div class="bar-fill" style="width:89%"></div></div><span class="bar-val">60/67</span></div>
+    <div class="bar-row"><span class="bar-lbl">Byzantine</span><div class="bar-track"><div class="bar-fill" style="width:65%"></div></div><span class="bar-val">56/86</span></div>
+    <div class="bar-row"><span class="bar-lbl">Roman Republic</span><div class="bar-track"><div class="bar-fill" style="width:76%"></div></div><span class="bar-val">42/55</span></div>
+    <div class="bar-row"><span class="bar-lbl">Islamic Civ.</span><div class="bar-track"><div class="bar-fill" style="width:46%"></div></div><span class="bar-val">41/89</span></div>
+    <div class="bar-row"><span class="bar-lbl">Sicily</span><div class="bar-track"><div class="bar-fill" style="width:50%"></div></div><span class="bar-val">35/70</span></div>
+    <div class="bar-row"><span class="bar-lbl">Classical Recept.</span><div class="bar-track"><div class="bar-fill" style="width:18%"></div></div><span class="bar-val">19/106</span></div>
+    <div class="bar-row"><span class="bar-lbl">AP European</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-val">0/95</span></div>
+    <div class="bar-row"><span class="bar-lbl">Ancient Classical</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-val">0/73</span></div>
+    <div class="bar-row"><span class="bar-lbl">AP World History</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span class="bar-val">0/78</span></div>
+  </div>
+</section>
+
+<hr class="dbl">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PART II: PEOPLE                                            -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<section id="people">
+  <div class="sec-marker">Part II</div>
+  <h2>People Doing Related Work</h2>
+  <p>Organized by what we'd want to <em>talk</em> about — the conversation, not the CV.</p>
+
+  <div class="conv-group">
+    <div class="conv-topic">Reading across multiple sources</div>
+    <div class="person"><div class="person-info"><span class="person-name">Ivar Bråten</span> <span class="person-inst">University of Oslo (Emeritus)</span><div class="person-does">Pioneer of multiple-document literacy. Led Norwegian Research Council project (2009-2012). Epistemic beliefs shape multi-text processing.</div><div class="person-discuss">How do readers build integrated knowledge from books + articles? Does source attribution improve retention?</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Helge I. Strømsø</span> <span class="person-inst">University of Oslo</span><div class="person-does">Epistemic cognition, multiple-text comprehension. Three dimensions of justification in multi-source reading.</div><div class="person-discuss">How epistemic beliefs affect what Petrarca users extract from reading.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">M. Anne Britt</span> <span class="person-inst">Northern Illinois University</span><div class="person-does">Co-originator of Documents Model. The "mush model" problem. Integration-sourcing tradeoff.</div><div class="person-discuss">Does Petrarca's claim-level source tracking actually prevent the mush model?</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Alexandra List</span> <span class="person-inst">Penn State</span><div class="person-does">2025 framework on prior knowledge integration with multiple texts: assimilative vs critical use.</div><div class="person-discuss">How to model the way prior knowledge shapes new reading — the Matthew effect formalized.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">How to measure what someone knows</div>
+    <div class="person"><div class="person-info"><span class="person-name">Kenneth Koedinger</span> <span class="person-inst">CMU</span><div class="person-does">KLI framework, knowledge components, Cognitive Tutors, LearnLab.</div><div class="person-discuss">Applying Facts/Skills/Principles decomposition to curriculum nodes. How to assess "skills" like historical sequencing.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Andrew Lan</span> <span class="person-inst">UMass Amherst</span><div class="person-does">GENCAT (Feb 2026) — generative CAT with LLMs. Won US DoE reading comprehension scoring challenge. SPARFA-Trace.</div><div class="person-discuss">Using LLMs to assess open-ended voice responses for knowledge estimation. Connecting IRT to language generation.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Alberto Cañas</span> <span class="person-inst">IHMC, Florida</span><div class="person-does">CmapTools, concept mapping, Pathfinder networks for expert-novice comparison.</div><div class="person-discuss">Applying Pathfinder map-distance metrics to compare voice recall structure against curriculum graph.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Jeffrey Zemla</span> <span class="person-inst">Syracuse University</span><div class="person-does">SNAFU tool for estimating semantic networks from free recall. Memory &amp; Cognition 2026.</div><div class="person-discuss">Extracting knowledge structure from voice transcripts. Quantifying organization quality.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">Voice and free recall</div>
+    <div class="person"><div class="person-info"><span class="person-name">Jeffrey Karpicke</span> <span class="person-inst">Purdue</span><div class="person-does">Retrieval practice, testing effect, elaborative retrieval. Landmark 2011 Science paper.</div><div class="person-discuss">Voice free recall as simultaneously the best assessment AND the best learning exercise.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Janice Chen</span> <span class="person-inst">Johns Hopkins</span><div class="person-does">Naturalistic Free Recall dataset (229 participants). NLP scoring of narrative recalls using embeddings.</div><div class="person-discuss">Her methods for comparing recall against source narratives are almost exactly what Petrarca needs.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Jeremy Manning</span> <span class="person-inst">Dartmouth</span><div class="person-does">Automated scoring using LLM event segmentation + embedding-based scoring for narrative recall.</div><div class="person-discuss">Scoring voice dumps about historical domains. Event segmentation for curriculum node detection.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Danielle McNamara</span> <span class="person-inst">Arizona State</span><div class="person-does">Coh-Metrix (200+ discourse measures), iSTART (self-explanation strategy training).</div><div class="person-discuss">Applying Coh-Metrix indices (referential cohesion, deep cohesion, causal connectives) to score voice recall.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">Making knowledge visible</div>
+    <div class="person"><div class="person-info"><span class="person-name">Susan Bull</span> <span class="person-inst">U. of Birmingham</span><div class="person-does">Pioneer of open learner models. SMILI framework — how to show learners what the system thinks they know.</div><div class="person-discuss">Petrarca's knowledge map IS an open learner model. How to make it useful for metacognition, not anxiety.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Judy Kay</span> <span class="person-inst">U. of Sydney</span><div class="person-does">"Scrutable" learner models, lifelong personal user models (PUMLs). Personis user modelling.</div><div class="person-discuss">Long-term personal knowledge tracking. Making the model inspectable and negotiable.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Peter Brusilovsky</span> <span class="person-inst">U. of Pittsburgh</span><div class="person-does">20+ years in adaptive educational systems. Mastery Grids — social knowledge visualization.</div><div class="person-discuss">Curriculum node visualization. How to show 719 nodes without overwhelm.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">Spaced learning beyond flashcards</div>
+    <div class="person"><div class="person-info"><span class="person-name">Robert &amp; Elizabeth Bjork</span> <span class="person-inst">UCLA</span><div class="person-does">Desirable difficulties, spacing effect, interleaving, retrieval-induced forgetting.</div><div class="person-discuss">Natural spacing through related reading — ecological data on the spacing effect from real reading.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Andy Matuschak</span> <span class="person-inst">Independent</span><div class="person-does">Mnemonic medium, Orbit, timeful texts, programmable attention.</div><div class="person-discuss">Petrarca extends his vision: multiple sources, voice assessment, curriculum-based maps, not individual prompts.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Bodong Chen</span> <span class="person-inst">U. of Pennsylvania</span><div class="person-does">InkSpire project (2025-26, Sloan): AI-enhanced reading for science. Knowledge building + learning analytics.</div><div class="person-discuss">The closest active research project to Petrarca. AI-enhanced reading with knowledge tracking.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">Historical thinking &amp; assessment</div>
+    <div class="person"><div class="person-info"><span class="person-name">Sam Wineburg</span> <span class="person-inst">Stanford</span><div class="person-does">Historical thinking, how historians read, Stanford History Education Group (15M+ downloads).</div><div class="person-discuss">Operationalizing "situation model" detection in voice recall. What does historical understanding look like computationally?</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Peter Seixas</span> <span class="person-inst">UBC (Emeritus)</span><div class="person-does">Big Six Historical Thinking Concepts with graduated benchmarks. The Historical Thinking Project.</div><div class="person-discuss">Scoring voice narratives against the Big Six dimensions, not just factual coverage.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">Nordic learning technology</div>
+    <div class="person"><div class="person-info"><span class="person-name">Barbara Wasson</span> <span class="person-inst">SLATE / AI LEARN, U. of Bergen</span><div class="person-does">Director of SLATE &amp; AI LEARN (NOK 200M). Chairs LAK26 in Bergen (Apr 27-May 1, 2026).</div><div class="person-discuss">Petrarca as a case study for AI LEARN. Norwegian learning analytics community.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Sanna Järvelä</span> <span class="person-inst">U. of Oulu, Finland</span><div class="person-does">ELLA project (2025-28): "Empowering Lifelong Learning with AI-driven Self-regulation Tools." Past EARLI president.</div><div class="person-discuss">AI-driven self-regulation for lifelong learners is exactly what Petrarca does.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Anne Mangen</span> <span class="person-inst">U. of Stavanger</span><div class="person-does">E-READ COST Action (200 scholars, 33 countries). Digital vs. print reading. "Shallowing hypothesis."</div><div class="person-discuss">How Petrarca's reading interface affects comprehension. Dim-not-hide as print-preserving strategy.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Mohammad Khalil</span> <span class="person-inst">SLATE, U. of Bergen</span><div class="person-does">Meltzers award 2025. Learning analytics, privacy, synthetic data for education.</div><div class="person-discuss">Privacy-preserving learning analytics. Voice data handling.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Olga Viberg</span> <span class="person-inst">KTH, Sweden</span><div class="person-does">President of EATEL (2025). Former SoLAR VP. Mobile-assisted learning, self-regulated learning.</div><div class="person-discuss">Gateway to European learning technology community. Mobile reading systems.</div></div></div>
+  </div>
+
+  <div class="conv-group">
+    <div class="conv-topic">AI in education</div>
+    <div class="person"><div class="person-info"><span class="person-name">Ryan Baker</span> <span class="person-inst">U. of Pennsylvania</span><div class="person-does">Established educational data mining community. First Masters in learning analytics.</div><div class="person-discuss">Analytics methodology for n=1 learning studies. What metrics matter.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Chris Piech</span> <span class="person-inst">Stanford</span><div class="person-does">Deep Knowledge Tracing (DKT). Educational AI, Code.org data science.</div><div class="person-discuss">Adapting knowledge tracing to reading behavior — no explicit Q&A, just reading signals.</div></div></div>
+    <div class="person"><div class="person-info"><span class="person-name">Tobias Ley</span> <span class="person-inst">U. for Continuing Ed. Krems</span><div class="person-does">Rare combination: knowledge management + learning analytics + workplace learning. 100+ papers.</div><div class="person-discuss">How professionals maintain domain knowledge over years through reading.</div></div></div>
+  </div>
+</section>
+
+<hr class="dbl">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PART III: WHAT TO BUILD                                    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<section id="build">
+  <div class="sec-marker">Part III</div>
+  <h2>What to Build Next</h2>
+  <p>Organized by "what problem does this solve for me as a reader?"</p>
+
+  <div class="build-item">
+    <div class="build-q">"Am I actually learning?"</div>
+    <div class="build-answer"><strong>Monthly voice sweep + Pathfinder map distance.</strong> Prompt: "Tell me the history of Sicily." Record 3 min. LLM scores against curriculum for coverage, accuracy, connectedness. Track monthly. The curriculum graph is the expert map. The gap between your recall structure and the curriculum is the learning target. This is both the best measurement AND the best exercise (Karpicke: free recall promotes relational processing).</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"What should I review?"</div>
+    <div class="build-answer"><strong>FSRS differentiation by knowledge type.</strong> Dates (verbatim) get 14-day base stability. Connections and causal frameworks (gist) get 45-day. Based on Fuzzy-Trace Theory — these genuinely decay at different rates. Config change, not architecture change. Also: bootstrap knowledge_items for the 466 uncovered nodes so the review flywheel has material.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"What connects across what I'm reading?"</div>
+    <div class="build-answer"><strong>Entity profiles + cross-domain nexus visualization.</strong> Design exists (entity-profiles-design.md). 261 entities with 511 cross-curriculum links already in the database. The "Archimedes appears in Sicily + Greece + History of Science" view, with accumulated knowledge per entity. Also: flag when two books disagree — D-ISC research says disagreement triggers <em>deeper</em> processing.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"Is the system's model of me accurate?"</div>
+    <div class="build-answer"><strong>Voice vs button calibration.</strong> On 20% of review cards, offer "say more?" (15 sec voice). Compare LLM-scored elaboration depth with the button press. If correlation is low, the buttons are noise. Also: compare FSRS-predicted retrievability to actual quiz scores — if the model says 80% and you get 50%, recalibrate.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"How do I maintain knowledge over months?"</div>
+    <div class="build-answer"><strong>Natural spacing through reading.</strong> When you read an article that maps to curriculum nodes, those nodes get "naturally spaced" — a new contextual encounter that's intrinsically motivated. Track whether article-reinforced nodes show higher stability growth than review-only nodes. Also: Knowledge Health Score (composite monthly metric) so you can see the trend.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"What should I read next?"</div>
+    <div class="build-answer"><strong>Firehose curriculum + novelty-guided feed.</strong> Create at least one curriculum for tech/AI content so Mode A articles enter the knowledge maintenance loop. Currently the 9 curricula are all historical — tech reading has no scaffold. The 70% novelty curiosity zone already works for articles; connecting it to curriculum gaps would make it prescriptive.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"Can I recall the big picture?"</div>
+    <div class="build-answer"><strong>Domain narrative prompts + timeline construction.</strong> Voice formats: "Put these 5 events in order" (tests Skills, 60 sec), "Why did the Athenian expedition fail?" (tests Principles, 60 sec), "What was happening elsewhere when…?" (tests cross-domain connections, 45 sec). The Feynman test: "Explain Roger II to someone who knows nothing about him" (tests situation model, 90 sec). All generate richer signal than quiz cards.</div>
+  </div>
+
+  <div class="build-item">
+    <div class="build-q">"Where are my gaps?"</div>
+    <div class="build-answer"><strong>Discovery probes for 466 uncovered nodes.</strong> Use key_facts where available (367 nodes have them), curriculum descriptions for the rest. The curriculum scan screen exists but doesn't create knowledge_items at scale. Also: extract key_facts for the remaining 4 domains (352 nodes) — enables deterministic questions everywhere.</div>
+  </div>
+</section>
+
+<hr class="dbl">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PART IV: EXPERIMENTS                                       -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<section id="experiments">
+  <div class="sec-marker">Part IV</div>
+  <h2>Experiments That Matter</h2>
+  <p>Not for publication — for making the system work better. Ordered by "do this first."</p>
+
+  <div class="exp">
+    <div class="exp-num">①</div>
+    <div class="exp-title">Voice Sweep Baseline</div>
+    <div class="exp-body">Record a 3-minute Sicily timeline NOW, before any system changes. Score against the 70-node curriculum. This is your ground truth — everything else is measured against this baseline.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>Transcript + LLM scoring (nodes mentioned, dates, connections, gaps)</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Where you actually are, vs where knowledge_states says you are</dd></div>
+  </div>
+
+  <div class="exp">
+    <div class="exp-num">②</div>
+    <div class="exp-title">Natural Spacing</div>
+    <div class="exp-body">Does reading articles that map to curriculum nodes improve the next review? Retrospective analysis: compare review scores for nodes that had an article encounter between reviews vs. nodes that didn't.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>article_curriculum_nodes + reading timestamps + review scores</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Whether the "reading echoes" thesis is real or hypothetical</dd></div>
+  </div>
+
+  <div class="exp">
+    <div class="exp-num">③</div>
+    <div class="exp-title">Voice Elaboration Sampling</div>
+    <div class="exp-body">On 20% of review cards, add "say more?" — a 15-second voice response. Compare predictive validity of voice-scored depth vs. button score for next-review outcome.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>Paired (button_score, voice_depth_score) for same items</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Whether buttons are meaningful or noise. If voice is dramatically better, it should be primary.</dd></div>
+  </div>
+
+  <div class="exp">
+    <div class="exp-num">④</div>
+    <div class="exp-title">FSRS Calibration</div>
+    <div class="exp-body">After 50+ reviewed items accumulate: compare FSRS-predicted retrievability at review time to actual knew/partly/missed distribution. Plot calibration curve.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>predicted_retrievability at review time + actual score</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Whether the spacing algorithm is right or needs parameter tuning</dd></div>
+  </div>
+
+  <div class="exp">
+    <div class="exp-num">⑤</div>
+    <div class="exp-title">Gist vs. Verbatim Decay</div>
+    <div class="exp-body">Set different FSRS base stability for date-type key_facts (14 days) vs. connection/significance-type (45 days). Monitor whether this produces better-calibrated scheduling after 2 months.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>Review scores by key_fact type at various delays</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Whether Fuzzy-Trace Theory's prediction holds for your reading</dd></div>
+  </div>
+
+  <div class="exp">
+    <div class="exp-num">⑥</div>
+    <div class="exp-title">Knowledge Structure Growth</div>
+    <div class="exp-body">Monthly voice sweeps for 6+ months. Track: nodes mentioned, connections articulated, connections-per-node ratio, Pathfinder distance to curriculum graph. Plot all four over time.</div>
+    <div class="exp-row"><dt>Collect</dt><dd>Monthly structured voice sweep results</dd></div>
+    <div class="exp-row"><dt>Tells you</dt><dd>Whether knowledge structure (connections) grows faster than knowledge amount (nodes) — the "hooks not facts" thesis</dd></div>
+  </div>
+</section>
+
+<div class="orn-center">✦ ✦ ✦</div>
+<p style="text-align:center;font-size:.82rem;color:var(--muted);font-style:italic;margin-bottom:3rem">
+  85+ research documents · 47 sessions · one reader's attempt to never forget what he reads<br>
+  Named after Francesco Petrarca (1304–1374), who climbed Mont Ventoux just to see the view.
+</p>
+
+</main>
+</div>
+
+<a href="#top" class="btt" id="btt">↑</a>
+
+<script>
+// Sidebar mobile toggle
+document.querySelectorAll('.sidebar nav a').forEach(a=>a.addEventListener('click',()=>{
+  document.getElementById('sb').classList.remove('open');
+  document.getElementById('ov').classList.remove('open');
+}));
+// Back to top
+const b=document.getElementById('btt');
+window.addEventListener('scroll',()=>b.classList.toggle('vis',scrollY>500));
+// Active nav
+const secs=document.querySelectorAll('section[id]');
+const links=document.querySelectorAll('.sidebar nav a');
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id))}),{rootMargin:'-15% 0px -75% 0px'});
+secs.forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

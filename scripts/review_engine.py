@@ -286,32 +286,35 @@ Output JSON only:
 
 
 FOLLOW_UP_PROMPT = """A history reader just reviewed a topic. Generate 3 follow-up research questions
-that would make them genuinely curious — the kind that make you go "wait, really?" or spark a
-desire to look something up immediately.
+that go SIDEWAYS — exploring adjacent angles the card didn't cover, not drilling deeper into
+what was already said. The reader should think "oh, I never thought about it from THAT angle."
 
 Topic: {node_title}
 Topic description: {node_description}
 Specific fact just reviewed: {fact_context}
 
-VARIETY IS ESSENTIAL. Each question should take a DIFFERENT angle from this list:
-- PRIMARY SOURCES: What did this person actually write? What contemporary documents survive?
-  (e.g., "What did Roger II's court chronicler Alexander of Telese actually record about the coronation?")
-- ART & CULTURAL RECEPTION: Opera, theatre, poetry, novels, films inspired by this person/event
-  (e.g., "Which Verdi opera dramatizes the Norman conquest of Sicily?")
-- MATERIAL EVIDENCE: Archaeological sites, artifacts, inscriptions, coins, buildings you can visit today
-  (e.g., "What inscriptions in Arabic, Greek, and Latin survive on Roger II's mantle?")
-- CONNECTED FIGURES: Fascinating contemporaries, rivals, or successors the reader hasn't met yet
+VARIETY IS ESSENTIAL. Each question should take a DIFFERENT angle. Prioritize these:
+- GEOGRAPHY AS EXPLANATION: Why HERE specifically? What about the landscape, harbors, climate,
+  trade routes explains why this happened in this place?
+  (e.g., "Why did the Greek-Carthaginian border run exactly where it did — what was special about the Halycus river?")
+- STRUCTURAL / SYSTEMIC: What institutional, economic, or social structure made this possible or inevitable?
+  (e.g., "How did the Norman feudal system interact with the existing Arab land-tenure system?")
+- TRANSMISSION & RECEPTION: How did knowledge of this reach us? Who carried it, translated it, debated it?
+  (e.g., "How did Western scholars actually access Greek manuscripts in Constantinople before 1453?")
+- COUNTER-NARRATIVES: What did the OTHER side think? The conquered, the losers, the minority voices?
+  (e.g., "What do we know about how ordinary Sicilian Muslims experienced the Norman conquest?")
+- CONNECTED FIGURES: Fascinating people adjacent to this story the reader hasn't met yet
   (e.g., "Who was George of Antioch, and why did a Greek Orthodox Syrian become Roger II's chief minister?")
-- SURPRISING CONNECTIONS: Unexpected links to other domains — science, trade routes, linguistics, religion
-  (e.g., "How did al-Idrisi's world map made for Roger II end up influencing Columbus?")
-- WHAT WE DON'T KNOW: Fascinating open questions, lost sources, scholarly debates
-  (e.g., "Why do we have almost no Arabic sources for the Norman conquest, despite 200 years of Arab rule?")
+- MODERN ECHOES: What modern institution, place name, legal concept, or cultural practice traces back here?
+  (e.g., "Which Sicilian place names are actually Arabic, and what do they reveal about settlement patterns?")
+- ART & CULTURAL AFTERLIFE: Opera, theatre, poetry, novels, films — how this event lives in culture
+  (e.g., "Which Verdi opera dramatizes the Sicilian Vespers, and how accurate is it?")
 
 Rules:
 - Be SPECIFIC — name real people, places, events, dates. Never generic.
+- DO NOT ask about things already covered in the card content. Go sideways, not deeper.
 - NO templates like "How does X connect to Y?" or "What was happening elsewhere?" or "Tell me more about X"
 - Each question should feel like it could be its own microlearning rabbit hole
-- Prefer questions the reader is UNLIKELY to already know the answer to
 
 Output JSON array of 3 strings only: ["q1","q2","q3"]"""
 
@@ -1377,24 +1380,28 @@ Write:
    Good: "The Catiline Conspiracy (63 BC)" or "Al-Idrisi's World Map for Roger II (1154)"
    Bad: "Cultural Blending in Medieval Sicily" or "An Ancient Conspiracy"
 
-2. A vivid, specific answer in 3-5 SHORT paragraphs (total 200-350 words) that MUST include:
-   - The core narrative: who, what, when, why it matters
-   - PRIMARY SOURCES: Name specific authors and works that document this. If the person wrote
-     anything, mention it. If no sources survive, say so — absence is historically significant.
-   - MATERIAL EVIDENCE: What can you still see or visit? Buildings, inscriptions, coins,
-     manuscripts in specific museums. Be concrete.
-   - One SURPRISING or lesser-known detail
+2. A vivid, specific answer as an array of labeled SECTIONS (total 200-350 words). Each section
+   has a "heading" (short label, null for the opening narrative) and "text" (the paragraph).
+   REQUIRED sections:
+   - Opening narrative (heading: null): who, what, when, why it matters. 2-3 sentences.
+   - "Sources": Name specific authors and works. If the person wrote anything, mention it.
+     If no sources survive, say so — absence is historically significant. Use proper titles
+     without markdown formatting.
+   - "Still Visible": What can you visit or see today? Buildings, inscriptions, coins,
+     manuscripts in specific museums. Be concrete about locations.
+   - Optionally one more: "Surprising Detail" or "Cultural Legacy" (art, opera, literature).
 
 3. 3-5 quiz questions testing SPECIFIC facts from the content. Short questions (6-15 words)
    with short specific answers (1-2 sentences). Each targets a different detail.
 
-4. 3 follow-up queries that latch onto SPECIFIC details you mentioned — a source, an artifact,
-   a person — offering to go deeper. The reader should think "I want to know more about THAT."
+4. 3 follow-up queries that go SIDEWAYS — exploring angles the card DIDN'T cover. Don't repeat
+   what's already in the content. Think: geography as explanation, counter-narratives, structural
+   causes, transmission history, modern echoes, connected figures. Each should open a new rabbit hole.
 
 5. Entities mentioned — people, places, events, concepts with canonical IDs.
 
 Output JSON only:
-{{"title":"short title with dates","content":"the answer with sources/artifacts woven in","quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
+{{"title":"short title with dates","sections":[{{"heading":null,"text":"opening narrative"}},{{"heading":"Sources","text":"primary source info"}},{{"heading":"Still Visible","text":"material evidence"}}],"quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
 
 
 ENTITY_RESEARCH_PROMPT = """You are a knowledgeable historian. Write a rich microlearning card about this entity,
@@ -1520,6 +1527,33 @@ def _find_related_entities(entity_id: str, entity_name: str, entity_type: str,
         pass
 
     return related[:8]
+
+
+def _strip_markdown(text: str) -> tuple[str, list[tuple[int, int, int, int]]]:
+    """Strip *italic* and **bold** markers from text.
+    Returns (clean_text, offset_map) where offset_map maps clean positions to original positions."""
+    import re
+    # Track removals to build an offset map
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i:i+2] == '**':
+            # Find closing **
+            end = text.find('**', i + 2)
+            if end != -1:
+                result.append(text[i+2:end])
+                i = end + 2
+                continue
+        if text[i] == '*' and (i == 0 or text[i-1] != '*') and (i + 1 < len(text) and text[i+1] != '*'):
+            # Find closing *
+            end = text.find('*', i + 1)
+            if end != -1 and text[end-1:end+1] != '**':
+                result.append(text[i+1:end])
+                i = end + 1
+                continue
+        result.append(text[i])
+        i += 1
+    return ''.join(result), []
 
 
 def _compute_entity_spans(text: str, entities: list) -> list:
@@ -1867,19 +1901,29 @@ def _run_microlearning_research(card_id: str, query: str,
 
         result = call_claude_json(prompt, timeout=120)
 
-        if not result or 'content' not in result:
+        if not result or ('content' not in result and 'sections' not in result):
             raise ValueError(f'Invalid response: {str(result)[:200] if result else "empty"}')
 
-        # Extract entities and compute text spans
+        # Handle sections format → join into flat content for entity spans
+        sections = result.get('sections', [])
+        if sections and isinstance(sections, list):
+            # Join section texts into flat content
+            result['content'] = '\n\n'.join(s.get('text', '') for s in sections)
+        elif not result.get('content'):
+            result['content'] = ''
+
+        # Strip markdown for entity span computation
+        raw_content = result['content']
+        clean_content, _ = _strip_markdown(raw_content)
         entities = result.get('entities', [])
-        entity_spans = _compute_entity_spans(result['content'], entities)
+        entity_spans = _compute_entity_spans(clean_content, entities)
         spans_json = json.dumps({'content': [
             {'start': s['start'], 'end': s['end'], 'entity_id': s['entity_id'],
              'name': s['name'], 'entity_type': s['entity_type']}
             for s in entity_spans
         ]}) if entity_spans else '{}'
 
-        # Update the card
+        # Update the card — store clean content (for spans) in content field
         now_ms = int(time.time() * 1000)
         quizzes = result.get('quizzes', [])
         # Backwards compat: if model returned old single-question format
@@ -1890,12 +1934,13 @@ def _run_microlearning_research(card_id: str, query: str,
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                title=?, content=?, follow_up_queries=?, entities=?, entity_spans=?,
+                title=?, content=?, sections=?, follow_up_queries=?, entities=?, entity_spans=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
             result.get('title', query[:60]),
-            result['content'],
+            clean_content,
+            json.dumps(sections) if sections else '[]',
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),
             spans_json,
