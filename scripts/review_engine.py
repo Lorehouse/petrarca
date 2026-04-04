@@ -1317,6 +1317,122 @@ Output JSON only:
 {{"content":"the 3-4 paragraph answer","question":"assessment question about this content","answer_guidance":"1-2 sentence answer to the assessment question","follow_up_queries":["query1","query2","query3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
 
 
+ENTITY_RESEARCH_PROMPT = """You are a knowledgeable historian. Write a rich microlearning card about this entity,
+making connections to the learner's known context.
+
+Entity: {entity_name} ({entity_type})
+{entity_description}
+
+Related entities from the same period or region that the learner has encountered:
+{related_entities}
+
+Write:
+1. A concise but vivid profile (3-4 SHORT paragraphs, 150-250 words) that:
+   - Covers who/what this is and why it matters
+   - Makes SPECIFIC connections to the related entities listed above (how they interacted, overlapped, influenced each other)
+   - Includes concrete dates, places, and names
+   - Highlights surprising connections or lesser-known facts
+2. One assessment question about the content
+3. 3 follow-up research queries that explore connections further
+4. Entities mentioned in the text (people, places, events, concepts)
+
+Output JSON only:
+{{"content":"the profile text","question":"assessment question","answer_guidance":"1-2 sentence answer","follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
+
+
+ENTITY_QUESTIONS_PROMPT = """Generate 3 research questions about this entity that would make a history reader
+genuinely curious — the kind that make you go "wait, really?" or "I never thought about it that way."
+
+Entity: {entity_name} ({entity_type})
+{entity_description}
+
+Related entities from the same period or region:
+{related_entities}
+
+Requirements:
+- Be SPECIFIC — name real people, places, events, dates
+- At least one question should connect this entity to a related entity listed above
+- Vary the angle: one factual/what-happened, one comparative/connection, one surprising/counter-intuitive
+- NO generic templates like "How does X connect to Y?"
+
+Output JSON array of 3 strings only: ["q1","q2","q3"]"""
+
+
+def _find_related_entities(entity_id: str, entity_name: str, entity_type: str,
+                           conn) -> list[dict]:
+    """Find entities related by time period or location."""
+    related = []
+
+    # Get the target entity's details if in shared_entities
+    target = conn.execute(
+        'SELECT * FROM shared_entities WHERE entity_id = ?', (entity_id,)
+    ).fetchone()
+
+    if target:
+        target = dict(target)
+        date_start = target.get('date_start')
+        date_end = target.get('date_end')
+        lat = target.get('latitude')
+        lon = target.get('longitude')
+
+        # Find temporally overlapping entities (within 100 years)
+        if date_start is not None:
+            time_related = conn.execute('''
+                SELECT entity_id, name, entity_type, date_start, date_end, description
+                FROM shared_entities
+                WHERE entity_id != ? AND date_start IS NOT NULL
+                  AND ABS(date_start - ?) < 100
+                ORDER BY ABS(date_start - ?) ASC
+                LIMIT 5
+            ''', (entity_id, date_start, date_start)).fetchall()
+            for r in time_related:
+                related.append({
+                    'name': r['name'], 'type': r['entity_type'],
+                    'relation': 'same period',
+                    'detail': f"({r['date_start']} to {r['date_end'] or '?'})" if r['date_start'] else '',
+                })
+
+        # Find spatially nearby entities (within ~2 degrees ≈ 200km)
+        if lat is not None and lon is not None:
+            space_related = conn.execute('''
+                SELECT entity_id, name, entity_type, description
+                FROM shared_entities
+                WHERE entity_id != ? AND latitude IS NOT NULL
+                  AND ABS(latitude - ?) < 2.0 AND ABS(longitude - ?) < 2.0
+                LIMIT 5
+            ''', (entity_id, lat, lon)).fetchall()
+            seen = {r['name'] for r in related}
+            for r in space_related:
+                if r['name'] not in seen:
+                    related.append({
+                        'name': r['name'], 'type': r['entity_type'],
+                        'relation': 'same region',
+                    })
+
+    # Also search microlearning cards for co-occurring entities
+    try:
+        ml_rows = conn.execute(
+            "SELECT entities FROM microlearning_cards WHERE status='completed' AND entities LIKE ?",
+            (f'%{entity_id}%',)
+        ).fetchall()
+        co_entities = {}
+        for row in ml_rows:
+            ents = json.loads(row['entities'] or '[]')
+            for e in ents:
+                cid = e.get('canonical', '')
+                if cid and cid != entity_id and cid not in co_entities:
+                    co_entities[cid] = {'name': e['name'], 'type': e.get('type', 'concept'),
+                                        'relation': 'co-mentioned in research'}
+        seen = {r['name'] for r in related}
+        for cid, info in list(co_entities.items())[:5]:
+            if info['name'] not in seen:
+                related.append(info)
+    except Exception:
+        pass
+
+    return related[:8]
+
+
 def _compute_entity_spans(text: str, entities: list) -> list:
     """Find entity mentions in text and return span objects for the client."""
     spans = []
@@ -1346,6 +1462,137 @@ def _compute_entity_spans(text: str, entities: list) -> list:
             filtered.append(s)
             last_end = s['end']
     return filtered
+
+
+def generate_entity_questions(entity_id: str, entity_name: str,
+                              entity_type: str = 'concept',
+                              description: str = '') -> list[str]:
+    """Generate 3 research questions about an entity, informed by related entities."""
+    from db import get_connection
+    conn = get_connection(readonly=True)
+    related = _find_related_entities(entity_id, entity_name, entity_type, conn)
+    conn.close()
+
+    related_text = '\n'.join(
+        f'- {r["name"]} ({r["type"]}, {r["relation"]})'
+        + (f' {r.get("detail", "")}' if r.get('detail') else '')
+        for r in related
+    ) if related else '(none found — focus on the entity itself)'
+
+    prompt = ENTITY_QUESTIONS_PROMPT.format(
+        entity_name=entity_name,
+        entity_type=entity_type,
+        entity_description=description or '(no description available)',
+        related_entities=related_text,
+    )
+    result = call_claude_json(prompt, timeout=60, model='sonnet')
+    if isinstance(result, list) and len(result) >= 2:
+        return result[:3]
+    return [f'What was the historical significance of {entity_name}?']
+
+
+def create_entity_research(entity_id: str, entity_name: str,
+                           entity_type: str = 'concept',
+                           description: str = '') -> str:
+    """Create a microlearning card about an entity with related-entity context.
+
+    Returns the card ID. Research runs in background.
+    """
+    from db import get_connection
+    query = f'Profile: {entity_name} — who/what, why it matters, connections'
+    card_id = f'ml_{int(time.time())}_{hash(entity_id) % 10000:04d}'
+    now_ms = int(time.time() * 1000)
+
+    conn = get_connection()
+    conn.execute('''
+        INSERT OR IGNORE INTO microlearning_cards
+        (id, query, source_item_id, source_node_id, source_domain,
+         content, status, created_at)
+        VALUES (?, ?, ?, ?, ?, '', 'pending', ?)
+    ''', (card_id, query, f'entity:{entity_id}', None, None, now_ms))
+    conn.commit()
+    conn.close()
+
+    threading.Thread(
+        target=_run_entity_research,
+        args=(card_id, entity_id, entity_name, entity_type, description),
+        daemon=True,
+    ).start()
+    return card_id
+
+
+def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
+                          entity_type: str, description: str):
+    """Background: generate a rich entity profile with related-entity connections."""
+    from db import get_connection
+    try:
+        conn = get_connection(readonly=True)
+        related = _find_related_entities(entity_id, entity_name, entity_type, conn)
+        conn.close()
+
+        related_text = '\n'.join(
+            f'- {r["name"]} ({r["type"]}, {r["relation"]})'
+            + (f' {r.get("detail", "")}' if r.get('detail') else '')
+            for r in related
+        ) if related else '(none known — focus on the entity itself)'
+
+        # Web search for factual accuracy
+        search_result = None
+        try:
+            search_prompt = f'Research: {entity_name} historical significance and connections'
+            search_result = call_claude_search(search_prompt, timeout=120)
+        except Exception as e:
+            print(f'[entity-research] search failed for {card_id}: {e}', flush=True)
+
+        prompt = ENTITY_RESEARCH_PROMPT.format(
+            entity_name=entity_name,
+            entity_type=entity_type,
+            entity_description=description or '(no description available)',
+            related_entities=related_text,
+        )
+        if search_result:
+            prompt += f'\n\nSearch results to incorporate:\n{search_result[:2000]}'
+
+        result = call_claude_json(prompt, timeout=120)
+        if not result or 'content' not in result:
+            raise ValueError(f'Invalid response: {str(result)[:200]}')
+
+        entities = result.get('entities', [])
+        entity_spans = _compute_entity_spans(result['content'], entities)
+
+        now_ms = int(time.time() * 1000)
+        conn = get_connection()
+        conn.execute('''
+            UPDATE microlearning_cards SET
+                content=?, question=?, answer_guidance=?,
+                follow_up_queries=?, entities=?,
+                status='completed', due_at=?
+            WHERE id=?
+        ''', (
+            result['content'],
+            result.get('question', ''),
+            result.get('answer_guidance', ''),
+            json.dumps(result.get('follow_up_queries', [])),
+            json.dumps(entities),
+            now_ms,
+            card_id,
+        ))
+        conn.commit()
+        conn.close()
+        print(f'[entity-research] completed {card_id}: {entity_name} '
+              f'({len(entities)} entities, {len(related)} related)', flush=True)
+
+    except Exception as e:
+        print(f'[entity-research] failed {card_id}: {e}', flush=True)
+        import traceback; traceback.print_exc()
+        try:
+            conn = get_connection()
+            conn.execute("UPDATE microlearning_cards SET status='failed' WHERE id=?",
+                         (card_id,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
 
 def create_microlearning_request(query: str, source_item_id: str | None = None,

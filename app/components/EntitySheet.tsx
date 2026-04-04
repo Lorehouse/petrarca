@@ -5,7 +5,10 @@ import {
 } from 'react-native';
 import { colors, fonts, layout } from '../design/tokens';
 import { EntityDetails } from '../data/types';
-import { fetchEntityDetails, recordEntityTap } from '../lib/book-api';
+import {
+  fetchEntityDetails, recordEntityTap, fetchEntityQuestions,
+  triggerEntityResearch, triggerMicrolearning,
+} from '../lib/book-api';
 import { logEvent } from '../data/logger';
 import AncientMap from './AncientMap';
 
@@ -19,6 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   person: '\u{1F464} Person',
   event: '\u26A1 Event',
   period: '\u{1F551} Period',
+  concept: '\u{1F4A1} Concept',
 };
 
 const KNOWLEDGE_COLORS: Record<string, string> = {
@@ -33,23 +37,35 @@ export default function EntitySheet({ entityId, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [tapped, setTapped] = useState<false | 'unknown' | 'interested' | 'loading'>(false);
   const [promptsQueued, setPromptsQueued] = useState(0);
+  // Entity research state
+  const [questions, setQuestions] = useState<string[] | null>(null);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [researchTriggered, setResearchTriggered] = useState(false);
+  const [triggeredQueries, setTriggeredQueries] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!entityId) {
       setEntity(null);
       setTapped(false);
       setPromptsQueued(0);
+      setQuestions(null);
+      setQuestionsLoading(false);
+      setResearchTriggered(false);
+      setTriggeredQueries(new Set());
       return;
     }
     setLoading(true);
     setTapped(false);
     setPromptsQueued(0);
+    setQuestions(null);
+    setQuestionsLoading(false);
+    setResearchTriggered(false);
+    setTriggeredQueries(new Set());
     fetchEntityDetails(entityId)
       .then(setEntity)
       .catch(() => setEntity(null))
       .finally(() => setLoading(false));
 
-    // Implicit tap signal — auto-schedules review
     recordEntityTap(entityId, 'tap').catch(() => {});
     logEvent('entity_sheet_opened', { entity_id: entityId });
   }, [entityId]);
@@ -83,7 +99,40 @@ export default function EntitySheet({ entityId, onClose }: Props) {
     }
   };
 
-  // Best knowledge state across linked nodes
+  const handleGetQuestions = async () => {
+    if (!entity || questionsLoading) return;
+    setQuestionsLoading(true);
+    logEvent('entity_questions_requested', { entity_id: entityId });
+    try {
+      const resp = await fetchEntityQuestions(
+        entityId, entity.name, entity.entity_type, entity.description);
+      setQuestions(resp.questions);
+    } catch (e) {
+      console.warn('[entity] questions failed:', e);
+      setQuestions([`What was the historical significance of ${entity.name}?`]);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  const handleResearch = async () => {
+    if (!entity || researchTriggered) return;
+    setResearchTriggered(true);
+    logEvent('entity_research_triggered', { entity_id: entityId });
+    try {
+      await triggerEntityResearch(
+        entityId, entity.name, entity.entity_type, entity.description);
+    } catch (e) {
+      console.warn('[entity] research failed:', e);
+    }
+  };
+
+  const handleQuestionTap = (query: string, idx: number) => {
+    setTriggeredQueries(prev => new Set(prev).add(idx));
+    logEvent('entity_question_tapped', { entity_id: entityId, query });
+    triggerMicrolearning({ query }).catch(() => {});
+  };
+
   const bestKnowledge = entity?.curriculum_links?.reduce((best, link) => {
     const rank: Record<string, number> = { anchored: 3, engaged: 2, mentioned: 1, unknown: 0 };
     return (rank[link.knowledge || 'unknown'] || 0) > (rank[best] || 0)
@@ -94,6 +143,8 @@ export default function EntitySheet({ entityId, onClose }: Props) {
     if (y == null) return '';
     return y < 0 ? `${Math.abs(y)} BC` : `${y} AD`;
   };
+
+  const hasResearchContent = entity?.microlearning_backlinks && entity.microlearning_backlinks.length > 0;
 
   return (
     <Modal
@@ -178,10 +229,10 @@ export default function EntitySheet({ entityId, onClose }: Props) {
               ) : null}
 
               {/* Microlearning backlinks */}
-              {entity.microlearning_backlinks && entity.microlearning_backlinks.length > 0 ? (
+              {hasResearchContent ? (
                 <View style={es.linksSection}>
                   <Text style={es.sectionLabel}>In your research</Text>
-                  {entity.microlearning_backlinks.map((bl, i) => (
+                  {entity.microlearning_backlinks!.map((bl, i) => (
                     <View key={i} style={es.linkRow}>
                       <View style={[es.linkDot, { backgroundColor: '#2a4a6a' }]} />
                       <View style={es.linkContent}>
@@ -196,13 +247,54 @@ export default function EntitySheet({ entityId, onClose }: Props) {
               {/* Wikipedia link */}
               {entity.wikipedia_url ? (
                 <Pressable style={es.wikiLink} onPress={handleWikipedia}>
-                  <Text style={es.wikiLinkText}>Wikipedia →</Text>
+                  <Text style={es.wikiLinkText}>Wikipedia {'\u2192'}</Text>
                 </Pressable>
               ) : null}
 
-              {/* Actions */}
+              {/* Quick questions section */}
+              {questions ? (
+                <View style={es.questionsSection}>
+                  <Text style={es.sectionLabel}>{'\uD83D\uDD0D'} Research questions</Text>
+                  {questions.map((q, i) => (
+                    <Pressable
+                      key={i}
+                      style={[es.questionBtn, triggeredQueries.has(i) && es.questionTriggered]}
+                      onPress={() => !triggeredQueries.has(i) && handleQuestionTap(q, i)}
+                    >
+                      <Text style={[es.questionText, triggeredQueries.has(i) && es.questionTriggeredText]}>
+                        {triggeredQueries.has(i) ? '\u2713 ' : ''}{q}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* Action buttons */}
+              <View style={es.researchActions}>
+                {!questions && !questionsLoading ? (
+                  <Pressable style={es.questionsBtn} onPress={handleGetQuestions}>
+                    <Text style={es.questionsBtnText}>{'\uD83D\uDD0D'} 3 questions</Text>
+                  </Pressable>
+                ) : questionsLoading ? (
+                  <View style={[es.questionsBtn, { opacity: 0.6 }]}>
+                    <ActivityIndicator size="small" color="#2a4a6a" />
+                  </View>
+                ) : null}
+
+                {!researchTriggered ? (
+                  <Pressable style={es.researchBtn} onPress={handleResearch}>
+                    <Text style={es.researchBtnText}>{'\u2726'} Research this</Text>
+                  </Pressable>
+                ) : (
+                  <View style={[es.researchBtn, es.researchTriggered]}>
+                    <Text style={es.researchTriggeredText}>Researching... {'\u2713'}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Legacy actions */}
               {tapped === 'unknown' ? (
-                <Text style={es.tappedConfirm}>Noted ✓</Text>
+                <Text style={es.tappedConfirm}>Noted {'\u2713'}</Text>
               ) : tapped === 'loading' ? (
                 <View style={es.actionRow}>
                   <ActivityIndicator size="small" color="#b8860b" />
@@ -211,8 +303,8 @@ export default function EntitySheet({ entityId, onClose }: Props) {
               ) : tapped === 'interested' ? (
                 <Text style={es.explorationConfirm}>
                   {promptsQueued > 0
-                    ? `${promptsQueued} exploration questions queued for next session ✦`
-                    : 'Queued for exploration ✦'}
+                    ? `${promptsQueued} exploration questions queued for next session \u2726`
+                    : 'Queued for exploration \u2726'}
                 </Text>
               ) : (
                 <View style={es.actionRow}>
@@ -370,6 +462,76 @@ const es = StyleSheet.create({
     fontSize: 13,
     color: colors.info,
     textDecorationLine: 'underline',
+  },
+  // Research questions
+  questionsSection: {
+    marginBottom: 16,
+  },
+  questionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(42,74,106,0.3)',
+    backgroundColor: 'rgba(42,74,106,0.03)',
+    borderRadius: 2,
+  },
+  questionTriggered: {
+    borderLeftColor: colors.claimNew,
+    backgroundColor: 'rgba(42,122,74,0.04)',
+  },
+  questionText: {
+    fontFamily: fonts.reading,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#2a4a6a',
+  },
+  questionTriggeredText: {
+    color: colors.claimNew,
+  },
+  // Action buttons
+  researchActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  questionsBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 4,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a4a6a',
+    backgroundColor: 'rgba(42,74,106,0.04)',
+  },
+  questionsBtnText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: '#2a4a6a',
+  },
+  researchBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 4,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.rubric,
+    backgroundColor: 'rgba(139,37,0,0.04)',
+  },
+  researchBtnText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.rubric,
+  },
+  researchTriggered: {
+    borderColor: colors.claimNew,
+    backgroundColor: 'rgba(42,122,74,0.04)',
+  },
+  researchTriggeredText: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 12,
+    color: colors.claimNew,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
   },
   actionRow: {
     flexDirection: 'row',

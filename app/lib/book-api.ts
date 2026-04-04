@@ -459,6 +459,46 @@ export async function fetchEntityDetails(
   return resp.json();
 }
 
+export async function fetchEntityQuestions(
+  entityId: string,
+  entityName: string,
+  entityType?: string,
+  description?: string,
+): Promise<{ entity_id: string; questions: string[] }> {
+  const resp = await fetch(`${RESEARCH_BASE}/entity/questions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      entity_id: entityId,
+      entity_name: entityName,
+      entity_type: entityType,
+      description: description,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Entity questions failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function triggerEntityResearch(
+  entityId: string,
+  entityName: string,
+  entityType?: string,
+  description?: string,
+): Promise<{ card_id: string; status: string; entity_id: string }> {
+  const resp = await fetch(`${RESEARCH_BASE}/entity/research`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      entity_id: entityId,
+      entity_name: entityName,
+      entity_type: entityType,
+      description: description,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Entity research failed (${resp.status})`);
+  return resp.json();
+}
+
 export async function recordEntityTap(
   entityId: string,
   action: 'tap' | 'unknown' | 'interested' | 'encountered' = 'tap',

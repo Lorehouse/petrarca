@@ -4187,6 +4187,55 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_entity_questions(self):
+        """POST /entity/questions — generate 3 research questions about an entity."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        entity_id = body.get('entity_id', '').strip()
+        entity_name = body.get('entity_name', '').strip()
+        entity_type = body.get('entity_type', 'concept')
+        description = body.get('description', '')
+        if not entity_id or not entity_name:
+            self._send_json_response(400, {'error': 'entity_id and entity_name required'})
+            return
+        try:
+            from review_engine import generate_entity_questions
+            questions = generate_entity_questions(
+                entity_id, entity_name, entity_type, description)
+            self._send_json_response(200, {
+                'entity_id': entity_id,
+                'questions': questions,
+            })
+        except Exception as e:
+            print(f'[entity/questions] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_entity_research(self):
+        """POST /entity/research — trigger a rich entity profile microlearning card."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        entity_id = body.get('entity_id', '').strip()
+        entity_name = body.get('entity_name', '').strip()
+        entity_type = body.get('entity_type', 'concept')
+        description = body.get('description', '')
+        if not entity_id or not entity_name:
+            self._send_json_response(400, {'error': 'entity_id and entity_name required'})
+            return
+        try:
+            from review_engine import create_entity_research
+            card_id = create_entity_research(
+                entity_id, entity_name, entity_type, description)
+            self._send_json_response(202, {
+                'card_id': card_id,
+                'status': 'processing',
+                'entity_id': entity_id,
+            })
+        except Exception as e:
+            print(f'[entity/research] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
     def _handle_entity_tap(self):
         """POST /entity/tap — record entity tap and auto-schedule review."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -5083,6 +5132,10 @@ JSON array only:"""
             return self._handle_review_batch_generate()
         if self.path == '/entity/tap':
             return self._handle_entity_tap()
+        if self.path == '/entity/questions':
+            return self._handle_entity_questions()
+        if self.path == '/entity/research':
+            return self._handle_entity_research()
         if self.path == '/book/process-kindle':
             return self._handle_process_kindle()
         if self.path == '/kindle/sync':
