@@ -57,6 +57,7 @@ FEEDBACK_DIR = Path(os.environ.get('FEEDBACK_DIR', '/opt/petrarca/data/feedback'
 PROJECTS_PATH = Path(os.environ.get('PROJECTS_PATH', '/opt/petrarca/data/projects.json'))
 PROJECTS_MEDIA_DIR = Path(os.environ.get('PROJECTS_MEDIA_DIR', '/opt/petrarca/data/projects'))
 PHOTO_OCR_QUEUE_PATH = Path(os.environ.get('PHOTO_OCR_QUEUE_PATH', '/opt/petrarca/data/photo_ocr_queue.json'))
+VOICE_ELICIT_CACHE_DIR = Path(os.environ.get('VOICE_ELICIT_CACHE_DIR', '/opt/petrarca/data/voice_elicit_cache'))
 
 from server_log import log_server_event
 # Core curriculum functions from SQLite-backed module
@@ -100,6 +101,7 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 BOOK_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+VOICE_ELICIT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -4883,7 +4885,12 @@ JSON array only:"""
             audio_path.unlink(missing_ok=True)
 
     def _handle_voice_elicitation(self):
-        """POST /review/voice-elicit — voice free-recall elicitation for a curriculum node."""
+        """POST /review/voice-elicit — voice free-recall elicitation for a curriculum node.
+
+        Accepts optional request_id for idempotent retries. If a result was already
+        computed for this request_id, returns it from cache instantly (no re-processing).
+        This handles mobile connections dropping during the 40-50s processing time.
+        """
         import cgi
         content_type = self.headers.get('Content-Type', '')
         if 'multipart' not in content_type:
@@ -4896,27 +4903,63 @@ JSON array only:"""
         fs = cgi.FieldStorage(fp=io.BytesIO(data), environ=environ, keep_blank_values=True)
         node_id = fs.getvalue('node_id', '')
         domain_id = fs.getvalue('domain_id', '')
+        request_id = fs.getvalue('request_id', '')
         audio_field = fs['audio'] if 'audio' in fs else None
         if not node_id or not domain_id or audio_field is None:
             self._send_json_response(400, {'error': 'Missing node_id, domain_id, or audio'})
             return
+
+        # Check cache for idempotent retry (expires after 24h)
+        cache_path = None
+        if request_id:
+            cache_path = VOICE_ELICIT_CACHE_DIR / f'{request_id}.json'
+            if cache_path.exists():
+                age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+                if age_hours > 24:
+                    cache_path.unlink(missing_ok=True)
+                else:
+                    try:
+                        cached = json.loads(cache_path.read_text())
+                        print(f'[voice-elicit] Cache hit for {request_id}, returning cached result', flush=True)
+                        self._send_json_response(200, cached)
+                        return
+                    except Exception:
+                        pass  # corrupted cache, re-process
+
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
             tmp.write(audio_field.file.read())
             audio_path = Path(tmp.name)
+        result = None
         try:
             print(f'[voice-elicit] Processing: node={node_id}, domain={domain_id[:30]}, audio={audio_path.stat().st_size} bytes', flush=True)
             result = run_voice_elicitation(node_id, domain_id, audio_path, None, transcribe_on_server)
             print(f'[voice-elicit] Result: coverage={result.get("coverage_pct", "?")}%, captured={len(result.get("captured", []))}, ml_triggered={len(result.get("microlearning_triggered", []))}', flush=True)
             if result.get('error'):
                 print(f'[voice-elicit] Error in result: {result["error"]}', flush=True)
-            self._send_json_response(200, result)
         except Exception as e:
             print(f'[voice-elicit] Exception: {e}', flush=True)
             import traceback; traceback.print_exc()
-            self._send_json_response(500, {'error': str(e)})
+            result = {'error': str(e)}
         finally:
             audio_path.unlink(missing_ok=True)
+
+        # Cache successful results before sending (connection may drop)
+        if cache_path and result and not result.get('error'):
+            try:
+                cache_path.write_text(json.dumps(result))
+            except Exception:
+                pass
+
+        # Send response (may fail with ConnectionReset on flaky mobile connections)
+        try:
+            status = 500 if result.get('error') else 200
+            self._send_json_response(status, result)
+        except (ConnectionResetError, BrokenPipeError):
+            if cache_path and result and not result.get('error'):
+                print(f'[voice-elicit] Client disconnected but result cached as {request_id}', flush=True)
+            else:
+                print(f'[voice-elicit] Client disconnected, result lost (no request_id)', flush=True)
 
     def _handle_elicit_candidates(self):
         """GET /review/elicit-candidates?domain_id=X&limit=5 — nodes suitable for voice elicitation.

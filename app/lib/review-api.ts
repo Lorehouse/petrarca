@@ -197,11 +197,12 @@ export async function getElicitationCandidates(
 }
 
 export async function sendVoiceElicitation(
-  nodeId: string, domainId: string, audioUri: string
+  nodeId: string, domainId: string, audioUri: string, requestId?: string
 ): Promise<ElicitationResult> {
   const form = new FormData();
   form.append('node_id', nodeId);
   form.append('domain_id', domainId);
+  if (requestId) form.append('request_id', requestId);
   form.append('audio', { uri: audioUri, type: 'audio/m4a', name: 'elicit.m4a' } as any);
   const res = await fetchWithTimeout(`${RESEARCH_BASE}/review/voice-elicit`, {
     method: 'POST',

@@ -25,6 +25,7 @@ interface PendingUpload {
   domainId: string;
   nodeTitle: string;
   recordedAt: number;
+  requestId: string;
 }
 
 const PENDING_DIR = `${documentDirectory}voice-elicitation/`;
@@ -117,6 +118,10 @@ export default function VoiceElicitation() {
     }
 
     const pending = await loadPendingUploads();
+    // Backfill requestId for uploads saved before this field existed
+    for (const p of pending) {
+      if (!p.requestId) p.requestId = `elicit_${p.recordedAt}_${p.nodeId.slice(0, 40)}`;
+    }
     if (pending.length > 0) {
       setPendingUploads(pending);
       setPhase('pending_retry');
@@ -182,18 +187,20 @@ export default function VoiceElicitation() {
 
       // Track as pending before upload attempt
       const cand = candidates[current];
+      const requestId = `elicit_${ts}_${cand.node_id.slice(0, 40)}`;
       await savePendingUpload({
         audioUri: savedPath,
         nodeId: cand.node_id,
         domainId: cand.domain_id,
         nodeTitle: cand.node_title,
         recordedAt: ts,
+        requestId,
       });
 
       // Upload in background — don't block, move to next topic immediately
       const candTitle = cand.node_title;
       setProcessingCount(c => c + 1);
-      uploadElicitation(savedPath).then(async () => {
+      uploadElicitation(savedPath, undefined, requestId).then(async () => {
         await clearPendingUpload(savedPath);
       }).catch(() => {
         // Stays in pending for retry next time
@@ -247,7 +254,7 @@ export default function VoiceElicitation() {
     });
   }
 
-  async function uploadElicitation(uri: string, overrideCand?: ElicitationCandidate) {
+  async function uploadElicitation(uri: string, overrideCand?: ElicitationCandidate, requestId?: string) {
     const cand = overrideCand || candidates[current];
     if (!cand?.node_id) {
       throw new Error('No candidate context for upload');
@@ -257,7 +264,7 @@ export default function VoiceElicitation() {
       logEvent('voice_elicitation_submitted', {
         node_id: cand.node_id, duration_s: recordingDuration,
       });
-      const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri);
+      const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri, requestId);
       if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
         throw new Error('Server returned empty analysis');
       }
@@ -346,7 +353,7 @@ export default function VoiceElicitation() {
                     setProcessingCount(c => c + 1);
                     // Remove from pending list immediately and show processing
                     setPendingUploads(prev => prev.filter(u => u.audioUri !== p.audioUri));
-                    uploadElicitation(p.audioUri, fakeCand).then(async () => {
+                    uploadElicitation(p.audioUri, fakeCand, p.requestId).then(async () => {
                       await clearPendingUpload(p.audioUri);
                     }).catch(() => {
                       setProcessingCount(c => Math.max(0, c - 1));
