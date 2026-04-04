@@ -4173,6 +4173,15 @@ JSON array only:"""
                     entity['aliases'] = []
                 entity['curriculum_links'] = [dict(l) for l in links]
                 entity['microlearning_backlinks'] = ml_backlinks
+                # Include user notes
+                try:
+                    notes = conn.execute(
+                        'SELECT id, note, created_at FROM entity_notes WHERE entity_id = ? ORDER BY created_at DESC',
+                        (entity_id,)
+                    ).fetchall()
+                    entity['notes'] = [dict(n) for n in notes]
+                except Exception:
+                    entity['notes'] = []
                 self._send_json_response(200, entity)
             elif ml_backlinks:
                 # Dynamic entity from microlearning annotations
@@ -4248,6 +4257,32 @@ JSON array only:"""
             print(f'[entity/research] Error: {e}', flush=True)
             import traceback; traceback.print_exc()
             self._send_json_response(500, {'error': str(e)})
+
+    def _handle_entity_notes_save(self):
+        """POST /entity/notes — save a user note about an entity."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        entity_id = body.get('entity_id', '').strip()
+        note = body.get('note', '').strip()
+        if not entity_id or not note:
+            self._send_json_response(400, {'error': 'entity_id and note required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            now_ms = int(time.time() * 1000)
+            conn.execute(
+                'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
+                (entity_id, note, now_ms))
+            conn.commit()
+            self._send_json_response(201, {
+                'status': 'saved', 'entity_id': entity_id, 'created_at': now_ms,
+            })
+        except Exception as e:
+            print(f'[entity/notes] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
 
     def _handle_entity_tap(self):
         """POST /entity/tap — record entity tap and auto-schedule review."""
@@ -4905,8 +4940,29 @@ JSON array only:"""
         domain_id = fs.getvalue('domain_id', '')
         request_id = fs.getvalue('request_id', '')
         audio_field = fs['audio'] if 'audio' in fs else None
-        if not node_id or not domain_id or audio_field is None:
-            self._send_json_response(400, {'error': 'Missing node_id, domain_id, or audio'})
+        if not node_id or audio_field is None:
+            self._send_json_response(400, {'error': 'Missing node_id or audio'})
+            return
+
+        # Auto-detect domain_id for chapter/book recalls when not provided
+        if not domain_id and (node_id.startswith('chapter:') or node_id.startswith('book:')):
+            parts = node_id.split(':')
+            book_id = parts[1] if len(parts) > 1 else ''
+            if book_id:
+                from db import get_connection
+                tmp_conn = get_connection(readonly=True)
+                try:
+                    row = tmp_conn.execute(
+                        "SELECT DISTINCT curriculum_domain FROM knowledge_items WHERE sources LIKE ? LIMIT 1",
+                        (f'%{book_id}%',)
+                    ).fetchone()
+                    if row:
+                        domain_id = row['curriculum_domain']
+                        print(f'[voice-elicit] Auto-detected domain={domain_id} for {node_id}', flush=True)
+                finally:
+                    tmp_conn.close()
+        if not domain_id and not node_id.startswith('chapter:') and not node_id.startswith('book:'):
+            self._send_json_response(400, {'error': 'Missing domain_id'})
             return
 
         # Check cache for idempotent retry (expires after 24h)
@@ -4974,6 +5030,27 @@ JSON array only:"""
         try:
             candidates = get_elicitation_candidates(domain_id, limit=limit, conn=conn)
             self._send_json_response(200, {'candidates': candidates})
+        finally:
+            conn.close()
+
+    def _handle_elicit_know_nothing(self):
+        """POST /review/elicit-know-nothing — user explicitly knows nothing about a topic."""
+        body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
+        node_id = body.get('node_id', '')
+        domain_id = body.get('domain_id', '')
+        if not node_id:
+            self._send_json_response(400, {'error': 'Missing node_id'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            from curriculum_db import update_knowledge
+            if domain_id:
+                update_knowledge(domain_id, node_id, knowledge='unknown', confidence=0.8,
+                                 source='voice_elicit_know_nothing', conn=conn)
+            conn.commit()
+            print(f'[voice-elicit] Know nothing: node={node_id}, domain={domain_id}', flush=True)
+            self._send_json_response(200, {'ok': True})
         finally:
             conn.close()
 
@@ -5190,6 +5267,8 @@ JSON array only:"""
             return self._handle_entity_questions()
         if self.path == '/entity/research':
             return self._handle_entity_research()
+        if self.path == '/entity/notes':
+            return self._handle_entity_notes_save()
         if self.path == '/book/process-kindle':
             return self._handle_process_kindle()
         if self.path == '/kindle/sync':
@@ -5242,6 +5321,8 @@ JSON array only:"""
             return self._handle_review_voice_memo()
         if self.path == '/review/voice-elicit':
             return self._handle_voice_elicitation()
+        if self.path == '/review/elicit-know-nothing':
+            return self._handle_elicit_know_nothing()
         if self.path == '/review/article-read':
             return self._handle_review_article_read()
         if self.path == '/review/hamarquizen':
@@ -5801,7 +5882,7 @@ JSON array only:"""
             return self._handle_resurfacing_status()
         if self.path == '/entities' or self.path.startswith('/entities?'):
             return self._handle_entities_list()
-        if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap'):
+        if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap') and not self.path.startswith('/entity/notes'):
             return self._handle_entity_lookup()
         if self.path.startswith('/curriculum/review/timeline/'):
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]

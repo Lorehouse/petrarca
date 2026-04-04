@@ -2211,36 +2211,76 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         conn = get_connection()
     # Handle chapter recall pseudo-nodes (chapter:{book_id}:{chapter_number})
     is_chapter_recall = node_id.startswith('chapter:')
-    if is_chapter_recall:
+    is_book_recall = node_id.startswith('book:')
+    book_id = ''
+    chapter_num = ''
+    chapter_source_texts = []
+
+    if is_chapter_recall or is_book_recall:
         parts = node_id.split(':')
         book_id = parts[1] if len(parts) > 1 else ''
-        chapter_num = parts[2] if len(parts) > 2 else ''
-        # Look up chapter title and book from knowledge_items sources
+        chapter_num = parts[2] if len(parts) > 2 and is_chapter_recall else ''
+
+        # Auto-detect domain_id from book if not provided
+        if not domain_id and book_id:
+            row = conn.execute(
+                "SELECT DISTINCT curriculum_domain FROM knowledge_items WHERE sources LIKE ? LIMIT 1",
+                (f'%{book_id}%',)
+            ).fetchone()
+            if row:
+                domain_id = row['curriculum_domain']
+
+        # Look up book title and chapter sources
         book_title = ''
         chapter_title = ''
-        chapter_source_texts = []
+        source_query = f'%{book_id}%'
+        domain_clause = "AND curriculum_domain = ?" if domain_id else ""
+        domain_params = (source_query, domain_id) if domain_id else (source_query,)
         rows = conn.execute(
-            "SELECT sources FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
-            (domain_id, f'%{book_id}%')
+            f"SELECT sources FROM knowledge_items WHERE sources LIKE ? {domain_clause}",
+            domain_params
         ).fetchall()
         for r in rows:
             try:
                 sources = json.loads(r['sources'])
                 for s in sources:
-                    if str(s.get('chapter_number', '')) == str(chapter_num) and s.get('book_id') == book_id:
-                        chapter_title = chapter_title or s.get('chapter_title', '')
-                        book_title = book_title or s.get('book_title', book_id)
+                    if s.get('book_id') != book_id:
+                        continue
+                    book_title = book_title or s.get('book_title', book_id)
+                    if is_chapter_recall:
+                        if str(s.get('chapter_number', '')) == str(chapter_num):
+                            chapter_title = chapter_title or s.get('chapter_title', '')
+                            if s.get('source_text'):
+                                chapter_source_texts.append(s['source_text'])
+                    else:
+                        # Book recall — gather all source texts
                         if s.get('source_text'):
                             chapter_source_texts.append(s['source_text'])
             except Exception:
                 pass
-        node = {
-            'id': node_id,
-            'title': f'Chapter {chapter_num}: {chapter_title}' if chapter_title else f'Chapter {chapter_num}',
-            'description': f'What do you remember from Chapter {chapter_num} of {book_title}? Key ideas, people, events, and arguments.',
-        }
+
+        # Fall back to book title from physical_books table
+        if not book_title:
+            bt_row = conn.execute('SELECT title FROM physical_books WHERE id = ?', (book_id,)).fetchone()
+            if bt_row:
+                book_title = bt_row['title']
+
+        if is_chapter_recall:
+            node = {
+                'id': node_id,
+                'title': f'Chapter {chapter_num}: {chapter_title}' if chapter_title else f'Chapter {chapter_num}',
+                'description': f'What do you remember from Chapter {chapter_num} of {book_title}? Key ideas, people, events, and arguments.',
+            }
+        else:
+            node = {
+                'id': node_id,
+                'title': book_title or book_id,
+                'description': f'What do you remember from {book_title}? Speak freely about key ideas, people, events, themes, and anything that stuck with you.',
+            }
     else:
         # Standard curriculum node
+        if not domain_id:
+            return {'error': 'Missing domain_id for curriculum node'}
         curriculum = load_curriculum(domain_id)
         if not curriculum:
             return {'error': f'Curriculum {domain_id} not found'}
@@ -2254,10 +2294,10 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             return {'error': f'Node {node_id} not found'}
 
     # Gather sources BEFORE closing connection
-    if is_chapter_recall and chapter_source_texts:
-        sources_text = '\n'.join(chapter_source_texts[:5])
+    if (is_chapter_recall or is_book_recall) and chapter_source_texts:
+        sources_text = '\n'.join(chapter_source_texts[:8])
     else:
-        sources_text = _gather_node_sources(node_id, domain_id, conn)
+        sources_text = _gather_node_sources(node_id, domain_id, conn) if domain_id else ''
 
     # Close connection before slow work (transcription + LLM) to avoid write lock
     conn.close()
@@ -2300,7 +2340,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             conn.execute('PRAGMA busy_timeout = 60000')  # 60s wait for lock
 
             # Generate temporal hook (skip for chapter recall)
-            temporal_hook = '' if is_chapter_recall else _generate_temporal_hook(node, domain_id, conn)
+            temporal_hook = '' if (is_chapter_recall or is_book_recall) else _generate_temporal_hook(node, domain_id, conn)
             result['temporal_hook'] = temporal_hook
 
             # Process "wonderings" — create research triggers
@@ -2331,31 +2371,53 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             knowledge_level = 'anchored' if score == 'knew' else 'engaged' if score == 'partly' else 'mentioned'
             confidence = coverage / 100.0
 
-            if is_chapter_recall:
-                if book_id and chapter_num:
+            if is_chapter_recall or is_book_recall:
+                if book_id and domain_id:
+                    if is_chapter_recall and chapter_num:
+                        source_filter = f'%"chapter_number": {chapter_num}%'
+                    else:
+                        source_filter = f'%{book_id}%'
                     ki_rows = conn.execute(
                         "SELECT id, curriculum_node_id FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
-                        (domain_id, f'%"chapter_number": {chapter_num}%' if chapter_num else f'%{book_id}%')
+                        (domain_id, source_filter)
                     ).fetchall()
+                    source_tag = f'voice_chapter_recall:{book_id}:{chapter_num}' if is_chapter_recall else f'voice_book_recall:{book_id}'
                     for ki in ki_rows:
                         update_knowledge(domain_id, ki['curriculum_node_id'],
                                          knowledge=knowledge_level, confidence=confidence,
-                                         source=f'voice_chapter_recall:{book_id}:{chapter_num}', conn=conn)
+                                         source=source_tag, conn=conn)
             else:
                 update_knowledge(domain_id, node_id, knowledge=knowledge_level,
                                  confidence=confidence, source='voice_elicitation', conn=conn)
 
             now_ms = int(time.time() * 1000)
             stability_mult = {'knew': 2.5, 'partly': 1.5, 'missed': 0.4}.get(score, 1.0)
-            conn.execute("""
-                UPDATE knowledge_items
-                SET last_score = ?, last_reviewed_at = ?,
-                    stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
-                    due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
-                    review_count = review_count + 1,
-                    cached_question = NULL
-                WHERE curriculum_node_id = ? AND curriculum_domain = ?
-            """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
+            if is_chapter_recall or is_book_recall:
+                # Update all matched knowledge_items for book/chapter recall
+                if book_id and domain_id:
+                    if is_chapter_recall and chapter_num:
+                        source_filter = f'%"chapter_number": {chapter_num}%'
+                    else:
+                        source_filter = f'%{book_id}%'
+                    conn.execute("""
+                        UPDATE knowledge_items
+                        SET last_score = ?, last_reviewed_at = ?,
+                            stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
+                            due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
+                            review_count = review_count + 1,
+                            cached_question = NULL
+                        WHERE curriculum_domain = ? AND sources LIKE ?
+                    """, (score, now_ms, stability_mult, now_ms, stability_mult, domain_id, source_filter))
+            else:
+                conn.execute("""
+                    UPDATE knowledge_items
+                    SET last_score = ?, last_reviewed_at = ?,
+                        stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
+                        due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
+                        review_count = review_count + 1,
+                        cached_question = NULL
+                    WHERE curriculum_node_id = ? AND curriculum_domain = ?
+                """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
 
             conn.commit()
             conn.close()

@@ -631,7 +631,7 @@ export default function BookDetailScreen() {
                         book_title: book.title,
                         chapter_number: chNum,
                         chapter_title: chTitle,
-                        domain_id: book.topics?.[0] ? '' : '',
+                        domain_id: '',
                       },
                     } as any);
                   }}
@@ -656,6 +656,26 @@ export default function BookDetailScreen() {
             </Text>
           </Pressable>
         )}
+        <Pressable
+          style={styles.bookRecallBtn}
+          onPress={() => {
+            logEvent('book_recall', { book_id: book.id, title: book.title });
+            router.push({
+              pathname: '/voice-elicitation',
+              params: {
+                chapter_recall: '1',
+                book_id: book.id,
+                book_title: book.title,
+                chapter_number: '',
+                chapter_title: '',
+                domain_id: '',
+                book_recall: '1',
+              },
+            } as any);
+          }}
+        >
+          <Text style={styles.bookRecallBtnText}>{'\u25CE'} Record what I remember</Text>
+        </Pressable>
         <View style={styles.positionRow}>
           <Text style={styles.fieldLabel}>Page</Text>
           <TextInput style={styles.pageInput} value={pageInput} onChangeText={setPageInput}
@@ -946,6 +966,12 @@ const styles = StyleSheet.create({
   storySoFarDismissText: { fontFamily: fonts.body, fontSize: 14, color: colors.parchment },
   reviewBadge: { borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 10, paddingVertical: 8, marginTop: 4 },
   reviewBadgeText: { fontFamily: fonts.ui, fontSize: 13, color: colors.rubric },
+  bookRecallBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, marginTop: 8, marginBottom: 4,
+    borderWidth: 1, borderColor: colors.rubric, borderRadius: 4,
+  },
+  bookRecallBtnText: { fontFamily: fonts.ui, fontSize: 13, fontWeight: '500', color: colors.rubric },
   chapterActions: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: 8, marginLeft: 72 },
   chapterActionBtn: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.rubric, borderRadius: 3 },
   chapterActionText: { fontFamily: fonts.ui, fontSize: 11, color: colors.rubric },

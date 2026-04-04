@@ -11,7 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, fonts } from '../design/tokens';
 import {
-  getElicitationCandidates, sendVoiceElicitation,
+  getElicitationCandidates, sendVoiceElicitation, reportKnowNothing,
   ElicitationCandidate, ElicitationResult,
 } from '../lib/review-api';
 import { logEvent } from '../data/logger';
@@ -65,6 +65,7 @@ export default function VoiceElicitation() {
   const params = useLocalSearchParams<{
     domain_id?: string;
     chapter_recall?: string;
+    book_recall?: string;
     book_id?: string;
     book_title?: string;
     chapter_number?: string;
@@ -85,6 +86,7 @@ export default function VoiceElicitation() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savedUriRef = useRef<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const seenNodeIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setFeedbackContext({ screen: 'voice-elicitation' });
@@ -92,7 +94,36 @@ export default function VoiceElicitation() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
+  // Resume from done if new candidates were loaded
+  useEffect(() => {
+    if (phase === 'done' && current + 1 < candidates.length) {
+      setCurrent(current + 1);
+      setResult(null);
+      setPhase('prompt');
+    }
+  }, [candidates.length]);
+
   async function checkPendingThenLoad() {
+    // Book-level recall (not tied to a chapter)
+    if (params.book_recall === '1' && params.book_id) {
+      const bookTitle = params.book_title || '';
+      const cand: ElicitationCandidate = {
+        type: 'book_recall',
+        node_id: `book:${params.book_id}`,
+        node_title: bookTitle,
+        node_description: `What do you remember from ${bookTitle}? Speak freely about key ideas, people, events, themes, and anything that stuck with you.`,
+        domain_id: params.domain_id || '',
+        knowledge: 'engaged',
+        confidence: 0.5,
+        elicitation_score: 0,
+        book_id: params.book_id,
+        book_title: bookTitle,
+      };
+      setCandidates([cand]);
+      setPhase('prompt');
+      return;
+    }
+
     // Direct chapter recall from book detail
     if (params.chapter_recall === '1' && params.book_id && params.chapter_number) {
       const chNum = params.chapter_number;
@@ -130,21 +161,29 @@ export default function VoiceElicitation() {
     }
   }
 
-  async function loadCandidates() {
-    setPhase('loading');
+  async function loadCandidates(append = false) {
+    if (!append) setPhase('loading');
     try {
       const domainId = params.domain_id || undefined;
       const { candidates: cands } = await getElicitationCandidates(domainId, 10);
-      if (cands.length === 0) {
-        setPhase('done');
+      // Filter out already-seen nodes
+      const fresh = cands.filter(c => !seenNodeIds.current.has(c.node_id));
+      if (fresh.length === 0) {
+        if (!append) setPhase('done');
         return;
       }
-      setCandidates(cands);
+      fresh.forEach(c => seenNodeIds.current.add(c.node_id));
+      if (append) {
+        setCandidates(prev => [...prev, ...fresh]);
+      } else {
+        setCandidates(fresh);
+        setCurrent(0);
+      }
       setPhase('prompt');
-      logEvent('voice_elicitation_loaded', { domain: domainId || 'all', candidate_count: cands.length });
+      logEvent('voice_elicitation_loaded', { domain: domainId || 'all', candidate_count: fresh.length, append });
     } catch (e) {
       console.error('Failed to load candidates:', e);
-      setPhase('done');
+      if (!append) setPhase('done');
     }
   }
 
@@ -293,11 +332,45 @@ export default function VoiceElicitation() {
     Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
       const nextIdx = current + 1;
       if (nextIdx >= candidates.length) {
+        // Try to load more instead of ending
+        loadCandidates(true).then(() => {
+          // If loadCandidates appended new items, candidates will have grown
+          // We need to check the updated length in the next render
+        });
         setPhase('done');
       } else {
         setCurrent(nextIdx);
         setResult(null);
         setPhase('prompt');
+        // Pre-fetch more when 2 away from end
+        if (nextIdx >= candidates.length - 2) {
+          loadCandidates(true);
+        }
+      }
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    });
+  }
+
+  function knowNothing() {
+    const cand = candidates[current];
+    logEvent('voice_elicitation_know_nothing', { node_id: cand?.node_id, node_title: cand?.node_title });
+    // Record on server (fire-and-forget)
+    if (cand?.node_id && cand?.domain_id) {
+      reportKnowNothing(cand.node_id, cand.domain_id).catch(() => {});
+    }
+    setResults(prev => [...prev, { node: cand?.node_title || '', score: 'missed' }]);
+    Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      const nextIdx = current + 1;
+      if (nextIdx >= candidates.length) {
+        loadCandidates(true);
+        setPhase('done');
+      } else {
+        setCurrent(nextIdx);
+        setResult(null);
+        setPhase('prompt');
+        if (nextIdx >= candidates.length - 2) {
+          loadCandidates(true);
+        }
       }
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     });
@@ -577,19 +650,21 @@ export default function VoiceElicitation() {
           {/* Prompt card */}
           <View style={styles.card}>
             <Text style={styles.domainLabel}>
-              {cand.type === 'chapter_recall' && cand.book_title
+              {(cand.type === 'chapter_recall' || cand.type === 'book_recall') && cand.book_title
                 ? cand.book_title.slice(0, 40)
                 : cand.domain_title || 'Review'}
             </Text>
 
             <Text style={styles.promptLabel}>
-              {cand.type === 'chapter_recall'
+              {cand.type === 'book_recall'
+                ? 'What do you remember from this book?'
+                : cand.type === 'chapter_recall'
                 ? 'What do you remember from…'
                 : 'Tell me what you remember about…'}
             </Text>
             <Text style={styles.nodeTitle}>{cand.node_title}</Text>
 
-            {phase === 'prompt' && cand.type === 'chapter_recall' && (
+            {phase === 'prompt' && (cand.type === 'chapter_recall' || cand.type === 'book_recall') && (
               <Text style={styles.nodeDesc}>{cand.node_description}</Text>
             )}
 
@@ -600,9 +675,14 @@ export default function VoiceElicitation() {
                   <Text style={styles.recordBtnIcon}>{'\u25CE'}</Text>
                   <Text style={styles.recordBtnText}>Start speaking</Text>
                 </Pressable>
-                <Pressable style={styles.skipBtn} onPress={skipNode}>
-                  <Text style={styles.skipBtnText}>Skip {'\u2192'}</Text>
-                </Pressable>
+                <View style={styles.skipRow}>
+                  <Pressable style={styles.knowNothingBtn} onPress={knowNothing}>
+                    <Text style={styles.knowNothingBtnText}>Know nothing</Text>
+                  </Pressable>
+                  <Pressable style={styles.skipBtn} onPress={skipNode}>
+                    <Text style={styles.skipBtnText}>Skip {'\u2192'}</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
 
@@ -868,7 +948,16 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
     fontSize: 12, color: colors.textMuted, textAlign: 'center',
   },
-  skipBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 8 },
+  skipRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: 24, marginTop: 12,
+  },
+  knowNothingBtn: { paddingVertical: 8, paddingHorizontal: 12 },
+  knowNothingBtnText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
+    fontSize: 13, color: colors.rubric, fontWeight: '500',
+  },
+  skipBtn: { paddingVertical: 8, paddingHorizontal: 12 },
   skipBtnText: {
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
     fontSize: 13, color: colors.textMuted,

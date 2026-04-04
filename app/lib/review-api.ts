@@ -157,7 +157,7 @@ export async function getCrossBookHamarquizen(
 // ── Voice elicitation (free recall) ─────────────────────────────────────────
 
 export interface ElicitationCandidate {
-  type?: 'chapter_recall';  // absent for standard curriculum nodes
+  type?: 'chapter_recall' | 'book_recall';  // absent for standard curriculum nodes
   node_id: string;
   node_title: string;
   node_description: string;
@@ -194,6 +194,12 @@ export async function getElicitationCandidates(
   const params = new URLSearchParams({ limit: String(limit) });
   if (domainId) params.append('domain_id', domainId);
   return get(`/review/elicit-candidates?${params}`);
+}
+
+export async function reportKnowNothing(
+  nodeId: string, domainId: string
+): Promise<{ ok: boolean }> {
+  return post('/review/elicit-know-nothing', { node_id: nodeId, domain_id: domainId });
 }
 
 export async function sendVoiceElicitation(
