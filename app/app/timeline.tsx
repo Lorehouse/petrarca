@@ -5,6 +5,7 @@ import { colors, fonts, type, layout, spacing } from '../design/tokens';
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
 import { RESEARCH_BASE } from '../lib/chat-api';
+import { triggerMicrolearning } from '../lib/book-api';
 import DoubleRule from '../components/DoubleRule';
 
 // --- Types ---
@@ -353,6 +354,25 @@ export default function TimelineScreen() {
                     setSelectedNode(selectedNode?.id === node.id ? null : node);
                     logEvent('timeline_tap_event', { node_id: node.id });
                   }}
+                  onGenerateCard={(query) => {
+                    triggerMicrolearning({
+                      query,
+                      sourceNodeId: node.id,
+                      sourceDomain: node.curriculum,
+                    }).then(resp => {
+                      logEvent('timeline_generate_card', {
+                        node_id: node.id, card_id: resp.id, query,
+                      });
+                    }).catch(e => console.warn('[timeline] microlearning failed:', e));
+                  }}
+                  onViewInMap={() => {
+                    router.push(`/knowledge-map?domain=${node.curriculum}&node=${node.id}` as any);
+                  }}
+                  onSelectEntity={(name) => {
+                    setSelectedEntity(name);
+                    setSelectedNode(null);
+                    logEvent('timeline_entity_link_tap', { entity: name });
+                  }}
                 />
               ))}
             </View>
@@ -377,12 +397,16 @@ export default function TimelineScreen() {
 
 // --- Event Row ---
 
-function TimelineEvent({ node, showDomain, isSelected, onPress }: {
+function TimelineEvent({ node, showDomain, isSelected, onPress, onGenerateCard, onViewInMap, onSelectEntity }: {
   node: TimelineNode;
   showDomain: boolean;
   isSelected: boolean;
   onPress: () => void;
+  onGenerateCard: (query: string) => void;
+  onViewInMap: () => void;
+  onSelectEntity: (name: string) => void;
 }) {
+  const [cardRequested, setCardRequested] = useState(false);
   if (!node.time_span) return null;
   const { num, era } = formatYear(node.time_span[0]);
   const kc = KNOWLEDGE_COLORS[node.knowledge] || KNOWLEDGE_COLORS.unknown;
@@ -420,10 +444,13 @@ function TimelineEvent({ node, showDomain, isSelected, onPress }: {
               {node.description}
             </Text>
           )}
+          {/* Tappable entity links */}
           {isSelected && (
             <View style={styles.entityTags}>
               {[...node.entities.persons, ...node.entities.places].slice(0, 5).map(e => (
-                <Text key={e} style={styles.entityTag}>{e}</Text>
+                <Pressable key={e} onPress={() => onSelectEntity(e)} hitSlop={4}>
+                  <Text style={styles.entityTag}>{e}</Text>
+                </Pressable>
               ))}
             </View>
           )}
@@ -434,6 +461,27 @@ function TimelineEvent({ node, showDomain, isSelected, onPress }: {
               {node.entities.events.map(e => (
                 <Text key={e} style={styles.connectionText}>{e}</Text>
               ))}
+            </View>
+          )}
+          {/* Action buttons */}
+          {isSelected && (
+            <View style={styles.actionRow}>
+              <Pressable
+                style={[styles.actionBtn, styles.actionBtnPrimary, cardRequested && styles.actionBtnDisabled]}
+                onPress={() => {
+                  if (cardRequested) return;
+                  setCardRequested(true);
+                  onGenerateCard(`Tell me about: ${node.title}`);
+                }}
+                disabled={cardRequested}
+              >
+                <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>
+                  {cardRequested ? '✦ Card queued' : '✦ Generate card'}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.actionBtn} onPress={onViewInMap}>
+                <Text style={styles.actionBtnText}>View in map</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -711,6 +759,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  actionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: colors.rule,
+  },
+  actionBtnPrimary: {
+    backgroundColor: colors.rubric,
+    borderColor: colors.rubric,
+  },
+  actionBtnDisabled: {
+    backgroundColor: colors.parchmentDark,
+    borderColor: colors.rule,
+  },
+  actionBtnText: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  actionBtnTextPrimary: {
+    color: colors.parchment,
   },
   eventDivider: {
     height: 1,
