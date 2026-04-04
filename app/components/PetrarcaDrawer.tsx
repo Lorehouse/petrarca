@@ -110,6 +110,11 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
           />
           {/* Voice Recall and Book Review now accessible via Review tab */}
           <NavItem
+            title="Timeline"
+            subtitle="Events across your curricula"
+            onPress={() => navigate('timeline', '/timeline')}
+          />
+          <NavItem
             title="Ancient Map"
             subtitle="Places from your curriculum"
             onPress={() => navigate('map', '/map')}
