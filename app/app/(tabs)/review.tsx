@@ -15,6 +15,9 @@ import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import EntitySheet from '../../components/EntitySheet';
 import AncientMap from '../../components/AncientMap';
+import KnowledgeExplorer from '../../components/KnowledgeExplorer';
+
+type ReviewTab = 'cards' | 'voice' | 'explore';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -686,6 +689,9 @@ export default function ReviewScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeEntityId, setActiveEntityId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ReviewTab>('cards');
+  const [exploreEntity, setExploreEntity] = useState<string | undefined>();
+  const [exploreYear, setExploreYear] = useState<number | undefined>();
   const offsetRef = useRef(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAtRef = useRef<number>(Date.now());
@@ -886,20 +892,34 @@ export default function ReviewScreen() {
   return (
     <View style={s.container}>
       <ScrollView ref={scrollRef} contentContainerStyle={s.content}>
-        {/* Minimal top bar */}
+        {/* Top bar with drawer */}
         <View style={s.header}>
           <View style={s.topActions}>
-            <Pressable onPress={() => router.push('/voice-elicitation')} style={s.voiceBtn}>
-              <Text style={s.voiceBtnText}>{'\uD83C\uDF99'} Voice</Text>
-            </Pressable>
+            <View />
             <Pressable onPress={() => setDrawerOpen(true)} style={s.drawerBtn}>
               <Text style={s.drawerBtnText}>{'\u2726'}</Text>
             </Pressable>
           </View>
         </View>
 
+        {/* ── Tab bar ── */}
+        <View style={s.reviewTabRow}>
+          {(['cards', 'voice', 'explore'] as ReviewTab[]).map(tab => (
+            <Pressable key={tab} style={[s.reviewTab, activeTab === tab && s.reviewTabActive]}
+              onPress={() => {
+                if (tab === 'voice') { router.push('/voice-elicitation' as any); return; }
+                setActiveTab(tab);
+                logEvent('review_tab_switch', { tab });
+              }}>
+              <Text style={[s.reviewTabText, activeTab === tab && s.reviewTabTextActive]}>
+                {tab === 'cards' ? 'Cards' : tab === 'voice' ? 'Voice' : 'Explore'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* ── Card stream ──────────────────────────────────────── */}
-        <>
+        {activeTab === 'cards' && <>
             {loading && (
               <View style={s.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.rubric} />
@@ -974,7 +994,15 @@ export default function ReviewScreen() {
                 <ActivityIndicator size="small" color={colors.textMuted} />
               </View>
             )}
-        </>
+        </>}
+
+        {/* ── Explore tab ── */}
+        {activeTab === 'explore' && (
+          <KnowledgeExplorer
+            initialEntity={exploreEntity}
+            initialYear={exploreYear}
+          />
+        )}
       </ScrollView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
@@ -1084,4 +1112,10 @@ const s = StyleSheet.create({
   newSessionBtn: { marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 24, paddingVertical: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, alignItems: 'center' },
   newSessionText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
   loadingMoreRow: { alignItems: 'center', paddingVertical: 16 },
+  // Review tab bar (Cards / Voice / Explore)
+  reviewTabRow: { flexDirection: 'row', marginHorizontal: layout.screenPadding, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  reviewTab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  reviewTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric },
+  reviewTabText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted },
+  reviewTabTextActive: { color: colors.rubric },
 });
