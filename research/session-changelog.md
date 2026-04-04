@@ -1,6 +1,34 @@
 # Knowledge System Implementation Status
 
-**Date**: April 4, 2026 (last updated — session 46: voice upload robustness)
+**Date**: April 4, 2026 (last updated — session 47: voice elicitation UX + book recall)
+
+## Session 47: Voice Elicitation UX + Book Recall (April 4, 2026)
+
+### Changes
+
+**1. "Know Nothing" button replaces ambiguous "Skip"**
+- Voice prompt screen now shows two options: **Know nothing** (rubric-colored, records `knowledge=unknown` with confidence 0.8) and **Skip** (muted, no signal).
+- New `POST /review/elicit-know-nothing` server endpoint. Fire-and-forget from client.
+- Files: `voice-elicitation.tsx`, `review-api.ts`, `research-server.py`.
+
+**2. Fix: chapter recall from book-detail was silently failing**
+- `book-detail.tsx:634` always passed `domain_id: ''` due to broken ternary (`book.topics?.[0] ? '' : ''`).
+- Server at `_handle_voice_elicitation` rejected empty `domain_id` with 400 — recordings saved to `pending.json` but never processed.
+- Fix: server auto-detects domain from `knowledge_items WHERE sources LIKE '%{book_id}%'`. Both handler and `run_voice_elicitation` have fallback detection.
+- Files: `research-server.py`, `review_engine.py`.
+
+**3. Voice prompts now load more instead of ending**
+- Previously: 10 candidates loaded, session ended at "done" when exhausted.
+- Now: tracks `seenNodeIds`, pre-fetches when 2 from end, auto-resumes via `useEffect` on `candidates.length` if new batch arrives while on done screen.
+- Files: `voice-elicitation.tsx`.
+
+**4. Book-level "Record what I remember" button**
+- Always-visible button on book-detail page, not tied to chapter selection. Uses `node_id: book:{book_id}`.
+- Server gathers ALL source texts for the book (up to 8), updates all linked knowledge_items.
+- Useful for Kindle-tracked books or loosely-chaptered reads.
+- Files: `book-detail.tsx`, `voice-elicitation.tsx`, `review-api.ts`, `review_engine.py`.
+
+---
 
 ## Session 46: Voice Upload Robustness (April 4, 2026)
 
