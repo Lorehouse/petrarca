@@ -362,12 +362,13 @@ Compare the learner's recall against the topic definition and book sources. Iden
 1. CAPTURED: Specific facts or concepts from the definition/sources that the learner mentioned (even if imprecisely). Be generous — paraphrases count.
 2. MISSED: The 2-3 most structurally important omissions — facts that serve as scaffolding for understanding the broader topic (key dates, actors, causal relationships). Prefer load-bearing facts over colorful details.
 3. INTERESTING: Things the learner said that go BEYOND the sources — personal connections, questions, hypotheses, links to other topics. These are valuable signals.
-4. WONDERINGS: Any "I wonder..." or questioning statements — these are research triggers.
+4. WONDERINGS: Extract ALL questioning or curious statements — "I wonder...", "I'm not sure if...", "was it...?", "I'd like to know...", hedged questions, speculative connections, anything where the learner is reaching beyond what they know. These are the most valuable signals — err on the side of including too many. Rephrase as clear research questions.
+5. RESEARCH_QUESTIONS: Specific questions that could be researched to deepen the learner's understanding. Derive from wonderings, gaps in knowledge, and interesting but uncertain claims. Frame as searchable questions.
 
 If the learner demonstrates extensive knowledge about adjacent or broader topics beyond the node definition, acknowledge this in feedback_summary and give partial credit in coverage_pct for related knowledge that connects to this topic.
 
 Output JSON:
-{{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["question1"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
+{{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["I wonder if X was related to Y", "Was it Z who did this?", "I'm curious whether..."], "research_questions": ["What was the relationship between X and Y?", "Did Z lead to the outcome described?"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
 
 
 HAMARQUIZEN_PROMPT = """Generate a Hamarquizen-style micro-lesson for reviewing a book topic.
@@ -2421,7 +2422,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             # Process "wonderings" — create research triggers (with dedup)
             wonderings = result.get('wonderings', [])
             research_triggers = []
-            for w in wonderings[:3]:
+            for w in wonderings[:5]:
                 # Skip if this exact wondering already exists for this node
                 existing_q = conn.execute(
                     "SELECT id FROM review_items WHERE item_type = 'voice_followup' AND curriculum_node_id = ? AND source_text = ?",
@@ -2527,7 +2528,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     # Trigger microlearning for wonderings, research triggers, and top missed fact
     ml_triggered = []
     # Wonderings → microlearning (purest signal — user literally said "I wonder...")
-    for w in wonderings[:2]:
+    for w in wonderings[:3]:
         try:
             card_id = create_microlearning_request(
                 query=w, source_node_id=node_id, source_domain=domain_id,
@@ -2537,18 +2538,20 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         except Exception as e:
             print(f'[voice→ml] wondering trigger failed: {e}', flush=True)
 
-    # Explicit research triggers from LLM extraction
-    for trigger in result.get('research_triggers_raw', result.get('research_triggers', []))[:2]:
-        q = trigger.get('question', '') if isinstance(trigger, dict) else str(trigger)
+    # Research questions from LLM extraction (derived from wonderings + gaps)
+    for q in result.get('research_questions', [])[:3]:
+        if isinstance(q, dict):
+            q = q.get('question', '') or q.get('query', '')
+        q = str(q).strip()
         if q and q not in [m['query'] for m in ml_triggered]:
             try:
                 card_id = create_microlearning_request(
                     query=q, source_node_id=node_id, source_domain=domain_id,
                 )
                 ml_triggered.append({'id': card_id, 'query': q})
-                print(f'[voice→ml] research trigger → {card_id}: {q[:60]}', flush=True)
+                print(f'[voice→ml] research question → {card_id}: {q[:60]}', flush=True)
             except Exception as e:
-                print(f'[voice→ml] research trigger failed: {e}', flush=True)
+                print(f'[voice→ml] research question failed: {e}', flush=True)
 
     # Top missed critical fact → targeted microlearning
     missed = result.get('missed', [])
