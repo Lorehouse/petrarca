@@ -1,0 +1,1888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potential Petrarca Collaborators</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  :root {
+    --parchment: #f5f0e8;
+    --parchment-deep: #ebe4d6;
+    --ink: #2c2416;
+    --ink-light: #5c4d3a;
+    --ink-faint: #8a7d6b;
+    --red-ink: #8b3a3a;
+    --red-ink-light: #a85454;
+    --blue-ink: #3a4f6b;
+    --blue-ink-light: #4a6a8f;
+    --green-ink: #3a5c3a;
+    --green-ink-light: #4a7a4a;
+    --gold: #b8960c;
+    --gold-light: #d4b24a;
+    --sienna: #8b5e3c;
+    --sienna-light: #a87a56;
+    --purple-ink: #5c3a6b;
+    --purple-ink-light: #7a4f8f;
+    --teal-ink: #2e5c5c;
+    --teal-ink-light: #3a7a7a;
+    --shadow: rgba(44, 36, 22, 0.08);
+    --shadow-deep: rgba(44, 36, 22, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scrollbar-color: var(--ink-faint) var(--parchment);
+  }
+
+  body {
+    font-family: 'Source Sans 3', 'Georgia', serif;
+    background: var(--parchment);
+    color: var(--ink);
+    line-height: 1.6;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(184, 150, 12, 0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(139, 58, 58, 0.02) 0%, transparent 40%),
+      radial-gradient(ellipse at 50% 80%, rgba(58, 79, 107, 0.02) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Subtle paper texture via noise */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0.3;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    padding: 4rem 0 3rem;
+    border-bottom: 1px solid rgba(44, 36, 22, 0.12);
+    margin-bottom: 2rem;
+  }
+
+  .header-ornament {
+    text-align: center;
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--ink-faint);
+    font-size: 1.1rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeDown 0.8s ease forwards;
+  }
+
+  .header-ornament::before,
+  .header-ornament::after {
+    content: '───';
+    margin: 0 1rem;
+    opacity: 0.4;
+  }
+
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
+    text-align: center;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeDown 0.8s 0.1s ease forwards;
+  }
+
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--red-ink);
+  }
+
+  .subtitle {
+    text-align: center;
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    font-size: 1.05rem;
+    color: var(--ink-light);
+    line-height: 1.7;
+    opacity: 0;
+    animation: fadeDown 0.8s 0.2s ease forwards;
+  }
+
+  .subtitle strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .header-meta {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    opacity: 0;
+    animation: fadeDown 0.8s 0.3s ease forwards;
+  }
+
+  /* ─── STATS BAR ─── */
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 2.5rem;
+    padding: 1.5rem 0;
+    margin-bottom: 1rem;
+    opacity: 0;
+    animation: fadeDown 0.8s 0.4s ease forwards;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-number {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    margin-top: 0.25rem;
+  }
+
+  /* ─── FILTER BAR ─── */
+  .filter-section {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--parchment);
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(44, 36, 22, 0.1);
+    transition: box-shadow 0.3s ease;
+  }
+
+  .filter-section.scrolled {
+    box-shadow: 0 4px 20px var(--shadow);
+  }
+
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .filter-btn {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.4rem 1rem;
+    border: 1px solid rgba(44, 36, 22, 0.15);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--ink-light);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover {
+    border-color: var(--ink-faint);
+    color: var(--ink);
+    background: rgba(44, 36, 22, 0.03);
+  }
+
+  .filter-btn.active {
+    background: var(--ink);
+    color: var(--parchment);
+    border-color: var(--ink);
+  }
+
+  .filter-btn .cat-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  .search-box {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    padding: 0.4rem 1rem;
+    border: 1px solid rgba(44, 36, 22, 0.15);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--ink);
+    width: 200px;
+    outline: none;
+    transition: border-color 0.25s ease;
+  }
+
+  .search-box::placeholder { color: var(--ink-faint); }
+  .search-box:focus { border-color: var(--ink-faint); }
+
+  /* ─── CATEGORY SECTIONS ─── */
+  .category-section {
+    margin: 3rem 0;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards;
+  }
+
+  .category-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid;
+  }
+
+  .category-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+  }
+
+  .category-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .category-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    padding: 0.15rem 0.5rem;
+    border: 1px solid rgba(44, 36, 22, 0.12);
+    border-radius: 2px;
+  }
+
+  .category-desc {
+    font-size: 0.9rem;
+    color: var(--ink-light);
+    font-style: italic;
+    margin: -0.75rem 0 1.5rem 0;
+    padding-left: 2.5rem;
+  }
+
+  /* Category colors */
+  .cat-pedagogy .category-header { border-color: var(--red-ink); }
+  .cat-pedagogy .category-title { color: var(--red-ink); }
+  .cat-pedagogy .card { --card-accent: var(--red-ink); --card-accent-light: var(--red-ink-light); }
+
+  .cat-classical .category-header { border-color: var(--blue-ink); }
+  .cat-classical .category-title { color: var(--blue-ink); }
+  .cat-classical .card { --card-accent: var(--blue-ink); --card-accent-light: var(--blue-ink-light); }
+
+  .cat-learning .category-header { border-color: var(--green-ink); }
+  .cat-learning .category-title { color: var(--green-ink); }
+  .cat-learning .card { --card-accent: var(--green-ink); --card-accent-light: var(--green-ink-light); }
+
+  .cat-tools .category-header { border-color: var(--purple-ink); }
+  .cat-tools .category-title { color: var(--purple-ink); }
+  .cat-tools .card { --card-accent: var(--purple-ink); --card-accent-light: var(--purple-ink-light); }
+
+  .cat-languages .category-header { border-color: var(--gold); }
+  .cat-languages .category-title { color: var(--gold); }
+  .cat-languages .card { --card-accent: var(--gold); --card-accent-light: var(--gold-light); }
+
+  .cat-history .category-header { border-color: var(--sienna); }
+  .cat-history .category-title { color: var(--sienna); }
+  .cat-history .card { --card-accent: var(--sienna); --card-accent-light: var(--sienna-light); }
+
+  .cat-academic .category-header { border-color: #5c3a3a; }
+  .cat-academic .category-title { color: #5c3a3a; }
+  .cat-academic .card { --card-accent: #5c3a3a; --card-accent-light: #7a5050; }
+
+  .cat-norwegian .category-header { border-color: var(--teal-ink); }
+  .cat-norwegian .category-title { color: var(--teal-ink); }
+  .cat-norwegian .card { --card-accent: var(--teal-ink); --card-accent-light: var(--teal-ink-light); }
+
+  /* ─── CARDS GRID ─── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    --card-accent: var(--ink);
+    --card-accent-light: var(--ink-light);
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(44, 36, 22, 0.08);
+    border-left: 3px solid var(--card-accent);
+    padding: 1.25rem 1.4rem;
+    transition: all 0.3s ease;
+    position: relative;
+    cursor: default;
+  }
+
+  .card:hover {
+    background: rgba(255, 255, 255, 0.75);
+    border-color: rgba(44, 36, 22, 0.12);
+    border-left-color: var(--card-accent);
+    box-shadow: 0 4px 20px var(--shadow);
+    transform: translateY(-1px);
+  }
+
+  .card.hidden {
+    display: none;
+  }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .card-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  .card-articles {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--card-accent);
+    background: rgba(44, 36, 22, 0.04);
+    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .card-site {
+    margin-bottom: 0.75rem;
+  }
+
+  .card-site a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--card-accent-light);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  .card-site a:hover {
+    border-bottom-color: var(--card-accent-light);
+  }
+
+  .card-desc {
+    font-size: 0.88rem;
+    color: var(--ink-light);
+    line-height: 1.55;
+    margin-bottom: 0.75rem;
+  }
+
+  .card-connection {
+    font-size: 0.8rem;
+    color: var(--card-accent);
+    padding: 0.5rem 0.7rem;
+    background: rgba(44, 36, 22, 0.025);
+    border-left: 2px solid var(--card-accent);
+    margin-top: auto;
+    line-height: 1.5;
+    font-style: italic;
+  }
+
+  .card-connection strong {
+    font-style: normal;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: block;
+    margin-bottom: 0.15rem;
+    opacity: 0.7;
+  }
+
+  .card-tags {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    font-size: 0.65rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 1px;
+  }
+
+  .tag-subscribed {
+    color: var(--green-ink);
+    background: rgba(58, 92, 58, 0.08);
+    border: 1px solid rgba(58, 92, 58, 0.15);
+  }
+
+  .tag-read {
+    color: var(--blue-ink);
+    background: rgba(58, 79, 107, 0.08);
+    border: 1px solid rgba(58, 79, 107, 0.15);
+  }
+
+  .tag-archived {
+    color: var(--sienna);
+    background: rgba(139, 94, 60, 0.08);
+    border: 1px solid rgba(139, 94, 60, 0.15);
+  }
+
+  .tag-top-pick {
+    color: var(--red-ink);
+    background: rgba(139, 58, 58, 0.08);
+    border: 1px solid rgba(139, 58, 58, 0.2);
+    font-weight: 600;
+  }
+
+  /* ─── FOOTER ─── */
+  footer {
+    margin-top: 4rem;
+    padding: 2rem 0;
+    border-top: 1px solid rgba(44, 36, 22, 0.1);
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+  }
+
+  footer .colophon {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1rem;
+    font-style: italic;
+    margin-bottom: 0.5rem;
+    color: var(--ink-light);
+  }
+
+  /* ─── NO RESULTS ─── */
+  .no-results {
+    text-align: center;
+    padding: 3rem;
+    color: var(--ink-faint);
+    font-style: italic;
+    font-size: 1.1rem;
+    display: none;
+  }
+
+  .no-results.visible {
+    display: block;
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .category-section:nth-child(1) { animation-delay: 0.1s; }
+  .category-section:nth-child(2) { animation-delay: 0.15s; }
+  .category-section:nth-child(3) { animation-delay: 0.2s; }
+  .category-section:nth-child(4) { animation-delay: 0.25s; }
+  .category-section:nth-child(5) { animation-delay: 0.3s; }
+  .category-section:nth-child(6) { animation-delay: 0.35s; }
+  .category-section:nth-child(7) { animation-delay: 0.4s; }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 768px) {
+    .container { padding: 0 1rem; }
+    header { padding: 2.5rem 0 2rem; }
+    .stats-bar { gap: 1.5rem; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .filter-controls { gap: 0.35rem; }
+    .filter-btn { font-size: 0.72rem; padding: 0.35rem 0.7rem; }
+    .search-box { width: 100%; order: -1; }
+    .category-desc { padding-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-ornament">From the Readwise Library</div>
+    <h1>Potential <em>Petrarca</em> Collaborators</h1>
+    <p class="subtitle">
+      A curated directory of <strong>84 bloggers, thinkers, and researchers</strong> from 11,598 Readwise items who work at the intersection of history pedagogy, learning science, knowledge tools, and classical education &mdash; the exact terrain where <strong>Petrarca</strong> operates.
+    </p>
+    <div class="header-meta">Compiled 2026-04-04 &middot; Filtered from RSS feeds, archived reads, and engaged articles</div>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-number">84</div>
+      <div class="stat-label">People Identified</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">8</div>
+      <div class="stat-label">Categories</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">11,598</div>
+      <div class="stat-label">Items Searched</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">5</div>
+      <div class="stat-label">Top Picks</div>
+    </div>
+  </div>
+</div>
+
+<div class="filter-section" id="filterSection">
+  <div class="container">
+    <div class="filter-controls">
+      <input type="text" class="search-box" id="searchBox" placeholder="Search names, sites, topics&hellip;">
+      <button class="filter-btn active" data-filter="all">All <span class="cat-dot" style="background:var(--ink);"></span></button>
+      <button class="filter-btn" data-filter="pedagogy"><span class="cat-dot" style="background:var(--red-ink);"></span>Pedagogy</button>
+      <button class="filter-btn" data-filter="classical"><span class="cat-dot" style="background:var(--blue-ink);"></span>Great Books</button>
+      <button class="filter-btn" data-filter="learning"><span class="cat-dot" style="background:var(--green-ink);"></span>Learning Science</button>
+      <button class="filter-btn" data-filter="tools"><span class="cat-dot" style="background:var(--purple-ink);"></span>Tools for Thought</button>
+      <button class="filter-btn" data-filter="languages"><span class="cat-dot" style="background:var(--gold);"></span>Classical Languages</button>
+      <button class="filter-btn" data-filter="history"><span class="cat-dot" style="background:var(--sienna);"></span>Public History</button>
+      <button class="filter-btn" data-filter="academic"><span class="cat-dot" style="background:#5c3a3a;"></span>Academic</button>
+      <button class="filter-btn" data-filter="norwegian"><span class="cat-dot" style="background:var(--teal-ink);"></span>Norwegian</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div id="categoriesContainer">
+
+    <!-- ═══ HISTORY & SOCIAL STUDIES PEDAGOGY ═══ -->
+    <section class="category-section cat-pedagogy" data-category="pedagogy">
+      <div class="category-header">
+        <span class="category-icon">&#x1F3DB;</span>
+        <h2 class="category-title">History &amp; Social Studies Pedagogy</h2>
+        <span class="category-count">18 people</span>
+      </div>
+      <p class="category-desc">People blogging about how to teach history &mdash; curriculum design, knowledge-rich approaches, pedagogical methods. Most directly relevant to Petrarca's domain.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="michael fordham clioetcetera history curriculum pedagogy knowledge-rich">
+          <div class="card-top">
+            <div class="card-name">Michael Fordham</div>
+            <div class="card-articles">103 articles</div>
+          </div>
+          <div class="card-site"><a href="https://clioetcetera.com" target="_blank" rel="noopener">clioetcetera.com</a></div>
+          <div class="card-desc">UK history education researcher. Writes about subject-specific pedagogy, curriculum design, and what it means to "understand" history. Posts like "Is 'understanding' a thing?" and "On teaching the canon" explore exactly the terrain Petrarca navigates.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His knowledge-rich history education work maps directly to Petrarca's curriculum nodes + comprehension-before-memory principle. The most aligned voice in this entire list.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="paula lobo lobworth history desirable difficulties causal reasoning">
+          <div class="card-top">
+            <div class="card-name">Paula Lobo</div>
+            <div class="card-articles">25 articles</div>
+          </div>
+          <div class="card-site"><a href="https://lobworth.com" target="_blank" rel="noopener">lobworth.com</a></div>
+          <div class="card-desc">History teacher writing about desirable difficulties, source analysis, and causal reasoning in history. Her post "Your brain is like a forest" is about being transparent with pupils about how learning works.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her work on making desirable difficulties visible to students echoes Petrarca's "dim familiar, don't hide" principle and the Michel Thomas philosophy of managing the learner's anxiety.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="ad astra per mundum adastrapermundum classics history teacher aeneid oakeshott">
+          <div class="card-top">
+            <div class="card-name">ad astra per mundum</div>
+            <div class="card-articles">48 articles</div>
+          </div>
+          <div class="card-site"><a href="https://adastrapermundum.com" target="_blank" rel="noopener">adastrapermundum.com</a></div>
+          <div class="card-desc">Classics/history teacher blog. Reading the Aeneid with teenagers, Oakeshott on classical education, reflections on teaching in a cathedral close. Beautiful intersection of classical education and reflective pedagogical practice.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>The blog's reflective approach to classical education &mdash; how reading ancient texts shapes understanding &mdash; aligns with Petrarca's "hooks, not facts" philosophy and temporal anchoring.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="dan allosso making history lifelong learning substack why read">
+          <div class="card-top">
+            <div class="card-name">Dan Allosso</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://substack.com/@danallosso" target="_blank" rel="noopener">MakingHistory &amp; Lifelong Learning (Substack)</a></div>
+          <div class="card-desc">Writes about reading, history, and lifelong learning. "Why Read?" is exactly the question Petrarca answers. The independent/lifelong learning angle is a direct match for a power-user reading tool.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His focus on lifelong historical learning outside formal education is precisely Petrarca's use case &mdash; curriculum-guided independent reading.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="harry fletcher-wood improving teaching evidence-based uncertain inferences practice">
+          <div class="card-top">
+            <div class="card-name">Harry Fletcher-Wood</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://improvingteaching.co.uk" target="_blank" rel="noopener">improvingteaching.co.uk</a></div>
+          <div class="card-desc">Evidence-based teaching researcher. "The power of uncertain inferences" and practice-based teacher training. Bridges cognitive science research and classroom reality.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His work on translating learning science into practice parallels Petrarca's mission of translating retention research into a reading tool.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="daisy christodoulou nomoremarking skills knowledge assessment eng lit">
+          <div class="card-top">
+            <div class="card-name">Daisy Christodoulou</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://substack.nomoremarking.com" target="_blank" rel="noopener">nomoremarking.com</a></div>
+          <div class="card-desc">UK education researcher driving the "skills vs knowledge" debate. "The fall of Eng Lit" and "Skills vs knowledge, 13 years on" argue for knowledge-rich curriculum and better assessment.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her knowledge-rich stance aligns with Petrarca's "facts first, then concepts" principle. Her assessment work connects to calibrated knowledge-state modeling.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="daniel willingham cognitive psychologist how knowledge helps background comprehension">
+          <div class="card-top">
+            <div class="card-name">Daniel T. Willingham</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.aft.org/ae/spring2006/willingham" target="_blank" rel="noopener">AFT &mdash; "How Knowledge Helps"</a></div>
+          <div class="card-desc">Cognitive psychologist whose work on background knowledge enabling reading comprehension is foundational. "How Knowledge Helps" is one of the most-cited pieces in knowledge-rich education.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His research is the theoretical foundation of Petrarca's 70% novelty zone and the entire claim-based knowledge modeling approach.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (76%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="kris boulton to the real understand remember comprehension retention gap">
+          <div class="card-top">
+            <div class="card-name">Kris Boulton</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://tothereal.wordpress.com" target="_blank" rel="noopener">...to the real.</a></div>
+          <div class="card-desc">"Why is it that students always seem to understand, but then never remember?" Directly addresses the comprehension-retention gap. Also writes on questioning as a teaching tool.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His central question is literally what Petrarca is designed to solve &mdash; the gap between comprehending an article and retaining its insights.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="lefthistoryteaching radical case knowledge-rich curriculum political">
+          <div class="card-top">
+            <div class="card-name">lefthistoryteaching</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://lefthistoryteaching.wordpress.com" target="_blank" rel="noopener">lefthistoryteaching.wordpress.com</a></div>
+          <div class="card-desc">"The Radical Case for a Knowledge-Rich Curriculum." Argues for knowledge-rich approaches from a progressive political perspective, countering the assumption that it's a conservative project.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's curriculum design doesn't privilege one political lens &mdash; it scaffolds understanding that lets readers form their own interpretations.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="missdcoxblog same homework 3 years repetition knowledge building keywords">
+          <div class="card-top">
+            <div class="card-name">missdcoxblog</div>
+            <div class="card-articles">4 articles</div>
+          </div>
+          <div class="card-site"><a href="https://missdcoxblog.wordpress.com" target="_blank" rel="noopener">missdcoxblog.wordpress.com</a></div>
+          <div class="card-desc">"The same homework for 3 years &mdash; how and why." Practical classroom approaches to building knowledge through strategic repetition. Also writes about why keyword knowledge is essential.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her practical repetition strategies mirror Petrarca's "books encode, system maintains" principle &mdash; strategic re-engagement rather than cramming.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="greg ashman filling the pail evidence-based cognitive science education">
+          <div class="card-top">
+            <div class="card-name">Greg Ashman</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://gregashman.wordpress.com" target="_blank" rel="noopener">Filling the Pail</a></div>
+          <div class="card-desc">Australian educator writing on evidence-based teaching, cognitive science in the classroom, and critical thinking. "Teaching for Understanding" explores the same territory as Petrarca's design.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His cognitive science approach to education aligns with Petrarca's grounding in learning science research rather than pedagogical intuition.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="tom sherrington teacherhead cpd feedback evidence-informed leadership">
+          <div class="card-top">
+            <div class="card-name">Tom Sherrington</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://teacherhead.com" target="_blank" rel="noopener">teacherhead.com</a></div>
+          <div class="card-desc">Education leadership writer. CPD design, making feedback count, and evidence-informed teaching practices. Influential voice in UK education circles.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His interest in systematizing professional learning connects to Petrarca's approach to systematizing independent reading and knowledge building.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="doug lemov teach like a champion read aloud participation evidence-based">
+          <div class="card-top">
+            <div class="card-name">Doug Lemov</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://teachlikeachampion.org" target="_blank" rel="noopener">teachlikeachampion.org</a></div>
+          <div class="card-desc">Author of "Teach Like a Champion." Writes about the power of read-aloud, strong classroom procedures, and evidence-based teaching routines. Hugely influential in K-12.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His focus on making reading central to education, and on systematic approaches to building comprehension, shares DNA with Petrarca.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="theeffortfuleducator spaced practice automaticity cognitive psychology classroom">
+          <div class="card-top">
+            <div class="card-name">theeffortfuleducator</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://theeffortfuleducator.com" target="_blank" rel="noopener">theeffortfuleducator.com</a></div>
+          <div class="card-desc">Applied cognitive psychology for classrooms. "An Ah-Ha Moment with Spaced Practice" and posts on automaticity. Translates research into practical classroom techniques.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's review system applies similar spaced practice principles but for independent reading rather than classroom instruction.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="ollie lovell edthreads curriculum stupid education">
+          <div class="card-top">
+            <div class="card-name">Ollie Lovell</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://edthreads.ollielovell.com" target="_blank" rel="noopener">EdThreads</a></div>
+          <div class="card-desc">"It's the curriculum, Stupid!" Curriculum-focused education writing that puts content knowledge at the center of good teaching.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's curriculum-as-bridge concept &mdash; 50-80 Opus-generated nodes organizing knowledge domains &mdash; is a radical take on curriculum design.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="cambridge school classics project blog pedagogy lottie mortimer">
+          <div class="card-top">
+            <div class="card-name">Cambridge School Classics Project</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://blog.cambridgescp.com" target="_blank" rel="noopener">blog.cambridgescp.com</a></div>
+          <div class="card-desc">History pedagogy interviews, including a conversation with Lottie Mortimer on teaching history through classics. Institutional voice with deep subject expertise.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their work bridging classics and history pedagogy reflects Petrarca's vision of cross-domain knowledge scaffolding.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (74%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="ingrid loken norwegian curriculum geography history boundary crossing academic">
+          <div class="card-top">
+            <div class="card-name">Ingrid L&oslash;ken</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://bera-journals.onlinelibrary.wiley.com/doi/full/10.1002/curj.247" target="_blank" rel="noopener">British Educational Research Association</a></div>
+          <div class="card-desc">Academic researching boundary crossing in the Norwegian national curriculum &mdash; how geography and history interact as subjects. Relevant to interdisciplinary curriculum design.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's overlapping curricula vision &mdash; where nodes from different domains connect &mdash; is a technological realization of boundary crossing.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="robert pondiscio knowledge revival hirsch curriculum deep thinking">
+          <div class="card-top">
+            <div class="card-name">Robert Pondiscio</div>
+            <div class="card-articles">4 articles</div>
+          </div>
+          <div class="card-site"><a href="https://thenext30years.substack.com" target="_blank" rel="noopener">The Next 30 Years (Substack)</a></div>
+          <div class="card-desc">"The Knowledge Revival." Leading advocate for E.D. Hirsch's knowledge-rich curriculum approach. Writes about content knowledge as the foundation for critical thinking.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca operationalizes the Hirschian insight &mdash; that background knowledge enables comprehension &mdash; into an actual knowledge-modeling reading tool.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ CLASSICAL EDUCATION & GREAT BOOKS ═══ -->
+    <section class="category-section cat-classical" data-category="classical">
+      <div class="category-header">
+        <span class="category-icon">&#x1F4DA;</span>
+        <h2 class="category-title">Classical Education &amp; Great Books</h2>
+        <span class="category-count">9 people</span>
+      </div>
+      <p class="category-desc">People thinking about canonical reading, classical education models, and the Great Books tradition.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="james hankins past enemy country great books history teaching public discourse">
+          <div class="card-top">
+            <div class="card-name">James Hankins</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.thepublicdiscourse.com/2023/08/89635/" target="_blank" rel="noopener">Public Discourse</a></div>
+          <div class="card-desc">"The Past As Enemy Country: Why Teachers of Great Books Should Be Teaching History, Too." Argues that Great Books stripped of historical context become shallow and misleading.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His argument that Great Books need historical context is literally what Petrarca's temporal hooks do &mdash; anchoring ideas to known events and causal chains.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (100%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="t. greer scholar's stage scholars-stage canonical reading east asian paideia silicon valley">
+          <div class="card-top">
+            <div class="card-name">The Scholar's Stage / T. Greer</div>
+            <div class="card-articles">48 articles</div>
+          </div>
+          <div class="card-site"><a href="https://scholars-stage.org" target="_blank" rel="noopener">scholars-stage.org</a></div>
+          <div class="card-desc">"A Guide Map for Reading the East Asian Canon," "The Silicon Valley Canon," "Quantum Libraries." A serious reader and thinker about intellectual formation, canonical reading programs, and the role of history in education.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His "guide maps" for canonical reading are a manual version of what Petrarca automates &mdash; structured paths through a knowledge domain with curriculum scaffolding.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="nadya williams classics professor socrates classical education modern">
+          <div class="card-top">
+            <div class="card-name">Nadya Williams</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://currentpub.com" target="_blank" rel="noopener">Current / Law &amp; Liberty</a></div>
+          <div class="card-desc">Classics professor writing about Socrates, classical education in modern context, and the cultural politics of the Great Books. "Drafting Socrates into the Culture Wars?"</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's domain-agnostic curriculum approach avoids the culture-war framing she critiques, focusing on knowledge scaffolding rather than ideological programs.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="erik ellis imaginative conservative classical education what is">
+          <div class="card-top">
+            <div class="card-name">Erik Ellis</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://theimaginativeconservative.org" target="_blank" rel="noopener">The Imaginative Conservative</a></div>
+          <div class="card-desc">"What Is a Classical Education?" and "Are the Great Books Enough to Revive Our Education System?" Probing essays on the foundations and limits of classical education.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His question about whether Great Books alone suffice echoes Petrarca's answer: you need curriculum structure, temporal hooks, and knowledge modeling too.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="shawn barnett circe dorothy sayers trivium child development wrong">
+          <div class="card-top">
+            <div class="card-name">Shawn Barnett</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.circeinstitute.org" target="_blank" rel="noopener">CiRCE Institute</a></div>
+          <div class="card-desc">"Dorothy Sayers Was Wrong: The Trivium and Child Development." A critical take on the foundational assumptions of the modern classical education movement from within the movement itself.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>If Sayers' developmental model is wrong, what replaces it? Petrarca's evidence-based approach to knowledge building offers a computational alternative.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="jonathan roberts ancient language institute classical schools not really classical">
+          <div class="card-top">
+            <div class="card-name">Jonathan Roberts</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://ancientlanguage.com/classical-schools-not-classical/" target="_blank" rel="noopener">Ancient Language Institute</a></div>
+          <div class="card-desc">"Classical Schools Are Not Really Classical." A provocative argument that modern "classical" schools have little in common with actual ancient and medieval educational practices.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's approach draws on actual learning science rather than nostalgic educational models &mdash; a genuinely modern take on ancient knowledge practices.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (77%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="francis miller argument academy hexagon literature teaching structured comprehension">
+          <div class="card-top">
+            <div class="card-name">Francis Miller</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.argumentacademy.com" target="_blank" rel="noopener">ArgumentAcademy.com</a></div>
+          <div class="card-desc">The argument claim hexagon model for teaching literature. Knowledge structures and argument structure maps. Systematic approaches to reading comprehension and structured argumentation.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His structured models for comprehension parallel Petrarca's atomic claims approach &mdash; both decompose reading into tractable knowledge units.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="bret devereaux unmitigated pedantry acoup popular history carolingian military dune">
+          <div class="card-top">
+            <div class="card-name">Bret Devereaux</div>
+            <div class="card-articles">19 articles</div>
+          </div>
+          <div class="card-site"><a href="https://acoup.blog" target="_blank" rel="noopener">A Collection of Unmitigated Pedantry</a></div>
+          <div class="card-desc">Popular history blogging at scale &mdash; Carolingian values, the Fremen Mirage, Roman traditionalism. Uses pop culture (Dune, Lord of the Rings) as entry points to serious historical analysis. Massive audience.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His approach of using familiar hooks to teach unfamiliar history embodies Petrarca's 70% novelty principle. His readers are exactly the audience for a knowledge-building reading tool.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="rose horowitch atlantic elite college students can't read books reading decline">
+          <div class="card-top">
+            <div class="card-name">Rose Horowitch</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.theatlantic.com/magazine/archive/2024/11/the-elite-college-students-who-cant-read-books/679945/" target="_blank" rel="noopener">The Atlantic</a></div>
+          <div class="card-desc">"The Elite College Students Who Can't Read Books." Viral article on the decline of sustained reading ability among college students. Catalyzed a national conversation about reading.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca is a direct response to this crisis &mdash; a tool designed to make nonfiction reading rewarding and retainable, not just consumed.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ LEARNING SCIENCE & SPACED REPETITION ═══ -->
+    <section class="category-section cat-learning" data-category="learning">
+      <div class="category-header">
+        <span class="category-icon">&#x1F9E0;</span>
+        <h2 class="category-title">Learning Science &amp; Spaced Repetition</h2>
+        <span class="category-count">6 people</span>
+      </div>
+      <p class="category-desc">People working on memory, retrieval practice, and learning &mdash; Petrarca's "beyond flashcards" approach would be a provocative conversation.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="soren bjornstad controlaltbackspace anki spaced repetition what to learn partnering">
+          <div class="card-top">
+            <div class="card-name">Soren Bjornstad</div>
+            <div class="card-articles">37 articles</div>
+          </div>
+          <div class="card-site"><a href="https://controlaltbackspace.org" target="_blank" rel="noopener">Control-Alt-Backspace</a></div>
+          <div class="card-desc">Deep Anki practitioner and thinker. "What to Learn with Anki," "How Much to Learn with Anki," "Partnering with Anki." Among the most thoughtful writers on spaced repetition as a life practice, not just a study technique.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Would be fascinated by Petrarca's critique of SRS for conceptual knowledge and the alternative &mdash; elaborative retrieval, connection-based resurfacing, curriculum nodes instead of flashcards.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="andy matuschak comprehension before memory doing-centric explanatory mediums mnemonic">
+          <div class="card-top">
+            <div class="card-name">Andy Matuschak</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://andymatuschak.org" target="_blank" rel="noopener">andymatuschak.org</a></div>
+          <div class="card-desc">Already cited in Petrarca's design docs. "Comprehension before memory" comes from his research. Work on mnemonic mediums, doing-centric explanatory mediums, and AI ethics in invention.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca is arguably the most ambitious implementation of his research insights &mdash; building "comprehension before memory" into a complete reading system.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="cedric chin commoncog land expand reading accelerated expertise deliberate practice">
+          <div class="card-top">
+            <div class="card-name">Cedric Chin</div>
+            <div class="card-articles">6 articles</div>
+          </div>
+          <div class="card-site"><a href="https://commoncog.com" target="_blank" rel="noopener">Commoncog</a></div>
+          <div class="card-desc">"The Land and Expand Strategy for Reading" and "Accelerated Expertise." Thinks seriously about how reading translates to real expertise. Also critiques deliberate practice dogma.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His reading-to-expertise pipeline maps to Petrarca's full loop: read &rarr; model claims &rarr; build curriculum &rarr; review &rarr; deepen. The "land and expand" strategy is what curriculum nodes enable.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="henrik karlsson escaping flatland remember reading books kids childhoods exceptional">
+          <div class="card-top">
+            <div class="card-name">Henrik Karlsson</div>
+            <div class="card-articles">11 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.henrikkarlsson.xyz" target="_blank" rel="noopener">henrikkarlsson.xyz</a></div>
+          <div class="card-desc">"Remember, remember," "Reading challenging books with kids," "Childhoods of exceptional people," "Essays the size of cathedrals." Beautifully written essays on learning, memory, reading, and intellectual development.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His "Remember, remember" essay engages directly with retention. His writing on reading challenging material connects to Petrarca's scaffolded knowledge approach.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="scott h young ultralearning self-directed learning books recommendations">
+          <div class="card-top">
+            <div class="card-name">Scott H Young</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.scotthyoung.com" target="_blank" rel="noopener">scotthyoung.com</a></div>
+          <div class="card-desc">"Ultralearning" author. Writes about self-directed learning at scale, ambitious learning projects, and evidence-based study techniques. Large audience of independent learners.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His audience of self-directed learners is Petrarca's target user base. The tool operationalizes many principles he writes about.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="moritz wallawitsch remnote scaling knowledge podcast spaced repetition knowledge creation">
+          <div class="card-top">
+            <div class="card-name">Moritz Wallawitsch</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://scalingknowledge.substack.com" target="_blank" rel="noopener">Scaling Knowledge (Substack / Podcast)</a></div>
+          <div class="card-desc">Co-founder of RemNote. Hosts the "Scaling Knowledge" podcast covering spaced repetition, knowledge creation, novelty search in education, and AI. Episode on "Spaced Repetition for Knowledge Creation" goes beyond drill-based SRS.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>RemNote is the closest existing tool to Petrarca's vision. His podcast episode on SR for knowledge creation (not just memorization) directly intersects with Petrarca's "comprehension before memory" principle.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (88%)</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ TOOLS FOR THOUGHT & PKM ═══ -->
+    <section class="category-section cat-tools" data-category="tools">
+      <div class="category-header">
+        <span class="category-icon">&#x1F527;</span>
+        <h2 class="category-title">Tools for Thought &amp; PKM</h2>
+        <span class="category-count">11 people</span>
+      </div>
+      <p class="category-desc">People building or writing about knowledge management tools &mdash; would appreciate the technical architecture of atomic claims, curriculum nodes, and novelty detection.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="eleanor konik obsidian history phoenician konik method roundup note-taking">
+          <div class="card-top">
+            <div class="card-name">Eleanor Konik</div>
+            <div class="card-articles">7 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.eleanorkonik.com" target="_blank" rel="noopener">eleanorkonik.com</a></div>
+          <div class="card-desc">History/fantasy writer AND Obsidian power user. Created the Konik Method for note-taking, ran the Obsidian Roundup newsletter. Also researches Phoenician maritime history. The rare person who straddles history research and tools-for-thought.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>She'd probably get the full Petrarca vision fastest &mdash; someone who personally needs both the history knowledge scaffolding AND the technical PKM architecture.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="gordon brander subconscious notes conversations time knowledge gardening recursive">
+          <div class="card-top">
+            <div class="card-name">Gordon Brander</div>
+            <div class="card-articles">24 articles</div>
+          </div>
+          <div class="card-site"><a href="https://subconscious.substack.com" target="_blank" rel="noopener">Squishy Computer (Substack)</a></div>
+          <div class="card-desc">"Notes are conversations across time," "Knowledge gardening is recursive," "Getting lost in the land of ideas." Building Subconscious (decentralized notes protocol). Thinks deeply about the nature of knowledge tools.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's atomic claims architecture &mdash; where claims are the fundamental unit, not documents &mdash; resonates with his vision of composable, interconnected knowledge.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="maggie appleton digital gardens visual essays tools thought design knowledge">
+          <div class="card-top">
+            <div class="card-name">Maggie Appleton</div>
+            <div class="card-articles">32 articles</div>
+          </div>
+          <div class="card-site"><a href="https://maggieappleton.com" target="_blank" rel="noopener">maggieappleton.com</a></div>
+          <div class="card-desc">Visual essayist and designer working on tools for thought, digital gardens, and knowledge tools. Creates illustrated explorations of complex ideas. Currently writing about AI and the Enlightenment.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her design-oriented thinking about knowledge tools &mdash; how interfaces shape understanding &mdash; connects to Petrarca's "dim familiar, don't hide" and knowledge-diff interface research.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="alexander rink goedel unleashing mind pkm knowledge maps amplenote remembrall">
+          <div class="card-top">
+            <div class="card-name">Alexander Rink</div>
+            <div class="card-articles">9 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.goedel.io" target="_blank" rel="noopener">goedel.io</a></div>
+          <div class="card-desc">"Unleashing the Mind" series reviewing PKM tools and knowledge mapping approaches. "Where is my Ariadne?" explores the challenge of navigating complex knowledge spaces.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His "Ariadne" question &mdash; how to navigate knowledge spaces &mdash; is answered by Petrarca's curriculum nodes serving as a map through domain knowledge.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="geoffrey litt ink switch interfaces thinking malleable software surgeon">
+          <div class="card-top">
+            <div class="card-name">Geoffrey Litt</div>
+            <div class="card-articles">13 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.geoffreylitt.com" target="_blank" rel="noopener">geoffreylitt.com</a></div>
+          <div class="card-desc">Ink &amp; Switch researcher. "Thinking about the interfaces with which we think," malleable software, AI copilots vs. HUDs. Works on making software adaptable to individual thinking styles.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca is a malleable reading interface &mdash; one that adapts its display based on the reader's knowledge state. His research agenda directly informs this approach.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="alexander obenauer item computing thinking interfaces experiments weekly">
+          <div class="card-top">
+            <div class="card-name">Alexander Obenauer</div>
+            <div class="card-articles">12 articles</div>
+          </div>
+          <div class="card-site"><a href="https://alexanderobenauer.com" target="_blank" rel="noopener">alexanderobenauer.com</a></div>
+          <div class="card-desc">Exploring item-based computing and new interfaces for thinking. Weekly experiment logs documenting explorations of how we interact with information and knowledge.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His item-based computing research parallels Petrarca's atomic claims as fundamental units &mdash; both reject the document as the primary container.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="jamie miles jamoe hqa notes nonfiction highlight question answer reading">
+          <div class="card-top">
+            <div class="card-name">Jamie Miles</div>
+            <div class="card-articles">4 articles</div>
+          </div>
+          <div class="card-site"><a href="https://words.jamoe.org" target="_blank" rel="noopener">Jamoe</a></div>
+          <div class="card-desc">HQ&amp;A (Highlight, Question &amp; Answer) method for nonfiction reading. Systematic approach to extracting and retaining knowledge from books. "Up, Down, and Across" note-taking upgrades.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His manual HQ&amp;A process is essentially what Petrarca automates &mdash; extracting claims, generating questions, and building review cycles from reading.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="mark mcelroy roam zettelkasten knowledge graph daily notes readwise">
+          <div class="card-top">
+            <div class="card-name">Mark McElroy</div>
+            <div class="card-articles">9 articles</div>
+          </div>
+          <div class="card-site"><a href="https://markmcelroy.com" target="_blank" rel="noopener">markmcelroy.com</a></div>
+          <div class="card-desc">Knowledge graphs, Zettelkasten, Roam Research. "How to Use the Knowledge Graph" and "The Feng Shui of Zettelkasten." Also writes about using Readwise highlights as journaling prompts.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>He's working with Readwise data (like Petrarca) and thinking about knowledge graphs &mdash; Petrarca's curriculum graph is a more structured take on the same vision.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="pkm beth medium note-taking workflow reading routines fiction nerd">
+          <div class="card-top">
+            <div class="card-name">PKM Beth</div>
+            <div class="card-articles">5 articles</div>
+          </div>
+          <div class="card-site"><a href="https://medium.com/@pkmeth" target="_blank" rel="noopener">Medium</a></div>
+          <div class="card-desc">"My Note-Taking Workflow," "My Reading Routines as a PKM Fan," "How I Read Fiction as a Note-taking Nerd." Practical PKM workflows centered on reading.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her reading-centric PKM approach is the manual version of what Petrarca automates &mdash; she's the ideal early adopter profile.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="anne-laure le cunff ness labs knowledge web learning metacognition dunning kruger">
+          <div class="card-top">
+            <div class="card-name">Anne-Laure Le Cunff</div>
+            <div class="card-articles">4 articles</div>
+          </div>
+          <div class="card-site"><a href="https://nesslabs.com" target="_blank" rel="noopener">Ness Labs</a></div>
+          <div class="card-desc">Ness Labs &mdash; mindful productivity, learning science, and knowledge tools. Writes about metacognition, the Dunning-Kruger effect, and building personal knowledge webs.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her interest in metacognition and self-awareness of knowledge gaps connects to Petrarca's knowledge-state modeling &mdash; making invisible knowledge visible.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="philipp temmel creativerly pkm note-taking setup tools review">
+          <div class="card-top">
+            <div class="card-name">Philipp Temmel</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://creativerly.com" target="_blank" rel="noopener">Creativerly</a></div>
+          <div class="card-desc">PKM tool reviews and workflows. "Note taking for the next decade," "How to build, maintain, and value your PKM setup." Covers the tools-for-thought ecosystem.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>As a PKM tool reviewer, he'd be interested in Petrarca's novel approach &mdash; knowledge modeling built into reading rather than bolt-on note-taking.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ CLASSICAL LANGUAGES & PEDAGOGY ═══ -->
+    <section class="category-section cat-languages" data-category="languages">
+      <div class="category-header">
+        <span class="category-icon">&#x1F4DC;</span>
+        <h2 class="category-title">Classical Languages &amp; Pedagogy</h2>
+        <span class="category-count">12 people</span>
+      </div>
+      <p class="category-desc">People building tools and methods for learning classical languages &mdash; technical overlap with Petrarca's computational approach to knowledge scaffolding.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="james tauber jktauber vocabulary travelling salesman generating readers greek plato">
+          <div class="card-top">
+            <div class="card-name">James Tauber</div>
+            <div class="card-articles">35 articles</div>
+          </div>
+          <div class="card-site"><a href="https://jktauber.com" target="_blank" rel="noopener">jktauber.com</a></div>
+          <div class="card-desc">"Programmed Vocabulary Learning as a Travelling Salesman Problem," "Generating Readers" for Greek, "The Core Vocabulary of New Testament Greek." Building computational tools for classical language learning.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>He's solving the same class of problems &mdash; computationally optimizing the path through a knowledge domain. His TSP framing of vocabulary learning parallels Petrarca's curriculum ordering.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="thepatrologist patrologist reading practice gtm communicative time language learning greek">
+          <div class="card-top">
+            <div class="card-name">thepatrologist</div>
+            <div class="card-articles">57 articles</div>
+          </div>
+          <div class="card-site"><a href="https://thepatrologist.com" target="_blank" rel="noopener">thepatrologist.com</a></div>
+          <div class="card-desc">Massive output on classical language pedagogy. Reading practice, grammar-translation vs. communicative approaches, "Time and language learning: Friend, Enemy, Resource, and Measure." Also teaching Pliny AP courses.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His debate on GTM vs. communicative approaches maps to Petrarca's "comprehension before memory" &mdash; both reject drill-first in favor of meaning-first learning.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="daniel pettersson latinitium legentibus reading method latin improve ten minutes">
+          <div class="card-top">
+            <div class="card-name">Daniel Pettersson</div>
+            <div class="card-articles">5 articles</div>
+          </div>
+          <div class="card-site"><a href="https://latinitium.com" target="_blank" rel="noopener">Latinitium</a></div>
+          <div class="card-desc">"The Legentibus Reading Method: How to read a Latin text to maximize learning." Systematic approaches to Latin reading, including daily practice routines and study techniques for classical texts.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His reading method is an approach to incremental reading for classical texts &mdash; Petrarca applies similar principles to nonfiction in any language.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="justin slocum bailey indwelling language pre-reading three-reading comprehensible input">
+          <div class="card-top">
+            <div class="card-name">Justin Slocum Bailey</div>
+            <div class="card-articles">6 articles</div>
+          </div>
+          <div class="card-site"><a href="http://indwellinglanguage.com" target="_blank" rel="noopener">Indwelling Language</a></div>
+          <div class="card-desc">"Pre-Reading and Three-Reading" and comprehensible input approaches to language learning. Advocates for meaning-first acquisition. One of the few posts read to 100% in the Readwise library.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His meaning-first, comprehensible-input philosophy directly parallels Petrarca's comprehension-before-memory principle. Both fight the drill-first instinct.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (100%)</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="colin gorrie old english llpsi classical chinese poetry ancient language institute">
+          <div class="card-top">
+            <div class="card-name">Colin Gorrie</div>
+            <div class="card-articles">5 articles</div>
+          </div>
+          <div class="card-site"><a href="https://colingorrie.substack.com" target="_blank" rel="noopener">colingorrie.substack.com</a></div>
+          <div class="card-desc">Old English LLPSI (Lingua Latina Per Se Illustrata adapted for OE), classical Chinese poetry guides, the Frankish paradox. Bridges classical and medieval language pedagogy.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His graded reader approach to multiple ancient languages mirrors Petrarca's graduated difficulty through curriculum scaffolding.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="ryan hammill ancient language institute greek hard ekho vergil press">
+          <div class="card-top">
+            <div class="card-name">Ryan Hammill</div>
+            <div class="card-articles">12 articles</div>
+          </div>
+          <div class="card-site"><a href="https://ancientlanguage.com" target="_blank" rel="noopener">Ancient Language Institute</a></div>
+          <div class="card-desc">"Does Ancient Greek Have to Be Hard?" Building actual tools (Ekho, Vergil Press) for classical language education. Also publishes interviews on classical education reform.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>He's building educational tools for classical languages &mdash; a parallel track to Petrarca's tools for historical knowledge. Potential technical collaboration.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="carla hurt found in antiquity medulla latin textbook autodidact open source">
+          <div class="card-top">
+            <div class="card-name">Carla Hurt</div>
+            <div class="card-articles">19 articles</div>
+          </div>
+          <div class="card-site"><a href="https://foundinantiquity.com" target="_blank" rel="noopener">Found in Antiquity</a></div>
+          <div class="card-desc">The Medulla project &mdash; an open-source compatibility standard for Latin textbooks. Also writes about Latin autodidact methods: "Latin autodidacts, you're working way too hard!" Tiered readers and graded materials.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her open-source, interoperable approach to language learning materials parallels Petrarca's cross-article knowledge tracking. Both reject closed, monolithic systems.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="tom hendrickson neo-latin eidolon medium teaching broader curriculum perpetua">
+          <div class="card-top">
+            <div class="card-name">Tom Hendrickson</div>
+            <div class="card-articles">13 articles</div>
+          </div>
+          <div class="card-site"><a href="https://eidolon.pub" target="_blank" rel="noopener">Eidolon / Medium</a></div>
+          <div class="card-desc">"Why So Few Of Us Teach Neo-Latin" and "A Defining Moment for Neo-Latin Studies." Advocates for expanding the Latin curriculum beyond the classical canon. Passion of Perpetua pedagogy award.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His push to broaden what counts as "Latin literature" parallels Petrarca's domain-agnostic approach &mdash; any knowledge domain can be scaffolded.</div>
+          <div class="card-tags">
+            <span class="tag tag-archived">Archived</span>
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="claire mieher wheelock llpsi greek prose writing combining methods latin">
+          <div class="card-top">
+            <div class="card-name">Claire Mieher</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.clairemieher.com" target="_blank" rel="noopener">clairemieher.com</a></div>
+          <div class="card-desc">"Combining Wheelock's &amp; LLPSI: An Introduction" and "Greek Prose Writing." Practical approaches to integrating different Latin teaching methods into a coherent curriculum.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her method-integration approach mirrors Petrarca's synthesis of multiple learning theories (SRS + elaborative retrieval + curriculum scaffolding) into one system.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="quinquennium classics teaching ovid outreach jact latin camp trainee teacher">
+          <div class="card-top">
+            <div class="card-name">QUINQUENNIUM</div>
+            <div class="card-articles">5 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.quinquennium.com" target="_blank" rel="noopener">quinquennium.com</a></div>
+          <div class="card-desc">Teaching Ovid unseens, classics outreach, JACT Latin Camp experiences. Written by multiple contributors (Dom, Laurens Macklon, Ollie) involved in UK classics education.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their hands-on teaching reflections &mdash; how to make classical texts accessible &mdash; connects to Petrarca's scaffolding approach for complex knowledge.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="kathleen schuhl living latin pedagogy ap exam medium survival">
+          <div class="card-top">
+            <div class="card-name">Kathleen Schuhl</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://medium.com/in-medias-res" target="_blank" rel="noopener">Medium (In Medias Res)</a></div>
+          <div class="card-desc">"Can Living Latin Pedagogy Survive the AP Exam?" Explores the tension between communicative language teaching and standardized testing demands.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>The tension she identifies &mdash; deep understanding vs. testable knowledge &mdash; is what Petrarca's calibrated assessment tries to resolve.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="steven hunt classicsforall speaking latin good outreach value">
+          <div class="card-top">
+            <div class="card-name">Steven Hunt</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://classicsforall.org.uk" target="_blank" rel="noopener">classicsforall.org.uk</a></div>
+          <div class="card-desc">"Why speaking Latin is good for you" and "On the value of looking again." Classics outreach advocate exploring how classical languages benefit broader learning.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His argument about the transferable cognitive benefits of classical language study connects to Petrarca's cross-domain knowledge scaffolding.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (13%)</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ HISTORY BLOGGING & PUBLIC HISTORY ═══ -->
+    <section class="category-section cat-history" data-category="history">
+      <div class="category-header">
+        <span class="category-icon">&#x1F30D;</span>
+        <h2 class="category-title">History Blogging &amp; Public History</h2>
+        <span class="category-count">7 people</span>
+      </div>
+      <p class="category-desc">People making history accessible &mdash; would appreciate Petrarca's approach to knowledge scaffolding and the temporal hooks retention mechanism.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="isaac samuel african history extra non-western perspectives africa europe decolonize">
+          <div class="card-top">
+            <div class="card-name">Isaac Samuel</div>
+            <div class="card-articles">11 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.africanhistoryextra.com" target="_blank" rel="noopener">African History Extra</a></div>
+          <div class="card-desc">"When Africa discovered Europe," "The Aksumite empire between Rome and India," "Acemoglu in Kongo." Bringing non-Western history perspectives to a wider audience with serious scholarship.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's cross-domain curriculum nodes could scaffold understanding of African history by connecting it to European timelines readers already know &mdash; exactly the temporal hooks approach.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="historian's sketchpad ralphtorta samottewillsoulsby medieval carolingian charlemagne capetians">
+          <div class="card-top">
+            <div class="card-name">The Historian's Sketchpad</div>
+            <div class="card-articles">8 articles</div>
+          </div>
+          <div class="card-site"><a href="https://salutemmundo.wordpress.com" target="_blank" rel="noopener">salutemmundo.wordpress.com</a></div>
+          <div class="card-desc">Medieval history blogging by ralphtorta and samottewillsoulsby. Carolingian period, Charlemagne, early Capetians, Marc Bloch. Exactly the period Petrarca's Sicily curriculum covers.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their Carolingian focus overlaps directly with Petrarca's existing curriculum. They'd see how temporal hooks and entity profiles could enhance their readers' understanding.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+            <span class="tag tag-archived">Archived</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="sean book and sword military history ancient world arms armour">
+          <div class="card-top">
+            <div class="card-name">Sean / Book and Sword</div>
+            <div class="card-articles">79 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.bookandsword.com" target="_blank" rel="noopener">bookandsword.com</a></div>
+          <div class="card-desc">Military history from ancient to medieval. Conferences on arms and armour, living history events. "There Is no Need to Write or Teach History in an Intellectual Sewer."</div>
+          <div class="card-connection"><strong>Why they'd care</strong>A prolific history blogger whose readers would benefit from Petrarca's knowledge scaffolding to connect battles, leaders, and eras into a coherent timeline.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="philological crocodile roman republic classical reading lists societal collapse">
+          <div class="card-top">
+            <div class="card-name">The Philological Crocodile</div>
+            <div class="card-articles">12 articles</div>
+          </div>
+          <div class="card-site"><a href="https://philologicalcrocodile.wordpress.com" target="_blank" rel="noopener">philologicalcrocodile.wordpress.com</a></div>
+          <div class="card-desc">Roman Republic reading lists, "Societal Collapse in the Roman Republic: a reading list," and "The Fall of the Roman Republic Was a Family Affair." Curated reading paths through classical history.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their curated reading lists are the manual equivalent of Petrarca's algorithmic article selection &mdash; guiding readers through a domain in a structured way.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="antigone journal classics classical education ancient world publication">
+          <div class="card-top">
+            <div class="card-name">Antigone Journal</div>
+            <div class="card-articles">283 articles</div>
+          </div>
+          <div class="card-site"><a href="https://antigonejournal.com" target="_blank" rel="noopener">Antigone</a></div>
+          <div class="card-desc">Major classics publication. "Education in the cave," "Lord Byron and Classical Education," interviews with Averil Cameron. Covers the full spectrum of classical world engagement.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>As a publication making classics accessible, they'd appreciate a tool that helps readers build the background knowledge to engage more deeply with classical content.</div>
+          <div class="card-tags">
+            <span class="tag tag-subscribed">Subscribed</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="hai-di nguyen white attic shakespeare hamlet literary analysis dover wilson turgenev">
+          <div class="card-top">
+            <div class="card-name">Hai-Di Nguyen</div>
+            <div class="card-articles">6 articles</div>
+          </div>
+          <div class="card-site"><a href="https://thelittlewhiteattic.blogspot.com" target="_blank" rel="noopener">The Little White Attic</a></div>
+          <div class="card-desc">Deep Shakespeare analysis, Turgenev's "Hamlet and Don Quixote," and literary performance reviews. Posts read to 100% &mdash; clearly engaging material on close reading and literary interpretation.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their deep-reading practice &mdash; connecting texts across traditions &mdash; is exactly what Petrarca's cross-article claim tracking enables at scale.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (100%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="henry oliver common reader quest literature meaning world bloom silicon valley">
+          <div class="card-top">
+            <div class="card-name">Henry Oliver</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://www.commonreader.co.uk" target="_blank" rel="noopener">The Common Reader</a></div>
+          <div class="card-desc">"The Reader's Quest: How literature helps us find meaning and understand the world." Also "Harold Bloom in Silicon Valley." Bridges literary criticism and contemporary culture.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His argument that reading builds understanding (not just information) aligns with Petrarca's "hooks, not facts" philosophy.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ ACADEMIC RESEARCHERS ═══ -->
+    <section class="category-section cat-academic" data-category="academic">
+      <div class="category-header">
+        <span class="category-icon">&#x1F393;</span>
+        <h2 class="category-title">Academic Researchers</h2>
+        <span class="category-count">18 people</span>
+      </div>
+      <p class="category-desc">Researchers whose published work directly intersects with Petrarca's approach &mdash; knowledge tracing, free recall, reading comprehension, spaced repetition, and educational AI. From <code>research/academic-landscape-and-collaborations.md</code>.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="andrew lan umass amherst gencat generative adaptive testing llm open-ended knowledge assessment">
+          <div class="card-top">
+            <div class="card-name">Andrew Lan</div>
+            <div class="card-articles">Priority #1</div>
+          </div>
+          <div class="card-site"><a href="https://people.umass.edu/~andrewlan/" target="_blank" rel="noopener">UMass Amherst</a></div>
+          <div class="card-desc">GENCAT (2026) &mdash; using LLMs for open-ended knowledge assessment, not just binary correct/incorrect. Won the U.S. Dept. of Education's Automated Scoring Challenge for reading comprehension.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>GENCAT is essentially what Petrarca does: using LLMs to assess open-ended responses (voice recall) rather than multiple choice. His reading comprehension scoring directly addresses Petrarca's assessment challenge.</div>
+          <div class="card-tags">
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="jeremy manning dartmouth naturalistic free recall narrative memory scoring">
+          <div class="card-top">
+            <div class="card-name">Jeremy Manning</div>
+            <div class="card-articles">Priority #2</div>
+          </div>
+          <div class="card-site"><a href="https://faculty-directory.dartmouth.edu/jeremy-r-manning" target="_blank" rel="noopener">Dartmouth College</a></div>
+          <div class="card-desc">Naturalistic Free Recall dataset (2024) &mdash; 229 participants listened to spoken narratives and freely recalled them. Uses LLMs for event segmentation and embedding-based recall scoring.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His dataset and scoring method are the closest existing research to Petrarca's voice knowledge dumps. His finding that recalls preserve "essential narrative elements but not fine-scale details" validates claim-level tracking.</div>
+          <div class="card-tags">
+            <span class="tag tag-top-pick">Top Pick</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="jeffrey zemla syracuse snafu semantic network free recall knowledge structure">
+          <div class="card-top">
+            <div class="card-name">Jeffrey Zemla</div>
+            <div class="card-articles">Priority #3</div>
+          </div>
+          <div class="card-site"><a href="https://scholar.google.com/citations?user=wYL1tVcAAAAJ" target="_blank" rel="noopener">Syracuse University</a></div>
+          <div class="card-desc">SNAFU (Semantic Network and Fluency Utility) &mdash; estimates semantic networks from verbal fluency data. 2026 paper on individual-level knowledge structure estimation from free recall.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>When a user does a voice dump about Roman history, the order and clustering of concepts reveals their mental knowledge structure. SNAFU could analyze Petrarca's voice transcripts.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="alexandra list penn state prior knowledge multiple texts documents model integration">
+          <div class="card-top">
+            <div class="card-name">Alexandra List</div>
+            <div class="card-articles">Priority #4</div>
+          </div>
+          <div class="card-site"><a href="https://ed.psu.edu/directory/dr-alexandra-list" target="_blank" rel="noopener">Penn State University</a></div>
+          <div class="card-desc">2025 framework for how learners integrate prior knowledge with multiple texts &mdash; distinguishing "assimilative" vs. "critical" integration. Expands the Documents Model Framework.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca tracks exactly what her framework describes &mdash; how readers integrate knowledge across dozens of self-selected sources over weeks. Naturalistic data she can't get from controlled studies.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="ivar braten oslo norway epistemic cognition multiple document comprehension reading">
+          <div class="card-top">
+            <div class="card-name">Ivar Br&aring;ten</div>
+            <div class="card-articles">Priority #5</div>
+          </div>
+          <div class="card-site"><a href="https://www.uv.uio.no/iped/english/people/aca/ivarbr/" target="_blank" rel="noopener">University of Oslo</a></div>
+          <div class="card-desc">Pioneering research on epistemic cognition in multiple document literacy. Studies how readers' beliefs about knowledge affect how they integrate conflicting sources. Norwegian &mdash; natural geographic connection.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His finding that reading conflicting documents changes epistemic beliefs suggests Petrarca should deliberately surface conflicting sources. His epistemic cognition dimensions could become new knowledge-model dimensions.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="sam wineburg stanford historical thinking unnatural acts reading like historian sheg">
+          <div class="card-top">
+            <div class="card-name">Sam Wineburg</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://sheg.stanford.edu/" target="_blank" rel="noopener">Stanford (SHEG)</a></div>
+          <div class="card-desc">"Historical Thinking and Other Unnatural Acts" (2001). Created "Reading Like a Historian" curriculum (14M+ downloads). Research on how historians read: sourcing, contextualization, corroboration.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His core finding &mdash; that historical thinking requires explicit scaffolding &mdash; validates Petrarca's entire approach. Could Petrarca help readers develop these skills across self-selected reading?</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="danielle mcnamara asu istart coh-metrix reading comprehension learning engineering">
+          <div class="card-top">
+            <div class="card-name">Danielle McNamara</div>
+            <div class="card-articles">Priority #6</div>
+          </div>
+          <div class="card-site"><a href="https://search.asu.edu/profile/6103740" target="_blank" rel="noopener">Arizona State University</a></div>
+          <div class="card-desc">iSTART (game-based reading comprehension ITS), Coh-Metrix (100+ text cohesion measures). Regents Professor, Director of Learning Engineering Institute. Closest existing system to Petrarca's reading support.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>iSTART particularly helps "lower knowledge readers" through strategy instruction. Coh-Metrix could predict which Petrarca articles need more scaffolding. Natural collaboration.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="marti hearst berkeley semantic reader learning at scale nlp digital humanities chi">
+          <div class="card-top">
+            <div class="card-name">Marti Hearst</div>
+            <div class="card-articles">Priority #7</div>
+          </div>
+          <div class="card-site"><a href="https://people.ischool.berkeley.edu/~hearst/" target="_blank" rel="noopener">UC Berkeley</a></div>
+          <div class="card-desc">Semantic Reader Project (AI-powered interactive reading interfaces). Co-founded ACM Learning@Scale. Former ACL President. Research in NLP + HCI + education.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Her Semantic Reader Project &mdash; augmenting documents with AI-powered interfaces &mdash; is the closest academic project to Petrarca's reading experience. She'd understand the humanities-focused domain.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="chris piech stanford deep knowledge tracing dkt education ai code in place">
+          <div class="card-top">
+            <div class="card-name">Chris Piech</div>
+            <div class="card-articles">Priority #8</div>
+          </div>
+          <div class="card-site"><a href="https://web.stanford.edu/~cpiech/bio/index.html" target="_blank" rel="noopener">Stanford University</a></div>
+          <div class="card-desc">"Deep Knowledge Tracing" (NeurIPS 2015) &mdash; foundational paper on using RNNs to model student knowledge evolution. Co-founded Code in Place. Pitch: "Here's DKT applied to reading comprehension across humanities."</div>
+          <div class="card-connection"><strong>Why they'd care</strong>DKT is the foundation of all modern knowledge tracing. Petrarca applies it to a domain with no clear knowledge components &mdash; a genuinely novel research problem.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="ryan baker upenn penn center learning analytics educational data mining fairness bkt reading">
+          <div class="card-top">
+            <div class="card-name">Ryan Baker</div>
+            <div class="card-articles">Priority #9</div>
+          </div>
+          <div class="card-site"><a href="https://learninganalytics.upenn.edu/ryanbaker/" target="_blank" rel="noopener">University of Pennsylvania</a></div>
+          <div class="card-desc">Educational data mining, student modeling. 2025 Best Paper nominee: "Fairness of Bayesian Knowledge Tracing for Math Learners of Different Reading Ability" &mdash; linking reading ability to KT fairness.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His finding that standard KT is unfair across reading abilities implies current models don't capture comprehension &mdash; exactly the problem Petrarca solves by tracking reading-level knowledge states.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="bjorn herrmann toronto rotman llm automated speech recall scoring language-agnostic">
+          <div class="card-top">
+            <div class="card-name">Bj&ouml;rn Herrmann</div>
+            <div class="card-articles">Priority #10</div>
+          </div>
+          <div class="card-site"><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12125525/" target="_blank" rel="noopener">University of Toronto / Rotman</a></div>
+          <div class="card-desc">"Language-Agnostic Automated Assessment of Listeners' Speech Recall Using LLMs" (2025). Pipeline using GPT-4o and LaBSE to score free recall across 10 languages.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His pipeline (story &rarr; listen &rarr; free recall &rarr; LLM scoring) is almost exactly Petrarca's voice assessment workflow. The dual approach (embedding + LLM prompt scoring) could be implemented directly.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="michael kahana upenn temporal context model free recall memory computational">
+          <div class="card-top">
+            <div class="card-name">Michael Kahana</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://memory.psych.upenn.edu/" target="_blank" rel="noopener">UPenn &mdash; Computational Memory Lab</a></div>
+          <div class="card-desc">Temporal Context Model (TCM) explains how context at encoding drives recall. CMR model for how "memory accumulates across multiple lists" &mdash; reading book A, then articles B and C creates layered associations.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His model of cross-list memory accumulation maps to Petrarca's cross-source knowledge integration. His free recall data archive could validate voice analysis.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="robert elizabeth bjork ucla desirable difficulties spacing interleaving retrieval storage strength">
+          <div class="card-top">
+            <div class="card-name">Robert &amp; Elizabeth Bjork</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://bjorklab.psych.ucla.edu/" target="_blank" rel="noopener">UCLA &mdash; Bjork Learning and Forgetting Lab</a></div>
+          <div class="card-desc">"Desirable difficulties" framework: spacing, interleaving, retrieval practice. The distinction between "storage strength" and "retrieval strength" is central to modern learning science.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Their framework is Petrarca's theoretical foundation. Reading increases storage strength; voice recall exercises retrieval strength. The dim-familiar approach embodies desirable difficulty.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="jeffrey karpicke purdue retrieval practice concept mapping testing effect metacognition">
+          <div class="card-top">
+            <div class="card-name">Jeffrey Karpicke</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://learninglab.psych.purdue.edu/" target="_blank" rel="noopener">Purdue University</a></div>
+          <div class="card-desc">"Retrieval Practice Produces More Learning than Elaborative Studying with Concept Mapping" (Science, 2011). Students lack metacognitive awareness of testing benefits.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Petrarca's voice recall IS retrieval practice. His finding about poor metacognition supports the "system manages your memory" principle &mdash; users don't realize recall helps.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="burr settles duolingo half-life regression birdbrain spaced repetition at scale">
+          <div class="card-top">
+            <div class="card-name">Burr Settles / Duolingo</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://research.duolingo.com/" target="_blank" rel="noopener">Duolingo Research</a></div>
+          <div class="card-desc">Half-Life Regression model (ACL, 2016) estimates memory half-life per item. BirdBrain simultaneously estimates exercise difficulty + learner proficiency, processing ~1B exercises/day.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>HLR provides a concrete, implementable model for knowledge decay. The challenge: Duolingo operates on discrete vocabulary; Petrarca must adapt this to fluid conceptual knowledge.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="philip pavlik memphis act-r spacing effect activation decay optimal scheduling">
+          <div class="card-top">
+            <div class="card-name">Philip Pavlik</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://umwa.memphis.edu/fcv/viewcv.php?personUUID=ppavlik" target="_blank" rel="noopener">University of Memphis</a></div>
+          <div class="card-desc">ACT-R model of the spacing effect &mdash; decay rate depends on current activation, not a fixed rate. Optimal practice scheduling algorithms balancing temporal spacing against failure costs.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His activation-based decay model could replace simple forgetting curves. Petrarca's "practice" is reading articles rather than flashcards, making the scheduling problem novel for his models.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="alberto canas ihmc cmaptools concept mapping automated assessment skeleton expert scaffolding">
+          <div class="card-top">
+            <div class="card-name">Alberto Ca&ntilde;as</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://cmap.ihmc.us/" target="_blank" rel="noopener">IHMC &mdash; CmapTools</a></div>
+          <div class="card-desc">CmapTools &mdash; dominant concept mapping software. Automated concept map assessment (comparing student maps to expert references). "Skeleton concept maps" for scaffolding learning.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His "skeleton concept maps" (partial expert structures students complete) are analogous to Petrarca's curriculum nodes &mdash; scaffolding that gets filled through reading.</div>
+          <div class="card-tags"></div>
+        </div>
+
+        <div class="card" data-search="nate kornell williams college spacing category learning metacognitive illusion massed study">
+          <div class="card-top">
+            <div class="card-name">Nate Kornell</div>
+            <div class="card-articles">&mdash;</div>
+          </div>
+          <div class="card-site"><a href="https://sites.williams.edu/nk2/" target="_blank" rel="noopener">Williams College</a></div>
+          <div class="card-desc">Spacing effects in concept/category learning (not just word pairs). Key finding: spacing helps induction even though people believe massing is more effective &mdash; a metacognitive illusion.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His work on spacing in category learning is more applicable to Petrarca than standard spacing research. The system should space reading across topics even when users want to binge one.</div>
+          <div class="card-tags"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══ NORWEGIAN EDUCATION DISCOURSE ═══ -->
+    <section class="category-section cat-norwegian" data-category="norwegian">
+      <div class="category-header">
+        <span class="category-icon">&#x1F1F3;&#x1F1F4;</span>
+        <h2 class="category-title">Norwegian Education Discourse</h2>
+        <span class="category-count">3 people</span>
+      </div>
+      <p class="category-desc">Norwegian-language writers on education, reading, and curriculum &mdash; relevant given Stian's context and multilingual interests.</p>
+      <div class="cards-grid">
+
+        <div class="card" data-search="gammal sur lektor lesekompetanse norway reading competence decline norwegian">
+          <div class="card-top">
+            <div class="card-name">Gammal sur lektor</div>
+            <div class="card-articles">2 articles</div>
+          </div>
+          <div class="card-site"><a href="https://gammalsurlektor.org" target="_blank" rel="noopener">gammalsurlektor.org</a></div>
+          <div class="card-desc">"Hvorfor ramler lesekompetansen mer i Norge enn i andre land?" (Why is reading competence declining more in Norway than elsewhere?). Grumpy but incisive Norwegian education commentary. Read to 100%.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>Norway's reading decline makes tools like Petrarca more urgent. The blog's focus on evidence over ideology matches Petrarca's research-grounded approach.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (100%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="roar ulvestad utdanningsnytt teacher autonomy methodology freedom norwegian">
+          <div class="card-top">
+            <div class="card-name">Roar Ulvestad</div>
+            <div class="card-articles">1 article</div>
+          </div>
+          <div class="card-site"><a href="https://www.utdanningsnytt.no" target="_blank" rel="noopener">utdanningsnytt.no</a></div>
+          <div class="card-desc">"Ludvigsenutval, l&aelig;rarrolle og metodefridom" (The Ludvigsen committee, teacher role, and methodological freedom). Norwegian debate on teacher autonomy vs. evidence-based mandates.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>The methodology debate connects to how tools like Petrarca could support teachers without constraining their professional judgment.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read (79%)</span>
+          </div>
+        </div>
+
+        <div class="card" data-search="lars sandaker lesing leseforskning reading research comprehension literature list norwegian">
+          <div class="card-top">
+            <div class="card-name">Lars Sandaker</div>
+            <div class="card-articles">3 articles</div>
+          </div>
+          <div class="card-site"><a href="https://larssandaker.blogspot.com" target="_blank" rel="noopener">larssandaker.blogspot.com</a></div>
+          <div class="card-desc">"Om lesing, leseforst&aring;else og leseforskning" (On reading, reading comprehension, and reading research). Curates reading research literature lists for Norwegian educators.</div>
+          <div class="card-connection"><strong>Why they'd care</strong>His curation of reading research connects to Petrarca's evidence-based design &mdash; many of the same researchers inform both.</div>
+          <div class="card-tags">
+            <span class="tag tag-read">Read</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+
+  <div class="no-results" id="noResults">
+    No collaborators match your search. Try a different term or clear the filter.
+  </div>
+
+  <footer>
+    <div class="colophon">"The reading of all good books is like a conversation with the finest minds of past centuries." &mdash; Descartes</div>
+    <div>Compiled from 11,598 Readwise items &middot; Petrarca Project &middot; April 2026</div>
+  </footer>
+</div>
+
+<script>
+  // ─── STICKY FILTER SHADOW ───
+  const filterSection = document.getElementById('filterSection');
+  const observer = new IntersectionObserver(
+    ([e]) => filterSection.classList.toggle('scrolled', e.intersectionRatio < 1),
+    { threshold: [1], rootMargin: '-1px 0px 0px 0px' }
+  );
+  observer.observe(filterSection);
+
+  // ─── FILTER LOGIC ───
+  const filterBtns = document.querySelectorAll('.filter-btn');
+  const categorySections = document.querySelectorAll('.category-section');
+  const searchBox = document.getElementById('searchBox');
+  const noResults = document.getElementById('noResults');
+  let activeFilter = 'all';
+
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.filter;
+      applyFilters();
+    });
+  });
+
+  searchBox.addEventListener('input', () => applyFilters());
+
+  function applyFilters() {
+    const query = searchBox.value.toLowerCase().trim();
+    let totalVisible = 0;
+
+    categorySections.forEach(section => {
+      const category = section.dataset.category;
+      const categoryMatch = activeFilter === 'all' || category === activeFilter;
+
+      if (!categoryMatch) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = '';
+      const cards = section.querySelectorAll('.card');
+      let sectionVisible = 0;
+
+      cards.forEach(card => {
+        const searchData = card.dataset.search.toLowerCase();
+        const cardText = card.textContent.toLowerCase();
+        const matchesSearch = !query || searchData.includes(query) || cardText.includes(query);
+
+        if (matchesSearch) {
+          card.classList.remove('hidden');
+          sectionVisible++;
+          totalVisible++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      section.style.display = sectionVisible > 0 ? '' : 'none';
+    });
+
+    noResults.classList.toggle('visible', totalVisible === 0);
+  }
+
+  // ─── STAGGER CARD ANIMATIONS ───
+  document.querySelectorAll('.cards-grid').forEach(grid => {
+    grid.querySelectorAll('.card').forEach((card, i) => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(10px)';
+      card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    });
+  });
+
+  const cardObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const cards = entry.target.querySelectorAll('.card');
+        cards.forEach((card, i) => {
+          setTimeout(() => {
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+          }, i * 60);
+        });
+        cardObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.cards-grid').forEach(grid => cardObserver.observe(grid));
+</script>
+</body>
+</html>

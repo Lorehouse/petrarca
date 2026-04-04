@@ -1,12 +1,12 @@
 """Process Kindle library into unified book system.
 
-Reads kindle_library.json, filters non-fiction, creates unified book records,
+Reads kindle_books from SQLite, filters non-fiction, creates unified book records,
 runs research agent, converts highlights to captures, triggers embedding.
 
 Usage:
     python3 process_kindle_books.py                    # process all unprocessed non-fiction
     python3 process_kindle_books.py --research-only    # research but don't embed
-    python3 process_kindle_books.py --asin B00XXXX     # process specific book
+    python3 process_kindle_books.py --key B00XXXX      # process specific book
     python3 process_kindle_books.py --list              # list unprocessed books
     python3 process_kindle_books.py --stats             # show processing stats
 """
@@ -20,9 +20,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 DATA_DIR = SCRIPT_DIR / "data"
-KINDLE_DATA_PATH = Path(os.environ.get('KINDLE_DATA_PATH', '/opt/petrarca/data/kindle_library.json'))
 KINDLE_HIGHLIGHTS_PATH = Path(os.environ.get('KINDLE_HIGHLIGHTS_PATH', '/opt/petrarca/data/kindle_highlights.json'))
-PHYSICAL_BOOKS_PATH = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
 BOOK_RESEARCH_DIR = DATA_DIR / "book_research"
 
 BOOK_RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,9 +34,25 @@ def log(msg: str):
 
 
 def load_kindle_library() -> dict:
-    if not KINDLE_DATA_PATH.exists():
-        return {'books': {}}
-    return json.loads(KINDLE_DATA_PATH.read_text())
+    """Load kindle books from SQLite as a dict keyed by key."""
+    from db import get_connection
+    conn = get_connection(readonly=True)
+    rows = conn.execute('SELECT * FROM kindle_books').fetchall()
+    conn.close()
+    books = {}
+    for row in rows:
+        book = dict(row)
+        book['added_to_petrarca'] = bool(book.get('added_to_petrarca'))
+        book['is_sideloaded'] = bool(book.get('is_sideloaded'))
+        # Reconstruct progress object for backward compat with kindle_to_unified_book
+        book['progress'] = {
+            'pct': book.get('progress_pct', 0),
+            'text': book.get('progress_text', ''),
+            'current_position': book.get('current_position', 0),
+            'max_position': book.get('max_position', 0),
+        }
+        books[book['key']] = book
+    return {'books': books}
 
 
 def load_kindle_highlights() -> dict:
@@ -48,26 +62,39 @@ def load_kindle_highlights() -> dict:
 
 
 def load_physical_books() -> dict:
-    if not PHYSICAL_BOOKS_PATH.exists():
-        return {'books': [], 'captures': []}
-    try:
-        return json.loads(PHYSICAL_BOOKS_PATH.read_text())
-    except json.JSONDecodeError:
-        return {'books': [], 'captures': []}
+    """Load physical books from SQLite."""
+    from db import load_all_books_and_captures
+    return load_all_books_and_captures()
 
 
 def save_physical_books(data: dict):
-    PHYSICAL_BOOKS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    """Save physical books to SQLite."""
+    from db import get_connection, upsert_books, upsert_captures
+    conn = get_connection()
+    upsert_books(data.get('books', []), conn)
+    upsert_captures(data.get('captures', []), conn)
+    conn.commit()
+    conn.close()
 
 
-def is_already_unified(key: str, physical_data: dict) -> bool:
+def is_already_unified(key: str, physical_data: dict = None) -> bool:
     """Check if a Kindle book (by ASIN or book_id key) is already unified."""
-    return any(
-        b.get('kindle_asin') == key
-        or b.get('kindle_book_id') == key
-        or b.get('id') == f'kindle_{key}'
-        for b in physical_data.get('books', [])
-    )
+    if physical_data:
+        return any(
+            b.get('kindle_asin') == key
+            or b.get('kindle_book_id') == key
+            or b.get('id') == f'kindle_{key}'
+            for b in physical_data.get('books', [])
+        )
+    # Check directly in SQLite
+    from db import get_connection
+    conn = get_connection(readonly=True)
+    row = conn.execute(
+        "SELECT id FROM physical_books WHERE kindle_asin=? OR kindle_book_id=? OR id=?",
+        (key, key, f'kindle_{key}')
+    ).fetchone()
+    conn.close()
+    return row is not None
 
 
 def is_already_researched(book_id: str) -> bool:
@@ -273,58 +300,61 @@ def process_all(do_research: bool = True, max_books: int | None = None):
 
 def show_stats():
     """Show processing statistics."""
-    kindle_data = load_kindle_library()
+    from db import get_connection
+    conn = get_connection(readonly=True)
+
+    total = conn.execute('SELECT COUNT(*) FROM kindle_books').fetchone()[0]
+    cat_rows = conn.execute(
+        "SELECT COALESCE(category, 'unclassified') as cat, COUNT(*) as cnt FROM kindle_books GROUP BY category"
+    ).fetchall()
+    status_rows = conn.execute(
+        "SELECT status, COUNT(*) as cnt FROM kindle_books GROUP BY status"
+    ).fetchall()
+    unified_count = conn.execute(
+        "SELECT COUNT(*) FROM physical_books WHERE kindle_asin IS NOT NULL OR kindle_book_id IS NOT NULL"
+    ).fetchone()[0]
+    capture_count = conn.execute(
+        "SELECT COUNT(*) FROM book_captures WHERE type='kindle_highlight'"
+    ).fetchone()[0]
+    conn.close()
+
     highlights_data = load_kindle_highlights()
-    physical_data = load_physical_books()
-
-    books = kindle_data.get('books', {})
-
-    by_category = {}
-    for book in books.values():
-        cat = book.get('category', 'unclassified')
-        by_category[cat] = by_category.get(cat, 0) + 1
-
-    by_status = {}
-    for book in books.values():
-        st = book.get('status', 'unreviewed')
-        by_status[st] = by_status.get(st, 0) + 1
-
-    unified_kindle = [b for b in physical_data.get('books', []) if b.get('kindle_asin')]
-    researched = sum(1 for b in unified_kindle if is_already_researched(b['id']))
-    total_captures = len([c for c in physical_data.get('captures', []) if c.get('type') == 'kindle_highlight'])
-
     highlight_books = highlights_data.get('books', {})
     total_highlights = sum(len(b.get('highlights', [])) for b in highlight_books.values())
 
     print(f"\n{'='*50}")
     print(f"  Kindle Book Processing Stats")
     print(f"{'='*50}")
-    print(f"  Kindle library:     {len(books)} books")
-    print(f"  By category:        {json.dumps(by_category, indent=2)}")
-    print(f"  By status:          {json.dumps(by_status, indent=2)}")
+    print(f"  Kindle library:     {total} books")
+    print(f"  By category:        {json.dumps({r['cat']: r['cnt'] for r in cat_rows}, indent=2)}")
+    print(f"  By status:          {json.dumps({r['status']: r['cnt'] for r in status_rows}, indent=2)}")
     print(f"  Highlights:         {total_highlights} across {len(highlight_books)} books")
-    print(f"  Unified (Kindle):   {len(unified_kindle)} books")
-    print(f"  Researched:         {researched} books")
-    print(f"  Kindle captures:    {total_captures}")
+    print(f"  Unified (Kindle):   {unified_count} books")
+    print(f"  Kindle captures:    {capture_count}")
     print()
 
 
 def list_unprocessed():
     """List Kindle books that are read + relevant category but not yet processed."""
-    kindle_data = load_kindle_library()
-    physical_data = load_physical_books()
+    from db import get_connection
+    conn = get_connection(readonly=True)
+    cats = ','.join(f"'{c}'" for c in RELEVANT_CATEGORIES)
+    rows = conn.execute(f'''
+        SELECT key, title, title_resolved, category, progress_pct
+        FROM kindle_books
+        WHERE category IN ({cats})
+          AND status = 'read'
+        ORDER BY COALESCE(title_resolved, title)
+    ''').fetchall()
+    conn.close()
 
-    books = kindle_data.get('books', {})
-    for key, book in sorted(books.items(), key=lambda x: (x[1].get('title_resolved') or x[1].get('title', ''))):
-        if book.get('category') not in RELEVANT_CATEGORIES:
+    for r in rows:
+        key = r['key']
+        if is_already_unified(key):
             continue
-        if book.get('status') != 'read':
-            continue
-        if is_already_unified(key, physical_data):
-            continue
-        title = book.get('title_resolved') or book.get('title', '?')
-        cat = book.get('category', '?')
-        pct = book.get('progress', {}).get('pct', '?')
+        title = r['title_resolved'] or r['title'] or '?'
+        cat = r['category'] or '?'
+        pct = r['progress_pct'] or '?'
         print(f"  {key[:15]:15s} {title[:55]:55s} [{cat}, {pct}%]")
 
 

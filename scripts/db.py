@@ -103,6 +103,51 @@ CREATE TABLE IF NOT EXISTS book_captures (
 );
 CREATE INDEX IF NOT EXISTS idx_captures_book ON book_captures(book_id);
 
+-- Kindle books (replaces kindle_library.json)
+CREATE TABLE IF NOT EXISTS kindle_books (
+    key TEXT PRIMARY KEY,
+    asin TEXT,
+    book_id TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    title_resolved TEXT,
+    author TEXT NOT NULL DEFAULT '',
+    cover_url TEXT,
+    progress_pct REAL DEFAULT 0,
+    current_position INTEGER DEFAULT 0,
+    max_position INTEGER DEFAULT 0,
+    progress_text TEXT,
+    progress_updated TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    status TEXT NOT NULL DEFAULT 'unreviewed',
+    category TEXT,
+    added_to_petrarca INTEGER DEFAULT 0,
+    finished_date TEXT,
+    last_read TEXT,
+    purchase_date TEXT,
+    language TEXT DEFAULT '',
+    publisher TEXT DEFAULT '',
+    is_sideloaded INTEGER DEFAULT 0,
+    epub_path TEXT,
+    source TEXT DEFAULT 'kindle_mac'
+);
+CREATE INDEX IF NOT EXISTS idx_kindle_books_asin ON kindle_books(asin);
+CREATE INDEX IF NOT EXISTS idx_kindle_books_status ON kindle_books(status);
+CREATE INDEX IF NOT EXISTS idx_kindle_books_category ON kindle_books(category);
+
+-- Available EPUBs on server (for matching to kindle_books)
+CREATE TABLE IF NOT EXISTS available_epubs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    server_path TEXT NOT NULL,
+    title TEXT,
+    author TEXT,
+    size_bytes INTEGER,
+    kindle_book_key TEXT,
+    uploaded_at TEXT,
+    UNIQUE(server_path)
+);
+
 -- ===== Content Pipeline Tables (replaces JSON files) =====
 
 -- Articles (replaces articles.json)
@@ -922,6 +967,206 @@ def load_all_books_and_captures(conn=None) -> dict:
             conn.close()
 
 
+# --- Kindle books helpers (replaces kindle_library.json) ---
+
+KINDLE_BOOK_FIELDS = [
+    'key', 'asin', 'book_id', 'title', 'title_resolved', 'author', 'cover_url',
+    'progress_pct', 'current_position', 'max_position', 'progress_text',
+    'progress_updated', 'first_seen', 'last_seen', 'status', 'category',
+    'added_to_petrarca', 'finished_date', 'last_read', 'purchase_date',
+    'language', 'publisher', 'is_sideloaded', 'epub_path', 'source',
+]
+
+KINDLE_BOOL_FIELDS = {'added_to_petrarca', 'is_sideloaded'}
+
+
+def upsert_kindle_books(books: list[dict], conn=None):
+    """Upsert kindle books. Each dict must have 'key'. Preserves curation fields on update."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    for book in books:
+        values = {}
+        for f in KINDLE_BOOK_FIELDS:
+            v = book.get(f)
+            if f in KINDLE_BOOL_FIELDS:
+                v = int(bool(v)) if v is not None else 0
+            values[f] = v
+        if not values.get('key'):
+            continue
+        cols = ', '.join(values.keys())
+        placeholders = ', '.join(['?'] * len(values))
+        updates = ', '.join(f'{k}=excluded.{k}' for k in values if k != 'key')
+        conn.execute(
+            f'INSERT INTO kindle_books ({cols}) VALUES ({placeholders}) '
+            f'ON CONFLICT(key) DO UPDATE SET {updates}',
+            list(values.values())
+        )
+    if own:
+        conn.commit()
+        conn.close()
+    return len(books)
+
+
+def get_kindle_book(key: str, conn=None) -> dict | None:
+    """Get a single kindle book by key."""
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        row = conn.execute('SELECT * FROM kindle_books WHERE key = ?', (key,)).fetchone()
+        if not row:
+            return None
+        book = dict(row)
+        for f in KINDLE_BOOL_FIELDS:
+            book[f] = bool(book.get(f))
+        return book
+    finally:
+        if own:
+            conn.close()
+
+
+def get_kindle_books(conn=None, search=None, status=None, category=None,
+                     tracked=None, sort='last_seen', order='desc',
+                     limit=50, offset=0) -> tuple[list[dict], int]:
+    """Query kindle books with filtering/sorting/pagination.
+
+    Returns (books, total_count).
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        where = []
+        params = []
+
+        if search:
+            where.append(
+                "(title LIKE ? OR title_resolved LIKE ? OR author LIKE ?)"
+            )
+            pattern = f'%{search}%'
+            params.extend([pattern, pattern, pattern])
+
+        if status:
+            statuses = [s.strip() for s in status.split(',')]
+            placeholders = ','.join(['?'] * len(statuses))
+            where.append(f'status IN ({placeholders})')
+            params.extend(statuses)
+
+        if category:
+            cats = [c.strip() for c in category.split(',')]
+            placeholders = ','.join(['?'] * len(cats))
+            where.append(f'category IN ({placeholders})')
+            params.extend(cats)
+
+        if tracked == 'true':
+            where.append('added_to_petrarca = 1')
+        elif tracked == 'false':
+            where.append('added_to_petrarca = 0')
+
+        where_sql = (' WHERE ' + ' AND '.join(where)) if where else ''
+
+        # Sort
+        sort_map = {
+            'recent': 'last_seen', 'last_seen': 'last_seen',
+            'title': 'COALESCE(title_resolved, title)',
+            'author': 'author',
+            'progress': 'progress_pct',
+            'purchase_date': 'purchase_date',
+        }
+        sort_col = sort_map.get(sort, 'last_seen')
+        order_dir = 'ASC' if order == 'asc' else 'DESC'
+
+        # Total count
+        total = conn.execute(
+            f'SELECT COUNT(*) FROM kindle_books{where_sql}', params
+        ).fetchone()[0]
+
+        # Fetch page
+        rows = conn.execute(
+            f'SELECT * FROM kindle_books{where_sql} '
+            f'ORDER BY {sort_col} {order_dir} NULLS LAST '
+            f'LIMIT ? OFFSET ?',
+            params + [limit, offset]
+        ).fetchall()
+
+        books = []
+        for row in rows:
+            book = dict(row)
+            for f in KINDLE_BOOL_FIELDS:
+                book[f] = bool(book.get(f))
+            book['title_display'] = book.get('title_resolved') or book.get('title', '')
+            books.append(book)
+
+        return books, total
+    finally:
+        if own:
+            conn.close()
+
+
+def migrate_kindle_json_to_sqlite():
+    """One-time migration: kindle_library.json → kindle_books table."""
+    kindle_path = Path(os.environ.get('KINDLE_DATA_PATH', '/opt/petrarca/data/kindle_library.json'))
+    if not kindle_path.exists():
+        print('[db] No kindle_library.json found, skipping kindle migration', flush=True)
+        return
+
+    data = json.loads(kindle_path.read_text())
+    books_dict = data.get('books', {})
+    if not books_dict:
+        print('[db] kindle_library.json has no books, skipping', flush=True)
+        return
+
+    conn = get_connection()
+    existing = conn.execute('SELECT COUNT(*) FROM kindle_books').fetchone()[0]
+    if existing > 0:
+        print(f'[db] kindle_books already has {existing} rows, skipping migration', flush=True)
+        conn.close()
+        return
+
+    count = 0
+    for key, book in books_dict.items():
+        progress = book.get('progress', {}) or {}
+        row = {
+            'key': key,
+            'asin': book.get('asin', ''),
+            'book_id': book.get('book_id', ''),
+            'title': book.get('title', ''),
+            'title_resolved': book.get('title_resolved'),
+            'author': book.get('author', ''),
+            'cover_url': book.get('cover_url'),
+            'progress_pct': progress.get('pct') or progress.get('percent') or 0,
+            'current_position': progress.get('current_position') or 0,
+            'max_position': progress.get('max_position') or 0,
+            'progress_text': progress.get('text', ''),
+            'progress_updated': progress.get('updated', ''),
+            'first_seen': book.get('first_seen', ''),
+            'last_seen': book.get('last_seen', ''),
+            'status': book.get('status', 'unreviewed'),
+            'category': book.get('category'),
+            'added_to_petrarca': int(bool(book.get('added_to_petrarca', False))),
+            'finished_date': book.get('finished_date'),
+            'last_read': book.get('last_read'),
+            'purchase_date': book.get('purchase_date'),
+            'language': book.get('language', ''),
+            'publisher': book.get('publisher', ''),
+            'is_sideloaded': int(bool(book.get('is_sideloaded', False))),
+            'epub_path': book.get('epub_path'),
+            'source': 'kindle_mac',
+        }
+        cols = ', '.join(row.keys())
+        placeholders = ', '.join(['?'] * len(row))
+        conn.execute(
+            f'INSERT OR IGNORE INTO kindle_books ({cols}) VALUES ({placeholders})',
+            list(row.values())
+        )
+        count += 1
+
+    conn.commit()
+    conn.close()
+    print(f'[db] Migrated {count} kindle books from JSON → SQLite', flush=True)
+
+
 def migrate_books_json_to_sqlite():
     """One-time migration: physical_books.json → SQLite tables."""
     books_path = Path(os.environ.get('PHYSICAL_BOOKS_PATH', '/opt/petrarca/data/physical_books.json'))
@@ -1063,5 +1308,7 @@ if __name__ == '__main__':
             print(f'[db] Migrated {n} knowledge_items from review_items', flush=True)
         if data_type in ('books', 'all'):
             migrate_books_json_to_sqlite()
+        if data_type in ('kindle', 'all'):
+            migrate_kindle_json_to_sqlite()
     else:
         print(f'Unknown command: {cmd}')

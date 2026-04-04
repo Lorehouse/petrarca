@@ -9,6 +9,7 @@ import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/ty
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
+  triggerFollowUp, generateFollowUps,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -108,32 +109,86 @@ const entityStyle = StyleSheet.create({
 
 // ── Research Input ──────────────────────────────────────────────────
 
-function FollowUpLinks({ queries, onResearch }: { queries: string[]; onResearch: (q: string) => void }) {
-  const [tapped, setTapped] = useState<Set<number>>(new Set());
-  if (!queries || queries.length === 0) return null;
+function FollowUpLinks({
+  queries,
+  triggeredFromServer,
+  itemId,
+  nodeTitle,
+  nodeDescription,
+  onResearch,
+}: {
+  queries: string[];
+  triggeredFromServer?: string[];
+  itemId?: string;
+  nodeTitle?: string;
+  nodeDescription?: string;
+  onResearch: (q: string) => void;
+}) {
+  const [tapped, setTapped] = useState<Set<string>>(
+    new Set(triggeredFromServer || []),
+  );
+  const [extraQueries, setExtraQueries] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+
+  const allQueries = [...(queries || []), ...extraQueries];
+  if (allQueries.length === 0) return null;
+
+  const handleTap = (q: string) => {
+    if (tapped.has(q)) return;
+    setTapped(prev => new Set(prev).add(q));
+    onResearch(q);
+    if (itemId) {
+      triggerFollowUp(itemId, q).catch(e =>
+        console.warn('[follow-up] trigger record failed:', e));
+    }
+  };
+
+  const handleGenerateMore = async () => {
+    setGenerating(true);
+    try {
+      const allTriggered = [...tapped, ...allQueries];
+      const resp = await generateFollowUps({
+        nodeTitle: nodeTitle || '',
+        nodeDescription: nodeDescription || '',
+        exclude: allTriggered,
+      });
+      if (resp.follow_up_queries?.length) {
+        setExtraQueries(prev => [...prev, ...resp.follow_up_queries]);
+      }
+    } catch (e) {
+      console.warn('[follow-up] generate more failed:', e);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <>
       <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-      {queries.map((q, i) => {
-        const isTapped = tapped.has(i);
+      {allQueries.map((q, i) => {
+        const isTriggered = tapped.has(q);
         return (
           <Pressable
-            key={i}
-            style={[cs.followUpBtn, isTapped && cs.followUpBtnTapped]}
-            onPress={() => {
-              if (isTapped) return;
-              setTapped(prev => new Set(prev).add(i));
-              onResearch(q);
-            }}
-            disabled={isTapped}
+            key={`${i}-${q.slice(0, 20)}`}
+            style={[cs.followUpBtn, isTriggered && cs.followUpBtnTapped]}
+            onPress={() => handleTap(q)}
+            disabled={isTriggered}
           >
-            <Text style={[cs.followUpText, isTapped && cs.followUpTextTapped]}>
-              {isTapped ? `\u2726 Queued: ${q}` : q}
+            <Text style={[cs.followUpText, isTriggered && cs.followUpTextTapped]}>
+              {isTriggered ? `\u2726 Queued: ${q}` : q}
             </Text>
           </Pressable>
         );
       })}
+      <Pressable
+        style={[cs.followUpBtn, cs.generateMoreBtn]}
+        onPress={handleGenerateMore}
+        disabled={generating}
+      >
+        <Text style={cs.followUpText}>
+          {generating ? 'Generating...' : '\u2726 Generate 3 more questions'}
+        </Text>
+      </Pressable>
     </>
   );
 }
@@ -386,7 +441,14 @@ function ReviewCard({
 
           {/* Follow-up research queries + custom input */}
           <View style={cs.followUpSection}>
-            <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
+            <FollowUpLinks
+              queries={item.follow_up_queries || []}
+              triggeredFromServer={item.triggered_follow_ups}
+              itemId={item.question_id}
+              nodeTitle={item.node_title}
+              nodeDescription={item.node_description}
+              onResearch={onResearch}
+            />
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
@@ -521,7 +583,14 @@ function MicrolearningCard({
 
       {/* Follow-ups */}
       <View style={cs.followUpSection}>
-        <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
+        <FollowUpLinks
+              queries={item.follow_up_queries || []}
+              triggeredFromServer={item.triggered_follow_ups}
+              itemId={item.question_id}
+              nodeTitle={item.node_title}
+              nodeDescription={item.node_description}
+              onResearch={onResearch}
+            />
         <ResearchInput onSubmit={onResearch} />
       </View>
 
@@ -623,7 +692,14 @@ function MicrolearningQuizCard({
           </View>
 
           <View style={cs.followUpSection}>
-            <FollowUpLinks queries={item.follow_up_queries || []} onResearch={onResearch} />
+            <FollowUpLinks
+              queries={item.follow_up_queries || []}
+              triggeredFromServer={item.triggered_follow_ups}
+              itemId={item.question_id}
+              nodeTitle={item.node_title}
+              nodeDescription={item.node_description}
+              onResearch={onResearch}
+            />
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
@@ -1126,6 +1202,7 @@ const cs = StyleSheet.create({
   followUpLabel: { fontFamily: fonts.uiMedium, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   followUpBtn: { paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, borderLeftColor: 'rgba(139,37,0,0.2)', backgroundColor: 'rgba(139,37,0,0.02)', borderRadius: 2 },
   followUpBtnTapped: { borderLeftColor: colors.textMuted, backgroundColor: 'rgba(176,168,152,0.06)' },
+  generateMoreBtn: { borderLeftColor: 'rgba(139,37,0,0.1)', borderStyle: 'dashed' as const, marginTop: 4 },
   followUpText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.rubric },
   followUpTextTapped: { color: colors.textMuted, fontFamily: fonts.readingItalic, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });

@@ -449,6 +449,38 @@ export async function dismissMicrolearning(
   return resp.json();
 }
 
+// --- Follow-up Query API ---
+
+export async function triggerFollowUp(itemId: string, query: string): Promise<{ triggered: string[] }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/follow-up/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, query }),
+  });
+  if (!resp.ok) throw new Error(`Follow-up trigger failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function generateFollowUps(opts: {
+  nodeTitle: string;
+  nodeDescription?: string;
+  factContext?: string;
+  exclude?: string[];
+}): Promise<{ follow_up_queries: string[] }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/follow-up/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      node_title: opts.nodeTitle,
+      node_description: opts.nodeDescription || '',
+      fact_context: opts.factContext || '',
+      exclude: opts.exclude || [],
+    }),
+  });
+  if (!resp.ok) throw new Error(`Follow-up generate failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Entity API ---
 
 export async function fetchEntityDetails(

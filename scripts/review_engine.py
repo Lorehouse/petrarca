@@ -1362,8 +1362,10 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
 # ── Microlearning research ────────────────────────────────────────────────────
 
-MICROLEARNING_PROMPT = """You are a knowledgeable historian and educator. Answer this research question
-concisely but richly, as a microlearning card for a reader studying history and culture.
+MICROLEARNING_PROMPT = """You are a knowledgeable historian and educator. Write a microlearning card for
+a reader studying history and culture. This reader is especially interested in primary sources,
+cultural artifacts, and material evidence — not just "what happened" but "what survives and
+what was created."
 
 Research question: {query}
 
@@ -1371,25 +1373,32 @@ Context — the learner was reviewing this curriculum concept:
 {node_title}: {node_description}
 
 Write:
-1. A clear, engaging answer in 3-4 SHORT paragraphs (total 150-250 words). Include specific
-   names, dates, and vivid details. Write for someone who already has basic knowledge
-   of the period — don't over-explain fundamentals.
-2. 3-5 quiz questions that test SPECIFIC facts from the content. Each should target a
-   different detail — a date, a person, an event, a consequence, a connection. Short
-   questions (6-15 words) with short specific answers (1-2 sentences).
-3. 3 follow-up research queries for going even deeper
-4. A list of entities mentioned in the content — people, places, events, and key concepts.
-   For each entity, provide:
-   - "name": the name as it appears in the text
-   - "canonical": a canonical identifier (lowercase, underscores, e.g. "archimedes_of_syracuse")
-   - "type": one of "person", "place", "event", "concept", "period"
+1. A SHORT TITLE (under 60 chars) that names the specific subject with dates/years when relevant.
+   Good: "The Catiline Conspiracy (63 BC)" or "Al-Idrisi's World Map for Roger II (1154)"
+   Bad: "Cultural Blending in Medieval Sicily" or "An Ancient Conspiracy"
+
+2. A vivid, specific answer in 3-5 SHORT paragraphs (total 200-350 words) that MUST include:
+   - The core narrative: who, what, when, why it matters
+   - PRIMARY SOURCES: Name specific authors and works that document this. If the person wrote
+     anything, mention it. If no sources survive, say so — absence is historically significant.
+   - MATERIAL EVIDENCE: What can you still see or visit? Buildings, inscriptions, coins,
+     manuscripts in specific museums. Be concrete.
+   - One SURPRISING or lesser-known detail
+
+3. 3-5 quiz questions testing SPECIFIC facts from the content. Short questions (6-15 words)
+   with short specific answers (1-2 sentences). Each targets a different detail.
+
+4. 3 follow-up queries that latch onto SPECIFIC details you mentioned — a source, an artifact,
+   a person — offering to go deeper. The reader should think "I want to know more about THAT."
+
+5. Entities mentioned — people, places, events, concepts with canonical IDs.
 
 Output JSON only:
-{{"content":"the 3-4 paragraph answer","quizzes":[{{"question":"short factual question","answer":"1-2 sentence specific answer"}}],"follow_up_queries":["query1","query2","query3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
+{{"title":"short title with dates","content":"the answer with sources/artifacts woven in","quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
 
 
 ENTITY_RESEARCH_PROMPT = """You are a knowledgeable historian. Write a rich microlearning card about this entity,
-making connections to the learner's known context.
+making connections to the learner's known context. Include primary sources and material evidence.
 
 Entity: {entity_name} ({entity_type})
 {entity_description}
@@ -1398,19 +1407,25 @@ Related entities from the same period or region that the learner has encountered
 {related_entities}
 
 Write:
-1. A concise but vivid profile (3-4 SHORT paragraphs, 150-250 words) that:
+1. A SHORT TITLE (under 60 chars) with dates when relevant.
+   Good: "George of Antioch, Roger II's Admiral (d. 1151)" or "The Motya Charioteer (5th c. BC)"
+   Bad: "An Important Historical Figure"
+
+2. A vivid profile (3-5 SHORT paragraphs, 200-350 words) that:
    - Covers who/what this is and why it matters
-   - Makes SPECIFIC connections to the related entities listed above (how they interacted, overlapped, influenced each other)
-   - Includes concrete dates, places, and names
-   - Highlights surprising connections or lesser-known facts
-2. 3-5 quiz questions that test SPECIFIC facts from the content. Each should target a
-   different detail — a date, a person, an event, a consequence, a connection. Short
-   questions (6-15 words) with short specific answers (1-2 sentences).
-3. 3 follow-up research queries that explore connections further
-4. Entities mentioned in the text (people, places, events, concepts)
+   - Makes SPECIFIC connections to the related entities listed above
+   - Names PRIMARY SOURCES: who wrote about this entity? What survives?
+   - Names MATERIAL EVIDENCE: buildings, artifacts, inscriptions, museum objects
+   - Includes one surprising or lesser-known detail
+
+3. 3-5 quiz questions testing SPECIFIC facts. Short questions (6-15 words), short answers.
+
+4. 3 follow-up queries latching onto specific details from the card content
+
+5. Entities mentioned in the text
 
 Output JSON only:
-{{"content":"the profile text","quizzes":[{{"question":"short factual question","answer":"specific answer"}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
+{{"title":"short title with dates","content":"the profile text","quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
 
 
 ENTITY_QUESTIONS_PROMPT = """Generate 3 research questions about this entity that would make a history reader

@@ -3,7 +3,7 @@ import { View, Text, Pressable, TextInput, StyleSheet, Platform, ActivityIndicat
 import { colors, fonts } from '../design/tokens';
 import { logEvent } from '../data/logger';
 import { RESEARCH_BASE, fetchWithTimeout } from '../lib/chat-api';
-import { createAudioQueue, type AudioQueue } from '../lib/audio-upload-queue';
+import { createAudioQueue } from '../lib/audio-upload-queue';
 
 // Conditional native imports (not available on web)
 let Audio: any = null;
@@ -13,8 +13,9 @@ if (Platform.OS !== 'web') {
   try { Haptics = require('expo-haptics'); } catch {}
 }
 
-// Shared queue singleton — all ExplorerCapture instances share one queue
-export const exploreCaptureQueue: AudioQueue = createAudioQueue('explore-captures');
+// Shared queue — all ExplorerCapture instances share one queue.
+// Also registered in _layout.tsx for AppState-based retry.
+export const exploreCaptureQueue = createAudioQueue('explore-captures');
 
 export interface CaptureResult {
   status: 'completed' | 'error';
@@ -24,6 +25,8 @@ export interface CaptureResult {
   entities_detected: string[];
   error?: string;
 }
+
+// --- Component ---
 
 interface ExplorerCaptureProps {
   entityId?: string;
@@ -94,13 +97,13 @@ export default function ExplorerCapture({
 
       logEvent('explorer_capture_record_stop', { entity_id: entityId, duration, mode });
 
-      // 1. Enqueue: copies audio to persistent dir, saves to pending.json
+      // Enqueue: copies audio to persistent dir, saves to pending.json
       const metadata: Record<string, string> = { mode };
       if (entityId) metadata.entity_id = entityId;
       if (entityName) metadata.entity_name = entityName;
       const requestId = await exploreCaptureQueue.enqueue(tempUri, '/explore/capture', metadata);
 
-      // 2. Attempt upload (blocking — user sees "Transcribing…")
+      // Attempt upload (blocking — user sees "Transcribing…")
       setState('processing');
       setProcessingLabel('Transcribing…');
 
@@ -109,14 +112,14 @@ export default function ExplorerCapture({
         await exploreCaptureQueue.dequeue(requestId);
         handleResult(data);
       } catch (e) {
-        // Upload failed — audio is safely queued for retry
+        // Upload failed — audio is safely queued for automatic retry
         console.warn('[ExplorerCapture] upload failed, queued for retry:', e);
         logEvent('explorer_capture_upload_failed', { request_id: requestId, error: String(e) });
         setState('saved_pending');
         setTimeout(() => setState('idle'), 2500);
       }
     } catch (e) {
-      console.error('[ExplorerCapture] recording error:', e);
+      console.error('[ExplorerCapture] recording save failed:', e);
       setState('idle');
       setError(`Recording error: ${e}`);
     }
@@ -134,12 +137,7 @@ export default function ExplorerCapture({
       const resp = await fetchWithTimeout(`${RESEARCH_BASE}/explore/capture`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: trimmed,
-          entity_id: entityId,
-          entity_name: entityName,
-          mode,
-        }),
+        body: JSON.stringify({ text: trimmed, entity_id: entityId, entity_name: entityName, mode }),
         timeout: 30000,
       });
       if (!resp.ok) throw new Error(`Request failed: ${resp.status}`);
@@ -182,7 +180,7 @@ export default function ExplorerCapture({
   if (state === 'saved_pending') {
     return (
       <View style={cs.doneRow}>
-        <Text style={cs.pendingText}>Saved — will retry upload automatically</Text>
+        <Text style={cs.pendingText}>Saved — will retry upload ⟳</Text>
       </View>
     );
   }

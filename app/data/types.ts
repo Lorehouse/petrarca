@@ -546,6 +546,7 @@ export interface ResurfacingItem {
   curriculum_context?: string;
   anchors?: string[];
   follow_up_queries?: string[];
+  triggered_follow_ups?: string[];  // durably tracked: queries already triggered
   content?: string;  // microlearning card body
   query?: string;    // original research query
   quizzes?: MicrolearningQuiz[];  // multiple quizzes per ML card

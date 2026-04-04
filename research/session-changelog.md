@@ -1,6 +1,27 @@
 # Knowledge System Implementation Status
 
-**Date**: April 4, 2026 (last updated — session 47: voice elicitation UX + book recall)
+**Date**: April 4, 2026 (last updated — session 48: voice elicitation quality analysis + dedup fixes)
+
+## Session 48: Voice Elicitation Quality Analysis + Dedup Fixes (April 4, 2026)
+
+### Analysis
+Full audit of all 20 voice transcripts, extraction pipeline, and downstream effects. Findings:
+- **Extraction quality is excellent**: LLM correctly identifies captured/missed/interesting/wonderings. Feedback summaries are personalized and pedagogically useful.
+- **Recall patterns are rich**: Transcripts show associative hook-building (e.g., connecting Frederick II to Sicilian School of poetry, Al-Andalus to troubadour poetry).
+- **Major duplication bug**: 7 of 20 transcript rows were duplicates — same audio re-uploaded by mobile retry service. Caused inflated stability_days, duplicate microlearning items, wasted API calls.
+
+### Fixes
+1. **Server-side audio dedup**: Before transcription/LLM, checks `voice_transcripts` for matching `node_id + audio_bytes`. Returns cached LLM result instantly.
+2. **Minimum transcript quality gate**: Recordings under 15 words get "too short" response instead of full LLM processing. Catches interrupted recordings (e.g., 13-char "I'm assuming." and Chinese-interrupted 97-char transcript).
+3. **Wondering dedup at DB layer**: Before inserting `voice_followup` items, checks for existing items with same `curriculum_node_id + source_text`.
+4. **Prompt refinement**: MISSED now targets structurally important facts (dates, actors, causal relationships) over colorful details. Adjacent topic knowledge gets partial credit in coverage_pct.
+5. **Data cleanup**: Removed 6 duplicate transcripts (20→15), 3 duplicate followup items (18→16), corrected inflated stability_days on 3 knowledge_items.
+
+### Files
+- `scripts/review_engine.py` — dedup check, quality gate, wondering dedup, prompt refinement
+- `scripts/cleanup_voice_dupes.py` — one-time data cleanup script
+
+---
 
 ## Session 47: Voice Elicitation UX + Book Recall (April 4, 2026)
 
