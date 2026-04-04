@@ -5638,6 +5638,8 @@ Return JSON:
             return self._handle_kindle_classify()
         if self.path == '/kindle/resolve-titles':
             return self._handle_kindle_resolve_titles()
+        if self.path == '/kindle/scan-epubs':
+            return self._handle_kindle_scan_epubs()
 
         # Project endpoints
         if self.path == '/projects':
