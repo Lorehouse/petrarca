@@ -4258,6 +4258,190 @@ JSON array only:"""
             import traceback; traceback.print_exc()
             self._send_json_response(500, {'error': str(e)})
 
+    def _handle_explore_capture(self):
+        """POST /explore/capture — voice or text capture, routed to entities + research.
+
+        Accepts either:
+          - multipart/form-data with 'audio' file + form fields (entity_id, entity_name, mode)
+          - application/json with {text, entity_id, entity_name, mode}
+
+        Pipeline: transcribe (if audio) → analyze → save notes → trigger research → return results.
+        """
+        import cgi
+        content_type = self.headers.get('Content-Type', '')
+
+        entity_id = None
+        entity_name = None
+        mode = 'general'
+        input_text = None
+        audio_path = None
+
+        if 'multipart/form-data' in content_type:
+            environ = {
+                'REQUEST_METHOD': 'POST',
+                'CONTENT_TYPE': content_type,
+                'CONTENT_LENGTH': self.headers.get('Content-Length', '0'),
+            }
+            form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ=environ)
+            entity_id = form.getvalue('entity_id', None)
+            entity_name = form.getvalue('entity_name', None)
+            mode = form.getvalue('mode', 'general')
+
+            if 'audio' in form:
+                capture_id = f'exc_{int(time.time())}'
+                audio_path = AUDIO_DIR / f'{capture_id}.m4a'
+                audio_path.write_bytes(form['audio'].file.read())
+        elif 'application/json' in content_type:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(content_length))
+            entity_id = body.get('entity_id')
+            entity_name = body.get('entity_name')
+            mode = body.get('mode', 'general')
+            input_text = body.get('text', '').strip()
+        else:
+            self._send_json_response(400, {'error': 'Expected multipart or JSON'})
+            return
+
+        if not audio_path and not input_text:
+            self._send_json_response(400, {'error': 'No audio or text provided'})
+            return
+
+        # Return 202 immediately, process synchronously for now (< 30s typical)
+        # For voice: transcribe first
+        transcript = input_text or ''
+        if audio_path:
+            try:
+                transcript = transcribe_on_server(audio_path)
+            except Exception as e:
+                self._send_json_response(500, {'error': f'Transcription failed: {e}'})
+                return
+            if not transcript:
+                self._send_json_response(200, {
+                    'status': 'completed', 'transcript': '',
+                    'notes_saved': 0, 'research_triggered': [], 'entities_detected': [],
+                })
+                return
+
+        # Analyze with LLM: extract knowledge claims and research queries
+        from gemini_llm import call_llm
+        from db import get_connection
+
+        entity_context = ''
+        if entity_id:
+            conn = get_connection(readonly=True)
+            row = conn.execute(
+                'SELECT name, description, entity_type FROM shared_entities WHERE entity_id = ?',
+                (entity_id,)
+            ).fetchone()
+            if row:
+                entity_context = f"Entity: {row['name']} ({row['entity_type'] or 'unknown'})\nDescription: {row['description'] or 'N/A'}"
+                if not entity_name:
+                    entity_name = row['name']
+            conn.close()
+
+        analysis_prompt = f"""Analyze this user input about {'the entity ' + (entity_name or entity_id or 'unknown') if mode == 'entity' else 'their study topics'}.
+
+User input: "{transcript}"
+{entity_context}
+
+Extract:
+1. KNOWLEDGE_CLAIMS: What the user demonstrates knowing (factual statements they made). List as brief bullet points.
+2. QUERIES: Questions or "I wonder..." statements that should trigger research. List as research-ready queries.
+3. ENTITIES_MENTIONED: Names of historical figures, places, events, or concepts mentioned. List as simple names.
+
+Return JSON:
+{{"knowledge_claims": ["claim1", "claim2"], "queries": ["research query 1"], "entities_mentioned": ["Plato", "Athens"]}}"""
+
+        try:
+            raw = call_llm(analysis_prompt, model='gemini-2.5-flash', json_mode=True)
+            analysis = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception as e:
+            print(f'[explore/capture] LLM analysis failed: {e}', flush=True)
+            analysis = {'knowledge_claims': [transcript[:200]], 'queries': [], 'entities_mentioned': []}
+
+        claims = analysis.get('knowledge_claims', [])
+        queries = analysis.get('queries', [])
+        entities_mentioned = analysis.get('entities_mentioned', [])
+
+        # Save knowledge claims as entity notes
+        conn = get_connection()
+        now_ms = int(time.time() * 1000)
+        notes_saved = 0
+
+        if entity_id and claims:
+            note_text = '\n'.join(f'• {c}' for c in claims)
+            conn.execute(
+                'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
+                (entity_id, note_text, now_ms))
+            notes_saved += 1
+
+        # For general mode: route to detected entities
+        target_entity_ids = []
+        if mode == 'general' and entities_mentioned:
+            rows = conn.execute(
+                'SELECT entity_id, name FROM shared_entities WHERE name IN ({})'.format(
+                    ','.join('?' * len(entities_mentioned))
+                ), entities_mentioned
+            ).fetchall()
+            for r in rows:
+                target_entity_ids.append(r['entity_id'])
+                if claims:
+                    note_text = '\n'.join(f'• {c}' for c in claims)
+                    conn.execute(
+                        'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
+                        (r['entity_id'], note_text, now_ms))
+                    notes_saved += 1
+
+        conn.commit()
+        conn.close()
+
+        # Trigger research for queries
+        from review_engine import create_microlearning_request
+        research_triggered = []
+        # Get a curriculum node from the entity for context
+        source_node_id = None
+        source_domain = None
+        if entity_id:
+            conn = get_connection(readonly=True)
+            link = conn.execute(
+                'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ? LIMIT 1',
+                (entity_id,)
+            ).fetchone()
+            conn.close()
+            if link:
+                source_node_id = link['node_id']
+                source_domain = link['domain_id']
+
+        for query in queries[:3]:
+            card_id = create_microlearning_request(
+                query, source_node_id=source_node_id, source_domain=source_domain)
+            research_triggered.append({'card_id': card_id, 'query': query})
+
+        # Log voice transcript if audio was used
+        if audio_path:
+            try:
+                conn = get_connection()
+                conn.execute(
+                    '''INSERT INTO voice_transcripts
+                       (id, source, node_id, domain_id, node_title, transcript, audio_bytes, llm_result, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (f'exc_{int(time.time())}', 'explore_capture',
+                     source_node_id, source_domain, entity_name or 'general',
+                     transcript, audio_path.stat().st_size if audio_path.exists() else 0,
+                     json.dumps(analysis), now_ms))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f'[explore/capture] Failed to log transcript: {e}', flush=True)
+
+        self._send_json_response(200, {
+            'status': 'completed',
+            'transcript': transcript,
+            'notes_saved': notes_saved,
+            'research_triggered': research_triggered,
+            'entities_detected': entities_mentioned,
+        })
+
     def _handle_entity_notes_save(self):
         """POST /entity/notes — save a user note about an entity."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -5269,6 +5453,8 @@ JSON array only:"""
             return self._handle_entity_research()
         if self.path == '/entity/notes':
             return self._handle_entity_notes_save()
+        if self.path == '/explore/capture':
+            return self._handle_explore_capture()
         if self.path == '/book/process-kindle':
             return self._handle_process_kindle()
         if self.path == '/kindle/sync':
