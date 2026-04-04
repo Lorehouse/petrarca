@@ -279,11 +279,13 @@ def main():
         print(f'\n=== {curriculum["title"]} ({domain_id}) ===')
         print(f'  {len(nodes)} nodes, {dated_count} already have dates, {len(undated)} need dates')
 
-        # Split into batches if prompt would be too large (>50K chars)
+        # Split into batches if prompt would be too large (>35K chars)
         test_prompt = build_date_extraction_prompt(curriculum, undated)
-        if len(test_prompt) > 50000:
-            mid = len(undated) // 2
-            batches = [undated[:mid], undated[mid:]]
+        if len(test_prompt) > 35000:
+            # Split into enough batches to keep each under 35K chars
+            num_batches = (len(test_prompt) // 35000) + 1
+            batch_size = len(undated) // num_batches + 1
+            batches = [undated[i:i + batch_size] for i in range(0, len(undated), batch_size)]
             print(f'  Large curriculum — splitting into {len(batches)} batches')
         else:
             batches = [undated]

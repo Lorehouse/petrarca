@@ -108,6 +108,8 @@ FOR EACH NODE, provide:
 - "prerequisites": List of titles of nodes that should be known before this one (can be empty). Only include direct prerequisites, not transitive ones.
 - "obscurity": 1-5 (1 = widely known by anyone with passing interest, 5 = specialist knowledge)
 - "bloom_floor": The minimum level of understanding expected: "recognize" (know it exists), "explain" (understand the basics), or "analyze" (can discuss significance and connections)
+- "date_start": integer — start year of the topic's time period. Negative for BCE (e.g., 734 BC = -734, 330 AD = 330). Area nodes should span the full range of their children.
+- "date_end": integer — end year. Be as precise as the content allows. For undatable topics, use null.
 
 GUIDELINES:
 - Cover the major areas a well-designed introductory course would include
@@ -173,7 +175,7 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
         node_id = make_node_id(domain_id, title)
         title_to_id[title] = node_id
 
-        nodes.append({
+        node_dict = {
             "id": node_id,
             "title": title,
             "description": raw_node.get("description", ""),
@@ -184,7 +186,12 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
             "prerequisites": [],  # resolved below
             "obscurity": raw_node.get("obscurity", 3),
             "bloom_floor": raw_node.get("bloom_floor", "recognize"),
-        })
+        }
+        if raw_node.get("date_start") is not None:
+            node_dict["date_start"] = int(raw_node["date_start"])
+        if raw_node.get("date_end") is not None:
+            node_dict["date_end"] = int(raw_node["date_end"])
+        nodes.append(node_dict)
 
     # Resolve references
     for node in nodes:
