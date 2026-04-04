@@ -29,7 +29,8 @@
 │ log_server.py :8091 — interaction log collection             │
 │                                                             │
 │ petrarca.db (SQLite, WAL) — canonical data store             │
-│ /opt/petrarca/data/ — JSON fallback files                    │
+│ /opt/petrarca/data/ — JSON fallback + cache files            │
+│   voice_elicit_cache/ — idempotent retry cache (24h TTL)     │
 │ /opt/petrarca/.env — GEMINI_KEY, ANTHROPIC_KEY               │
 │                                                             │
 │ Cron: /etc/cron.d/petrarca-refresh (every 4 hours)           │
@@ -71,7 +72,7 @@
 | Knowledge Map | `knowledge-map.tsx` | Tree view of curricula with knowledge dots |
 | Curriculum Scan | `curriculum-scan.tsx` | v2 card-based self-assessment (3-level) |
 | Hamarquizen | `hamarquizen.tsx` | Book-specific PRIME→READ→TEST review |
-| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes |
+| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes. Fire-and-forget uploads with `request_id` caching for idempotent retries. |
 | Voice Notes | `voice-notes.tsx` | Voice note list + playback |
 | Kindle Curation | `kindle-curation.tsx` | Triage screen for Kindle library |
 | Projects | `projects.tsx` | Project list |
@@ -94,6 +95,7 @@
 | `MarkdownLink` | Cross-platform link handling (web `<a>`, native `onPress`) |
 | `PetrarcaDrawer` | ✦ navigation drawer (must be added per tab screen) |
 | `FeedbackCapture` | Global ✦ feedback button (voice + text + screenshot) |
+| `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `BookCurriculumContext` | Book-detail curriculum coverage section |
 | `ChapterContext` | Chapter preview/review with temporal hooks |
 | `EntitySheet` | Entity detail bottom sheet |
@@ -110,6 +112,8 @@
 | `interest-model.ts` | Topic-level interest tracking with Bayesian smoothing, 30-day decay |
 | `queue.ts` | Reading queue with AsyncStorage persistence + content prefetch |
 | `logger.ts` | Interaction event logging (`logEvent()`) — daily JSONL files |
+| `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. |
+| `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
 | `types.ts` | `ArticleMeta`, `ArticleContent`, `Article`, `TopicSynthesis`, etc. |
 
 ## Server: Key Modules
@@ -191,6 +195,8 @@
 | POST | `/review/batch-generate` | Batch generate questions for knowledge items |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |
+| POST | `/review/voice-elicit` | Voice free-recall elicitation (transcription + LLM). Idempotent via `request_id` — cached results returned on retry. |
+| POST | `/review/voice-memo` | Voice memo for review item |
 | GET | `/review/elicit-candidates` | Voice elicitation candidates |
 
 ### Entity

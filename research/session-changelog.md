@@ -1,6 +1,43 @@
 # Knowledge System Implementation Status
 
-**Date**: April 4, 2026 (last updated — session 44: multi-quiz microlearning + entity research)
+**Date**: April 4, 2026 (last updated — session 46: voice upload robustness)
+
+## Session 46: Voice Upload Robustness (April 4, 2026)
+
+### Problem
+Voice elicitation uploads failing consistently. Two root causes identified from server logs:
+- **Connection reset by peer** (today): Server completes 40-50s processing (Soniox transcription + Claude LLM analysis) but mobile connection drops before response delivery. 4 failures in 2 hours.
+- **Database is locked** (yesterday): 38 errors in 24h — post-LLM DB writes blocked by concurrent pipeline or other voice-elicit requests exceeding 60s busy_timeout.
+- Combined effect: recordings stuck in `pending.json`, retries re-process everything (wasting API calls), and may fail again the same way.
+
+### Fix: 3-Layer Robustness
+
+**1. Idempotent retry via request_id caching (server + client)**
+- Client generates stable `request_id` per recording (`elicit_{timestamp}_{node_id}`).
+- Server caches successful results to `voice_elicit_cache/{request_id}.json` *before* sending response.
+- On retry: cache hit returns instantly (<1s) — no re-transcription, no re-LLM, no duplicate side effects.
+- Cache expires after 24h. `ConnectionResetError` gracefully handled instead of crashing.
+- Files: `research-server.py` (`_handle_voice_elicitation`), `review-api.ts` (`sendVoiceElicitation`), `voice-elicitation.tsx` (PendingUpload + requestId plumbing).
+
+**2. DB write retry loop (server)**
+- Post-LLM write section (knowledge updates, review items, wonderings) wrapped in 3-attempt retry with 5s/10s backoff.
+- Even if all retries fail, LLM result still returned (and cached) — writes succeed on client's next retry.
+- File: `review_engine.py` (`run_voice_elicitation`).
+
+**3. Auto-retry on app foreground + toast (client)**
+- New `voice-upload-service.ts`: listens for `AppState` "active" transitions, retries all pending uploads.
+- Entries expire after 48h (was: never, required manual navigation to voice-elicitation screen).
+- New `VoiceUploadToast.tsx`: global toast showing success/failure of background retries.
+- Wired into `_layout.tsx` at app startup.
+
+### Files Changed/Created
+- `scripts/research-server.py` (idempotent cache, graceful ConnectionReset)
+- `scripts/review_engine.py` (DB write retry loop)
+- `app/lib/review-api.ts` (requestId parameter)
+- `app/app/voice-elicitation.tsx` (requestId generation + plumbing)
+- `app/lib/voice-upload-service.ts` (new — background retry service)
+- `app/components/VoiceUploadToast.tsx` (new — global toast)
+- `app/app/_layout.tsx` (wire service + toast)
 
 ## Session 44: Multi-Quiz Microlearning, Entity Research, Review Stream Fix (April 4, 2026)
 
