@@ -568,6 +568,8 @@ MIGRATIONS = [
     # Durable tracking of triggered follow-up queries
     "ALTER TABLE knowledge_items ADD COLUMN triggered_follow_ups TEXT DEFAULT '[]'",
     "ALTER TABLE microlearning_cards ADD COLUMN triggered_follow_ups TEXT DEFAULT '[]'",
+    # Card title (with dates) for prominent display
+    "ALTER TABLE microlearning_cards ADD COLUMN title TEXT",
 ]
 
 
