@@ -523,8 +523,14 @@ export interface ChapterInsights {
 
 // --- Resurfacing types ---
 
+export interface MicrolearningQuiz {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface ResurfacingItem {
-  type: 'review' | 'microlearning' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
+  type: 'review' | 'microlearning' | 'microlearning_quiz' | 'entity_intro' | 'resonance' | 'dialogue' | 'retrieval' | 'temporal_ordering';
   // Review card fields (from knowledge_items)
   question_id?: string;
   question?: string;
@@ -542,6 +548,8 @@ export interface ResurfacingItem {
   follow_up_queries?: string[];
   content?: string;  // microlearning card body
   query?: string;    // original research query
+  quizzes?: MicrolearningQuiz[];  // multiple quizzes per ML card
+  card_id?: string;  // parent card ID for individual quiz review
   review_count?: number;
   last_score?: string;
   stability_days?: number;

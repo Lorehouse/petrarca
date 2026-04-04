@@ -2,11 +2,36 @@
 
 Master index of all research documents. **Always update this file when adding new research.**
 
+## Essential Reading (start here)
+
+| When | Document | Why |
+|------|----------|-----|
+| **Every session** | [implementation-status.md](implementation-status.md) | Current system snapshot — architecture, all screens/scripts/endpoints, algorithm parameters |
+| **Design decisions** | [design-vision.md](design-vision.md) | Master "why" — "hooks not facts", Mode A vs B, three layers |
+| **Retention/review** | [review-system-architecture.md](review-system-architecture.md) | Knowledge-centric (not source-centric) review design |
+| **Retention/review** | [reading-companion-process-design.md](reading-companion-process-design.md) | How reading companion flows during active reading |
+| **Curriculum/entities** | [overlapping-curricula-vision.md](overlapping-curricula-vision.md) | Bounded courses, shared entities, nexus points |
+| **Deep intellectual "why"** | [matuschak-petrarca-analysis.md](../research/notes/matuschak-petrarca-analysis.md) | Critical flaws identified + 8 improvements |
+| **Understanding the reader** | [beyond-flashcards-knowledge-retention.md](beyond-flashcards-knowledge-retention.md) | Why SRS fails for conceptual knowledge, 7 experimental designs |
+
+## Read When Working On...
+
+- **Feed/ranking**: [novelty-system-architecture.md](novelty-system-architecture.md), [claims-topics-feedback-spec.md](claims-topics-feedback-spec.md)
+- **Synthesis**: [synthesis-pipeline-design.md](synthesis-pipeline-design.md), [synthesis-knowledge-tracking.md](synthesis-knowledge-tracking.md)
+- **Books**: [book-companion-handoff.md](book-companion-handoff.md), [book-companion-experiments.md](book-companion-experiments.md)
+- **Knowledge mapping**: [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md), [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md)
+- **Calibration/thresholds**: [experiment-results-report.md](experiment-results-report.md), `scripts/ground-truth/`
+- **UX**: [ux-redesign-spec.md](ux-redesign-spec.md), [web-app-audit.md](web-app-audit.md), [mobile-app-audit.md](mobile-app-audit.md)
+- **Agent architecture**: [autonomous-agent-frameworks-2025-2026.md](autonomous-agent-frameworks-2025-2026.md), [always-on-agent-cost-comparison.md](always-on-agent-cost-comparison.md)
+
+---
+
 ## Master Reference
 | Document | Description | Status |
 |----------|-------------|--------|
-| [implementation-status.md](implementation-status.md) | **CURRENT STATE** — Comprehensive implementation status: all files created/modified, algorithm parameters, deployment status, known issues, next steps. Read this first for what's built and what's pending. | Active |
-| [system-state-of-the-art.md](system-state-of-the-art.md) | **COMPREHENSIVE** — Single file covering all research, validated algorithms, data structures, UI mockups, pipeline architecture. | Active |
+| [implementation-status.md](implementation-status.md) | **CURRENT STATE** — System snapshot: architecture, screens, scripts, endpoints, algorithms, deployment | Active |
+| [session-changelog.md](session-changelog.md) | **HISTORY** — Session-by-session implementation log (sessions 20-44) | Active |
+| [system-state-of-the-art.md](system-state-of-the-art.md) | **COMPREHENSIVE** — Single file covering all research, validated algorithms, data structures, UI mockups, pipeline architecture | Active |
 
 ## Foundational
 | Document | Description | Status |

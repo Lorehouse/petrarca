@@ -4022,20 +4022,30 @@ JSON array only:"""
             self._send_json_response(500, {'error': str(e)})
 
     def _handle_microlearning_dismiss(self):
-        """POST /review/microlearning/dismiss — mark a microlearning card as not-interested."""
+        """POST /review/microlearning/dismiss — dismiss a card or individual quiz."""
         content_length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(content_length))
         card_id = body.get('card_id', '').strip()
-        if not card_id:
-            self._send_json_response(400, {'error': 'card_id required'})
+        quiz_id = body.get('quiz_id', '').strip()
+        if not card_id and not quiz_id:
+            self._send_json_response(400, {'error': 'card_id or quiz_id required'})
             return
         from db import get_connection
         conn = get_connection()
         try:
-            conn.execute("UPDATE microlearning_cards SET status='dismissed' WHERE id=?",
-                         (card_id,))
+            if quiz_id:
+                # Dismiss a single quiz
+                conn.execute("UPDATE microlearning_quizzes SET status='dismissed' WHERE id=?",
+                             (quiz_id,))
+            if card_id:
+                # Dismiss whole card + all its quizzes
+                conn.execute("UPDATE microlearning_cards SET status='dismissed' WHERE id=?",
+                             (card_id,))
+                conn.execute("UPDATE microlearning_quizzes SET status='dismissed' WHERE card_id=?",
+                             (card_id,))
             conn.commit()
-            self._send_json_response(200, {'status': 'dismissed', 'card_id': card_id})
+            self._send_json_response(200, {'status': 'dismissed',
+                                           'card_id': card_id, 'quiz_id': quiz_id})
         except Exception as e:
             self._send_json_response(500, {'error': str(e)})
         finally:

@@ -1189,12 +1189,20 @@ def generate_question(item_id: str, conn) -> dict:
 # ── Record answer ─────────────────────────────────────────────────────────────
 
 def record_answer(item_id: str, score: str, conn) -> dict:
-    # Look up in knowledge_items first; fall back to review_items, then microlearning_cards
+    # Look up in knowledge_items first; fall back to review_items,
+    # then microlearning_quizzes, then microlearning_cards (legacy)
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
     table = 'knowledge_items'
     if row is None:
         row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
         table = 'review_items'
+    if row is None:
+        try:
+            row = conn.execute('SELECT * FROM microlearning_quizzes WHERE id=?', (item_id,)).fetchone()
+            if row:
+                table = 'microlearning_quizzes'
+        except Exception:
+            pass
     if row is None:
         row = conn.execute('SELECT * FROM microlearning_cards WHERE id=?', (item_id,)).fetchone()
         table = 'microlearning_cards'
@@ -1210,16 +1218,34 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
     next_due = now + int(new_stability * 24 * 60 * 60 * 1000)
 
-    if table == 'microlearning_cards':
-        # Microlearning cards: update FSRS fields (no cached_question to clear)
+    if table == 'microlearning_quizzes':
+        # Individual quiz from a microlearning card
+        conn.execute("""
+            UPDATE microlearning_quizzes SET stability_days=?, due_at=?, last_reviewed_at=?,
+              last_score=?, review_count=review_count+1
+            WHERE id=?
+        """, (new_stability, next_due, now, score, item_id))
+        print(f'[review] ml_quiz {item_id}: {score} → stability={new_stability:.1f}d', flush=True)
+
+        # Propagate knowledge update via the parent card's curriculum context
+        parent = conn.execute(
+            'SELECT source_domain, source_node_id FROM microlearning_cards WHERE id=?',
+            (item['card_id'],)).fetchone()
+        if parent and parent['source_domain'] and parent['source_node_id']:
+            knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
+            update_knowledge(parent['source_domain'], parent['source_node_id'],
+                             knowledge=knowledge_val, confidence=confidence_val,
+                             source=f"microlearning:{item_id}")
+
+    elif table == 'microlearning_cards':
+        # Legacy: whole microlearning card as review unit
         conn.execute("""
             UPDATE microlearning_cards SET stability_days=?, due_at=?, last_reviewed_at=?,
               last_score=?, review_count=review_count+1
             WHERE id=?
         """, (new_stability, next_due, now, score, item_id))
-        print(f'[review] microlearning {item_id}: {score} → stability={new_stability:.1f}d, next_due in {new_stability:.1f}d', flush=True)
+        print(f'[review] microlearning {item_id}: {score} → stability={new_stability:.1f}d', flush=True)
 
-        # Update knowledge state if microlearning card has curriculum context
         if item.get('source_domain') and item.get('source_node_id'):
             knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
             update_knowledge(item['source_domain'], item['source_node_id'],
@@ -1305,7 +1331,9 @@ Write:
 1. A clear, engaging answer in 3-4 SHORT paragraphs (total 150-250 words). Include specific
    names, dates, and vivid details. Write for someone who already has basic knowledge
    of the period — don't over-explain fundamentals.
-2. One assessment question about the content (test whether they absorbed the key insight)
+2. 3-5 quiz questions that test SPECIFIC facts from the content. Each should target a
+   different detail — a date, a person, an event, a consequence, a connection. Short
+   questions (6-15 words) with short specific answers (1-2 sentences).
 3. 3 follow-up research queries for going even deeper
 4. A list of entities mentioned in the content — people, places, events, and key concepts.
    For each entity, provide:
@@ -1314,7 +1342,7 @@ Write:
    - "type": one of "person", "place", "event", "concept", "period"
 
 Output JSON only:
-{{"content":"the 3-4 paragraph answer","question":"assessment question about this content","answer_guidance":"1-2 sentence answer to the assessment question","follow_up_queries":["query1","query2","query3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
+{{"content":"the 3-4 paragraph answer","quizzes":[{{"question":"short factual question","answer":"1-2 sentence specific answer"}}],"follow_up_queries":["query1","query2","query3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
 
 
 ENTITY_RESEARCH_PROMPT = """You are a knowledgeable historian. Write a rich microlearning card about this entity,
@@ -1332,12 +1360,14 @@ Write:
    - Makes SPECIFIC connections to the related entities listed above (how they interacted, overlapped, influenced each other)
    - Includes concrete dates, places, and names
    - Highlights surprising connections or lesser-known facts
-2. One assessment question about the content
+2. 3-5 quiz questions that test SPECIFIC facts from the content. Each should target a
+   different detail — a date, a person, an event, a consequence, a connection. Short
+   questions (6-15 words) with short specific answers (1-2 sentences).
 3. 3 follow-up research queries that explore connections further
 4. Entities mentioned in the text (people, places, events, concepts)
 
 Output JSON only:
-{{"content":"the profile text","question":"assessment question","answer_guidance":"1-2 sentence answer","follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
+{{"content":"the profile text","quizzes":[{{"question":"short factual question","answer":"specific answer"}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
 
 
 ENTITY_QUESTIONS_PROMPT = """Generate 3 research questions about this entity that would make a history reader
@@ -1492,6 +1522,38 @@ def generate_entity_questions(entity_id: str, entity_name: str,
     return [f'What was the historical significance of {entity_name}?']
 
 
+def _store_quizzes(card_id: str, quizzes: list, conn) -> int:
+    """Store quiz questions from an ML card into microlearning_quizzes table.
+
+    Also backfills the legacy question/answer_guidance fields on the card
+    with the first quiz for backwards compatibility.
+    """
+    now_ms = int(time.time() * 1000)
+    stored = 0
+    for i, q in enumerate(quizzes):
+        question = q.get('question', '').strip()
+        answer = q.get('answer', '').strip()
+        if not question:
+            continue
+        quiz_id = f'{card_id}_q{i}'
+        conn.execute('''
+            INSERT OR IGNORE INTO microlearning_quizzes
+            (id, card_id, question, answer, status, stability_days, due_at,
+             review_count, created_at)
+            VALUES (?, ?, ?, ?, 'active', 1.0, ?, 0, ?)
+        ''', (quiz_id, card_id, question, answer, now_ms, now_ms))
+        stored += 1
+
+    # Backfill legacy fields with first quiz
+    if quizzes:
+        first = quizzes[0]
+        conn.execute(
+            'UPDATE microlearning_cards SET question=?, answer_guidance=? WHERE id=?',
+            (first.get('question', ''), first.get('answer', ''), card_id))
+
+    return stored
+
+
 def create_entity_research(entity_id: str, entity_name: str,
                            entity_type: str = 'concept',
                            description: str = '') -> str:
@@ -1559,29 +1621,30 @@ def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
             raise ValueError(f'Invalid response: {str(result)[:200]}')
 
         entities = result.get('entities', [])
-        entity_spans = _compute_entity_spans(result['content'], entities)
+        quizzes = result.get('quizzes', [])
+        if not quizzes and result.get('question'):
+            quizzes = [{'question': result['question'],
+                        'answer': result.get('answer_guidance', '')}]
 
         now_ms = int(time.time() * 1000)
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                content=?, question=?, answer_guidance=?,
-                follow_up_queries=?, entities=?,
+                content=?, follow_up_queries=?, entities=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
             result['content'],
-            result.get('question', ''),
-            result.get('answer_guidance', ''),
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),
             now_ms,
             card_id,
         ))
+        quiz_count = _store_quizzes(card_id, quizzes, conn)
         conn.commit()
         conn.close()
         print(f'[entity-research] completed {card_id}: {entity_name} '
-              f'({len(entities)} entities, {len(related)} related)', flush=True)
+              f'({quiz_count} quizzes, {len(entities)} entities, {len(related)} related)', flush=True)
 
     except Exception as e:
         print(f'[entity-research] failed {card_id}: {e}', flush=True)
@@ -1677,25 +1740,30 @@ def _run_microlearning_research(card_id: str, query: str,
 
         # Update the card
         now_ms = int(time.time() * 1000)
+        quizzes = result.get('quizzes', [])
+        # Backwards compat: if model returned old single-question format
+        if not quizzes and result.get('question'):
+            quizzes = [{'question': result['question'],
+                        'answer': result.get('answer_guidance', '')}]
+
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
-                content=?, question=?, answer_guidance=?,
-                follow_up_queries=?, entities=?,
+                content=?, follow_up_queries=?, entities=?,
                 status='completed', due_at=?
             WHERE id=?
         ''', (
             result['content'],
-            result.get('question', ''),
-            result.get('answer_guidance', ''),
             json.dumps(result.get('follow_up_queries', [])),
             json.dumps(entities),
-            now_ms,  # due immediately
+            now_ms,
             card_id,
         ))
+        quiz_count = _store_quizzes(card_id, quizzes, conn)
         conn.commit()
         conn.close()
-        print(f'[microlearning] completed {card_id}: {query[:60]} ({len(entities)} entities)', flush=True)
+        print(f'[microlearning] completed {card_id}: {query[:60]} '
+              f'({quiz_count} quizzes, {len(entities)} entities)', flush=True)
 
     except Exception as e:
         print(f'[microlearning] failed {card_id}: {e}', flush=True)

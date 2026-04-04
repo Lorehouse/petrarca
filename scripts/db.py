@@ -456,6 +456,24 @@ CREATE TABLE IF NOT EXISTS microlearning_cards (
 CREATE INDEX IF NOT EXISTS idx_ml_status ON microlearning_cards(status);
 CREATE INDEX IF NOT EXISTS idx_ml_due ON microlearning_cards(due_at);
 
+-- Individual quiz questions from microlearning cards, independently scheduled
+CREATE TABLE IF NOT EXISTS microlearning_quizzes (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES microlearning_cards(id),
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    status TEXT DEFAULT 'active',        -- active, dismissed
+    stability_days REAL DEFAULT 1.0,
+    due_at INTEGER DEFAULT 0,
+    last_reviewed_at INTEGER,
+    review_count INTEGER DEFAULT 0,
+    last_score TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mlq_card ON microlearning_quizzes(card_id);
+CREATE INDEX IF NOT EXISTS idx_mlq_due ON microlearning_quizzes(due_at);
+CREATE INDEX IF NOT EXISTS idx_mlq_status ON microlearning_quizzes(status);
+
 -- Voice transcript log: every voice interaction persisted for analysis
 CREATE TABLE IF NOT EXISTS voice_transcripts (
     id TEXT PRIMARY KEY,

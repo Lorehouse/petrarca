@@ -1,279 +1,113 @@
 # Petrarca — Intelligent Read-Later App
 
-## Project Overview
-A mobile-first read-later app combining incremental reading (SuperMemo-inspired), user knowledge modeling, and algorithmic article selection. The app helps the user pre-read, filter, and deeply engage with articles from RSS feeds, Twitter bookmarks, and other sources — surfacing content with genuinely new and interesting information based on a model of what the user already knows and cares about.
+A mobile-first read-later app combining incremental reading, user knowledge modeling, and algorithmic article selection. Named after Francesco Petrarca, pioneer of systematic reading methods. Built for one power user (Stian), not a social platform.
 
-## Project Name
-Named after Francesco Petrarca (Petrarch), pioneer of humanist reading practices and one of the first to develop systematic methods for reading, annotating, and synthesizing knowledge from texts.
+**Frontend**: Expo SDK 54 (React Native), 2-tab layout (Feed / Library) + ✦ drawer. **Backend**: Hetzner VM — nginx (:8083 content, :8084 web), research-server.py (:8090), 4-hour cron pipeline. **Data**: SQLite (petrarca.db, canonical), JSON fallback.
 
-## Key Design Principles
-- **Knowledge-aware filtering**: Model what the user knows and is interested in; score incoming articles for novelty and relevance
-- **Incremental reading**: Don't just save articles — progressively extract, summarize, and schedule key insights for review
-- **Active signals**: Easy user feedback during reading: "I know this", "interesting, tell me more", "save this segment", "not relevant"
-- **Open algorithms**: Selection/ranking algorithms should be transparent and configurable
-- **Personal, not social**: Built for one power user (Stian), not a social platform
+## Design Principles & North Star
 
-## Current Implementation Status
-**See `research/implementation-status.md` for comprehensive details** — all files, algorithms, deployment status, known issues, and next steps.
+These principles are the intellectual foundation of the project. They override implementation convenience. Read the linked docs when making design decisions beyond bug fixes.
 
-### Architecture
-- **Frontend**: Expo SDK 54 (React Native), 2-tab layout (Feed / Library) + ✦ drawer for secondary screens, deployed at `exp://alifstian.duckdns.org:8082` (native) and `http://alifstian.duckdns.org:8084` (web)
-- **Backend**: Hetzner VM — nginx content server (:8083), research server (:8090), 4-hour cron pipeline
-- **Pipeline**: Twitter bookmarks + Readwise Reader → Gemini Flash extraction → atomic claims → amygdala MiniLM embeddings → NLI-enhanced knowledge index → served via nginx
-- **State**: Module-level vars in `store.ts`, persisted to AsyncStorage. No Redux/Context.
-- **Interest Model**: Topic-level interest tracking with Bayesian smoothing, 30-day decay, feed ranking
-- **Knowledge System**: Server-computed INDEX (claim similarities, paragraph mappings, delta reports) + client-side LEDGER (FSRS decay, claim classification, paragraph dimming)
+1. **"Hooks, not facts."** Reading success = building frameworks (Caesar, Alexander, Charlemagne), not fact-drilling. The system builds scaffold knowledge that makes everything you read richer. *(research/design-vision.md)*
 
-### Key Files (Feed & UI)
-| File | Role |
-|------|------|
-| `app/app/(tabs)/index.tsx` | Feed screen — orchestrates ContinueBar + SynthesisScroll + ArticleRow list |
-| `app/components/ContinueBar.tsx` | Dark ink bar for in-progress article at top of feed |
-| `app/components/SynthesisScroll.tsx` | Horizontal-scroll synthesis cards with margin numbers |
-| `app/components/ArticleRow.tsx` | Tabular article row with novelty badge margin + swipe gestures |
-| `app/app/(tabs)/topics.tsx` | Syntheses screen — synthesis-led (not topic-led), accessible via ✦ drawer |
-| `app/components/FeedbackCapture.tsx` | Global floating ✦ feedback button — voice + text + screenshot + context |
+2. **"I'll manage your memory."** The fear of forgetting stops reading nonfiction. Like Michel Thomas: the system takes responsibility for retention so the user can focus on reading. Frame knowledge maps as positive progress, never anxiety-inducing gaps. *(memory/feedback_michel_thomas.md)*
 
-### Key Files (Knowledge System)
-| File | Role |
-|------|------|
-| `app/data/knowledge-engine.ts` | Core engine — FSRS decay, claim classification, paragraph dimming, curiosity scoring, article similarity lookup |
-| `app/data/article-content.ts` | Lazy article content loading — in-memory + disk cache, prefetch for offline |
-| `app/data/queue.ts` | Reading queue with AsyncStorage persistence + content prefetch |
-| `scripts/build_knowledge_index.py` | Server pipeline — embeddings → claim similarity → article similarity (via limbic.amygdala document_similarity) → delta reports → knowledge_index.json |
-| `scripts/build_claim_embeddings.py` | Generate claim embeddings via limbic.amygdala (was Gemini API, migrated 2026-03-19) |
-| `scripts/deploy_knowledge_index.sh` | Deploy knowledge_index.json to nginx + update manifest |
+3. **Comprehension before memory.** Ensure understanding before testing (Matuschak's key finding). SRS-style flashcards fail for conceptual knowledge — we need elaborative retrieval, connection-based resurfacing, spreading activation. *(research/andy-matuschak-research.md, research/beyond-flashcards-knowledge-retention.md)*
 
-### Key Files (Curriculum & Knowledge Mapping)
-| File | Role |
-|------|------|
-| `scripts/curriculum.py` | Curriculum engine — generate, map books, elicit, import assessments, gap analysis |
-| `scripts/build_curriculum_embeddings.py` | Embed curriculum nodes with MiniLM, map article claims → curriculum nodes |
-| `app/app/knowledge-map.tsx` | Knowledge Map screen — tree view of curricula with knowledge dots |
-| `app/app/curriculum-scan.tsx` | Breadth scan screen — v2 card-based self-assessment |
-| `app/components/BookCurriculumContext.tsx` | Book-detail section showing curriculum coverage + cross-book connections |
-| `data/curricula/` | Server-side curriculum JSONs, knowledge states, book mappings (gitignored, lives on server) |
+4. **Atomic claims are the fundamental unit.** Not articles, not words. Claims enable cross-article tracking, knowledge state management, and novelty detection. Delta-only reports show what's new since last read. *(research/novelty-system-architecture.md)*
 
-### Curriculum Data Model
-- Curricula: hierarchical nodes (Area → Topic → Concept), generated by Opus only (Gemini Flash quality rejected)
-- **Enriched fields** (session 34): `date_start`/`date_end` (years, negative for BCE), `cross_curriculum_entities` (shared entities with lenses)
-- Knowledge states: per-node `{knowledge, interest, confidence, sources}` in `knowledge_{domain}.json`
-- Book mappings: `mappings_{domain}_{book_id}.json` — which curriculum nodes a book covers
-- **Article-curriculum mappings**: `article_curriculum_mappings.json` — claim→node links at 0.65 cosine threshold, also embedded in `knowledge_index.json` as `article_curriculum_nodes`
-- **Cross-curriculum entities**: `cross_curriculum_entities.json` — 25 shared entities (Archimedes, Syracuse, etc.) with per-curriculum lenses
-- Server annotates knowledge directly on curriculum nodes in GET responses (not separate dict)
-- `GET /curriculum/book-context/{book_id}` composes all curriculum data for a book
+5. **Curriculum as bridge.** Don't match claims directly across sources. Curriculum nodes (50-80 per domain, Opus-generated) are the organizing principle — they connect books, articles, and review into a coherent structure. *(research/overlapping-curricula-vision.md)*
 
-### Book Data Architecture
-- Server stores books + captures in SQLite (`physical_books`, `book_captures` tables in petrarca.db)
-- Captures are a **top-level array**, NOT nested inside each book object — filtered by `book_id` field
-- Voice notes uploaded to `/book/voice-note`, transcription saved to `/data/notes/`, capture record synced via `/book/sync`
-- Client syncs to server after every mutation via `syncToServer()` in `book-store.ts`
+6. **Temporal hooks are the key retention mechanism.** Priority: (1) anchor to known events, (2) same-moment connections, (3) causal chains, (4) cross-domain surprises only if the reader knows the other domain. *(memory/feedback_temporal_hooks.md)*
 
-### Algorithm Parameters (experiment-validated)
-- KNOWN threshold: ≥ 0.82 cosine (MiniLM 384d), EXTENDS: ≥ 0.74, NLI cascade for 0.74–0.82 zone (59% accurate — consider disabling), FORGOTTEN: R < 0.3
-- **Article-level similarity**: weighted 0.5×summary + 0.5×claims cosine via amygdala `find_similar_documents()`. Calibrated on 18 human + 300 LLM-rated pairs: AUROC=0.930, 94% accuracy, ρ=0.818.
-  - Briefing card threshold: 0.52 (P=80%, R=78%). Feed ranking: 0.49. Dedup: 0.64.
-  - See `scripts/ground-truth/threshold_config.json` for full config, `scripts/ground-truth/experiment-report.html` for visual report
-- **Curriculum-article mapping**: ≥ 0.65 cosine (claim→node, lower than claim-claim because node descriptions are broader)
-- **Active book feed boost**: +0.15 score for articles matching active book topics
-- **Pipeline model**: gemini-3.1-flash-lite-preview for extraction + atomic claims (5% factual rate vs 60% with old prompt)
-- FSRS stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
-- Curiosity peak: 70% novelty, Gaussian σ=0.15
-- Reader: 3 modes (Full / Guided / New Only), familiar paragraph opacity=0.55
+7. **Facts first, then concepts.** Dates, key figures, key events are load-bearing scaffolding. Generate factual questions DETERMINISTICALLY from structured `key_facts` data. Only use LLM for rich answers and analytical questions. Never delegate to LLM what can be computed from structure. *(memory/feedback_rules.md § Knowledge System Design)*
 
-## Design System — "The Annotated Folio"
+8. **Books encode, system maintains.** Books provide initial encoding through narrative/structure. Maintaining and integrating knowledge is the system's job. Not SRS — but real decay exists. Voice dumps as knowledge elicitation. *(memory/feedback_knowledge_encoding.md)*
 
-**CRITICAL: Read `design/DESIGN_GUIDE.md` before making ANY UI changes.** The app has a carefully designed Renaissance-inspired visual language. Every new screen, component, or modification must follow this system.
+9. **Curiosity zone at 70% novelty.** Articles with ~70% novel claims + ~30% familiar context are most engaging (zone of proximal development). "Most novel" ≠ "most interesting." *(research/experiment-results-report.md)*
 
-### Philosophy
-The screen is a page from a humanist's working manuscript. Typography over decoration. Red rubrics guide the eye. Margins carry metadata. Structural ornament only — no gratuitous boxes or shadows.
+10. **Dim familiar, don't hide.** Familiar paragraphs at 0.55 opacity, not hidden. Constrained highlighting (150 words) improves comprehension 11-19% over highlighting everything (CHI 2024). *(research/knowledge-diff-interfaces.md)*
 
-### Color Palette
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `parchment` | `#f7f4ec` | Primary background |
-| `parchmentDark` | `#f0ece2` | Tab bar, secondary surfaces |
-| `ink` | `#2a2420` | Primary text, headings |
-| `rubric` | `#8b2500` | THE accent color — navigation, emphasis, section heads |
-| `textPrimary` | `#1a1a18` | Titles |
-| `textBody` | `#333333` | Body text |
-| `textSecondary` | `#6a6458` | Summaries |
-| `textMuted` | `#b0a898` | Metadata |
-| `rule` | `#e4dfd4` | Hairline dividers |
-| `claimNew` | `#2a7a4a` | "New to me" / success |
-| `claimKnown` | `#d0ccc0` | "Knew this" (+ opacity 0.55) |
+**Flag design drift proactively.** If implementation diverges from these principles, raise it before the user discovers it.
 
-### Typography — Four-Font System
-| Role | Font | Usage |
-|------|------|-------|
-| **Display** | Cormorant Garamond | Screen titles, large numbers, reader titles (600 weight) |
-| **Body/Titles** | EB Garamond | Entry titles, section heads (uppercase + letterspaced), claim text |
-| **Reading** | Crimson Pro | Reader body, summaries, long-form text |
-| **UI/Meta** | DM Sans | Metadata, labels, small caps, buttons |
+## Where to Look
 
-### Signature Visual Elements
-These elements define Petrarca's identity. Never omit them:
-
-1. **Double rule** — 2px + 1px rules with 5px gap, at the top of every screen below subtitle. The signature element.
-2. **✦ Section markers** — Four-pointed star before section headings, always rubric colored
-3. **Entry row sidebar** — Two-column grid: content (1fr) | sidebar (76px) with large Cormorant numbers + DM Sans labels + depth dots
-4. **Text-only tab bar** — EB Garamond 11px labels on parchmentDark, active = ink + 4px rubric dot indicator. NO icons.
-5. **Depth navigator** — Horizontal row: Summary / Claims / Sections / Full, active has rubric underline (2px)
-6. **Claim cards** — Left-bordered text blocks (2px), no background. Border colors: default=#e4dfd4, new=#2a7a4a, known=#d0ccc0
-7. **Novelty badges** — "Mostly new" / "72% new" / "Partly familiar" with semantic colors
-8. **Rubric dot** — 4px circle as active tab indicator and list bullets
-9. **Topic tags** — EB Garamond italic 11.5px in rubric color
-
-### Micro-Delights
-- **Pull-to-refresh**: ✦ ornament rotates (no spinner)
-- **Claim reveal**: Staggered 80ms slide-up animation
-- **Long-press highlight**: Warm amber left border fades in + haptic
-- **Completion flash**: Brief gold (#c9a84c) runs along double rule
-- **Knowledge bars**: Animate from 0% to actual width, staggered 60ms
-
-### Layout Rules
-- Reading measure: `max-width: 680px` for reader content
-- Screen padding: 16px horizontal
-- Touch targets: minimum 44×44pt
-- Entry rows: title + 1-line summary + topics + meta (no multi-line summaries in feed)
-- Hover on web: subtle `background: rgba(139,37,0,0.03)`
-
-### Design Files
-- `design/DESIGN_GUIDE.md` — Complete 490-line design specification
-- `design/tokens/` — TypeScript design tokens (colors, typography, spacing)
-- `design/assets/` — Logo SVGs (mark, wordmark, combined, favicon)
-- `app/mockups/` — Previous design round mockups (feed variants, reader variants)
-- `app/preview-mockups/` — Landing page / marketing mockups
-
-## Research & Documentation Organization
-All research lives in `research/` directory:
-- `research/README.md` — Master index of all research documents (ALWAYS update when adding new docs)
-- `research/implementation-status.md` — **CURRENT STATE** — comprehensive implementation status, deployment, known issues, next steps
-- `research/novelty-system-architecture.md` — Master architecture for knowledge-aware system
-- `research/system-state-of-the-art.md` — Comprehensive reference covering all research, algorithms, data structures, experiments, UI mockups
-- `research/experiment-results-report.md` — Results from 11 validation experiments
-- `research/experiment-log.md` — Append-only log of all experiments and prototypes
-- `research/ux-redesign-spec.md` — 2 rounds of mockup feedback, approved interaction models
+| Working on... | Read first |
+|--------------|-----------|
+| **Any feature work** | `research/implementation-status.md` (architecture, screens, scripts, endpoints, algorithms) |
+| **UI changes** | `design/DESIGN_GUIDE.md` — MUST READ. "The Annotated Folio" Renaissance visual language. |
+| **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
+| **Curriculum/entities** | `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
+| **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
+| **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
+| **Feed/ranking** | `research/novelty-system-architecture.md` |
+| **Deep "why"** | `research/design-vision.md` (master synthesis of all interviews + research) |
+| **Research index** | `research/README.md` (50+ docs, tiered reading guide) |
+| **Past sessions** | `research/session-changelog.md` |
 
 ## Working on This Codebase
 
-This project is exploratory — started from a hunch, evolved through 40+ sessions in many directions. That means:
+This project is exploratory — 45+ sessions in many directions. That means:
 
-1. **There is stale code and data.** Dead imports, unused tables, deprecated modules, JSON files that nothing reads. Don't assume everything exists for a reason. If you see something that looks wrong, verify it's still used before building on it.
-2. **Trace data flows before changing them.** Before modifying any pipeline, grep the actual imports and verify: where does data get written? Where does the consumer read? Are they the same store? This project has had critical bugs from write/read mismatches.
-3. **Test endpoints before telling the user to test.** After server changes, curl the endpoint with realistic data. After client changes, deploy mobile (`deploy.sh`) and verify the bundle compiles. "It should work" is not verification.
-4. **Clean up what you touch.** If you find dead code, unused imports, or stale data while working on something, remove it. Don't leave it for the next agent to be misled by. This is especially important for deprecated module imports (e.g., `curriculum.py` vs `curriculum_db.py`).
-5. **Diagnose before patching.** When something fails, read the full error, check what's concurrent, understand the architecture. One correct fix beats four incremental attempts that each introduce new bugs.
+1. **There is stale code.** Dead imports, unused tables, deprecated modules. Don't assume everything exists for a reason. Verify before building on it.
+2. **Trace data flows before changing them.** Where does it write → what store → who reads → what displays? Critical bugs came from write/read mismatches (JSON vs SQLite).
+3. **Test endpoints before telling user to test.** `curl` with realistic data after server changes. Deploy mobile after client changes. "It should work" is not verification.
+4. **Clean up what you touch.** Remove dead code, unused imports, stale data when you encounter them.
+5. **Diagnose before patching.** Read the full error, check concurrency, understand architecture. One correct fix beats four incremental attempts.
 
 ## Critical Rules
 
-### 1. Research Organization
-- ALL research goes in `research/` directory, linked from `research/README.md`
-- Read `research/README.md` FIRST when starting new research to avoid duplication
-- Update the index whenever adding new research documents
-
-### 2. Experiment Logging
-- `research/experiment-log.md` is **append-only** — new entries at top
-- Log BEFORE making changes, not after
-- Include: date, what was tried, results, conclusions
-
-### 3. Interaction Logging & Feedback Context
-- ALL user interactions must be logged via `logEvent()` from `app/data/logger.ts`
-- When adding new UI elements (buttons, gestures, toggles), always add a `logEvent()` call
-- Log files: `{documentDirectory}/logs/interactions_YYYY-MM-DD.jsonl` (daily, append-only)
-- Every event includes: timestamp, event name, session_id, plus context-specific fields
-- Signals are persisted to AsyncStorage via `app/data/persistence.ts` — never lose user decisions
-- **Feedback context**: Every screen MUST call `setFeedbackContext()` from `app/lib/feedback-context.ts` on focus/mount — this powers the ✦ feedback capture button (which screen, what article, etc.)
-- When adding a new screen, add `setFeedbackContext({ screen: 'screen-name' })` in a `useFocusEffect` (tabs) or `useEffect` (stack screens)
-
-### 4. Pipeline Prompt & Model Iteration
-- Use the **pipeline testing framework** (`scripts/pipeline-tests/run.py`) when iterating on prompts, models, or extraction logic
-- Key commands:
-  - `run.py clean --fixture NAME` / `--all` — test clean_markdown on fixtures
-  - `run.py extract --fixture NAME --model MODEL` — test article extraction with specific models
-  - `run.py compare <id_a> <id_b>` — compare two session outputs side-by-side
-  - `run.py report` — generate summary report across sessions
-  - `run.py fixture-create --url URL --name NAME --layer LAYER` — add new test fixtures from live URLs
-- Fixtures live in `scripts/pipeline-tests/fixtures/` organized by layer (clean_markdown, article_extraction, entity_concepts, end_to_end)
-- Always run relevant fixtures before and after changing prompts or switching models to measure impact
-- Use the `/pipeline-eval` skill for guided evaluation workflows
-
-### 5. Design Iteration & Review
-- Use the **design-explorer** skill to generate and compare design mockups with structured feedback
-- After creating or modifying any UI component/screen, use the **design review** process:
-  1. Generate mockup(s) with design-explorer
-  2. Review against `design/DESIGN_GUIDE.md` for adherence to the Annotated Folio design system
-  3. Check: correct fonts, colors from palette, signature elements (double rule, section markers, etc.)
-- Design tokens are in `design/tokens/` — always use these rather than hardcoding values
-- Existing mockups for reference: `app/mockups/` (feed/reader variants), `app/preview-mockups/` (landing page)
-
-### 6. Data Store Discipline — CRITICAL
+### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
-- **NEVER import from `curriculum.py`** for knowledge reads/writes — use `curriculum_db.py`
-- `curriculum.py` is ONLY for curriculum generation and graph utilities (no runtime data)
-- `curriculum_db.py` is for ALL runtime reads/writes: `update_knowledge()`, `load_knowledge_states()`, `load_curriculum()`
+- **`curriculum_db.py`** for ALL runtime reads/writes. **`curriculum.py`** is ONLY for generation/CLI.
 - **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.
-- **After ANY client-side change**, deploy mobile: `bash ~/src/expo/scripts/deploy.sh petrarca`
-- This was a critical bug (session 43): voice elicitation wrote to JSON files while review stream read from SQLite — knowledge updates were invisible to scheduling
+- **Server-first**: All data lives on server. Local storage is cache only.
 
-### 7. Code & Development
+### Deploy
+- **Commit + push first**, then `bash ~/src/expo/scripts/deploy.sh petrarca`
+- **After ANY `app/` change**: deploy mobile immediately
+- **Web**: `bash app/deploy-web.sh` (optional, for cache busting)
+- **NEVER**: rsync to server, `git clean` on server, skip `deploy.sh`
+- See `memory/feedback_rules.md` for full deploy details and anti-patterns
+
+### Interaction Logging
+- ALL user interactions via `logEvent()` from `app/data/logger.ts`
+- Every screen MUST call `setFeedbackContext()` on focus/mount
+- New screens: add `setFeedbackContext({ screen: 'screen-name' })` in `useFocusEffect` or `useEffect`
+
+### Pipeline Testing
+- Use `scripts/pipeline-tests/run.py` when iterating on prompts/models/extraction
+- Always run relevant fixtures before AND after changes
+
+### Research Organization
+- ALL research in `research/`, linked from `research/README.md`
+- `research/experiment-log.md` is **append-only** — new entries at top, log BEFORE making changes
+
+### Code Conventions
 - Branch prefix: `sh/` for all GitHub branches
 - No test plans or checklists in PR descriptions
-- Commit after every significant change
-- After SCP'ing scripts directly to server, the next `deploy.sh` will fail on `git pull` — must `git stash` or `rm` the conflicting files on server first
-- Always commit + push before deploying — both web (`deploy-web.sh`) and mobile (`~/src/expo/scripts/deploy.sh petrarca`) pull from git
-- **✦ Drawer**: Must be explicitly added to each tab screen (import `PetrarcaDrawer`, add state + render). Currently on Feed, Library, and Topics tabs.
-- **Component size**: Keep screen files under ~300 lines. Extract reusable UI into `app/components/`. The feed went from 1078→246 lines by extracting ContinueBar, SynthesisScroll, ArticleRow.
-- **Feed**: Single algorithmic feed (no lens tabs), limited to 30 articles. Syntheses shown via horizontal scroll, not lens.
-- **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS. Not needed for TextInput in ScrollView (pushes naturally).
-- **React Native Web links**: Never use `<Text onPress={fn} href={url}>` — RNW calls `preventDefault` on the anchor, then `Linking.openURL`/`window.open` gets blocked as a popup. Use `MarkdownLink` component (`app/components/MarkdownLink.tsx`) which handles the web/native split. Similarly, avoid wrapping clickable children in `<Pressable onLongPress>` on web — it captures pointer events. Use `View` on web instead.
-- **`limbic.amygdala`**: Shared embedding/clustering/novelty/document-similarity library (`pip install -e ~/src/limbic`). Server: `/opt/limbic` (rsynced by `deploy.sh`, editable-installed in venv). GitHub: `houshuang/limbic` (private). Locally: `PYTHONPATH=/Users/stian/src/limbic` to run pipeline scripts.
-  - Used by: `build_claim_embeddings.py` (EmbeddingModel), `build_knowledge_index.py` (pairwise_cosine, extract_pairs, classify_pairs, **Document, find_similar_documents**), `experiment_claim_dedup.py` (complete_linkage_cluster, pairwise_cosine)
-  - **Document similarity** (session 35): `find_similar_documents()` with weighted multi-field embeddings. 94% accuracy, AUROC=0.930. See `~/src/limbic/experiments/calibration_document_similarity.md`
-  - **Claim thresholds** (session 33): KNOWN 0.82, EXTENDS 0.74, NLI cascade 59% accurate. See `~/src/limbic/experiments/calibration_petrarca_thresholds.md`
-  - Ground truth datasets in `scripts/ground-truth/` — 300 LLM-rated pairs, 50 synthetic pairs, 11 embedding strategies tested
+- Component files under ~300 lines. Extract reusable UI into `app/components/`.
+- **React Native Web links**: Use `MarkdownLink` component. Never `<Text onPress href>` (RNW blocks it).
+- **KeyboardAvoidingView**: Required for bottom-sheet Modals with TextInput on iOS.
+- **✦ Drawer**: Must be explicitly added to each tab screen (import `PetrarcaDrawer`).
+- **No `as any`** — add proper types instead.
+- **limbic.amygdala**: `pip install -e ~/src/limbic`. Server: `/opt/limbic`. Used for embeddings, similarity, clustering.
 
-### 7. SQLite Content Pipeline
-- **`petrarca.db`** at `/opt/petrarca/data/petrarca.db` (configurable via `PETRARCA_DB` env) — stores all content pipeline data alongside books/projects/kindle tables
-- **Pipeline flow**: Scripts dual-write JSON + SQLite. SQLite is canonical; API serves directly from DB. JSON kept for nginx fallback.
-- **Sync helpers** in `db.py`: `sync_articles()`, `sync_knowledge_index()`, `sync_clusters()`, `sync_syntheses()` — each runs in one transaction
-- **Export**: `scripts/export_content_json.py` available for manual use (removed from pipeline cron in Phase 4c)
-- **Verify**: `scripts/verify_migration.py` does deep semantic comparison (values, not key ordering)
-- **Gotcha — knowledge_index claims are derived**: Topics are normalized (hyphens→spaces, lowercase), and only articles with embeddings (in paragraph_claim_map) are included. Don't naively dump from atomic_claims table.
-- **Gotcha — duplicate claim IDs**: One claim ID can appear in multiple articles. `atomic_claims` uses composite PK `(article_id, id)`.
-- **Gotcha — JSON formatting**: articles.json uses `indent=2`, knowledge_index.json uses compact (no indent). Export must match.
-- **Phase status**: Phase 1-4 + 4c complete and deployed. SQLite is canonical; API endpoints serve directly from DB.
-- **Phase 4 — API + Lazy Loading**: 6 `/api/*` endpoints on research-server.py. Client uses `ArticleMeta` (no content_markdown/sections) for feed/store, loads content lazily in reader via `article-content.ts`. Fallback to nginx JSON if API down.
-- **Phase 4c — Pipeline cleanup**: `export_content_json.py` removed from cron. Pipeline scripts still dual-write JSON for fallback.
-- **Incremental sync**: `content-sync.ts` compares manifest hashes, fetches only new articles via `?since=`, skips unchanged knowledge_index/clusters/syntheses. Falls back to full download on count mismatch.
-- **Key types**: `ArticleMeta` = feed/ranking metadata, `ArticleContent` = lazy-loaded reader content, `Article` = full composite (used only in reader)
-
-### 9. Curriculum Generation
-- **Opus only** — Gemini Flash curricula have meaningless titles and poor descriptions. Always use `claude -p` locally or set `model` param
-- `generate_curriculum()` accepts a `model` parameter but server `gemini_llm.py` only supports Gemini models
-- For Opus: generate locally via `claude -p`, parse JSON, run through `curriculum.py` node builder, save to `data/curricula/`
-- Assessment format: v2 (3-level: new/some/all + description-first + binary interest) — validated, built into app as curriculum-scan screen
-
-### 10. Reference Projects
-- `../alif` — Arabic learning app with FSRS-based knowledge tracking, Expo mobile setup, good model for "modeling knowledge at granular level"
-- `interview.md` — Original brainstorm interview (language learning focus evolved into read-later concept)
+### Curriculum Generation
+- **Opus only** — Gemini Flash curricula have meaningless titles
+- Generate locally via `claude -p`, parse JSON, run through `curriculum.py` node builder
 
 ## User Preferences
-- Prefers Claude Code agents (Max plan) over Anthropic API calls — it's free
-- Same pattern as ../alif: use `claude -p` wrapper for LLM work where possible
-- Wants rapid prototyping and experimentation in small chunks
-- Values research depth before building
-- Single user, personal tool first
-- Has Hetzner VM available (details in ../alif) for background agents
-- Broad interests: history, literature, classical philology, educational research, green party policy, AI/technology
-- Languages: Norwegian, Swedish, Danish, Italian, German, Spanish, French, Chinese, Indonesian, Esperanto, English — likes reading multilingual content
+- Prefers Claude Code agents (Max plan) over Anthropic API calls
+- Rapid prototyping in small chunks, research depth before building
+- Broad interests: history, classical philology, educational research, green party policy, AI
+- Languages: Norwegian, Swedish, Danish, Italian, German, Spanish, French, Chinese, Indonesian, Esperanto, English
 
 ## Voice Processing
-- **Soniox API**: Key is `SONIX_KEY` in `/Users/stian/src/alignment/.env`, base: `https://api.soniox.com/v1`
-- Patterns: `../alif/backend/app/services/soniox_service.py` (stt-async-v4), `../alignment/transcribe_soniox.py`
+- **Soniox API**: Key in `/Users/stian/src/alignment/.env`, base: `https://api.soniox.com/v1`
+- Patterns: `../alif/backend/app/services/soniox_service.py`
 
 ## Reference Projects
-- **../otak**: Twitter bookmarks, Readwise, LLM provider scripts (knowledge graph is a failed experiment — do NOT rely on it)
-- **../alif**: Mobile setup (Expo), FSRS knowledge tracking, `claude -p` wrapper pattern
+- **../alif**: Arabic learning app — Expo mobile, FSRS, `claude -p` wrapper
+- **../otak**: Twitter bookmarks, Readwise, LLM providers (knowledge graph is a failed experiment)
 - **../bookifier**: Pipeline/caching patterns

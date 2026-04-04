@@ -438,12 +438,12 @@ export async function triggerMicrolearning(opts: {
 }
 
 export async function dismissMicrolearning(
-  cardId: string,
-): Promise<{ status: string; card_id: string }> {
+  opts: { cardId?: string; quizId?: string },
+): Promise<{ status: string; card_id?: string; quiz_id?: string }> {
   const resp = await fetch(`${RESEARCH_BASE}/review/microlearning/dismiss`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ card_id: cardId }),
+    body: JSON.stringify({ card_id: opts.cardId, quiz_id: opts.quizId }),
   });
   if (!resp.ok) throw new Error(`Dismiss failed (${resp.status})`);
   return resp.json();

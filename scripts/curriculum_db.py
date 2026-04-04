@@ -928,94 +928,146 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             }
             items.append(card)
 
-        # ── Mix in completed microlearning cards ────────────────────────
-        # When regular review items are sparse, microlearning fills the gap.
-        # Never-reviewed cards go to the FRONT (high value — from voice
-        # elicitation: missed facts, wonderings, curiosity questions).
-        # Already-reviewed cards interleave normally.
+        # ── Mix in microlearning ─────────────────────────────────────────
+        # Two streams:
+        # 1. NEW ML cards (never seen) → full card with all quizzes, front of queue
+        # 2. DUE individual quizzes (from previously-seen cards) → interleaved
         try:
-            # Dynamic limit: when regular items are sparse, show more ML cards
             regular_count = len(items)
             if regular_count < 3:
-                ml_limit = limit  # fill the whole batch with ML
+                ml_limit = limit
             else:
                 ml_limit = max(3, limit // 4)
 
             now_ms = int(time.time() * 1000)
-            ml_rows = conn.execute('''
-                SELECT * FROM microlearning_cards
-                WHERE status = 'completed'
-                ORDER BY
-                    CASE WHEN review_count = 0 THEN 0 ELSE 1 END,
-                    CASE WHEN review_count > 0 AND due_at <= ? THEN 0 ELSE 1 END,
-                    created_at DESC
+
+            # Helper: build entity spans for a card
+            def _build_ml_spans(entities_raw, content_text):
+                spans = []
+                if not entities_raw or not content_text:
+                    return spans
+                for ent in entities_raw:
+                    name = ent.get('name', '')
+                    if not name or len(name) < 2:
+                        continue
+                    idx = content_text.find(name)
+                    while idx != -1:
+                        spans.append({
+                            'start': idx, 'end': idx + len(name),
+                            'entity_id': ent.get('canonical', name.lower().replace(' ', '_')),
+                            'name': name, 'entity_type': ent.get('type', 'concept'),
+                        })
+                        idx = content_text.find(name, idx + len(name))
+                spans.sort(key=lambda s: s['start'])
+                filtered = []
+                last_end = 0
+                for sp in spans:
+                    if sp['start'] >= last_end:
+                        filtered.append(sp)
+                        last_end = sp['end']
+                return filtered
+
+            # 1. New ML cards — never had any quiz interaction
+            # A card is "new" if it has no quizzes with review_count > 0
+            new_card_rows = conn.execute('''
+                SELECT mc.* FROM microlearning_cards mc
+                WHERE mc.status = 'completed'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM microlearning_quizzes mq
+                    WHERE mq.card_id = mc.id AND mq.review_count > 0
+                  )
+                ORDER BY mc.created_at DESC
                 LIMIT ?
-            ''', (now_ms, ml_limit)).fetchall()
+            ''', (ml_limit,)).fetchall()
 
             new_ml = []
-            seen_ml = []
-            for r in ml_rows:
+            for r in new_card_rows:
                 ml = dict(r)
-                # Parse stored entities and compute text spans
-                entities_raw = _parse_json_safe(ml.get('entities'), [])
                 content_text = ml.get('content') or ''
-                ml_entity_spans = []
-                if entities_raw and content_text:
-                    for ent in entities_raw:
-                        name = ent.get('name', '')
-                        if not name or len(name) < 2:
-                            continue
-                        idx = content_text.find(name)
-                        while idx != -1:
-                            ml_entity_spans.append({
-                                'start': idx,
-                                'end': idx + len(name),
-                                'entity_id': ent.get('canonical', name.lower().replace(' ', '_')),
-                                'name': name,
-                                'entity_type': ent.get('type', 'concept'),
-                            })
-                            idx = content_text.find(name, idx + len(name))
-                    # Sort and deduplicate overlapping spans
-                    ml_entity_spans.sort(key=lambda s: s['start'])
-                    filtered_spans = []
-                    last_end = 0
-                    for sp in ml_entity_spans:
-                        if sp['start'] >= last_end:
-                            filtered_spans.append(sp)
-                            last_end = sp['end']
-                    ml_entity_spans = filtered_spans
+                entities_raw = _parse_json_safe(ml.get('entities'), [])
+                ml_spans = _build_ml_spans(entities_raw, content_text)
+
+                # Load quizzes for this card
+                quiz_rows = conn.execute(
+                    "SELECT id, question, answer, status FROM microlearning_quizzes "
+                    "WHERE card_id=? AND status='active' ORDER BY rowid",
+                    (ml['id'],)).fetchall()
+                quizzes = [{'id': q['id'], 'question': q['question'],
+                            'answer': q['answer']} for q in quiz_rows]
+
+                # Fallback: legacy cards with single question but no quiz rows
+                if not quizzes and ml.get('question'):
+                    quizzes = [{'id': ml['id'], 'question': ml['question'],
+                                'answer': ml.get('answer_guidance') or ''}]
 
                 card = {
                     'type': 'microlearning',
                     'question_id': ml['id'],
-                    'question': ml.get('question') or '',
-                    'answer': ml.get('answer_guidance') or '',
-                    'rich_answer': ml.get('answer_guidance') or '',
-                    'answer_type': 'concept',
                     'content': content_text,
                     'query': ml['query'],
+                    'quizzes': quizzes,
+                    # Legacy fields for backward compat
+                    'question': quizzes[0]['question'] if quizzes else '',
+                    'answer': quizzes[0]['answer'] if quizzes else '',
+                    'rich_answer': quizzes[0]['answer'] if quizzes else '',
+                    'answer_type': 'concept',
                     'node_title': '',
                     'domain': ml.get('source_domain') or '',
-                    'memory_hook': '',
-                    'temporal_hook': '',
-                    'curriculum_context': '',
-                    'anchors': [],
-                    'review_count': ml['review_count'] or 0,
-                    'last_score': ml.get('last_score'),
-                    'stability_days': ml.get('stability_days') or 1.0,
+                    'memory_hook': '', 'temporal_hook': '',
+                    'curriculum_context': '', 'anchors': [],
+                    'review_count': 0,
+                    'stability_days': 1.0,
                     'node_knowledge': 'mentioned',
                     'node_confidence': 0.5,
                     'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
                     'entities': entities_raw,
-                    'entity_spans': {'content': ml_entity_spans} if ml_entity_spans else {},
+                    'entity_spans': {'content': ml_spans} if ml_spans else {},
                 }
-                if (ml['review_count'] or 0) == 0:
-                    new_ml.append(card)
-                else:
-                    seen_ml.append(card)
+                new_ml.append(card)
 
-            # New microlearning → front of queue
-            # Already-reviewed → interleave every ~3 review cards
+            # 2. Due individual quizzes from previously-seen cards
+            due_quiz_rows = conn.execute('''
+                SELECT mq.*, mc.content, mc.query as card_query,
+                       mc.entities, mc.follow_up_queries as card_follow_ups,
+                       mc.source_domain
+                FROM microlearning_quizzes mq
+                JOIN microlearning_cards mc ON mc.id = mq.card_id
+                WHERE mq.status = 'active' AND mq.review_count > 0
+                  AND mq.due_at <= ?
+                ORDER BY mq.due_at ASC
+                LIMIT ?
+            ''', (now_ms, ml_limit)).fetchall()
+
+            seen_ml = []
+            for q in due_quiz_rows:
+                q = dict(q)
+                content_text = q.get('content') or ''
+                entities_raw = _parse_json_safe(q.get('entities'), [])
+                ml_spans = _build_ml_spans(entities_raw, content_text)
+                seen_ml.append({
+                    'type': 'microlearning_quiz',
+                    'question_id': q['id'],
+                    'card_id': q['card_id'],
+                    'question': q['question'],
+                    'answer': q['answer'],
+                    'rich_answer': q['answer'],
+                    'answer_type': 'concept',
+                    'content': content_text,
+                    'query': q.get('card_query') or '',
+                    'node_title': '', 'domain': q.get('source_domain') or '',
+                    'memory_hook': '', 'temporal_hook': '',
+                    'curriculum_context': '', 'anchors': [],
+                    'review_count': q['review_count'] or 0,
+                    'last_score': q.get('last_score'),
+                    'stability_days': q.get('stability_days') or 1.0,
+                    'node_knowledge': 'mentioned',
+                    'node_confidence': 0.5,
+                    'follow_up_queries': json.loads(q.get('card_follow_ups') or '[]'),
+                    'entities': entities_raw,
+                    'entity_spans': {'content': ml_spans} if ml_spans else {},
+                })
+
+            # New ML cards → front, due quizzes → interleaved
             if seen_ml:
                 merged = []
                 ml_idx = 0
@@ -1032,8 +1084,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             if new_ml:
                 items = new_ml + items
         except Exception as e:
-            # Table might not exist yet — graceful fallback
             print(f'[review-stream] microlearning query failed: {e}', flush=True)
+            import traceback; traceback.print_exc()
 
         # ── Entity annotations ───────────────────────────────────────────
         entity_index = _load_entity_index(conn)

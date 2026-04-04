@@ -319,124 +319,72 @@ function ReviewCard({
   );
 }
 
-// ── Microlearning Card ──────────────────────────────────────────────
+// ── Microlearning Card (first encounter: content + all quizzes) ─────
 
 function MicrolearningCard({
   item,
   onResult,
   onSkip,
-  onDismiss,
+  onDismissCard,
+  onDismissQuiz,
   onResearch,
   onEntityTap,
 }: {
   item: ResurfacingItem;
-  onResult: (result: string) => void;
+  onResult: (quizId: string, result: string) => void;
   onSkip: () => void;
-  onDismiss: () => void;
+  onDismissCard: () => void;
+  onDismissQuiz: (quizId: string) => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
 }) {
-  const [revealed, setRevealed] = useState(false);
-  const [graded, setGraded] = useState(false);
-  const isReReview = (item.review_count || 0) > 0;
+  const quizzes = item.quizzes || (item.question ? [{ id: item.question_id || '', question: item.question, answer: item.answer || '' }] : []);
+  const [revealedQuizzes, setRevealedQuizzes] = useState<Set<string>>(new Set());
+  const [gradedQuizzes, setGradedQuizzes] = useState<Set<string>>(new Set());
+  const [dismissedQuizzes, setDismissedQuizzes] = useState<Set<string>>(new Set());
+  const [done, setDone] = useState(false);
 
-  if (graded) {
-    return (
-      <View style={cs.card}>
-        <Text style={cs.responded}>Recorded {'\u2713'}</Text>
-      </View>
-    );
-  }
+  const allHandled = quizzes.length > 0 && quizzes.every(
+    q => gradedQuizzes.has(q.id) || dismissedQuizzes.has(q.id));
 
-  // Re-review mode: quiz first, reveal content as answer
-  if (isReReview && item.question) {
-    return (
-      <View style={cs.card}>
-        <View style={cs.headerRow}>
-          <View style={ml.badge}>
-            <Text style={ml.badgeText}>Review</Text>
-          </View>
-          <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
-        </View>
+  // Auto-advance when all quizzes handled
+  React.useEffect(() => {
+    if (allHandled && !done) {
+      setDone(true);
+      setTimeout(onSkip, 800);
+    }
+  }, [allHandled]);
 
-        <Text style={cs.question}>{item.question}</Text>
+  const handleReveal = (quizId: string) => {
+    setRevealedQuizzes(prev => new Set(prev).add(quizId));
+  };
+  const handleGrade = (quizId: string, result: string) => {
+    setGradedQuizzes(prev => new Set(prev).add(quizId));
+    onResult(quizId, result);
+  };
+  const handleDismissQuiz = (quizId: string) => {
+    setDismissedQuizzes(prev => new Set(prev).add(quizId));
+    onDismissQuiz(quizId);
+  };
 
-        {!revealed ? (
-          <View style={cs.actionRow}>
-            <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
-              <Text style={cs.revealText}>Show answer</Text>
-            </Pressable>
-            <Pressable style={cs.skipButton} onPress={onSkip}>
-              <Text style={cs.skipText}>Skip {'\u2192'}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View>
-            {/* Answer guidance */}
-            <View style={cs.answerBox}>
-              <Text style={cs.answerText}>{item.answer}</Text>
-            </View>
+  const gradeButtons = [
+    { value: 'knew', label: 'Got it', style: 'correct' as const },
+    { value: 'partly', label: 'Partly', style: 'partial' as const },
+    { value: 'missed', label: 'Missed', style: 'wrong' as const },
+  ];
 
-            {/* Full content revealed */}
-            <View style={ml.revealedContent}>
-              <Text style={ml.revealedLabel}>{'\u2726'} Full context</Text>
-              <AnnotatedText
-                text={item.content || ''}
-                spans={item.entity_spans?.content}
-                style={ml.content}
-                onEntityTap={onEntityTap}
-              />
-            </View>
-
-            {/* Grading buttons */}
-            <View style={cs.gradeRow}>
-              {[
-                { value: 'knew', label: 'Got it', style: 'correct' as const },
-                { value: 'partly', label: 'Partly', style: 'partial' as const },
-                { value: 'missed', label: 'Missed', style: 'wrong' as const },
-              ].map(btn => (
-                <Pressable
-                  key={btn.value}
-                  style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
-                  onPress={() => { onResult(btn.value); setGraded(true); }}
-                >
-                  <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
-                    {btn.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Follow-up queries */}
-            <View style={cs.followUpSection}>
-              {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-                <>
-                  <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-                  {item.follow_up_queries.map((q, i) => (
-                    <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                      <Text style={cs.followUpText}>{q}</Text>
-                    </Pressable>
-                  ))}
-                </>
-              )}
-              <ResearchInput onSubmit={onResearch} />
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  // First encounter mode: content first, then quiz
   return (
     <View style={cs.card}>
-      {/* Header */}
-      <View style={cs.headerRow}>
+      {/* Top dismiss */}
+      <View style={ml.topRow}>
         <View style={ml.badge}>
           <Text style={ml.badgeText}>Research</Text>
         </View>
-        <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+        <Pressable onPress={onDismissCard} hitSlop={8}>
+          <Text style={ml.dismissText}>Not interested</Text>
+        </Pressable>
       </View>
+      <Text style={cs.domainLabel}>{item.query}</Text>
 
       {/* Content */}
       <AnnotatedText
@@ -446,25 +394,148 @@ function MicrolearningCard({
         onEntityTap={onEntityTap}
       />
 
-      {/* Assessment question */}
-      {item.question && !revealed ? (
-        <View>
-          <Text style={cs.question}>{item.question}</Text>
-          <View style={cs.actionRow}>
-            <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
-              <Text style={cs.revealText}>Show answer</Text>
-            </Pressable>
-            <Pressable style={cs.skipButton} onPress={onSkip}>
-              <Text style={cs.skipText}>Skip {'\u2192'}</Text>
-            </Pressable>
-          </View>
+      {/* All quizzes */}
+      {quizzes.length > 0 && (
+        <View style={ml.quizSection}>
+          <Text style={ml.quizSectionLabel}>{quizzes.length} questions</Text>
+          {quizzes.map(q => {
+            if (dismissedQuizzes.has(q.id)) {
+              return (
+                <View key={q.id} style={ml.quizDismissed}>
+                  <Text style={ml.quizDismissedText}>Dismissed</Text>
+                </View>
+              );
+            }
+            if (gradedQuizzes.has(q.id)) {
+              return (
+                <View key={q.id} style={ml.quizGraded}>
+                  <Text style={cs.responded}>Recorded {'\u2713'}</Text>
+                </View>
+              );
+            }
+            const isRevealed = revealedQuizzes.has(q.id);
+            return (
+              <View key={q.id} style={ml.quizCard}>
+                <Text style={ml.quizQuestion}>{q.question}</Text>
+                {!isRevealed ? (
+                  <View style={ml.quizActions}>
+                    <Pressable style={cs.revealButton} onPress={() => handleReveal(q.id)}>
+                      <Text style={cs.revealText}>Show answer</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDismissQuiz(q.id)} hitSlop={8}>
+                      <Text style={ml.dismissText}>Skip</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View>
+                    <View style={cs.answerBox}>
+                      <Text style={cs.answerText}>{q.answer}</Text>
+                    </View>
+                    <View style={cs.gradeRow}>
+                      {gradeButtons.map(btn => (
+                        <Pressable
+                          key={btn.value}
+                          style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
+                          onPress={() => handleGrade(q.id, btn.value)}
+                        >
+                          <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
+                            {btn.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
-      ) : item.question && revealed ? (
+      )}
+
+      {/* Follow-ups + bottom dismiss */}
+      <View style={cs.followUpSection}>
+        {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+          <>
+            <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+            {item.follow_up_queries.map((q, i) => (
+              <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                <Text style={cs.followUpText}>{q}</Text>
+              </Pressable>
+            ))}
+          </>
+        )}
+        <ResearchInput onSubmit={onResearch} />
+        <Pressable style={ml.dismissBtn} onPress={onDismissCard}>
+          <Text style={ml.dismissText}>Dismiss entire card</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ── Microlearning Quiz (individual re-review) ──────────────────────
+
+function MicrolearningQuizCard({
+  item,
+  onResult,
+  onSkip,
+  onResearch,
+  onEntityTap,
+}: {
+  item: ResurfacingItem;
+  onResult: (result: string) => void;
+  onSkip: () => void;
+  onResearch: (query: string) => void;
+  onEntityTap: (entityId: string) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [graded, setGraded] = useState(false);
+
+  if (graded) {
+    return (
+      <View style={cs.card}>
+        <Text style={cs.responded}>Recorded {'\u2713'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={cs.card}>
+      <View style={cs.headerRow}>
+        <View style={ml.badge}>
+          <Text style={ml.badgeText}>Review</Text>
+        </View>
+        <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+      </View>
+
+      <Text style={cs.question}>{item.question}</Text>
+
+      {!revealed ? (
+        <View style={cs.actionRow}>
+          <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+            <Text style={cs.revealText}>Show answer</Text>
+          </Pressable>
+          <Pressable style={cs.skipButton} onPress={onSkip}>
+            <Text style={cs.skipText}>Skip {'\u2192'}</Text>
+          </Pressable>
+        </View>
+      ) : (
         <View>
-          <Text style={cs.question}>{item.question}</Text>
           <View style={cs.answerBox}>
             <Text style={cs.answerText}>{item.answer}</Text>
           </View>
+
+          {/* Full content */}
+          <View style={ml.revealedContent}>
+            <Text style={ml.revealedLabel}>{'\u2726'} Full context</Text>
+            <AnnotatedText
+              text={item.content || ''}
+              spans={item.entity_spans?.content}
+              style={ml.content}
+              onEntityTap={onEntityTap}
+            />
+          </View>
+
           <View style={cs.gradeRow}>
             {[
               { value: 'knew', label: 'Got it', style: 'correct' as const },
@@ -482,30 +553,22 @@ function MicrolearningCard({
               </Pressable>
             ))}
           </View>
-        </View>
-      ) : (
-        <Pressable style={cs.skipButton} onPress={onSkip}>
-          <Text style={cs.skipText}>Continue {'\u2192'}</Text>
-        </Pressable>
-      )}
 
-      {/* Not interested + Follow-ups */}
-      <View style={cs.followUpSection}>
-        <Pressable style={ml.dismissBtn} onPress={onDismiss}>
-          <Text style={ml.dismissText}>Not interested</Text>
-        </Pressable>
-        {item.follow_up_queries && item.follow_up_queries.length > 0 && (
-          <>
-            <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-            {item.follow_up_queries.map((q, i) => (
-              <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
-                <Text style={cs.followUpText}>{q}</Text>
-              </Pressable>
-            ))}
-          </>
-        )}
-        <ResearchInput onSubmit={onResearch} />
-      </View>
+          <View style={cs.followUpSection}>
+            {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+              <>
+                <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+                {item.follow_up_queries.map((q, i) => (
+                  <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                    <Text style={cs.followUpText}>{q}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+            <ResearchInput onSubmit={onResearch} />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -745,20 +808,35 @@ export default function ReviewScreen() {
     });
   };
 
-  const handleDismiss = (item: ResurfacingItem) => {
+  const handleDismissCard = (item: ResurfacingItem) => {
     if (item.question_id) {
-      dismissMicrolearning(item.question_id).catch(e =>
+      dismissMicrolearning({ cardId: item.question_id }).catch(e =>
         console.warn('[review] dismiss failed:', e));
     }
-    logEvent('review_dismiss', {
+    logEvent('review_dismiss_card', {
       question_id: item.question_id,
-      domain: item.domain,
       query: item.query,
       time_seconds: timeOnCard(),
     });
     animateTransition(() => {
       setCurrentIndex(i => i + 1);
       maybeLoadMore();
+    });
+  };
+
+  const handleDismissQuiz = (quizId: string) => {
+    dismissMicrolearning({ quizId }).catch(e =>
+      console.warn('[review] dismiss quiz failed:', e));
+    logEvent('review_dismiss_quiz', { quiz_id: quizId });
+  };
+
+  const handleQuizResult = (quizId: string, result: string) => {
+    recordReviewResult(quizId, result).catch(e =>
+      console.warn('[review] quiz score failed:', e));
+    logEvent('review_quiz_result', {
+      quiz_id: quizId,
+      result,
+      time_seconds: timeOnCard(),
     });
   };
 
@@ -875,9 +953,19 @@ export default function ReviewScreen() {
                   <MicrolearningCard
                     key={currentItem.question_id || `ml-${currentIndex}`}
                     item={currentItem}
+                    onResult={(quizId, result) => handleQuizResult(quizId, result)}
+                    onSkip={() => handleSkip(currentItem)}
+                    onDismissCard={() => handleDismissCard(currentItem)}
+                    onDismissQuiz={handleDismissQuiz}
+                    onResearch={(q) => handleResearch(q, currentItem)}
+                    onEntityTap={setActiveEntityId}
+                  />
+                ) : currentItem.type === 'microlearning_quiz' ? (
+                  <MicrolearningQuizCard
+                    key={currentItem.question_id || `mlq-${currentIndex}`}
+                    item={currentItem}
                     onResult={(result) => handleResult(currentItem, result)}
                     onSkip={() => handleSkip(currentItem)}
-                    onDismiss={() => handleDismiss(currentItem)}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
                   />
@@ -967,8 +1055,17 @@ const ml = StyleSheet.create({
   content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 16 },
   revealedContent: { borderLeftWidth: 2, borderLeftColor: colors.rule, paddingLeft: 14, marginTop: 12, marginBottom: 14 },
   revealedLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
-  dismissBtn: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 10, marginBottom: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  dismissBtn: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 10, marginTop: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
   dismissText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
+  quizSection: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule, paddingTop: 12, marginBottom: 8 },
+  quizSectionLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  quizCard: { marginBottom: 14, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  quizQuestion: { fontFamily: fonts.reading, fontSize: 16, lineHeight: 23, color: colors.ink, marginBottom: 10 },
+  quizActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  quizGraded: { paddingVertical: 4, marginBottom: 8 },
+  quizDismissed: { paddingVertical: 4, marginBottom: 8, opacity: 0.5 },
+  quizDismissedText: { fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });
 
 const ic = StyleSheet.create({
