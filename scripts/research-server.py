@@ -69,7 +69,6 @@ from curriculum_db import (
     import_assessment_answers,
     get_timeline,
     generate_review_stream,
-    get_knowledge_atlas_data,
 )
 # Functions not yet migrated to SQLite — still use JSON files
 from curriculum import (
@@ -6226,6 +6225,10 @@ Return JSON:
         if self.path == '/knowledge/atlas':
             return self._serve_html_file('knowledge_atlas.html')
         if self.path == '/knowledge/atlas-data':
+            try:
+                from curriculum_db import get_knowledge_atlas_data
+            except ImportError:
+                return self._send_json_response(501, {'error': 'get_knowledge_atlas_data not implemented yet'})
             conn = get_connection(readonly=True)
             try:
                 data = get_knowledge_atlas_data(conn=conn)
