@@ -49,19 +49,25 @@ def call_claude(prompt: str, timeout: int = 300) -> str | None:
 
 # ── Prompt building ─────────────────────────────────────────────────────────
 
-def build_date_extraction_prompt(curriculum: dict) -> str:
+def build_date_extraction_prompt(curriculum: dict, nodes: list[dict] | None = None) -> str:
     """Build a prompt asking Claude to assign date_start/date_end to each node."""
+    target_nodes = nodes if nodes is not None else curriculum['nodes']
     nodes_block = []
-    for n in curriculum['nodes']:
+    for n in target_nodes:
         node_text = f"NODE: {n['id']}\n  Title: {n['title']}\n  Level: {n.get('level', 2)}"
         if n.get('description'):
-            node_text += f"\n  Description: {n['description'][:400]}"
-        # Include key_facts answers which often contain explicit dates
+            # Trim description to 250 chars for large curricula
+            desc = n['description'][:250]
+            node_text += f"\n  Description: {desc}"
+        # Include key_facts answers (just date-type facts, max 3) for temporal info
         facts = n.get('key_facts', [])
         if facts:
-            fact_answers = [f.get('answer', '') for f in facts[:5] if f.get('answer')]
-            if fact_answers:
-                node_text += f"\n  Key facts: {' | '.join(fact_answers)}"
+            date_facts = [f.get('answer', '') for f in facts[:3]
+                          if f.get('answer') and f.get('type') in ('date', 'event')]
+            if not date_facts:
+                date_facts = [f.get('answer', '') for f in facts[:2] if f.get('answer')]
+            if date_facts:
+                node_text += f"\n  Key facts: {' | '.join(date_facts)}"
         nodes_block.append(node_text)
 
     return f"""You are a historian. For each curriculum node below, determine the approximate date range it covers.
@@ -268,36 +274,54 @@ def main():
             continue
 
         nodes = curriculum['nodes']
-        dated = sum(1 for n in nodes if n.get('date_start') is not None)
+        undated = [n for n in nodes if n.get('date_start') is None]
+        dated_count = len(nodes) - len(undated)
         print(f'\n=== {curriculum["title"]} ({domain_id}) ===')
-        print(f'  {len(nodes)} nodes, {dated} already have dates, {len(nodes) - dated} need dates')
+        print(f'  {len(nodes)} nodes, {dated_count} already have dates, {len(undated)} need dates')
 
-        prompt = build_date_extraction_prompt(curriculum)
-        print(f'  Prompt: {len(prompt)} chars')
+        # Split into batches if prompt would be too large (>50K chars)
+        test_prompt = build_date_extraction_prompt(curriculum, undated)
+        if len(test_prompt) > 50000:
+            mid = len(undated) // 2
+            batches = [undated[:mid], undated[mid:]]
+            print(f'  Large curriculum — splitting into {len(batches)} batches')
+        else:
+            batches = [undated]
 
         if args.dry_run:
+            prompt = build_date_extraction_prompt(curriculum, batches[0])
+            print(f'  Prompt: {len(prompt)} chars (batch 1 of {len(batches)})')
             print(f'\n--- PROMPT (first 2000 chars) ---')
             print(prompt[:2000])
             print('...')
             continue
 
-        print(f'  Calling Claude...', flush=True)
-        raw = call_claude(prompt, timeout=600)
-        if not raw:
-            print(f'  No response from Claude')
+        all_date_results = []
+        for batch_idx, batch_nodes in enumerate(batches):
+            prompt = build_date_extraction_prompt(curriculum, batch_nodes)
+            print(f'  Batch {batch_idx + 1}/{len(batches)}: {len(batch_nodes)} nodes, {len(prompt)} chars')
+            print(f'  Calling Claude...', flush=True)
+            raw = call_claude(prompt, timeout=600)
+            if not raw:
+                print(f'  No response from Claude for batch {batch_idx + 1}')
+                continue
+
+            print(f'  Response: {len(raw)} chars')
+            date_results = parse_json_response(raw)
+            if not date_results:
+                print(f'  Failed to parse response for batch {batch_idx + 1}')
+                if raw:
+                    print(f'  First 300: {raw[:300]}')
+                continue
+
+            print(f'  Parsed {len(date_results)} date entries')
+            all_date_results.extend(date_results)
+
+        if not all_date_results:
+            print(f'  No date results obtained')
             continue
 
-        print(f'  Response: {len(raw)} chars')
-        date_results = parse_json_response(raw)
-        if not date_results:
-            print(f'  Failed to parse response')
-            if raw:
-                print(f'  First 300: {raw[:300]}')
-            continue
-
-        print(f'  Parsed {len(date_results)} date entries')
-
-        updated, skipped = apply_dates(curriculum, date_results)
+        updated, skipped = apply_dates(curriculum, all_date_results)
         print(f'  Applied: {updated} nodes updated, {skipped} nodes skipped (no dates from LLM)')
 
         save_curriculum_json(curriculum)
