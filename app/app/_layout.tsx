@@ -7,6 +7,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { initStore } from '../data/store';
 import { startNewSession } from '../data/logger';
 import { startVoiceUploadService } from '../lib/voice-upload-service';
+import { startAudioRetryService } from '../lib/audio-upload-queue';
+import { exploreCaptureQueue } from '../components/ExplorerCapture';
 import { colors } from '../design/tokens/colors';
 import FeedbackCapture from '../components/FeedbackCapture';
 import VoiceUploadToast from '../components/VoiceUploadToast';
@@ -48,6 +50,7 @@ export default function RootLayout() {
         console.warn('[layout] Init error, proceeding anyway:', e);
       }
       startVoiceUploadService();
+      startAudioRetryService([exploreCaptureQueue]);
       setReady(true);
       await SplashScreen.hideAsync();
     })();

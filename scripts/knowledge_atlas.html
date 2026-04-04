@@ -1,0 +1,1773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Atlas — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --text-faint: #ccc;
+  --rule: #e4dfd4;
+  --gold: #c9a84c;
+  --success: #2a7a4a;
+
+  --k-unknown: #d5d0c6;
+  --k-mentioned: #d4b96a;
+  --k-engaged: #c9a84c;
+  --k-anchored: #8b2500;
+
+  --k-unknown-bg: #edebe6;
+  --k-mentioned-bg: #f5eeda;
+  --k-engaged-bg: #f2e8c8;
+  --k-anchored-bg: #f0dcd4;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--parchment);
+  color: var(--ink);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ Header ═══ */
+header {
+  padding: 14px 24px 0;
+  flex-shrink: 0;
+}
+.header-top {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: 0.02em;
+}
+h1 .star { color: var(--rubric); }
+.subtitle {
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.search-box {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--ink);
+  width: 220px;
+  outline: none;
+}
+.search-box:focus { border-color: var(--rubric); }
+.search-box::placeholder { color: var(--text-muted); }
+
+.double-rule {
+  margin-top: 10px;
+  border-top: 2px solid var(--ink);
+  padding-top: 5px;
+  border-bottom: 1px solid var(--ink);
+  height: 7px;
+}
+
+/* ═══ View Tabs ═══ */
+nav.view-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+  background: var(--parchment);
+}
+.view-tab {
+  padding: 10px 18px 8px;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  user-select: none;
+  letter-spacing: 0.03em;
+}
+.view-tab:hover { color: var(--ink); }
+.view-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--rubric);
+  font-weight: 500;
+}
+
+/* ═══ Main Layout ═══ */
+.main-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.view-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.view { display: none; height: 100%; }
+.view.active { display: block; }
+
+/* ═══ Detail Panel ═══ */
+#detail-panel {
+  width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--rule);
+  background: white;
+  transition: width 0.25s ease;
+  flex-shrink: 0;
+}
+#detail-panel.open { width: 360px; }
+.detail-inner {
+  width: 360px;
+  padding: 20px;
+  overflow-y: auto;
+  height: 100%;
+}
+.detail-close {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.detail-close:hover { color: var(--ink); }
+.detail-type {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--rubric);
+  margin-bottom: 4px;
+}
+.detail-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+.detail-desc {
+  font-family: 'Crimson Pro', serif;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.detail-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+.detail-section-title {
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--rubric);
+  margin-bottom: 8px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.detail-row .label { color: var(--text-secondary); }
+.detail-row .value { font-weight: 500; }
+.detail-link {
+  display: block;
+  padding: 4px 0;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+}
+.detail-link:hover { color: var(--rubric); }
+.detail-link .muted { color: var(--text-muted); font-size: 11px; margin-left: 6px; }
+
+/* ═══ Knowledge Badge ═══ */
+.k-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.k-badge.unknown { background: var(--k-unknown-bg); color: #888; }
+.k-badge.mentioned { background: var(--k-mentioned-bg); color: #8a7030; }
+.k-badge.engaged { background: var(--k-engaged-bg); color: #7a6020; }
+.k-badge.anchored { background: var(--k-anchored-bg); color: var(--rubric); }
+
+/* ═══ Overview View ═══ */
+.overview-grid {
+  padding: 24px;
+  max-width: 1200px;
+}
+.stats-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  flex: 1;
+  background: white;
+  border: 1px solid var(--rule);
+  padding: 16px 20px;
+  text-align: center;
+}
+.stat-number {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 36px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+.stat-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.overview-columns {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
+}
+.section-head {
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--rubric);
+  margin-bottom: 12px;
+}
+.section-head .star { margin-right: 6px; }
+
+/* Domain bars */
+.domain-bar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.domain-bar-row:hover .domain-bar-label { color: var(--rubric); }
+.domain-bar-label {
+  width: 200px;
+  font-family: 'EB Garamond', serif;
+  font-size: 14px;
+  color: var(--ink);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+.domain-bar-track {
+  flex: 1;
+  height: 18px;
+  background: var(--parchment-dark);
+  display: flex;
+  overflow: hidden;
+  border-radius: 1px;
+}
+.domain-bar-seg {
+  height: 100%;
+  transition: width 0.6s ease;
+}
+.domain-bar-pct {
+  width: 50px;
+  text-align: right;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* Donut chart */
+.donut-container {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.donut-container svg { display: block; margin: 0 auto; }
+.donut-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.donut-center-num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-weight: 600;
+}
+.donut-center-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  fill: var(--text-muted);
+}
+
+/* Entity list */
+.entity-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  margin: 2px 4px 2px 0;
+  border-radius: 12px;
+  font-family: 'EB Garamond', serif;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  background: white;
+  transition: all 0.15s;
+}
+.entity-pill:hover { border-color: var(--rubric); color: var(--rubric); }
+.entity-pill .nexus {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Book list */
+.book-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+}
+.book-row:hover { color: var(--rubric); }
+.book-count {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ═══ Constellation View ═══ */
+#view-constellation {
+  position: relative;
+}
+#constellation-svg {
+  width: 100%;
+  height: 100%;
+}
+.constellation-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(247,244,236,0.95);
+  border: 1px solid var(--rule);
+  padding: 10px 14px;
+  font-size: 11px;
+  z-index: 10;
+}
+.constellation-controls label {
+  display: block;
+  margin: 3px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.constellation-controls input[type="checkbox"] { margin-right: 6px; }
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.node-tooltip {
+  position: absolute;
+  background: rgba(42,36,32,0.92);
+  color: #f7f4ec;
+  padding: 8px 12px;
+  border-radius: 3px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 100;
+  max-width: 260px;
+  line-height: 1.4;
+  display: none;
+}
+.node-tooltip .tt-title {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.node-tooltip .tt-meta {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* ═══ Explorer View ═══ */
+.explorer-layout {
+  display: flex;
+  height: 100%;
+}
+.explorer-sidebar {
+  width: 180px;
+  border-right: 1px solid var(--rule);
+  padding: 16px 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.explorer-domain-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 16px;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+}
+.explorer-domain-btn:hover { color: var(--ink); background: var(--parchment-dark); }
+.explorer-domain-btn.active {
+  color: var(--ink);
+  border-left-color: var(--rubric);
+  background: white;
+  font-weight: 500;
+}
+.explorer-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+.tree-node {
+  border-bottom: 1px solid var(--rule);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.tree-row:hover { background: var(--parchment-dark); }
+.tree-toggle {
+  width: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.tree-indent { flex-shrink: 0; }
+.tree-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.tree-title {
+  font-family: 'EB Garamond', serif;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-title.l1 { font-size: 15px; font-weight: 500; }
+.tree-title.l2 { font-size: 14px; }
+.tree-title.l3 { font-size: 13px; color: var(--text-secondary); }
+.tree-title.l4 { font-size: 12px; color: var(--text-muted); }
+.tree-meta {
+  display: flex;
+  gap: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.tree-children { display: none; }
+.tree-children.open { display: block; }
+
+/* ═══ Timeline View ═══ */
+#view-timeline { position: relative; }
+.timeline-container { padding: 20px 24px; height: 100%; }
+#timeline-svg { width: 100%; }
+.timeline-empty {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--text-muted);
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+}
+
+/* ═══ Entities View ═══ */
+.entities-container {
+  padding: 20px 24px;
+}
+.entities-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.filter-pill {
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-family: 'EB Garamond', serif;
+  font-size: 12px;
+  border: 1px solid var(--rule);
+  background: white;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.filter-pill:hover { border-color: var(--gold); }
+.filter-pill.active { background: var(--ink); color: var(--parchment); border-color: var(--ink); }
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.entity-card {
+  background: white;
+  border: 1px solid var(--rule);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.entity-card:hover { border-color: var(--rubric); }
+.entity-card-name {
+  font-family: 'EB Garamond', serif;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.entity-card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.entity-card-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.domain-tag {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--parchment-dark);
+  color: var(--text-secondary);
+}
+
+/* ═══ Sources View ═══ */
+.sources-container { padding: 20px 24px; }
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.book-card {
+  background: white;
+  border: 1px solid var(--rule);
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.book-card:hover { border-color: var(--rubric); }
+.book-card-title {
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.book-card-author {
+  font-family: 'Crimson Pro', serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.book-card-stats {
+  display: flex;
+  gap: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.book-card-bar {
+  margin-top: 8px;
+  height: 4px;
+  background: var(--parchment-dark);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.book-card-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.book-card-domains {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ═══ Loading ═══ */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.loading .star {
+  display: inline-block;
+  color: var(--rubric);
+  animation: spin 2s linear infinite;
+  margin-right: 10px;
+  font-size: 20px;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ═══ Search Results Overlay ═══ */
+.search-results {
+  position: absolute;
+  top: 46px;
+  right: 24px;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--rule);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 200;
+  display: none;
+}
+.search-results.open { display: block; }
+.search-result-item {
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+  transition: background 0.1s;
+}
+.search-result-item:hover { background: var(--parchment-dark); }
+.search-result-item .sr-type {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--rubric);
+}
+.search-result-item .sr-title {
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+}
+.search-result-item .sr-context {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <h1><span class="star">✦</span> Knowledge Atlas</h1>
+    <span class="subtitle">Petrarca — What You Know</span>
+    <div class="header-right">
+      <input type="text" class="search-box" id="search-input" placeholder="Search nodes, entities, books…">
+      <div class="search-results" id="search-results"></div>
+    </div>
+  </div>
+  <div class="double-rule"></div>
+</header>
+
+<nav class="view-tabs">
+  <div class="view-tab active" data-view="overview">Overview</div>
+  <div class="view-tab" data-view="constellation">Constellation</div>
+  <div class="view-tab" data-view="explorer">Explorer</div>
+  <div class="view-tab" data-view="timeline">Timeline</div>
+  <div class="view-tab" data-view="entities">Entities</div>
+  <div class="view-tab" data-view="sources">Sources</div>
+</nav>
+
+<div class="main-layout">
+  <div class="view-container">
+
+    <!-- Overview -->
+    <div id="view-overview" class="view active">
+      <div class="loading" id="loading"><span class="star">✦</span> Loading knowledge atlas…</div>
+      <div class="overview-grid" id="overview-content" style="display:none"></div>
+    </div>
+
+    <!-- Constellation -->
+    <div id="view-constellation" class="view">
+      <div class="constellation-controls" id="constellation-controls">
+        <div style="font-family:'EB Garamond',serif;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--rubric);margin-bottom:6px">Knowledge State</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--k-unknown);border:1px solid #bbb"></div> Unknown</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--k-mentioned)"></div> Mentioned</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--k-engaged)"></div> Engaged</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--k-anchored)"></div> Anchored</div>
+        <div style="margin-top:8px;border-top:1px solid var(--rule);padding-top:6px">
+          <div class="legend-row"><div class="legend-dot" style="background:var(--gold);transform:rotate(45deg);border-radius:1px"></div> Entity bridge</div>
+        </div>
+        <div style="margin-top:8px;border-top:1px solid var(--rule);padding-top:6px" id="domain-filters"></div>
+      </div>
+      <svg id="constellation-svg"></svg>
+      <div class="node-tooltip" id="node-tooltip"></div>
+    </div>
+
+    <!-- Explorer -->
+    <div id="view-explorer" class="view">
+      <div class="explorer-layout">
+        <div class="explorer-sidebar" id="explorer-sidebar"></div>
+        <div class="explorer-main" id="explorer-main"></div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div id="view-timeline" class="view">
+      <div class="timeline-container" id="timeline-container"></div>
+    </div>
+
+    <!-- Entities -->
+    <div id="view-entities" class="view">
+      <div class="entities-container" id="entities-container"></div>
+    </div>
+
+    <!-- Sources -->
+    <div id="view-sources" class="view">
+      <div class="sources-container" id="sources-container"></div>
+    </div>
+
+  </div>
+
+  <div id="detail-panel">
+    <div class="detail-inner" id="detail-inner"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// STATE & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════
+
+let DATA = null;
+let activeView = 'overview';
+let constellationSim = null;
+let explorerDomain = null;
+
+const KNOWLEDGE_COLORS = {
+  unknown: '#d5d0c6', mentioned: '#d4b96a',
+  engaged: '#c9a84c', anchored: '#8b2500',
+};
+const KNOWLEDGE_ORDER = ['anchored', 'engaged', 'mentioned', 'unknown'];
+const KNOWLEDGE_LABELS = {
+  unknown: 'Unknown', mentioned: 'Mentioned',
+  engaged: 'Engaged', anchored: 'Anchored',
+};
+
+const DOMAIN_PALETTE = [
+  '#1e5799', '#8b4513', '#6b3a8d', '#2a7a4a', '#b8860b',
+  '#6b3a3a', '#3a6b5a', '#5a3a6b', '#6b5a3a',
+];
+const domainColorMap = {};
+
+function domainColor(id) {
+  if (!domainColorMap[id]) {
+    const idx = Object.keys(domainColorMap).length % DOMAIN_PALETTE.length;
+    domainColorMap[id] = DOMAIN_PALETTE[idx];
+  }
+  return domainColorMap[id];
+}
+
+function knowledgeColor(k) { return KNOWLEDGE_COLORS[k] || KNOWLEDGE_COLORS.unknown; }
+
+function shortTitle(title, maxLen = 30) {
+  return title.length > maxLen ? title.slice(0, maxLen - 1) + '…' : title;
+}
+
+function formatYear(y) {
+  if (y == null) return '?';
+  return y < 0 ? `${Math.abs(y)} BCE` : `${y} CE`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════════════════════
+
+async function loadData() {
+  const resp = await fetch('/knowledge/atlas-data');
+  DATA = await resp.json();
+  // Assign domain colors
+  DATA.curricula.forEach(c => domainColor(c.id));
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('overview-content').style.display = 'block';
+  renderOverview();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VIEW SWITCHING
+// ═══════════════════════════════════════════════════════════════════════
+
+document.querySelectorAll('.view-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const viewId = tab.dataset.view;
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + viewId).classList.add('active');
+    activeView = viewId;
+    if (viewId === 'constellation') renderConstellation();
+    else if (viewId === 'explorer') renderExplorer();
+    else if (viewId === 'timeline') renderTimeline();
+    else if (viewId === 'entities') renderEntities();
+    else if (viewId === 'sources') renderSources();
+    else if (viewId === 'overview') renderOverview();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// DETAIL PANEL
+// ═══════════════════════════════════════════════════════════════════════
+
+function openDetail(type, item) {
+  const panel = document.getElementById('detail-panel');
+  const inner = document.getElementById('detail-inner');
+  panel.classList.add('open');
+
+  let html = `<button class="detail-close" onclick="closeDetail()">×</button>`;
+
+  if (type === 'node') {
+    html += `
+      <div class="detail-type">Curriculum Node · L${item.level}</div>
+      <div class="detail-title">${item.title}</div>
+      <span class="k-badge ${item.knowledge}">${item.knowledge}</span>
+      <div class="detail-desc">${item.description || ''}</div>
+      <div class="detail-section">
+        <div class="detail-section-title">✦ Details</div>
+        <div class="detail-row"><span class="label">Interest</span><span class="value">${item.interest || 'none'}</span></div>
+        <div class="detail-row"><span class="label">Confidence</span><span class="value">${Math.round((item.confidence || 0) * 100)}%</span></div>
+        <div class="detail-row"><span class="label">Key Facts</span><span class="value">${item.key_facts_count || 0}</span></div>
+        <div class="detail-row"><span class="label">Articles</span><span class="value">${item.article_count || 0}</span></div>
+        ${item.date_start != null ? `<div class="detail-row"><span class="label">Period</span><span class="value">${formatYear(item.date_start)} – ${formatYear(item.date_end)}</span></div>` : ''}
+      </div>`;
+    if (item.books && item.books.length) {
+      html += `<div class="detail-section"><div class="detail-section-title">✦ Source Books</div>`;
+      item.books.forEach(b => {
+        html += `<div class="detail-link" onclick="openBookDetail('${b.id}')">${b.title} <span class="muted">${b.coverage}</span></div>`;
+      });
+      html += `</div>`;
+    }
+    if (item.prerequisites && item.prerequisites.length) {
+      html += `<div class="detail-section"><div class="detail-section-title">✦ Prerequisites</div>`;
+      item.prerequisites.forEach(pid => {
+        const pNode = findNode(pid);
+        if (pNode) html += `<div class="detail-link" onclick="openDetail('node', findNode('${pid}'))">${pNode.title}</div>`;
+      });
+      html += `</div>`;
+    }
+  } else if (type === 'entity') {
+    html += `
+      <div class="detail-type">${item.entity_type || 'Entity'}${item.modern_name ? ' · ' + item.modern_name : ''}</div>
+      <div class="detail-title">${item.name}</div>
+      <span class="k-badge ${item.knowledge}">${item.knowledge}</span>
+      ${item.date_start != null ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${formatYear(item.date_start)} – ${formatYear(item.date_end)}</div>` : ''}
+      <div class="detail-desc">${item.description || ''}</div>
+      <div class="detail-section">
+        <div class="detail-section-title">✦ Curriculum Connections (${item.curriculum_links.length})</div>`;
+    item.curriculum_links.forEach(link => {
+      html += `<div class="detail-link" onclick="navigateToNode('${link.domain_id}','${link.node_id}')">
+        <span style="color:${domainColor(link.domain_id)}">●</span> ${link.node_title}
+        <span class="muted">${link.domain_title}</span>
+        ${link.lens_title ? `<br><span style="font-style:italic;font-size:11px;color:var(--text-secondary)">"${link.lens_title}"</span>` : ''}
+      </div>`;
+    });
+    html += `</div>`;
+  } else if (type === 'book') {
+    const domains = [...new Set(item.curriculum_mappings.map(m => m.domain_title))];
+    html += `
+      <div class="detail-type">Book${item.significance ? ' · ' + item.significance : ''}</div>
+      <div class="detail-title">${item.title}</div>
+      <div style="font-family:'Crimson Pro',serif;font-size:13px;color:var(--text-secondary);margin-bottom:8px">${item.author || ''}</div>
+      <div class="detail-row"><span class="label">Status</span><span class="value">${item.reading_status || '—'}</span></div>
+      <div class="detail-row"><span class="label">Nodes covered</span><span class="value">${item.curriculum_mappings.length}</span></div>
+      <div class="detail-section"><div class="detail-section-title">✦ Curriculum Mappings</div>`;
+    domains.forEach(dt => {
+      html += `<div style="font-size:11px;font-weight:500;margin-top:8px;color:var(--text-secondary)">${dt}</div>`;
+      item.curriculum_mappings.filter(m => m.domain_title === dt).forEach(m => {
+        html += `<div class="detail-link" onclick="navigateToNode('${m.domain_id}','${m.node_id}')">${m.node_title} <span class="muted">${m.coverage}</span></div>`;
+      });
+    });
+    html += `</div>`;
+  } else if (type === 'domain') {
+    const total = item.node_count;
+    const known = (item.stats.anchored || 0) + (item.stats.engaged || 0);
+    html += `
+      <div class="detail-type">Curriculum Domain</div>
+      <div class="detail-title">${item.title}</div>
+      <div class="detail-desc">${item.description || ''}</div>
+      <div class="detail-section">
+        <div class="detail-section-title">✦ Coverage</div>
+        <div class="detail-row"><span class="label">Total nodes</span><span class="value">${total}</span></div>
+        <div class="detail-row"><span class="label">Anchored</span><span class="value">${item.stats.anchored || 0}</span></div>
+        <div class="detail-row"><span class="label">Engaged</span><span class="value">${item.stats.engaged || 0}</span></div>
+        <div class="detail-row"><span class="label">Mentioned</span><span class="value">${item.stats.mentioned || 0}</span></div>
+        <div class="detail-row"><span class="label">Unknown</span><span class="value">${item.stats.unknown || 0}</span></div>
+        <div class="detail-row"><span class="label">Depth</span><span class="value">${item.depth || '—'}</span></div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">✦ Actions</div>
+        <div class="detail-link" onclick="switchToExplorer('${item.id}')">Explore this curriculum →</div>
+      </div>`;
+  }
+
+  inner.innerHTML = html;
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function findNode(nodeId) {
+  for (const c of DATA.curricula) {
+    const n = c.nodes.find(n => n.id === nodeId);
+    if (n) return n;
+  }
+  return null;
+}
+
+function openBookDetail(bookId) {
+  const book = DATA.books.find(b => b.id === bookId);
+  if (book) openDetail('book', book);
+}
+
+function navigateToNode(domainId, nodeId) {
+  explorerDomain = domainId;
+  switchToExplorer(domainId);
+  // Highlight the node after render
+  setTimeout(() => {
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.background = 'var(--k-engaged-bg)';
+      setTimeout(() => el.style.background = '', 1500);
+    }
+    const node = findNode(nodeId);
+    if (node) openDetail('node', node);
+  }, 100);
+}
+
+function switchToExplorer(domainId) {
+  explorerDomain = domainId;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-view="explorer"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-explorer').classList.add('active');
+  activeView = 'explorer';
+  renderExplorer();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderOverview() {
+  if (!DATA) return;
+  const el = document.getElementById('overview-content');
+  const s = DATA.stats;
+  const kd = s.knowledge_distribution;
+  const knownPct = s.total_nodes > 0 ? Math.round(((kd.anchored + kd.engaged) / s.total_nodes) * 100) : 0;
+
+  let html = `
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-number">${s.total_nodes}</div><div class="stat-label">Curriculum Nodes</div></div>
+      <div class="stat-card"><div class="stat-number">${s.total_entities}</div><div class="stat-label">Shared Entities</div></div>
+      <div class="stat-card"><div class="stat-number">${s.total_books}</div><div class="stat-label">Books Mapped</div></div>
+      <div class="stat-card"><div class="stat-number">${s.total_curricula}</div><div class="stat-label">Curricula</div></div>
+    </div>
+    <div class="overview-columns">
+      <div>
+        <div class="section-head"><span class="star">✦</span> Knowledge by Domain</div>
+        <div id="domain-bars"></div>
+        <div style="margin-top:24px">
+          <div class="section-head"><span class="star">✦</span> Top Nexus Entities</div>
+          <div id="nexus-entities"></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-head"><span class="star">✦</span> Overall Knowledge</div>
+        <div class="donut-container" id="donut-chart"></div>
+        <div style="margin-top:20px">
+          <div class="section-head"><span class="star">✦</span> Book Contributions</div>
+          <div id="book-list"></div>
+        </div>
+      </div>
+    </div>`;
+  el.innerHTML = html;
+
+  // Domain bars
+  const barsEl = document.getElementById('domain-bars');
+  DATA.curricula.forEach(c => {
+    const total = c.node_count;
+    if (total === 0) return;
+    const pct = k => Math.round(((c.stats[k] || 0) / total) * 100);
+    const knownP = pct('anchored') + pct('engaged');
+    const row = document.createElement('div');
+    row.className = 'domain-bar-row';
+    row.onclick = () => openDetail('domain', c);
+    row.innerHTML = `
+      <div class="domain-bar-label" style="color:${domainColor(c.id)}">${shortTitle(c.title, 28)}</div>
+      <div class="domain-bar-track">
+        <div class="domain-bar-seg" style="width:${pct('anchored')}%;background:var(--k-anchored)"></div>
+        <div class="domain-bar-seg" style="width:${pct('engaged')}%;background:var(--k-engaged)"></div>
+        <div class="domain-bar-seg" style="width:${pct('mentioned')}%;background:var(--k-mentioned)"></div>
+      </div>
+      <div class="domain-bar-pct">${knownP}%</div>`;
+    barsEl.appendChild(row);
+  });
+
+  // Donut chart
+  renderDonut(kd, s.total_nodes);
+
+  // Nexus entities (top 20)
+  const nexEl = document.getElementById('nexus-entities');
+  const topEntities = DATA.entities.filter(e => e.curriculum_links.length > 0).slice(0, 20);
+  topEntities.forEach(e => {
+    const pill = document.createElement('span');
+    pill.className = 'entity-pill';
+    pill.innerHTML = `${e.name}<span class="nexus">${e.nexus_score || e.curriculum_links.length}</span>`;
+    pill.onclick = () => openDetail('entity', e);
+    pill.style.borderLeftColor = knowledgeColor(e.knowledge);
+    pill.style.borderLeftWidth = '3px';
+    nexEl.appendChild(pill);
+  });
+
+  // Book list
+  const bookEl = document.getElementById('book-list');
+  DATA.books.slice(0, 10).forEach(b => {
+    const row = document.createElement('div');
+    row.className = 'book-row';
+    row.onclick = () => openDetail('book', b);
+    row.innerHTML = `<span>${shortTitle(b.title, 35)}</span><span class="book-count">${b.curriculum_mappings.length} nodes</span>`;
+    bookEl.appendChild(row);
+  });
+}
+
+function renderDonut(kd, total) {
+  const size = 200, radius = 80, innerR = 55;
+  const container = document.getElementById('donut-chart');
+  const svg = d3.select(container).append('svg')
+    .attr('width', size).attr('height', size)
+    .append('g').attr('transform', `translate(${size/2},${size/2})`);
+
+  const data = KNOWLEDGE_ORDER.map(k => ({ key: k, value: kd[k] || 0 }));
+  const pie = d3.pie().value(d => d.value).sort(null);
+  const arc = d3.arc().innerRadius(innerR).outerRadius(radius);
+
+  svg.selectAll('path')
+    .data(pie(data))
+    .join('path')
+    .attr('d', arc)
+    .attr('fill', d => KNOWLEDGE_COLORS[d.data.key])
+    .attr('stroke', 'var(--parchment)')
+    .attr('stroke-width', 2);
+
+  // Center text
+  const knownPct = total > 0 ? Math.round(((kd.anchored + kd.engaged) / total) * 100) : 0;
+  svg.append('text').attr('text-anchor', 'middle').attr('dy', '0.1em')
+    .attr('class', 'donut-center-num').text(`${knownPct}%`);
+  svg.append('text').attr('text-anchor', 'middle').attr('dy', '1.8em')
+    .attr('class', 'donut-center-label').text('KNOWN');
+
+  // Legend below
+  const legend = d3.select(container).append('div').style('margin-top', '8px');
+  KNOWLEDGE_ORDER.forEach(k => {
+    legend.append('span').style('display', 'inline-block').style('margin', '0 8px')
+      .html(`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${KNOWLEDGE_COLORS[k]};margin-right:3px;vertical-align:middle"></span>
+        <span class="donut-label">${KNOWLEDGE_LABELS[k]} ${kd[k] || 0}</span>`);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONSTELLATION
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderConstellation() {
+  if (!DATA) return;
+  const svgEl = document.getElementById('constellation-svg');
+  const rect = svgEl.getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+  if (W < 10 || H < 10) return;
+
+  // Clear previous
+  d3.select(svgEl).selectAll('*').remove();
+  if (constellationSim) { constellationSim.stop(); constellationSim = null; }
+
+  const svg = d3.select(svgEl).attr('viewBox', [0, 0, W, H]);
+  const g = svg.append('g');
+
+  // Zoom
+  svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', e => g.attr('transform', e.transform)));
+
+  // Build nodes and links
+  const nodes = [];
+  const links = [];
+  const nodeIndex = {};
+
+  // Domain cluster centers
+  const cx = W / 2, cy = H / 2;
+  const clusterR = Math.min(W, H) * 0.3;
+  const domainCenters = {};
+  DATA.curricula.forEach((c, i) => {
+    const angle = (2 * Math.PI * i) / DATA.curricula.length - Math.PI / 2;
+    domainCenters[c.id] = { x: cx + Math.cos(angle) * clusterR, y: cy + Math.sin(angle) * clusterR };
+  });
+
+  DATA.curricula.forEach(c => {
+    c.nodes.forEach(n => {
+      const node = { ...n, curriculum: c.id, is_entity: false };
+      nodes.push(node);
+      nodeIndex[n.id] = node;
+    });
+    // Prerequisite links
+    c.nodes.forEach(n => {
+      (n.prerequisites || []).forEach(pid => {
+        if (nodeIndex[pid]) links.push({ source: pid, target: n.id, type: 'prerequisite' });
+      });
+    });
+  });
+
+  // Entity bridge nodes
+  DATA.entities.filter(e => e.curriculum_links.length >= 2).forEach(e => {
+    const eNode = {
+      id: 'entity:' + e.id, title: e.name, is_entity: true,
+      entity_type: e.entity_type, knowledge: e.knowledge,
+      nexus_score: e.nexus_score, _entity: e,
+    };
+    nodes.push(eNode);
+    nodeIndex[eNode.id] = eNode;
+    e.curriculum_links.forEach(link => {
+      if (nodeIndex[link.node_id]) {
+        links.push({ source: eNode.id, target: link.node_id, type: 'entity' });
+      }
+    });
+  });
+
+  // Domain filter checkboxes
+  const filtersEl = document.getElementById('domain-filters');
+  filtersEl.innerHTML = '<div style="font-family:\'EB Garamond\',serif;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--rubric);margin-bottom:4px">Domains</div>';
+  DATA.curricula.forEach(c => {
+    const label = document.createElement('label');
+    label.style.display = 'block';
+    label.style.fontSize = '10px';
+    label.style.margin = '2px 0';
+    label.innerHTML = `<input type="checkbox" checked data-domain="${c.id}" onchange="updateConstellationFilters()">
+      <span style="color:${domainColor(c.id)}">●</span> ${shortTitle(c.title, 22)}`;
+    filtersEl.appendChild(label);
+  });
+
+  // Simulation
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.type === 'entity' ? 60 : 30).strength(d => d.type === 'entity' ? 0.1 : 0.3))
+    .force('charge', d3.forceManyBody().strength(d => d.is_entity ? -80 : -40))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 2))
+    .force('x', d3.forceX(d => {
+      if (d.is_entity) return cx;
+      return domainCenters[d.curriculum]?.x || cx;
+    }).strength(d => d.is_entity ? 0.03 : 0.15))
+    .force('y', d3.forceY(d => {
+      if (d.is_entity) return cy;
+      return domainCenters[d.curriculum]?.y || cy;
+    }).strength(d => d.is_entity ? 0.03 : 0.15));
+
+  constellationSim = sim;
+
+  // Links
+  const linkSel = g.append('g').selectAll('line')
+    .data(links).join('line')
+    .attr('stroke', d => d.type === 'entity' ? 'rgba(201,168,76,0.3)' : 'rgba(0,0,0,0.06)')
+    .attr('stroke-width', d => d.type === 'entity' ? 1 : 0.5);
+
+  // Nodes
+  const nodeSel = g.append('g').selectAll('g')
+    .data(nodes).join('g')
+    .attr('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  // Curriculum nodes: circles
+  nodeSel.filter(d => !d.is_entity)
+    .append('circle')
+    .attr('r', d => nodeRadius(d))
+    .attr('fill', d => knowledgeColor(d.knowledge))
+    .attr('stroke', d => domainColor(d.curriculum))
+    .attr('stroke-width', d => d.level <= 2 ? 2 : 1)
+    .attr('opacity', d => d.knowledge === 'unknown' ? 0.5 : 0.9);
+
+  // Entity nodes: diamonds
+  nodeSel.filter(d => d.is_entity)
+    .append('rect')
+    .attr('width', d => 8 + (d.nexus_score || 1) * 3)
+    .attr('height', d => 8 + (d.nexus_score || 1) * 3)
+    .attr('x', d => -(4 + (d.nexus_score || 1) * 1.5))
+    .attr('y', d => -(4 + (d.nexus_score || 1) * 1.5))
+    .attr('transform', 'rotate(45)')
+    .attr('fill', 'var(--gold)')
+    .attr('stroke', '#8b6914')
+    .attr('stroke-width', 1)
+    .attr('opacity', 0.85);
+
+  // L1 labels
+  nodeSel.filter(d => !d.is_entity && d.level === 1)
+    .append('text')
+    .attr('dy', d => nodeRadius(d) + 12)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'EB Garamond, serif')
+    .attr('font-size', '10px')
+    .attr('fill', 'var(--text-secondary)')
+    .text(d => shortTitle(d.title, 20));
+
+  // Domain labels at cluster centers
+  const labelsG = g.append('g');
+  DATA.curricula.forEach(c => {
+    const center = domainCenters[c.id];
+    labelsG.append('text')
+      .attr('x', center.x).attr('y', center.y - clusterR * 0.35)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'Cormorant Garamond, serif')
+      .attr('font-size', '14px')
+      .attr('font-weight', '600')
+      .attr('fill', domainColor(c.id))
+      .attr('opacity', 0.7)
+      .text(shortTitle(c.title, 25));
+  });
+
+  // Tooltip
+  const tooltip = document.getElementById('node-tooltip');
+  nodeSel.on('mouseover', (e, d) => {
+    const ttTitle = d.title;
+    let ttMeta = '';
+    if (d.is_entity) {
+      ttMeta = `${d.entity_type || 'Entity'} · nexus ${d.nexus_score || 0}`;
+    } else {
+      ttMeta = `L${d.level} · ${d.knowledge}${d.key_facts_count ? ' · ' + d.key_facts_count + ' facts' : ''}`;
+    }
+    tooltip.innerHTML = `<div class="tt-title">${ttTitle}</div><div class="tt-meta">${ttMeta}</div>`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.pageX + 12) + 'px';
+    tooltip.style.top = (e.pageY - 10) + 'px';
+  })
+  .on('mousemove', (e) => {
+    tooltip.style.left = (e.pageX + 12) + 'px';
+    tooltip.style.top = (e.pageY - 10) + 'px';
+  })
+  .on('mouseout', () => { tooltip.style.display = 'none'; })
+  .on('click', (e, d) => {
+    if (d.is_entity && d._entity) openDetail('entity', d._entity);
+    else if (!d.is_entity) openDetail('node', d);
+  });
+
+  sim.on('tick', () => {
+    linkSel
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+function nodeRadius(d) {
+  if (d.is_entity) return 6;
+  return [14, 10, 7, 5][d.level - 1] || 5;
+}
+
+function updateConstellationFilters() {
+  const checks = document.querySelectorAll('#domain-filters input[type=checkbox]');
+  const visible = new Set();
+  checks.forEach(cb => { if (cb.checked) visible.add(cb.dataset.domain); });
+
+  d3.select('#constellation-svg').selectAll('g g g').attr('display', d => {
+    if (d.is_entity) return 'block'; // always show entities
+    return visible.has(d.curriculum) ? 'block' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPLORER
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderExplorer() {
+  if (!DATA) return;
+
+  // Sidebar: domain list
+  const sidebar = document.getElementById('explorer-sidebar');
+  sidebar.innerHTML = '';
+  DATA.curricula.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'explorer-domain-btn' + (explorerDomain === c.id ? ' active' : '');
+    btn.textContent = shortTitle(c.title, 22);
+    btn.style.borderLeftColor = explorerDomain === c.id ? domainColor(c.id) : 'transparent';
+    btn.onclick = () => { explorerDomain = c.id; renderExplorer(); };
+    sidebar.appendChild(btn);
+  });
+
+  if (!explorerDomain && DATA.curricula.length > 0) {
+    explorerDomain = DATA.curricula[0].id;
+    renderExplorer();
+    return;
+  }
+
+  const curriculum = DATA.curricula.find(c => c.id === explorerDomain);
+  if (!curriculum) return;
+
+  const main = document.getElementById('explorer-main');
+
+  // Build tree hierarchy
+  const nodes = curriculum.nodes;
+  const byParent = {};
+  nodes.forEach(n => { byParent[n.parent_id || 'root'] = byParent[n.parent_id || 'root'] || []; byParent[n.parent_id || 'root'].push(n); });
+
+  // Sort by level then title
+  Object.values(byParent).forEach(arr => arr.sort((a, b) => a.level - b.level || a.title.localeCompare(b.title)));
+
+  // Coverage summary
+  const stats = curriculum.stats;
+  const total = curriculum.node_count;
+  const knownPct = total > 0 ? Math.round(((stats.anchored + stats.engaged) / total) * 100) : 0;
+
+  let html = `
+    <div style="margin-bottom:16px">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:${domainColor(curriculum.id)}">${curriculum.title}</div>
+      <div style="font-family:'Crimson Pro',serif;font-size:13px;color:var(--text-secondary);margin:4px 0 8px">${curriculum.description || ''}</div>
+      <div style="display:flex;gap:16px;font-family:'DM Sans',sans-serif;font-size:11px;color:var(--text-muted)">
+        <span><strong style="color:var(--k-anchored)">${stats.anchored || 0}</strong> anchored</span>
+        <span><strong style="color:var(--k-engaged)">${stats.engaged || 0}</strong> engaged</span>
+        <span><strong style="color:var(--k-mentioned)">${stats.mentioned || 0}</strong> mentioned</span>
+        <span><strong style="color:var(--k-unknown)">${stats.unknown || 0}</strong> unknown</span>
+        <span style="margin-left:auto"><strong>${knownPct}%</strong> known</span>
+      </div>
+      <div style="margin-top:6px;height:4px;background:var(--parchment-dark);border-radius:2px;overflow:hidden;display:flex">
+        <div style="width:${total ? (stats.anchored/total*100) : 0}%;background:var(--k-anchored)"></div>
+        <div style="width:${total ? (stats.engaged/total*100) : 0}%;background:var(--k-engaged)"></div>
+        <div style="width:${total ? (stats.mentioned/total*100) : 0}%;background:var(--k-mentioned)"></div>
+      </div>
+    </div>`;
+
+  // Render tree recursively
+  function renderTreeNode(parentId, depth) {
+    const children = byParent[parentId] || [];
+    if (!children.length) return '';
+    let s = '';
+    children.forEach(n => {
+      const hasKids = (byParent[n.id] || []).length > 0;
+      const indent = depth * 20;
+      s += `<div class="tree-node" data-node-id="${n.id}">
+        <div class="tree-row" onclick="openDetail('node', findNode('${n.id}'))">
+          <div class="tree-indent" style="width:${indent}px"></div>
+          ${hasKids ? `<div class="tree-toggle" onclick="event.stopPropagation();toggleTreeNode(this)">▸</div>` : '<div class="tree-toggle"></div>'}
+          <div class="tree-dot" style="background:${knowledgeColor(n.knowledge)}${n.knowledge === 'unknown' ? ';border:1px solid #bbb' : ''}"></div>
+          <div class="tree-title l${n.level}">${n.title}</div>
+          <div class="tree-meta">
+            ${n.key_facts_count ? `<span>${n.key_facts_count} facts</span>` : ''}
+            ${n.article_count ? `<span>${n.article_count} articles</span>` : ''}
+            ${n.books.length ? `<span>${n.books.length} books</span>` : ''}
+          </div>
+        </div>
+        ${hasKids ? `<div class="tree-children">${renderTreeNode(n.id, depth + 1)}</div>` : ''}
+      </div>`;
+    });
+    return s;
+  }
+
+  // Find root nodes (those whose parent_id is null or not in the curriculum)
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const roots = nodes.filter(n => !n.parent_id || !nodeIds.has(n.parent_id));
+  const rootParents = [...new Set(roots.map(n => n.parent_id || 'root'))];
+
+  rootParents.forEach(pid => {
+    html += renderTreeNode(pid, 0);
+  });
+
+  main.innerHTML = html;
+
+  // Auto-expand L1 nodes
+  main.querySelectorAll('.tree-node').forEach(tn => {
+    const row = tn.querySelector('.tree-row');
+    const toggle = tn.querySelector('.tree-toggle');
+    const children = tn.querySelector('.tree-children');
+    const titleEl = tn.querySelector('.tree-title');
+    if (children && titleEl && titleEl.classList.contains('l1')) {
+      children.classList.add('open');
+      if (toggle) toggle.textContent = '▾';
+    }
+  });
+}
+
+function toggleTreeNode(toggleEl) {
+  const node = toggleEl.closest('.tree-node');
+  const children = node.querySelector('.tree-children');
+  if (children) {
+    children.classList.toggle('open');
+    toggleEl.textContent = children.classList.contains('open') ? '▾' : '▸';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TIMELINE
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderTimeline() {
+  if (!DATA) return;
+  const container = document.getElementById('timeline-container');
+
+  // Collect all nodes with dates
+  const items = [];
+  DATA.curricula.forEach(c => {
+    c.nodes.forEach(n => {
+      if (n.date_start != null) {
+        items.push({ ...n, domain_id: c.id, domain_title: c.title });
+      }
+    });
+  });
+
+  if (items.length === 0) {
+    container.innerHTML = '<div class="timeline-empty">No temporal data available yet.</div>';
+    return;
+  }
+
+  // Sort by date_start
+  items.sort((a, b) => a.date_start - b.date_start);
+  const minYear = items[0].date_start;
+  const maxYear = items[items.length - 1].date_end || items[items.length - 1].date_start;
+
+  const margin = { top: 40, right: 30, bottom: 40, left: 200 };
+  const containerRect = container.getBoundingClientRect();
+  const width = containerRect.width - margin.left - margin.right;
+  const domains = [...new Set(items.map(i => i.domain_id))];
+  const rowH = 40;
+  const height = domains.length * rowH;
+
+  container.innerHTML = '';
+  const svg = d3.select(container).append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom);
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Scales
+  const x = d3.scaleLinear().domain([minYear, maxYear]).range([0, width]);
+  const y = d3.scaleBand().domain(domains).range([0, height]).padding(0.3);
+
+  // X axis
+  const xAxis = d3.axisBottom(x).tickFormat(d => d < 0 ? `${Math.abs(d)} BCE` : `${d} CE`);
+  g.append('g').attr('transform', `translate(0,${height})`).call(xAxis)
+    .selectAll('text').attr('font-family', 'DM Sans').attr('font-size', '10px');
+
+  // Y axis (domain labels)
+  domains.forEach(did => {
+    const c = DATA.curricula.find(c => c.id === did);
+    g.append('text')
+      .attr('x', -10).attr('y', y(did) + y.bandwidth() / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('font-family', 'EB Garamond, serif').attr('font-size', '12px')
+      .attr('fill', domainColor(did))
+      .text(shortTitle(c ? c.title : did, 24));
+  });
+
+  // Swim lane backgrounds
+  domains.forEach((did, i) => {
+    g.append('rect')
+      .attr('x', 0).attr('y', y(did))
+      .attr('width', width).attr('height', y.bandwidth())
+      .attr('fill', i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent');
+  });
+
+  // Tooltip
+  const tooltip = document.getElementById('node-tooltip');
+
+  // Plot nodes
+  const circles = g.selectAll('.tl-node')
+    .data(items).join('g')
+    .attr('class', 'tl-node')
+    .attr('transform', d => `translate(${x(d.date_start)},${y(d.domain_id) + y.bandwidth() / 2})`)
+    .attr('cursor', 'pointer');
+
+  // Range bars for nodes with both start and end
+  circles.filter(d => d.date_end != null && d.date_end !== d.date_start)
+    .append('rect')
+    .attr('x', 0)
+    .attr('y', -3)
+    .attr('width', d => Math.max(2, x(d.date_end) - x(d.date_start)))
+    .attr('height', 6)
+    .attr('fill', d => knowledgeColor(d.knowledge))
+    .attr('opacity', 0.4)
+    .attr('rx', 1);
+
+  circles.append('circle')
+    .attr('r', d => d.level <= 2 ? 5 : 3.5)
+    .attr('fill', d => knowledgeColor(d.knowledge))
+    .attr('stroke', d => d.knowledge === 'unknown' ? '#bbb' : domainColor(d.domain_id))
+    .attr('stroke-width', 1);
+
+  circles.on('mouseover', (e, d) => {
+    tooltip.innerHTML = `<div class="tt-title">${d.title}</div><div class="tt-meta">${formatYear(d.date_start)}${d.date_end ? ' – ' + formatYear(d.date_end) : ''} · ${d.knowledge}</div>`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.pageX + 12) + 'px';
+    tooltip.style.top = (e.pageY - 10) + 'px';
+  })
+  .on('mousemove', e => { tooltip.style.left = (e.pageX + 12) + 'px'; tooltip.style.top = (e.pageY - 10) + 'px'; })
+  .on('mouseout', () => { tooltip.style.display = 'none'; })
+  .on('click', (e, d) => openDetail('node', d));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ENTITIES
+// ═══════════════════════════════════════════════════════════════════════
+
+let entityTypeFilter = 'all';
+let entityKnowledgeFilter = 'all';
+
+function renderEntities() {
+  if (!DATA) return;
+  const container = document.getElementById('entities-container');
+
+  // Get unique entity types
+  const types = [...new Set(DATA.entities.map(e => e.entity_type).filter(Boolean))];
+
+  let html = `
+    <div class="section-head"><span class="star">✦</span> Shared Entities</div>
+    <div class="entities-filters">
+      <div class="filter-pill ${entityTypeFilter === 'all' ? 'active' : ''}" onclick="setEntityFilter('type','all')">All types</div>
+      ${types.map(t => `<div class="filter-pill ${entityTypeFilter === t ? 'active' : ''}" onclick="setEntityFilter('type','${t}')">${t}</div>`).join('')}
+      <span style="width:16px"></span>
+      <div class="filter-pill ${entityKnowledgeFilter === 'all' ? 'active' : ''}" onclick="setEntityFilter('knowledge','all')">All states</div>
+      ${KNOWLEDGE_ORDER.map(k => `<div class="filter-pill ${entityKnowledgeFilter === k ? 'active' : ''}" onclick="setEntityFilter('knowledge','${k}')">${KNOWLEDGE_LABELS[k]}</div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">${DATA.entities.length} entities total</div>
+    <div class="entity-grid" id="entity-grid"></div>`;
+  container.innerHTML = html;
+
+  const grid = document.getElementById('entity-grid');
+  const filtered = DATA.entities.filter(e => {
+    if (entityTypeFilter !== 'all' && e.entity_type !== entityTypeFilter) return false;
+    if (entityKnowledgeFilter !== 'all' && e.knowledge !== entityKnowledgeFilter) return false;
+    return true;
+  });
+
+  filtered.forEach(e => {
+    const card = document.createElement('div');
+    card.className = 'entity-card';
+    card.onclick = () => openDetail('entity', e);
+    const domainSet = [...new Set(e.curriculum_links.map(l => l.domain_title))];
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="entity-card-name">${e.name}</div>
+        <span class="k-badge ${e.knowledge}" style="font-size:9px">${e.knowledge}</span>
+      </div>
+      <div class="entity-card-meta">
+        ${e.entity_type || ''}${e.date_start != null ? ' · ' + formatYear(e.date_start) + (e.date_end ? '–' + formatYear(e.date_end) : '') : ''}
+        · ${e.curriculum_links.length} connections
+      </div>
+      <div class="entity-card-domains">
+        ${domainSet.map(d => `<span class="domain-tag">${shortTitle(d, 20)}</span>`).join('')}
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function setEntityFilter(filterType, value) {
+  if (filterType === 'type') entityTypeFilter = value;
+  else entityKnowledgeFilter = value;
+  renderEntities();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SOURCES
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderSources() {
+  if (!DATA) return;
+  const container = document.getElementById('sources-container');
+
+  let html = `
+    <div class="section-head"><span class="star">✦</span> Books Contributing Knowledge</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">${DATA.books.length} books with curriculum mappings · ${DATA.stats.articles_mapped} articles mapped to curricula</div>
+    <div class="book-grid" id="book-grid"></div>`;
+  container.innerHTML = html;
+
+  const grid = document.getElementById('book-grid');
+  // Sort by mapping count descending
+  const sorted = [...DATA.books].sort((a, b) => b.curriculum_mappings.length - a.curriculum_mappings.length);
+
+  sorted.forEach(b => {
+    const card = document.createElement('div');
+    card.className = 'book-card';
+    card.onclick = () => openDetail('book', b);
+    const domains = [...new Set(b.curriculum_mappings.map(m => m.domain_title))];
+    const coverageCount = { surface: 0, moderate: 0, deep: 0 };
+    b.curriculum_mappings.forEach(m => { coverageCount[m.coverage] = (coverageCount[m.coverage] || 0) + 1; });
+    const deepPct = b.curriculum_mappings.length > 0 ? Math.round(coverageCount.deep / b.curriculum_mappings.length * 100) : 0;
+
+    card.innerHTML = `
+      <div class="book-card-title">${b.title}</div>
+      <div class="book-card-author">${b.author || ''}</div>
+      <div class="book-card-stats">
+        <span>${b.curriculum_mappings.length} nodes</span>
+        ${b.significance ? `<span>${b.significance}</span>` : ''}
+        ${b.reading_status ? `<span>${b.reading_status}</span>` : ''}
+        <span>${coverageCount.deep} deep · ${coverageCount.moderate} moderate · ${coverageCount.surface} surface</span>
+      </div>
+      <div class="book-card-bar">
+        <div class="book-card-bar-fill" style="width:${deepPct}%;background:var(--k-engaged)"></div>
+      </div>
+      <div class="book-card-domains">
+        ${domains.map(d => `<span class="domain-tag">${shortTitle(d, 20)}</span>`).join('')}
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════════════════
+
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim().toLowerCase();
+  if (q.length < 2) { searchResults.classList.remove('open'); return; }
+
+  const results = [];
+  const maxResults = 15;
+
+  // Search nodes
+  for (const c of DATA.curricula) {
+    for (const n of c.nodes) {
+      if (results.length >= maxResults) break;
+      if (n.title.toLowerCase().includes(q) || (n.description || '').toLowerCase().includes(q)) {
+        results.push({ type: 'node', title: n.title, context: c.title + ' · L' + n.level, item: n, domainId: c.id });
+      }
+    }
+  }
+
+  // Search entities
+  for (const e of DATA.entities) {
+    if (results.length >= maxResults) break;
+    if (e.name.toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)) {
+      results.push({ type: 'entity', title: e.name, context: (e.entity_type || '') + ' · ' + e.curriculum_links.length + ' links', item: e });
+    }
+  }
+
+  // Search books
+  for (const b of DATA.books) {
+    if (results.length >= maxResults) break;
+    if (b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)) {
+      results.push({ type: 'book', title: b.title, context: b.author || '', item: b });
+    }
+  }
+
+  if (results.length === 0) {
+    searchResults.classList.remove('open');
+    return;
+  }
+
+  searchResults.innerHTML = '';
+  results.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'search-result-item';
+    div.innerHTML = `<div class="sr-type">${r.type}</div><div class="sr-title">${r.title}</div><div class="sr-context">${r.context}</div>`;
+    div.onclick = () => {
+      searchResults.classList.remove('open');
+      searchInput.value = '';
+      if (r.type === 'node') {
+        navigateToNode(r.domainId, r.item.id);
+      } else if (r.type === 'entity') {
+        openDetail('entity', r.item);
+      } else if (r.type === 'book') {
+        openDetail('book', r.item);
+      }
+    };
+    searchResults.appendChild(div);
+  });
+  searchResults.classList.add('open');
+});
+
+// Close search on outside click
+document.addEventListener('click', e => {
+  if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+    searchResults.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+
+loadData();
+</script>
+</body>
+</html>

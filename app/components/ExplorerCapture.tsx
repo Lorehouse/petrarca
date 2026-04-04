@@ -1,18 +1,20 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { colors, fonts, layout } from '../design/tokens';
+import { colors, fonts } from '../design/tokens';
 import { logEvent } from '../data/logger';
-import { RESEARCH_BASE } from '../lib/chat-api';
+import { RESEARCH_BASE, fetchWithTimeout } from '../lib/chat-api';
+import { createAudioQueue, type AudioQueue } from '../lib/audio-upload-queue';
 
-// Conditional expo-av import (not available on web)
+// Conditional native imports (not available on web)
 let Audio: any = null;
 let Haptics: any = null;
-let FileSystem: any = null;
 if (Platform.OS !== 'web') {
   try { Audio = require('expo-av').Audio; } catch {}
   try { Haptics = require('expo-haptics'); } catch {}
-  try { FileSystem = require('expo-file-system/legacy'); } catch {}
 }
+
+// Shared queue singleton — all ExplorerCapture instances share one queue
+export const exploreCaptureQueue: AudioQueue = createAudioQueue('explore-captures');
 
 export interface CaptureResult {
   status: 'completed' | 'error';
@@ -31,7 +33,7 @@ interface ExplorerCaptureProps {
   onCaptureComplete?: (result: CaptureResult) => void;
 }
 
-type CaptureState = 'idle' | 'recording' | 'processing' | 'done';
+type CaptureState = 'idle' | 'recording' | 'processing' | 'done' | 'saved_pending';
 
 export default function ExplorerCapture({
   entityId, entityName, mode, placeholder, onCaptureComplete,
@@ -48,6 +50,15 @@ export default function ExplorerCapture({
   const defaultPlaceholder = mode === 'entity'
     ? `What do I know about ${entityName || 'this'}…`
     : 'Capture a note or question…';
+
+  // Retry any pending uploads on mount; notify parent if background retries succeed
+  useEffect(() => {
+    const unsub = exploreCaptureQueue.onResult((_item, success, response) => {
+      if (success && response) onCaptureComplete?.(response as CaptureResult);
+    });
+    exploreCaptureQueue.retryAll().catch(() => {});
+    return unsub;
+  }, []);
 
   const startRecording = useCallback(async () => {
     if (!Audio) { setError('Recording not available on web'); return; }
@@ -72,61 +83,44 @@ export default function ExplorerCapture({
 
   const stopAndSend = useCallback(async () => {
     if (!recRef.current) return;
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     try {
       await recRef.current.stopAndUnloadAsync();
-      const uri = recRef.current.getURI();
+      const tempUri = recRef.current.getURI();
       recRef.current = null;
-      setState('processing');
-      setProcessingLabel('Transcribing…');
+
+      if (!tempUri) { setState('idle'); setError('No audio file'); return; }
       if (Haptics) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      if (!uri) { setState('idle'); setError('No audio file'); return; }
-
-      // Save locally for resilience
-      let localPath = uri;
-      if (FileSystem && FileSystem.documentDirectory) {
-        const filename = `explore_capture_${Date.now()}.m4a`;
-        const dir = `${FileSystem.documentDirectory}explore-captures/`;
-        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-        localPath = `${dir}${filename}`;
-        await FileSystem.copyAsync({ from: uri, to: localPath });
-      }
 
       logEvent('explorer_capture_record_stop', { entity_id: entityId, duration, mode });
 
-      // Upload as multipart
-      await uploadAudio(localPath);
+      // 1. Enqueue: copies audio to persistent dir, saves to pending.json
+      const metadata: Record<string, string> = { mode };
+      if (entityId) metadata.entity_id = entityId;
+      if (entityName) metadata.entity_name = entityName;
+      const requestId = await exploreCaptureQueue.enqueue(tempUri, '/explore/capture', metadata);
+
+      // 2. Attempt upload (blocking — user sees "Transcribing…")
+      setState('processing');
+      setProcessingLabel('Transcribing…');
+
+      try {
+        const data = await exploreCaptureQueue.upload(requestId);
+        await exploreCaptureQueue.dequeue(requestId);
+        handleResult(data);
+      } catch (e) {
+        // Upload failed — audio is safely queued for retry
+        console.warn('[ExplorerCapture] upload failed, queued for retry:', e);
+        logEvent('explorer_capture_upload_failed', { request_id: requestId, error: String(e) });
+        setState('saved_pending');
+        setTimeout(() => setState('idle'), 2500);
+      }
     } catch (e) {
+      console.error('[ExplorerCapture] recording error:', e);
       setState('idle');
       setError(`Recording error: ${e}`);
     }
   }, [entityId, entityName, duration, mode]);
-
-  const uploadAudio = async (audioPath: string) => {
-    setProcessingLabel('Transcribing…');
-    try {
-      const formData = new FormData();
-      formData.append('audio', {
-        uri: audioPath,
-        type: 'audio/m4a',
-        name: 'capture.m4a',
-      } as any);
-      if (entityId) formData.append('entity_id', entityId);
-      if (entityName) formData.append('entity_name', entityName);
-      formData.append('mode', mode);
-
-      const resp = await fetch(`${RESEARCH_BASE}/explore/capture`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await resp.json();
-      handleResult(data);
-    } catch (e) {
-      setState('idle');
-      setError(`Upload failed: ${e}`);
-    }
-  };
 
   const sendText = useCallback(async () => {
     const trimmed = text.trim();
@@ -137,7 +131,7 @@ export default function ExplorerCapture({
     logEvent('explorer_capture_text', { entity_id: entityId, mode, length: trimmed.length });
 
     try {
-      const resp = await fetch(`${RESEARCH_BASE}/explore/capture`, {
+      const resp = await fetchWithTimeout(`${RESEARCH_BASE}/explore/capture`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -146,7 +140,9 @@ export default function ExplorerCapture({
           entity_name: entityName,
           mode,
         }),
+        timeout: 30000,
       });
+      if (!resp.ok) throw new Error(`Request failed: ${resp.status}`);
       const data = await resp.json();
       handleResult(data);
       setText('');
@@ -156,31 +152,40 @@ export default function ExplorerCapture({
     }
   }, [text, entityId, entityName, mode]);
 
-  const handleResult = (data: any) => {
+  const handleResult = (data: CaptureResult) => {
     if (data.status === 'error') {
       setState('idle');
       setError(data.error || 'Unknown error');
       return;
     }
     setProcessingLabel('');
-    const captureResult: CaptureResult = {
-      status: 'completed',
-      transcript: data.transcript,
-      notes_saved: data.notes_saved || 0,
-      research_triggered: data.research_triggered || [],
-      entities_detected: data.entities_detected || [],
-    };
-    setResult(captureResult);
+    setResult(data);
     setState('done');
-    onCaptureComplete?.(captureResult);
-    // Reset after showing result
-    setTimeout(() => {
-      setState('idle');
-      setResult(null);
-    }, 3000);
+    onCaptureComplete?.(data);
+    setTimeout(() => { setState('idle'); setResult(null); }, 3000);
   };
 
+  const cancelRecording = useCallback(() => {
+    if (recRef.current) {
+      recRef.current.stopAndUnloadAsync().catch(() => {});
+      recRef.current = null;
+    }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setDuration(0);
+    setState('idle');
+    logEvent('explorer_capture_cancelled', { entity_id: entityId, duration });
+  }, [entityId, duration]);
+
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  // --- Saved pending (upload failed, will retry) ---
+  if (state === 'saved_pending') {
+    return (
+      <View style={cs.doneRow}>
+        <Text style={cs.pendingText}>Saved — will retry upload automatically</Text>
+      </View>
+    );
+  }
 
   // --- Done state ---
   if (state === 'done' && result) {
@@ -217,14 +222,7 @@ export default function ExplorerCapture({
         <Pressable onPress={stopAndSend} style={cs.sendBtn}>
           <Text style={cs.sendBtnText}>Send</Text>
         </Pressable>
-        <Pressable onPress={() => {
-          if (recRef.current) {
-            recRef.current.stopAndUnloadAsync().catch(() => {});
-            recRef.current = null;
-          }
-          if (timerRef.current) clearInterval(timerRef.current);
-          setState('idle');
-        }} style={cs.cancelBtn}>
+        <Pressable onPress={cancelRecording} style={cs.cancelBtn}>
           <Text style={cs.cancelText}>✕</Text>
         </Pressable>
       </View>
@@ -349,6 +347,12 @@ const cs = StyleSheet.create({
     fontFamily: fonts.readingItalic,
     fontSize: 13,
     color: colors.claimNew,
+    ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
+  },
+  pendingText: {
+    fontFamily: fonts.readingItalic,
+    fontSize: 13,
+    color: colors.textMuted,
     ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}),
   },
   errorText: {
