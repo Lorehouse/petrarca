@@ -929,23 +929,62 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             items.append(card)
 
         # ── Mix in completed microlearning cards ────────────────────────
+        # When regular review items are sparse, microlearning fills the gap.
         # Never-reviewed cards go to the FRONT (high value — from voice
         # elicitation: missed facts, wonderings, curiosity questions).
         # Already-reviewed cards interleave normally.
         try:
+            # Dynamic limit: when regular items are sparse, show more ML cards
+            regular_count = len(items)
+            if regular_count < 3:
+                ml_limit = limit  # fill the whole batch with ML
+            else:
+                ml_limit = max(3, limit // 4)
+
+            now_ms = int(time.time() * 1000)
             ml_rows = conn.execute('''
                 SELECT * FROM microlearning_cards
                 WHERE status = 'completed'
                 ORDER BY
                     CASE WHEN review_count = 0 THEN 0 ELSE 1 END,
+                    CASE WHEN review_count > 0 AND due_at <= ? THEN 0 ELSE 1 END,
                     created_at DESC
                 LIMIT ?
-            ''', (max(3, limit // 4),)).fetchall()
+            ''', (now_ms, ml_limit)).fetchall()
 
             new_ml = []
             seen_ml = []
             for r in ml_rows:
                 ml = dict(r)
+                # Parse stored entities and compute text spans
+                entities_raw = _parse_json_safe(ml.get('entities'), [])
+                content_text = ml.get('content') or ''
+                ml_entity_spans = []
+                if entities_raw and content_text:
+                    for ent in entities_raw:
+                        name = ent.get('name', '')
+                        if not name or len(name) < 2:
+                            continue
+                        idx = content_text.find(name)
+                        while idx != -1:
+                            ml_entity_spans.append({
+                                'start': idx,
+                                'end': idx + len(name),
+                                'entity_id': ent.get('canonical', name.lower().replace(' ', '_')),
+                                'name': name,
+                                'entity_type': ent.get('type', 'concept'),
+                            })
+                            idx = content_text.find(name, idx + len(name))
+                    # Sort and deduplicate overlapping spans
+                    ml_entity_spans.sort(key=lambda s: s['start'])
+                    filtered_spans = []
+                    last_end = 0
+                    for sp in ml_entity_spans:
+                        if sp['start'] >= last_end:
+                            filtered_spans.append(sp)
+                            last_end = sp['end']
+                    ml_entity_spans = filtered_spans
+
                 card = {
                     'type': 'microlearning',
                     'question_id': ml['id'],
@@ -953,7 +992,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'answer': ml.get('answer_guidance') or '',
                     'rich_answer': ml.get('answer_guidance') or '',
                     'answer_type': 'concept',
-                    'content': ml['content'],
+                    'content': content_text,
                     'query': ml['query'],
                     'node_title': '',
                     'domain': ml.get('source_domain') or '',
@@ -967,6 +1006,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'node_knowledge': 'mentioned',
                     'node_confidence': 0.5,
                     'follow_up_queries': json.loads(ml.get('follow_up_queries') or '[]'),
+                    'entities': entities_raw,
+                    'entity_spans': {'content': ml_entity_spans} if ml_entity_spans else {},
                 }
                 if (ml['review_count'] or 0) == 0:
                     new_ml.append(card)
@@ -1012,6 +1053,14 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?', (soon,)
         ).fetchone()[0]
 
+        # Count total available microlearning cards
+        try:
+            total_ml = conn.execute(
+                "SELECT COUNT(*) FROM microlearning_cards WHERE status = 'completed'"
+            ).fetchone()[0]
+        except Exception:
+            total_ml = 0
+
         # Count by domain
         domain_counts = {}
         for r in conn.execute(
@@ -1019,12 +1068,16 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
         ).fetchall():
             domain_counts[r['curriculum_domain']] = r['c']
 
+        # has_more considers both regular candidates and microlearning cards
+        total_available = len(candidates) + total_ml
+        has_more = len(items) >= limit and offset + limit < total_available
+
         return {
             'items': items,
             'generated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             'offset': offset,
-            'has_more': offset + limit < len(candidates),
-            'total_candidates': len(candidates),
+            'has_more': has_more,
+            'total_candidates': len(candidates) + total_ml,
             'total_items': total_items,
             'total_with_question': total_with_question,
             'due_count': due_count,

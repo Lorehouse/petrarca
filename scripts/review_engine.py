@@ -1307,9 +1307,45 @@ Write:
    of the period — don't over-explain fundamentals.
 2. One assessment question about the content (test whether they absorbed the key insight)
 3. 3 follow-up research queries for going even deeper
+4. A list of entities mentioned in the content — people, places, events, and key concepts.
+   For each entity, provide:
+   - "name": the name as it appears in the text
+   - "canonical": a canonical identifier (lowercase, underscores, e.g. "archimedes_of_syracuse")
+   - "type": one of "person", "place", "event", "concept", "period"
 
 Output JSON only:
-{{"content":"the 3-4 paragraph answer","question":"assessment question about this content","answer_guidance":"1-2 sentence answer to the assessment question","follow_up_queries":["query1","query2","query3"]}}"""
+{{"content":"the 3-4 paragraph answer","question":"assessment question about this content","answer_guidance":"1-2 sentence answer to the assessment question","follow_up_queries":["query1","query2","query3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
+
+
+def _compute_entity_spans(text: str, entities: list) -> list:
+    """Find entity mentions in text and return span objects for the client."""
+    spans = []
+    for ent in entities:
+        name = ent.get('name', '')
+        if not name or len(name) < 2:
+            continue
+        start = 0
+        while True:
+            idx = text.find(name, start)
+            if idx == -1:
+                break
+            spans.append({
+                'start': idx,
+                'end': idx + len(name),
+                'entity_id': ent.get('canonical', name.lower().replace(' ', '_')),
+                'name': name,
+                'entity_type': ent.get('type', 'concept'),
+            })
+            start = idx + len(name)
+    # Sort by position, deduplicate overlapping spans
+    spans.sort(key=lambda s: s['start'])
+    filtered = []
+    last_end = 0
+    for s in spans:
+        if s['start'] >= last_end:
+            filtered.append(s)
+            last_end = s['end']
+    return filtered
 
 
 def create_microlearning_request(query: str, source_item_id: str | None = None,
@@ -1387,26 +1423,31 @@ def _run_microlearning_research(card_id: str, query: str,
         if not result or 'content' not in result:
             raise ValueError(f'Invalid response: {str(result)[:200] if result else "empty"}')
 
+        # Extract entities and compute text spans
+        entities = result.get('entities', [])
+        entity_spans = _compute_entity_spans(result['content'], entities)
+
         # Update the card
         now_ms = int(time.time() * 1000)
         conn = get_connection()
         conn.execute('''
             UPDATE microlearning_cards SET
                 content=?, question=?, answer_guidance=?,
-                follow_up_queries=?, status='completed',
-                due_at=?
+                follow_up_queries=?, entities=?,
+                status='completed', due_at=?
             WHERE id=?
         ''', (
             result['content'],
             result.get('question', ''),
             result.get('answer_guidance', ''),
             json.dumps(result.get('follow_up_queries', [])),
+            json.dumps(entities),
             now_ms,  # due immediately
             card_id,
         ))
         conn.commit()
         conn.close()
-        print(f'[microlearning] completed {card_id}: {query[:60]}', flush=True)
+        print(f'[microlearning] completed {card_id}: {query[:60]} ({len(entities)} entities)', flush=True)
 
     except Exception as e:
         print(f'[microlearning] failed {card_id}: {e}', flush=True)

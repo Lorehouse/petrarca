@@ -3962,6 +3962,85 @@ JSON array only:"""
 
     # _handle_curriculum_review_status removed — retrieval_questions table archived
 
+    def _handle_review_batch_generate(self):
+        """POST /review/batch-generate — batch-generate cached_questions for knowledge_items."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = {}
+        if content_length:
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except (json.JSONDecodeError, ValueError):
+                pass
+        batch_limit = body.get('limit', 20)
+
+        from db import get_connection
+        from review_engine import generate_question
+        conn = get_connection()
+        try:
+            # Find items with known knowledge state but no cached_question
+            rows = conn.execute('''
+                SELECT ki.id FROM knowledge_items ki
+                LEFT JOIN knowledge_states ks
+                  ON ks.domain_id = ki.curriculum_domain
+                  AND ks.node_id = ki.curriculum_node_id
+                WHERE ki.cached_question IS NULL
+                  AND COALESCE(ks.knowledge, 'unknown') != 'unknown'
+                LIMIT ?
+            ''', (batch_limit,)).fetchall()
+            item_ids = [r[0] for r in rows]
+            conn.close()
+
+            # Generate in background thread
+            def _batch():
+                from db import get_connection as _get_conn
+                c = _get_conn()
+                done = 0
+                for iid in item_ids:
+                    try:
+                        q = generate_question(iid, c)
+                        c.execute('UPDATE knowledge_items SET cached_question=? WHERE id=?',
+                                  (json.dumps(q), iid))
+                        c.commit()
+                        done += 1
+                        print(f'[batch-gen] {done}/{len(item_ids)} generated: {iid}', flush=True)
+                    except Exception as e:
+                        print(f'[batch-gen] failed for {iid}: {e}', flush=True)
+                c.close()
+                print(f'[batch-gen] Complete: {done}/{len(item_ids)}', flush=True)
+
+            import threading
+            threading.Thread(target=_batch, daemon=True).start()
+
+            self._send_json_response(202, {
+                'status': 'generating',
+                'queued': len(item_ids),
+                'message': f'Generating questions for {len(item_ids)} items in background',
+            })
+        except Exception as e:
+            print(f'[batch-gen] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_microlearning_dismiss(self):
+        """POST /review/microlearning/dismiss — mark a microlearning card as not-interested."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        card_id = body.get('card_id', '').strip()
+        if not card_id:
+            self._send_json_response(400, {'error': 'card_id required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            conn.execute("UPDATE microlearning_cards SET status='dismissed' WHERE id=?",
+                         (card_id,))
+            conn.commit()
+            self._send_json_response(200, {'status': 'dismissed', 'card_id': card_id})
+        except Exception as e:
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_microlearning_request(self):
         """POST /review/microlearning — trigger microlearning research for a query."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -4030,7 +4109,11 @@ JSON array only:"""
             conn.close()
 
     def _handle_entity_lookup(self):
-        """GET /entity/{entity_id} — get full entity details."""
+        """GET /entity/{entity_id} — get full entity details.
+
+        If entity_id is not in shared_entities, fall back to searching
+        microlearning cards for backlinks (dynamic entity from ML annotations).
+        """
         entity_id = self.path.split('/entity/')[-1]
         from db import get_connection
         conn = get_connection(readonly=True)
@@ -4038,26 +4121,69 @@ JSON array only:"""
             row = conn.execute(
                 'SELECT * FROM shared_entities WHERE entity_id = ?', (entity_id,)
             ).fetchone()
-            if not row:
-                self._send_json_response(404, {'error': 'Entity not found'})
-                return
-            links = conn.execute(
-                '''SELECT ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
-                          cn.title as node_title, cn.description as node_description,
-                          COALESCE(ks.knowledge, 'unknown') as knowledge
-                   FROM entity_curriculum_links ecl
-                   LEFT JOIN curriculum_nodes cn ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
-                   LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
-                   WHERE ecl.entity_id = ?''',
-                (entity_id,)
-            ).fetchall()
-            entity = dict(row)
+
+            # Collect microlearning backlinks for this entity
+            ml_backlinks = []
             try:
-                entity['aliases'] = json.loads(entity.get('aliases') or '[]')
-            except (json.JSONDecodeError, TypeError):
-                entity['aliases'] = []
-            entity['curriculum_links'] = [dict(l) for l in links]
-            self._send_json_response(200, entity)
+                ml_rows = conn.execute(
+                    "SELECT id, query, content, entities, source_domain "
+                    "FROM microlearning_cards WHERE status='completed' AND entities LIKE ?",
+                    (f'%{entity_id}%',)
+                ).fetchall()
+                for ml in ml_rows:
+                    entities_data = json.loads(ml['entities'] or '[]')
+                    if any(e.get('canonical') == entity_id for e in entities_data):
+                        ml_backlinks.append({
+                            'card_id': ml['id'],
+                            'query': ml['query'],
+                            'snippet': (ml['content'] or '')[:150],
+                            'domain': ml['source_domain'],
+                        })
+            except Exception:
+                pass
+
+            if row:
+                links = conn.execute(
+                    '''SELECT ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
+                              cn.title as node_title, cn.description as node_description,
+                              COALESCE(ks.knowledge, 'unknown') as knowledge
+                       FROM entity_curriculum_links ecl
+                       LEFT JOIN curriculum_nodes cn ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
+                       LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+                       WHERE ecl.entity_id = ?''',
+                    (entity_id,)
+                ).fetchall()
+                entity = dict(row)
+                try:
+                    entity['aliases'] = json.loads(entity.get('aliases') or '[]')
+                except (json.JSONDecodeError, TypeError):
+                    entity['aliases'] = []
+                entity['curriculum_links'] = [dict(l) for l in links]
+                entity['microlearning_backlinks'] = ml_backlinks
+                self._send_json_response(200, entity)
+            elif ml_backlinks:
+                # Dynamic entity from microlearning annotations
+                # Find the entity metadata from the first card that mentions it
+                entity_meta = {}
+                for ml in ml_rows:
+                    entities_data = json.loads(ml['entities'] or '[]')
+                    for e in entities_data:
+                        if e.get('canonical') == entity_id:
+                            entity_meta = e
+                            break
+                    if entity_meta:
+                        break
+                self._send_json_response(200, {
+                    'entity_id': entity_id,
+                    'name': entity_meta.get('name', entity_id.replace('_', ' ').title()),
+                    'entity_type': entity_meta.get('type', 'concept'),
+                    'description': None,
+                    'aliases': [],
+                    'curriculum_links': [],
+                    'microlearning_backlinks': ml_backlinks,
+                })
+            else:
+                self._send_json_response(404, {'error': 'Entity not found'})
         finally:
             conn.close()
 
@@ -4951,6 +5077,10 @@ JSON array only:"""
             return self._handle_curriculum_review_result()
         if self.path == '/review/microlearning':
             return self._handle_microlearning_request()
+        if self.path == '/review/microlearning/dismiss':
+            return self._handle_microlearning_dismiss()
+        if self.path == '/review/batch-generate':
+            return self._handle_review_batch_generate()
         if self.path == '/entity/tap':
             return self._handle_entity_tap()
         if self.path == '/book/process-kindle':

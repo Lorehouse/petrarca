@@ -437,6 +437,18 @@ export async function triggerMicrolearning(opts: {
   return resp.json();
 }
 
+export async function dismissMicrolearning(
+  cardId: string,
+): Promise<{ status: string; card_id: string }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/microlearning/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: cardId }),
+  });
+  if (!resp.ok) throw new Error(`Dismiss failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Entity API ---
 
 export async function fetchEntityDetails(

@@ -8,7 +8,7 @@ import { colors, fonts, layout } from '../../design/tokens';
 import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/types';
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
-  triggerMicrolearning,
+  triggerMicrolearning, dismissMicrolearning,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -325,17 +325,20 @@ function MicrolearningCard({
   item,
   onResult,
   onSkip,
+  onDismiss,
   onResearch,
   onEntityTap,
 }: {
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
+  onDismiss: () => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
+  const isReReview = (item.review_count || 0) > 0;
 
   if (graded) {
     return (
@@ -345,6 +348,86 @@ function MicrolearningCard({
     );
   }
 
+  // Re-review mode: quiz first, reveal content as answer
+  if (isReReview && item.question) {
+    return (
+      <View style={cs.card}>
+        <View style={cs.headerRow}>
+          <View style={ml.badge}>
+            <Text style={ml.badgeText}>Review</Text>
+          </View>
+          <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+        </View>
+
+        <Text style={cs.question}>{item.question}</Text>
+
+        {!revealed ? (
+          <View style={cs.actionRow}>
+            <Pressable style={cs.revealButton} onPress={() => setRevealed(true)}>
+              <Text style={cs.revealText}>Show answer</Text>
+            </Pressable>
+            <Pressable style={cs.skipButton} onPress={onSkip}>
+              <Text style={cs.skipText}>Skip {'\u2192'}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View>
+            {/* Answer guidance */}
+            <View style={cs.answerBox}>
+              <Text style={cs.answerText}>{item.answer}</Text>
+            </View>
+
+            {/* Full content revealed */}
+            <View style={ml.revealedContent}>
+              <Text style={ml.revealedLabel}>{'\u2726'} Full context</Text>
+              <AnnotatedText
+                text={item.content || ''}
+                spans={item.entity_spans?.content}
+                style={ml.content}
+                onEntityTap={onEntityTap}
+              />
+            </View>
+
+            {/* Grading buttons */}
+            <View style={cs.gradeRow}>
+              {[
+                { value: 'knew', label: 'Got it', style: 'correct' as const },
+                { value: 'partly', label: 'Partly', style: 'partial' as const },
+                { value: 'missed', label: 'Missed', style: 'wrong' as const },
+              ].map(btn => (
+                <Pressable
+                  key={btn.value}
+                  style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
+                  onPress={() => { onResult(btn.value); setGraded(true); }}
+                >
+                  <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
+                    {btn.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Follow-up queries */}
+            <View style={cs.followUpSection}>
+              {item.follow_up_queries && item.follow_up_queries.length > 0 && (
+                <>
+                  <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
+                  {item.follow_up_queries.map((q, i) => (
+                    <Pressable key={i} style={cs.followUpBtn} onPress={() => onResearch(q)}>
+                      <Text style={cs.followUpText}>{q}</Text>
+                    </Pressable>
+                  ))}
+                </>
+              )}
+              <ResearchInput onSubmit={onResearch} />
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // First encounter mode: content first, then quiz
   return (
     <View style={cs.card}>
       {/* Header */}
@@ -406,8 +489,11 @@ function MicrolearningCard({
         </Pressable>
       )}
 
-      {/* Follow-up queries + custom input */}
+      {/* Not interested + Follow-ups */}
       <View style={cs.followUpSection}>
+        <Pressable style={ml.dismissBtn} onPress={onDismiss}>
+          <Text style={ml.dismissText}>Not interested</Text>
+        </Pressable>
         {item.follow_up_queries && item.follow_up_queries.length > 0 && (
           <>
             <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
@@ -659,6 +745,23 @@ export default function ReviewScreen() {
     });
   };
 
+  const handleDismiss = (item: ResurfacingItem) => {
+    if (item.question_id) {
+      dismissMicrolearning(item.question_id).catch(e =>
+        console.warn('[review] dismiss failed:', e));
+    }
+    logEvent('review_dismiss', {
+      question_id: item.question_id,
+      domain: item.domain,
+      query: item.query,
+      time_seconds: timeOnCard(),
+    });
+    animateTransition(() => {
+      setCurrentIndex(i => i + 1);
+      maybeLoadMore();
+    });
+  };
+
   const handleEntityIntroContinue = () => {
     logEvent('review_entity_intro_continue', {
       entity_id: items[currentIndex]?.entity_id,
@@ -774,6 +877,7 @@ export default function ReviewScreen() {
                     item={currentItem}
                     onResult={(result) => handleResult(currentItem, result)}
                     onSkip={() => handleSkip(currentItem)}
+                    onDismiss={() => handleDismiss(currentItem)}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
                   />
@@ -861,6 +965,10 @@ const ml = StyleSheet.create({
   badge: { backgroundColor: '#2a4a6a', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
   badgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   content: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 23, color: colors.textBody, marginBottom: 16 },
+  revealedContent: { borderLeftWidth: 2, borderLeftColor: colors.rule, paddingLeft: 14, marginTop: 12, marginBottom: 14 },
+  revealedLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  dismissBtn: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 10, marginBottom: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
+  dismissText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
 });
 
 const ic = StyleSheet.create({

@@ -601,6 +601,13 @@ export interface EntitySpan {
   name: string;
 }
 
+export interface MicrolearningBacklink {
+  card_id: string;
+  query: string;
+  snippet: string;
+  domain?: string;
+}
+
 export interface EntityDetails {
   entity_id: string;
   name: string;
@@ -616,6 +623,7 @@ export interface EntityDetails {
   date_end?: number;
   nexus_score: number;
   curriculum_links: EntityCurriculumLink[];
+  microlearning_backlinks?: MicrolearningBacklink[];
 }
 
 export interface EntityCurriculumLink {

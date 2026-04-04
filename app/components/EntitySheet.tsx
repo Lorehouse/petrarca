@@ -177,6 +177,22 @@ export default function EntitySheet({ entityId, onClose }: Props) {
                 </View>
               ) : null}
 
+              {/* Microlearning backlinks */}
+              {entity.microlearning_backlinks && entity.microlearning_backlinks.length > 0 ? (
+                <View style={es.linksSection}>
+                  <Text style={es.sectionLabel}>In your research</Text>
+                  {entity.microlearning_backlinks.map((bl, i) => (
+                    <View key={i} style={es.linkRow}>
+                      <View style={[es.linkDot, { backgroundColor: '#2a4a6a' }]} />
+                      <View style={es.linkContent}>
+                        <Text style={es.linkTitle}>{bl.query}</Text>
+                        <Text style={es.linkEmphasis} numberOfLines={2}>{bl.snippet}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
               {/* Wikipedia link */}
               {entity.wikipedia_url ? (
                 <Pressable style={es.wikiLink} onPress={handleWikipedia}>
