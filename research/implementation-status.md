@@ -67,12 +67,12 @@
 |--------|------|------|
 | Reader | `reader.tsx` | Article reader — Full/Guided/New Only modes, paragraph dimming, briefing card |
 | Synthesis Reader | `synthesis-reader.tsx` | 3-column "Restrained Folio" reader |
-| Book Detail | `book-detail.tsx` | Book metadata, captures (photo/voice/text), curriculum context, chapter review |
+| Book Detail | `book-detail.tsx` | Book metadata, captures (photo/voice/text), curriculum context, chapter review, "Record what I remember" book-level recall |
 | Add Book | `add-book.tsx` | Camera capture → Gemini identification |
 | Knowledge Map | `knowledge-map.tsx` | Tree view of curricula with knowledge dots |
 | Curriculum Scan | `curriculum-scan.tsx` | v2 card-based self-assessment (3-level) |
 | Hamarquizen | `hamarquizen.tsx` | Book-specific PRIME→READ→TEST review |
-| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes. Fire-and-forget uploads with `request_id` caching for idempotent retries. |
+| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes + chapter/book recall. "Know nothing" vs "Skip" buttons. Auto-loads more prompts when batch exhausted. Fire-and-forget uploads with `request_id` caching. |
 | Voice Notes | `voice-notes.tsx` | Voice note list + playback |
 | Kindle Curation | `kindle-curation.tsx` | Triage screen for Kindle library |
 | Projects | `projects.tsx` | Project list |
@@ -195,16 +195,19 @@
 | POST | `/review/batch-generate` | Batch generate questions for knowledge items |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |
-| POST | `/review/voice-elicit` | Voice free-recall elicitation (transcription + LLM). Idempotent via `request_id` — cached results returned on retry. |
+| POST | `/review/voice-elicit` | Voice free-recall elicitation (transcription + LLM). Supports curriculum nodes, `chapter:{id}:{num}`, and `book:{id}` node types. Auto-detects domain_id for book/chapter. Idempotent via `request_id`. |
 | POST | `/review/voice-memo` | Voice memo for review item |
-| GET | `/review/elicit-candidates` | Voice elicitation candidates |
+| GET | `/review/elicit-candidates` | Voice elicitation candidates (curriculum nodes + chapter recalls) |
+| POST | `/review/elicit-know-nothing` | Record that user knows nothing about a topic (sets knowledge=unknown, confidence=0.8). Auto-detects domain for book/chapter node_ids. |
 
 ### Entity
 | POST | `/entity/tap` | Log entity tap, generate entity intro |
 | POST | `/entity/questions` | Generate entity questions |
 | POST | `/entity/research` | Entity research via Gemini+Search |
+| POST | `/entity/notes` | Save user note about an entity |
+| POST | `/explore/capture` | Voice/text capture routed to entities + research |
 | GET | `/entities` | List all entities |
-| GET | `/entity/:id` | Entity detail |
+| GET | `/entity/:id` | Entity detail (includes user notes) |
 
 ### Books
 | POST | `/book/identify` | Gemini Vision book identification |

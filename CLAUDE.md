@@ -40,6 +40,7 @@ These principles are the intellectual foundation of the project. They override i
 | **Curriculum/entities** | `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
+| **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
 | **Feed/ranking** | `research/novelty-system-architecture.md` |
 | **Deep "why"** | `research/design-vision.md` (master synthesis of all interviews + research) |
 | **Research index** | `research/README.md` (50+ docs, tiered reading guide) |
@@ -47,7 +48,7 @@ These principles are the intellectual foundation of the project. They override i
 
 ## Working on This Codebase
 
-This project is exploratory — 45+ sessions in many directions. That means:
+This project is exploratory — 47+ sessions in many directions. That means:
 
 1. **There is stale code.** Dead imports, unused tables, deprecated modules. Don't assume everything exists for a reason. Verify before building on it.
 2. **Trace data flows before changing them.** Where does it write → what store → who reads → what displays? Critical bugs came from write/read mismatches (JSON vs SQLite).

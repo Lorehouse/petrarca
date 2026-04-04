@@ -285,6 +285,37 @@ Output JSON only:
 {{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
+FOLLOW_UP_PROMPT = """A history reader just reviewed a topic. Generate 3 follow-up research questions
+that would make them genuinely curious — the kind that make you go "wait, really?" or spark a
+desire to look something up immediately.
+
+Topic: {node_title}
+Topic description: {node_description}
+Specific fact just reviewed: {fact_context}
+
+VARIETY IS ESSENTIAL. Each question should take a DIFFERENT angle from this list:
+- PRIMARY SOURCES: What did this person actually write? What contemporary documents survive?
+  (e.g., "What did Roger II's court chronicler Alexander of Telese actually record about the coronation?")
+- ART & CULTURAL RECEPTION: Opera, theatre, poetry, novels, films inspired by this person/event
+  (e.g., "Which Verdi opera dramatizes the Norman conquest of Sicily?")
+- MATERIAL EVIDENCE: Archaeological sites, artifacts, inscriptions, coins, buildings you can visit today
+  (e.g., "What inscriptions in Arabic, Greek, and Latin survive on Roger II's mantle?")
+- CONNECTED FIGURES: Fascinating contemporaries, rivals, or successors the reader hasn't met yet
+  (e.g., "Who was George of Antioch, and why did a Greek Orthodox Syrian become Roger II's chief minister?")
+- SURPRISING CONNECTIONS: Unexpected links to other domains — science, trade routes, linguistics, religion
+  (e.g., "How did al-Idrisi's world map made for Roger II end up influencing Columbus?")
+- WHAT WE DON'T KNOW: Fascinating open questions, lost sources, scholarly debates
+  (e.g., "Why do we have almost no Arabic sources for the Norman conquest, despite 200 years of Arab rule?")
+
+Rules:
+- Be SPECIFIC — name real people, places, events, dates. Never generic.
+- NO templates like "How does X connect to Y?" or "What was happening elsewhere?" or "Tell me more about X"
+- Each question should feel like it could be its own microlearning rabbit hole
+- Prefer questions the reader is UNLIKELY to already know the answer to
+
+Output JSON array of 3 strings only: ["q1","q2","q3"]"""
+
+
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
 
 Concept: {node_title}
@@ -966,6 +997,24 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> 
     return items[:limit]
 
 
+def _generate_follow_up_queries(node_title: str, node_description: str,
+                                fact_context: str = '') -> list[str]:
+    """Generate 3 LLM-powered follow-up queries for a review item.
+    Returns empty list on failure (caller should fall back to templates)."""
+    try:
+        prompt = FOLLOW_UP_PROMPT.format(
+            node_title=node_title,
+            node_description=node_description[:200],
+            fact_context=fact_context or '(general review)',
+        )
+        fq = call_claude_json(prompt, timeout=60, model='haiku')
+        if isinstance(fq, list) and len(fq) >= 2:
+            return fq[:3]
+    except Exception as e:
+        print(f'[review] follow-up gen failed for {node_title}: {e}', flush=True)
+    return []
+
+
 # ── Question generation ───────────────────────────────────────────────────────
 
 def _best_source_for_question(sources: list) -> dict:
@@ -1056,16 +1105,21 @@ def generate_question(item_id: str, conn) -> dict:
                 node_title = node['title'] if node else ''
                 node_description = node.get('description', '') if node else ''
                 result = _key_fact_to_question(fact, node_title, node_description)
-                entities = fact.get('entities', [])
-                # Generate specific follow-up queries from the fact context
-                entity_name = entities[0].replace('_', ' ').title() if entities else ''
                 fact_q = fact.get('question', '')
                 fact_a = fact.get('answer', '')
-                result['follow_up_queries'] = [
-                    f'Why did {entity_name} matter beyond {node_title}?' if entity_name else f'What were the long-term consequences of {node_title}?',
-                    f'What was happening elsewhere when {fact_a[:50].rstrip()}?' if fact_a else f'What was the wider context around {node_title}?',
-                    f'What would a contemporary have found most surprising about {entity_name or node_title}?',
-                ]
+                fact_ctx = f'{fact_q} — {fact_a}' if fact_a else fact_q
+                fqs = _generate_follow_up_queries(node_title, node_description, fact_ctx)
+                if fqs:
+                    result['follow_up_queries'] = fqs
+                else:
+                    # Fallback: at least give something
+                    entities = fact.get('entities', [])
+                    entity_name = entities[0].replace('_', ' ').title() if entities else ''
+                    result['follow_up_queries'] = [
+                        f'What primary sources survive from the time of {entity_name or node_title}?',
+                        f'What art, literature, or opera features {entity_name or node_title}?',
+                        f'What can you still visit or see today connected to {entity_name or node_title}?',
+                    ]
                 return result
 
     # ── Serve from cache if no key_facts path applied ─────────────────────────
@@ -1166,24 +1220,10 @@ def generate_question(item_id: str, conn) -> dict:
 
     # Generate follow-up research queries via Claude
     if 'follow_up_queries' not in result:
-        try:
-            fq_prompt = (
-                f'A history reader just reviewed "{node_title}": {node_description[:150]}\n\n'
-                f'Generate 3 questions that would make them genuinely curious — the kind that make you '
-                f'go "wait, really?" or "I never thought about it that way." Be specific, name real '
-                f'people/places/events. NO generic templates like "How does X connect to Y?" or '
-                f'"Tell me more about X."\n\n'
-                f'Examples of good questions:\n'
-                f'- "Did Archimedes\' war machines actually work, or was Polybius exaggerating?"\n'
-                f'- "Why did Syracuse back Carthage when every other Sicilian city backed Rome?"\n'
-                f'- "What happened to the Arab poets who wrote for Norman kings after Frederick II died?"\n\n'
-                f'Output JSON array of 3 strings only: ["q1","q2","q3"]'
-            )
-            fq = call_claude_json(fq_prompt, timeout=60, model='sonnet')
-            if isinstance(fq, list) and len(fq) >= 2:
-                result['follow_up_queries'] = fq[:3]
-        except Exception as e:
-            print(f'[review] follow-up gen failed for {node_title}: {e}', flush=True)
+        fqs = _generate_follow_up_queries(node_title, node_description,
+                                          source_text[:200] if source_text else '')
+        if fqs:
+            result['follow_up_queries'] = fqs
 
     return result
 
