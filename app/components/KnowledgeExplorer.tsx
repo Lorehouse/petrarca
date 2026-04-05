@@ -318,6 +318,13 @@ export default function KnowledgeExplorer({ initialEntity, initialYear, initialE
 
   return (
     <ScrollView contentContainerStyle={s.scrollContent}>
+      {/* Knowledge Atlas link */}
+      <Pressable style={s.atlasLink} onPress={() => Linking.openURL(`${RESEARCH_BASE}/knowledge/atlas`)}>
+        <Text style={s.atlasLinkStar}>✦</Text>
+        <Text style={s.atlasLinkText}>Knowledge Atlas</Text>
+        <Text style={s.atlasLinkArrow}>→</Text>
+      </Pressable>
+
       {/* Sub-tabs: Timeline / Persons / Places */}
       <View style={s.subTabRow}>
         {(['timeline', 'persons', 'places'] as SubTab[]).map(tab => (
@@ -657,6 +664,15 @@ function TimelineEvent({ node, showDomain, isSelected, onPress, onGenerateCard, 
 
 const s = StyleSheet.create({
   scrollContent: { paddingBottom: 32 },
+  atlasLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: layout.screenPadding, marginTop: 8, marginBottom: 4,
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: colors.rule, backgroundColor: '#fff',
+  },
+  atlasLinkStar: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric },
+  atlasLinkText: { fontFamily: fonts.body, fontSize: 13, color: colors.ink },
+  atlasLinkArrow: { fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, marginLeft: 'auto' },
   loadingWrap: { padding: 40, alignItems: 'center', gap: 8 },
   loadingText: { ...type.screenSubtitle, color: colors.textMuted },
   errorText: { fontFamily: fonts.reading, fontSize: 14, color: colors.textSecondary, textAlign: 'center', padding: 32 },
