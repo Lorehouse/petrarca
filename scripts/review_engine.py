@@ -388,7 +388,7 @@ LEARNER'S VOICE CAPTURE (transcribed speech):
 
 Instructions:
 1. Extract every concrete FACT the learner states or implies. Be thorough — include dates, names, events, causal claims, and connections. Each fact should be a standalone statement.
-2. Map each fact to the most relevant curriculum node from the list above. Use the exact node_id. A fact can map to multiple nodes if relevant.
+2. Map each fact to the most relevant curriculum node from the list above. Use the exact node_id. A fact can map to multiple nodes if relevant. CRITICAL MAPPING RULE: Only map a fact to a node if the fact is GENUINELY ABOUT that node's subject matter. The fact must belong to the same historical period and topic as the node. Do NOT map medieval facts to ancient nodes or vice versa. Do NOT map facts to nodes just because they share a word (e.g., a medieval monk writing is NOT about the Roman historian Tacitus; Arab prisoners are NOT about Roman slavery; medieval church politics is NOT about Roman religion). When in doubt, leave the fact unmapped rather than force a bad match.
 3. For each node that has at least one mapped fact, assess the knowledge demonstrated:
    - "anchored": learner shows confident, detailed knowledge (multiple facts, connections, temporal placement)
    - "engaged": learner demonstrates real knowledge but with gaps or uncertainty
@@ -3024,18 +3024,26 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                 })
                 seen_node_ids.add(n['id'])
 
-    # Phase 3: If still very few nodes, add all nodes from candidate domains
-    if len(candidate_nodes) < 10 and candidate_domains:
-        for domain_id in candidate_domains:
+    # Phase 3: If still very few nodes, expand only the primary domain
+    # (the one with the most direct links — avoids dumping 70 Ancient Greece
+    # nodes when the transcript is about medieval Sicily)
+    if len(candidate_nodes) < 10 and directly_linked_node_ids:
+        # Find which domain has the most direct links
+        domain_counts = {}
+        for n in candidate_nodes:
+            if n.get('priority') == 'direct':
+                domain_counts[n['domain_id']] = domain_counts.get(n['domain_id'], 0) + 1
+        if domain_counts:
+            primary_domain = max(domain_counts, key=domain_counts.get)
             nodes = conn.execute(
                 'SELECT id, title, description FROM curriculum_nodes WHERE domain_id = ? AND level >= 2',
-                (domain_id,)
+                (primary_domain,)
             ).fetchall()
             for n in nodes:
                 if n['id'] not in seen_node_ids:
                     candidate_nodes.append({
                         'node_id': n['id'],
-                        'domain_id': domain_id,
+                        'domain_id': primary_domain,
                         'title': n['title'],
                         'description': (n['description'] or '')[:200],
                         'priority': 'domain',
@@ -3074,7 +3082,12 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     candidate_nodes.sort(key=lambda n: (priority_order.get(n.get('priority', 'keyword'), 3),
                                          -n.get('overlap', 0)))
 
-    print(f'[voice-capture] Found {len(candidate_nodes)} candidate nodes across {len(candidate_domains)} domains', flush=True)
+    by_priority = {}
+    for n in candidate_nodes:
+        p = n.get('priority', '?')
+        by_priority[p] = by_priority.get(p, 0) + 1
+    print(f'[voice-capture] Found {len(candidate_nodes)} candidate nodes across {len(candidate_domains)} domains '
+          f'(breakdown: {by_priority})', flush=True)
 
     # --- Build context section for prompt ---
     if entity_id and entity_name:
