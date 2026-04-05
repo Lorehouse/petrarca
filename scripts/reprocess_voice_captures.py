@@ -53,13 +53,14 @@ def main():
             print('  [DRY RUN] Would reprocess this transcript')
             continue
 
-        # Reprocess through the rich pipeline
+        # Reprocess through the rich pipeline (sync=True to avoid background thread DB contention)
         # These were all general-mode captures (no entity_id)
         result = process_voice_capture(
             transcript=row['transcript'],
             entity_id=None,
             entity_name=None,
             mode='general',
+            sync=True,
         )
 
         if result.get('error'):
@@ -78,10 +79,10 @@ def main():
         print(f'  ML cards triggered: {len(result.get("microlearning_triggered", []))}')
         print(f'  Summary: {result.get("overall_summary", "")}')
 
-        # Wait for background threads (question generation, microlearning) to settle
+        # Small pause between recordings
         if i < len(rows) - 1:
-            print('  Waiting 30s for background threads to complete...')
-            time.sleep(30)
+            print('  ---')
+            time.sleep(2)
 
     print('\n' + '=' * 70)
     print('Done!')

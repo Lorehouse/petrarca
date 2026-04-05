@@ -1858,10 +1858,222 @@ def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
             pass
 
 
+def generate_also_want_to_know(item_id: str, question_text: str,
+                               entities: list) -> list:
+    """Generate tappable 'I also want to know...' suggestions after a review answer.
+
+    Uses entity metadata, key_facts, and node dates to produce 2-4 quick suggestions.
+    Each suggestion has: query, type ('simple_fact' or 'research'), label.
+    """
+    from db import get_connection
+    suggestions = []
+    conn = get_connection()
+
+    try:
+        # Get curriculum node context
+        ki = conn.execute(
+            'SELECT curriculum_node_id, curriculum_domain FROM knowledge_items WHERE id=?',
+            (item_id,)).fetchone()
+        if not ki:
+            return suggestions
+        node_id, domain_id = ki[0], ki[1]
+
+        node = conn.execute(
+            'SELECT title, date_start, date_end, key_facts FROM curriculum_nodes '
+            'WHERE id=? AND domain_id=?', (node_id, domain_id)).fetchone()
+        if not node:
+            return suggestions
+
+        node_title = node[0] or ''
+        date_start = node[1]
+        date_end = node[2]
+        key_facts = json.loads(node[3]) if node[3] else []
+
+        # Get already-asked fact_ids from question_history
+        ki_full = conn.execute('SELECT question_history FROM knowledge_items WHERE id=?',
+                               (item_id,)).fetchone()
+        asked_fact_ids = set()
+        if ki_full and ki_full[0]:
+            try:
+                for qh in json.loads(ki_full[0]):
+                    if qh.get('fact_id'):
+                        asked_fact_ids.add(qh['fact_id'])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Entity-based suggestions
+        for ent in (entities or []):
+            name = ent.get('name', '')
+            etype = ent.get('type', ent.get('entity_type', ''))
+            if not name:
+                continue
+            if etype == 'person':
+                suggestions.append({
+                    'query': f'When did {name} live?',
+                    'type': 'simple_fact',
+                    'label': f'{name} \u2014 dates',
+                })
+                if len(suggestions) < 4:
+                    suggestions.append({
+                        'query': f'Where was {name} primarily based?',
+                        'type': 'simple_fact',
+                        'label': f'{name} \u2014 location',
+                    })
+            elif etype == 'place':
+                suggestions.append({
+                    'query': f'What is the historical significance of {name}?',
+                    'type': 'research',
+                    'label': f'{name} \u2014 significance',
+                })
+            elif etype in ('event', 'battle', 'treaty'):
+                suggestions.append({
+                    'query': f'What were the consequences of {name}?',
+                    'type': 'research',
+                    'label': f'{name} \u2014 consequences',
+                })
+            if len(suggestions) >= 4:
+                break
+
+        # Key_facts-based suggestions (facts not yet quizzed)
+        for fact in key_facts:
+            fact_id = fact.get('id', '')
+            if fact_id in asked_fact_ids:
+                continue
+            ft = fact.get('type', '')
+            fname = fact.get('name', fact.get('value', ''))
+            if ft == 'date' and fname:
+                suggestions.append({
+                    'query': f'When: {fname}',
+                    'type': 'simple_fact',
+                    'label': f'Date: {fname}',
+                })
+            elif ft == 'person' and fname:
+                suggestions.append({
+                    'query': f'Who was {fname}?',
+                    'type': 'simple_fact',
+                    'label': f'Person: {fname}',
+                })
+            elif ft == 'place' and fname:
+                suggestions.append({
+                    'query': f'Where is {fname}?',
+                    'type': 'simple_fact',
+                    'label': f'Place: {fname}',
+                })
+            elif fname:
+                suggestions.append({
+                    'query': f'What was {fname}?',
+                    'type': 'simple_fact',
+                    'label': fname,
+                })
+            if len(suggestions) >= 6:
+                break
+
+        # Date-based cross-temporal suggestion
+        if date_start and len(suggestions) < 6:
+            year_str = f'{abs(int(date_start))} {"BC" if date_start < 0 else "AD"}'
+            suggestions.append({
+                'query': f'What else was happening around {year_str}?',
+                'type': 'research',
+                'label': f'Around {year_str}',
+            })
+
+    except Exception as e:
+        print(f'[also-want-to-know] Error: {e}', flush=True)
+    finally:
+        conn.close()
+
+    # Deduplicate by query
+    seen = set()
+    unique = []
+    for s in suggestions:
+        if s['query'] not in seen:
+            seen.add(s['query'])
+            unique.append(s)
+    return unique[:6]
+
+
+def create_targeted_quiz(item_id: str, query: str) -> dict:
+    """Create a simple quiz card for a specific fact gap (not a full ML research card).
+
+    For quick factual questions like 'When was Cicero assassinated?'
+    Returns the created quiz info.
+    """
+    from db import get_connection
+    conn = get_connection()
+
+    try:
+        # Get node context for the LLM
+        ki = conn.execute(
+            'SELECT curriculum_node_id, curriculum_domain FROM knowledge_items WHERE id=?',
+            (item_id,)).fetchone()
+        if not ki:
+            return {'error': 'item not found'}
+
+        node_id, domain_id = ki[0], ki[1]
+        node = conn.execute(
+            'SELECT title, description FROM curriculum_nodes WHERE id=? AND domain_id=?',
+            (node_id, domain_id)).fetchone()
+        node_title = node[0] if node else ''
+        node_desc = (node[1] or '')[:300] if node else ''
+
+        # Quick LLM call to generate Q+A for this specific fact
+        prompt = f"""Generate a single quiz question and answer for this specific knowledge gap.
+
+Topic: {node_title}
+Context: {node_desc}
+User wants to know: {query}
+
+Return JSON: {{"question": "...", "answer": "..."}}
+The question should be direct and factual. The answer should be 1-2 sentences."""
+
+        try:
+            from claude_llm import call_claude_json
+            result = call_claude_json(prompt, model='haiku')
+        except Exception:
+            from gemini_llm import call_llm
+            raw = call_llm(prompt, model='gemini-2.0-flash-lite')
+            result = json.loads(raw) if isinstance(raw, str) else raw
+
+        question = result.get('question', query)
+        answer = result.get('answer', '')
+
+        # Store as a microlearning quiz linked to a lightweight ML card
+        card_id = f'ml_{int(time.time())}_{hash(query) % 10000:04d}'
+        quiz_id = f'mq_{int(time.time())}_{hash(question) % 10000:04d}'
+        now_ms = int(time.time() * 1000)
+
+        conn.execute('''
+            INSERT OR IGNORE INTO microlearning_cards
+            (id, query, source_item_id, source_node_id, source_domain,
+             content, status, created_at, source_type, generation_depth, title)
+            VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, 'user_request', 0, ?)
+        ''', (card_id, query, item_id, node_id, domain_id,
+              answer, now_ms, node_title))
+
+        conn.execute('''
+            INSERT OR IGNORE INTO microlearning_quizzes
+            (id, card_id, question, answer, status, stability_days, due_at, review_count, created_at)
+            VALUES (?, ?, ?, ?, 'active', 1.0, ?, 0, ?)
+        ''', (quiz_id, card_id, question, answer, now_ms, now_ms))
+
+        conn.commit()
+        return {'card_id': card_id, 'quiz_id': quiz_id, 'question': question, 'answer': answer}
+    except Exception as e:
+        print(f'[targeted-quiz] Error: {e}', flush=True)
+        return {'error': str(e)}
+    finally:
+        conn.close()
+
+
 def create_microlearning_request(query: str, source_item_id: str | None = None,
                                   source_node_id: str | None = None,
-                                  source_domain: str | None = None) -> str:
+                                  source_domain: str | None = None,
+                                  source_type: str = 'follow_up',
+                                  generation_depth: int = 0) -> str:
     """Create a pending microlearning card and return its ID.
+
+    source_type: 'voice_wondering', 'follow_up', 'entity_research', 'user_request'
+    generation_depth: 0 = root, 1+ = child of another ML card
 
     The actual research runs in a background thread.
     """
@@ -1873,9 +2085,10 @@ def create_microlearning_request(query: str, source_item_id: str | None = None,
     conn.execute('''
         INSERT OR IGNORE INTO microlearning_cards
         (id, query, source_item_id, source_node_id, source_domain,
-         content, status, created_at)
-        VALUES (?, ?, ?, ?, ?, '', 'pending', ?)
-    ''', (card_id, query, source_item_id, source_node_id, source_domain, now_ms))
+         content, status, created_at, source_type, generation_depth)
+        VALUES (?, ?, ?, ?, ?, '', 'pending', ?, ?, ?)
+    ''', (card_id, query, source_item_id, source_node_id, source_domain,
+          now_ms, source_type, generation_depth))
     conn.commit()
     conn.close()
 
@@ -2302,6 +2515,7 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
                 source_item_id=item_id,
                 source_node_id=item.get('curriculum_node_id'),
                 source_domain=item.get('curriculum_domain'),
+                source_type='voice_wondering',
             )
             ml_triggered.append({'id': card_id, 'query': question})
             print(f'[voice→ml] memo question → {card_id}: {question[:60]}', flush=True)
@@ -2623,6 +2837,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         try:
             card_id = create_microlearning_request(
                 query=w, source_node_id=node_id, source_domain=domain_id,
+                source_type='voice_wondering',
             )
             ml_triggered.append({'id': card_id, 'query': w})
             print(f'[voice→ml] wondering → {card_id}: {w[:60]}', flush=True)
@@ -2638,6 +2853,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             try:
                 card_id = create_microlearning_request(
                     query=q, source_node_id=node_id, source_domain=domain_id,
+                    source_type='voice_wondering',
                 )
                 ml_triggered.append({'id': card_id, 'query': q})
                 print(f'[voice→ml] research question → {card_id}: {q[:60]}', flush=True)
@@ -2652,6 +2868,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         try:
             card_id = create_microlearning_request(
                 query=q, source_node_id=node_id, source_domain=domain_id,
+                source_type='voice_wondering',
             )
             ml_triggered.append({'id': card_id, 'query': q})
             print(f'[voice→ml] missed fact → {card_id}: {q[:60]}', flush=True)
@@ -2672,7 +2889,8 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
 
 
 def process_voice_capture(transcript: str, entity_id: str = None,
-                          entity_name: str = None, mode: str = 'general') -> dict:
+                          entity_name: str = None, mode: str = 'general',
+                          sync: bool = False) -> dict:
     """Process a voice capture for knowledge graph ingestion.
 
     Unlike run_voice_elicitation (which tests recall of a specific node),
@@ -3015,7 +3233,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     print(f'[voice-capture] Knowledge updates: {items_created} created, {items_updated} updated, '
           f'{len(knowledge_updates)} nodes touched', flush=True)
 
-    # --- Pre-generate questions in background ---
+    # --- Pre-generate questions ---
     if questions_queued:
         def _pregen_questions():
             from db import get_connection as _gc
@@ -3034,24 +3252,28 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                     print(f'[voice-capture] pre-gen failed {iid}: {e}', flush=True)
             c.close()
             print(f'[voice-capture] Pre-generated {generated}/{len(questions_queued)} questions', flush=True)
-        threading.Thread(target=_pregen_questions, daemon=True).start()
+        if sync:
+            _pregen_questions()
+        else:
+            threading.Thread(target=_pregen_questions, daemon=True).start()
 
     # --- Trigger microlearning from wonderings ---
     ml_triggered = []
     primary_domain = next(iter(candidate_domains)) if candidate_domains else None
     primary_node = node_assessments[0]['node_id'] if node_assessments else None
 
-    for w in wonderings[:5]:
-        try:
-            card_id = create_microlearning_request(
-                query=w,
-                source_node_id=primary_node,
-                source_domain=primary_domain,
-            )
-            ml_triggered.append({'id': card_id, 'query': w})
-            print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
-        except Exception as e:
-            print(f'[voice-capture→ml] failed: {e}', flush=True)
+    if not sync:
+        for w in wonderings[:5]:
+            try:
+                card_id = create_microlearning_request(
+                    query=w,
+                    source_node_id=primary_node,
+                    source_domain=primary_domain,
+                )
+                ml_triggered.append({'id': card_id, 'query': w})
+                print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
+            except Exception as e:
+                print(f'[voice-capture→ml] failed: {e}', flush=True)
 
     # --- Log transcript ---
     _log_voice_transcript(
