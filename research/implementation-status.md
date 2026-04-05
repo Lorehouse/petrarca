@@ -57,7 +57,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | Unified card stream. Multi-quiz ML cards (3-5 quizzes each, independently scheduled). Entity research. Fractal exploration. |
+| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Multi-quiz ML cards (3-5 quizzes, independently FSRS-scheduled). Enriched content with sections, primary sources, tappable dates+entities. Knowledge Explorer with timeline/persons/places. |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -98,7 +98,10 @@
 | `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `BookCurriculumContext` | Book-detail curriculum coverage section |
 | `ChapterContext` | Chapter preview/review with temporal hooks |
-| `EntitySheet` | Entity detail bottom sheet |
+| `EntitySheet` | Entity detail bottom sheet — backlinks, notes, "3 questions", "Research this", "View in timeline" |
+| `KnowledgeExplorer` | Reusable 3-tab explorer: Timeline (century groups, era bands) / Persons (450) / Places (384) |
+| `ExplorerCapture` | Voice/text entity note capture |
+| `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `SynthesisChat` | Inline chat modal for synthesis |
 
 ### Client Data Layer
@@ -114,6 +117,7 @@
 | `logger.ts` | Interaction event logging (`logEvent()`) — daily JSONL files |
 | `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. |
 | `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
+| `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. |
 | `types.ts` | `ArticleMeta`, `ArticleContent`, `Article`, `TopicSynthesis`, etc. |
 
 ## Server: Key Modules
@@ -191,8 +195,10 @@
 | POST | `/curriculum/review/generate` | Generate review question for a knowledge item |
 | POST | `/curriculum/review/result` | Record review answer (FSRS update) |
 | POST | `/review/microlearning` | Generate microlearning card from research query |
-| POST | `/review/microlearning/dismiss` | Dismiss a microlearning card |
+| POST | `/review/microlearning/dismiss` | Dismiss card or individual quiz (card_id and/or quiz_id) |
 | POST | `/review/batch-generate` | Batch generate questions for knowledge items |
+| POST | `/review/follow-up/trigger` | Trigger microlearning from follow-up query |
+| POST | `/review/follow-up/generate` | Generate sideways follow-up queries via Haiku |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |
 | POST | `/review/voice-elicit` | Voice free-recall elicitation (transcription + LLM). Supports curriculum nodes, `chapter:{id}:{num}`, and `book:{id}` node types. Auto-detects domain_id for book/chapter. Idempotent via `request_id`. |
@@ -271,7 +277,7 @@
 
 **Other**: `projects`, `project_notes`, `voice_transcripts`
 
-**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)` (one claim ID in multiple articles). `knowledge_items` is the review data source (replaces archived `retrieval_questions`). `microlearning_quizzes` holds individual quiz questions from ML cards, each independently FSRS-scheduled — the ML card is a content container, quizzes are the review units. `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
+**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)` (one claim ID in multiple articles). `knowledge_items` is the review data source (replaces archived `retrieval_questions`). `microlearning_quizzes` holds individual quiz questions from ML cards, each independently FSRS-scheduled — the ML card is a content container, quizzes are the review atoms. ML cards have `triggered_follow_ups` and `title` columns. Voice uploads use `request_id` for idempotent retry caching. `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
 
 ## Algorithm Parameters (experiment-validated)
 

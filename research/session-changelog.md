@@ -1,6 +1,47 @@
 # Knowledge System Implementation Status
 
-**Date**: April 4, 2026 (last updated — session 48: voice elicitation quality analysis + dedup fixes)
+**Date**: April 5, 2026 (last updated — session 49: microlearning enrichment + follow-up overhaul)
+
+## Session 49: Microlearning Card Enrichment + Follow-Up Overhaul (April 4–5, 2026)
+
+### Card Content Enrichment
+- `MICROLEARNING_PROMPT` now requires primary sources, material evidence, "still visible" sections
+- Output is structured `sections` array with headings, rendered with small-caps rubric subheadings
+- Enriched cards (200-350 words) preferred 3/4 over baseline in calibration eval
+- `_strip_markdown()` handles asterisks before entity span computation
+
+### Follow-Up Query Overhaul
+- Replaced template follow-ups with LLM-generated queries via Haiku (`FOLLOW_UP_PROMPT`)
+- Emphasizes sideways angles: geography, counter-narratives, structural causes, transmission history
+- "Generate 3 more" button for additional follow-ups
+- Durable server-side tracking: `triggered_follow_ups` column on knowledge_items + microlearning_cards
+
+### Card Titles
+- New `title` field with dates (e.g., "The Catiline Conspiracy (63 BC)")
+- Displayed at 20px displaySemiBold. New DB column + full pipeline threading
+
+### Entity Notes + Capture
+- `ExplorerCapture` component for voice/text entity notes
+- `POST /entity/notes` endpoint, notes displayed in EntitySheet "What I know" section
+
+## Session 45: Knowledge Explorer & Timeline (April 4, 2026)
+
+### Knowledge Explorer
+- `KnowledgeExplorer.tsx` — 3 subtabs: Timeline / Persons / Places
+- Timeline: entity-focused, cross-domain, century grouping, era bands, knowledge dots
+- Persons (450) and Places (384) lists with domain dots, date ranges, knowledge indicators
+- Tappable entity tags → filters timeline (browsing loop)
+- "Generate card" button on events → triggers microlearning
+
+### 3-Tab Review Screen
+- Review tab: **Cards / Voice / Explore** tabs (was Cards + Voice button)
+- Explore tab embeds KnowledgeExplorer
+- Tappable dates in review cards → switches to Explore tab at that century
+- Entity→timeline linking: EntitySheet "✦ View in timeline" button
+
+### 100% Date Coverage
+- `backfill_node_dates.py` populated dates for all 758 curriculum nodes (was ~40%)
+- Entity re-indexing: 450 persons, 384 places, 316 events (was 226/219)
 
 ## Session 48: Voice Elicitation Quality Analysis + Dedup Fixes (April 4, 2026)
 
