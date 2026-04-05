@@ -1156,7 +1156,10 @@ export default function ReviewScreen() {
               <View style={s.emptyState}>
                 <Text style={s.emptyTitle}>{'\u2726'} End of stream</Text>
                 <Text style={s.emptySubtitle}>{reviewedCount} cards reviewed</Text>
-                <Pressable style={s.newSessionBtn} onPress={() => loadStream(true)}>
+                <Pressable style={s.newSessionBtn} onPress={() => {
+                  gradedIdsRef.current.clear();
+                  loadStream(true);
+                }}>
                   <Text style={s.newSessionText}>Refresh</Text>
                 </Pressable>
               </View>
