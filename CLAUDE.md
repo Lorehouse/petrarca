@@ -26,7 +26,9 @@ These principles are the intellectual foundation of the project. They override i
 
 9. **Curiosity zone at 70% novelty.** Articles with ~70% novel claims + ~30% familiar context are most engaging (zone of proximal development). "Most novel" ≠ "most interesting." *(research/experiment-results-report.md)*
 
-10. **Dim familiar, don't hide.** Familiar paragraphs at 0.55 opacity, not hidden. Constrained highlighting (150 words) improves comprehension 11-19% over highlighting everything (CHI 2024). *(research/knowledge-diff-interfaces.md)*
+10. **Dim familiar, don't hide.**
+
+11. **Cards are mini-encyclopedias.** Microlearning card content MUST include primary sources (who wrote about this), material evidence (what survives, where to visit), and cultural artifacts (art, opera, literature). Follow-up queries go SIDEWAYS (geography, counter-narratives, structural causes) — not deeper into what the card already said. Familiar paragraphs at 0.55 opacity, not hidden. Constrained highlighting (150 words) improves comprehension 11-19% over highlighting everything (CHI 2024). *(research/knowledge-diff-interfaces.md)*
 
 **Flag design drift proactively.** If implementation diverges from these principles, raise it before the user discovers it.
 
@@ -37,10 +39,12 @@ These principles are the intellectual foundation of the project. They override i
 | **Any feature work** | `research/implementation-status.md` (architecture, screens, scripts, endpoints, algorithms) |
 | **UI changes** | `design/DESIGN_GUIDE.md` — MUST READ. "The Annotated Folio" Renaissance visual language. |
 | **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
+| **Microlearning cards** | `review_engine.py` (MICROLEARNING_PROMPT, _run_microlearning_research), `curriculum_db.py` (generate_review_stream ML mixing) |
 | **Curriculum/entities** | `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
 | **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
+| **Knowledge atlas** | `scripts/knowledge_atlas.html` (standalone D3 web viz), `curriculum_db.py` `get_knowledge_atlas_data()`, served at `/knowledge/atlas` |
 | **Feed/ranking** | `research/novelty-system-architecture.md` |
 | **Deep "why"** | `research/design-vision.md` (master synthesis of all interviews + research) |
 | **Research index** | `research/README.md` (50+ docs, tiered reading guide) |
@@ -60,6 +64,7 @@ This project is exploratory — 47+ sessions in many directions. That means:
 
 ### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
+- **Review stream pipeline**: `generate_question_for_item()` → `cached_question` JSON on `knowledge_items` → `generate_review_stream()` in `curriculum_db.py` assembles cards → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
 - **`curriculum_db.py`** for ALL runtime reads/writes. **`curriculum.py`** is ONLY for generation/CLI.
 - **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.
 - **Server-first**: All data lives on server. Local storage is cache only.
@@ -85,6 +90,7 @@ This project is exploratory — 47+ sessions in many directions. That means:
 - `research/experiment-log.md` is **append-only** — new entries at top, log BEFORE making changes
 
 ### Code Conventions
+- **Entity spans are offset-based on plain text.** `_compute_entity_spans()` in `review_engine.py` uses `text.find(name)`. Content must be markdown-stripped before span computation — use `_strip_markdown()`. Structured display uses `sections` JSON alongside flat `content`.
 - Branch prefix: `sh/` for all GitHub branches
 - No test plans or checklists in PR descriptions
 - Component files under ~300 lines. Extract reusable UI into `app/components/`.
@@ -93,6 +99,8 @@ This project is exploratory — 47+ sessions in many directions. That means:
 - **✦ Drawer**: Must be explicitly added to each tab screen (import `PetrarcaDrawer`).
 - **No `as any`** — add proper types instead.
 - **limbic.amygdala**: `pip install -e ~/src/limbic`. Server: `/opt/limbic`. Used for embeddings, similarity, clustering.
+- **Standalone web pages**: HTML files in `scripts/` served via `_serve_html_file()` in research-server.py. Pattern: D3.js CDN, fetch from `/endpoint`, Petrarca design tokens. Examples: `curriculum_graph.html`, `curriculum_timeline.html`, `knowledge_atlas.html`.
+- **DB is server-only**: `petrarca.db` lives at `/opt/petrarca/data/` on Hetzner. Local Python can't query it. Verify functions with `ast.parse()` for syntax, then `curl` the live endpoint after deploy.
 
 ### Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles
