@@ -169,6 +169,14 @@
 | `export_content_json.py` | Manual JSON export (removed from pipeline cron) |
 | `verify_migration.py` | Deep semantic comparison for SQLite migration |
 
+### Standalone Web Pages (served via `_serve_html_file()`)
+| Page | URL | Role |
+|------|-----|------|
+| `statistics_dashboard.html` | `/stats/dashboard` | Comprehensive statistics: today's summary, knowledge state bars per curriculum, review/quiz stats (7d/30d/all), books in progress, voice elicitation recall distribution, activity timeline. All items linked to atlas/coverage/book pages. |
+| `knowledge_atlas.html` | `/knowledge/atlas` | D3.js knowledge state visualization across curricula |
+| `curriculum_graph.html` | `/curriculum/graph` | D3.js curriculum concept graph |
+| `curriculum_timeline.html` | `/curriculum/timeline` | D3.js historical timeline per curriculum |
+
 ## API Endpoints (research-server.py :8090)
 
 ### Content API (`/api/*`)
@@ -266,6 +274,8 @@
 | POST | `/projects` | Create project |
 | POST | `/projects/note` | Add project note |
 | GET | `/projects` | List projects |
+| GET | `/stats/dashboard` | Statistics dashboard HTML page |
+| GET | `/stats/dashboard-data` | Dashboard stats JSON (today summary, knowledge per curriculum, review/quiz, books, voice, timeline) |
 | GET | `/health` | Health check |
 
 ## SQLite Schema (petrarca.db)

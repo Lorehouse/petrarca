@@ -1,6 +1,33 @@
 # Knowledge System Implementation Status
 
-**Date**: April 5, 2026 (last updated — session 52: Rich voice capture pipeline)
+**Date**: April 5, 2026 (last updated — session 53: Statistics dashboard)
+
+## Session 53: Statistics Dashboard (April 5, 2026)
+
+### What
+Standalone statistics page at `/stats/dashboard` combining three design approaches: dense metrics (Folio), timeline narrative (Chronicle), and card-based sections (Codex). Designed via design-explorer with 4 mockups, user selected top 3 for synthesis.
+
+### Implementation
+1. **`get_dashboard_stats()`** in `curriculum_db.py` — aggregates data from knowledge_states, knowledge_items, microlearning_cards, microlearning_quizzes, voice_transcripts, physical_books, kindle_books, book_captures, review_items.
+2. **`/stats/dashboard-data`** endpoint in research-server.py.
+3. **`statistics_dashboard.html`** — standalone HTML page with Petrarca design tokens. Fetches JSON on load.
+
+### Sections
+- **Today** — reviewed/due/elicitations/scores (4-column grid)
+- **Knowledge State** — stacked bars per curriculum, linked to coverage pages
+- **Review & Quiz** — all-time/7d/30d counts, score distribution, follow-ups/pipeline/stability, per-curriculum breakdown
+- **Reading** — physical + Kindle books with progress bars, linked to book pages
+- **Voice Elicitation** — total sessions, audio minutes, recall distribution, cards triggered
+- **Activity Timeline** — chronological feed grouped by day: reviews, voice, cards, book captures. All linked.
+
+### Fixes
+- Voice recall: uses `suggested_score` (knew/partly/missed), not `knowledge_demonstrated`
+- Book dedup: Kindle books already in physical_books excluded
+
+### Key Files
+- `scripts/statistics_dashboard.html` (new)
+- `scripts/curriculum_db.py` — `get_dashboard_stats()`
+- `scripts/research-server.py` — `/stats/dashboard` + `/stats/dashboard-data` routes
 
 ## Session 52: Rich Voice Capture Pipeline (April 5, 2026)
 
