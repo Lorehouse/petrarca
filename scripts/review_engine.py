@@ -374,6 +374,35 @@ Output JSON:
 {{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["I wonder if X was related to Y", "Was it Z who did this?", "I'm curious whether..."], "research_questions": ["What was the relationship between X and Y?", "Did Z lead to the outcome described?"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
 
 
+VOICE_CAPTURE_ANALYSIS_PROMPT = """Analyze a voice capture where a learner describes what they know about a topic.
+This is NOT a recall test — the learner is freely sharing knowledge from a podcast, book, conversation, or their own thinking.
+Your job is to extract concrete facts, map them to curriculum nodes, and identify wonderings.
+
+{context_section}
+
+CURRICULUM NODES (candidate matches — the learner's knowledge may touch any of these):
+{nodes_list}
+
+LEARNER'S VOICE CAPTURE (transcribed speech):
+{transcript}
+
+Instructions:
+1. Extract every concrete FACT the learner states or implies. Be thorough — include dates, names, events, causal claims, and connections. Each fact should be a standalone statement.
+2. Map each fact to the most relevant curriculum node from the list above. Use the exact node_id. A fact can map to multiple nodes if relevant.
+3. For each node that has at least one mapped fact, assess the knowledge demonstrated:
+   - "anchored": learner shows confident, detailed knowledge (multiple facts, connections, temporal placement)
+   - "engaged": learner demonstrates real knowledge but with gaps or uncertainty
+   - "mentioned": learner references the topic but with little substance
+4. Extract ALL wonderings, questions, uncertainties, "I think...", "I'm not sure if...", speculative statements. These are the most valuable signals. Rephrase as clear research questions.
+
+Output JSON:
+{{"facts": [{{"fact": "specific factual claim", "node_ids": ["node_id_1"], "source_excerpt": "relevant 1-2 sentences from transcript"}}],
+"node_assessments": [{{"node_id": "...", "node_title": "...", "knowledge_level": "anchored|engaged|mentioned", "fact_count": 3, "summary": "brief summary of what learner knows about this node"}}],
+"wonderings": ["research question 1", "research question 2"],
+"entities_mentioned": ["entity name 1", "entity name 2"],
+"overall_summary": "2-3 sentence summary of what the learner shared"}}"""
+
+
 HAMARQUIZEN_PROMPT = """Generate a Hamarquizen-style micro-lesson for reviewing a book topic.
 
 Book: {book_title} by {book_author}
@@ -2639,6 +2668,353 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         llm_result=result, ml_triggered=ml_triggered,
     )
 
+    return result
+
+
+def process_voice_capture(transcript: str, entity_id: str = None,
+                          entity_name: str = None, mode: str = 'general') -> dict:
+    """Process a voice capture for knowledge graph ingestion.
+
+    Unlike run_voice_elicitation (which tests recall of a specific node),
+    this ingests new knowledge: extracting facts, mapping to curriculum nodes,
+    updating knowledge states, adding sources to knowledge_items, and
+    triggering question generation + microlearning from wonderings.
+
+    Returns dict with: transcript, facts, node_assessments, wonderings,
+    knowledge_updates, microlearning_triggered, questions_queued.
+    """
+    from db import get_connection
+    import sqlite3
+
+    if not transcript or len(transcript.split()) < 5:
+        return {'error': 'Transcript too short for analysis', 'transcript': transcript}
+
+    conn = get_connection(readonly=True)
+
+    # --- Find candidate curriculum nodes ---
+    candidate_nodes = []
+    candidate_domains = set()
+
+    if entity_id:
+        # Entity mode: get all curriculum links for this entity
+        links = conn.execute(
+            'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ?',
+            (entity_id,)
+        ).fetchall()
+        for link in links:
+            candidate_domains.add(link['domain_id'])
+
+        # Also get links for related entities (siblings in same domain)
+        if links:
+            primary_domain = links[0]['domain_id']
+            # Get other entities linked to the same domain nodes for broader context
+            sibling_entity_ids = conn.execute(
+                '''SELECT DISTINCT ecl2.entity_id FROM entity_curriculum_links ecl1
+                   JOIN entity_curriculum_links ecl2 ON ecl1.domain_id = ecl2.domain_id
+                   WHERE ecl1.entity_id = ? AND ecl2.entity_id != ?
+                   LIMIT 20''',
+                (entity_id, entity_id)
+            ).fetchall()
+            sibling_ids = [r['entity_id'] for r in sibling_entity_ids]
+            if sibling_ids:
+                extra_links = conn.execute(
+                    'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({})'.format(
+                        ','.join('?' * len(sibling_ids))),
+                    sibling_ids
+                ).fetchall()
+                for link in extra_links:
+                    candidate_domains.add(link['domain_id'])
+
+    # For general mode or as fallback: detect entities from transcript via keyword matching
+    if not candidate_domains:
+        entity_rows = conn.execute(
+            'SELECT entity_id, name FROM shared_entities'
+        ).fetchall()
+        detected_ids = []
+        transcript_lower = transcript.lower()
+        for row in entity_rows:
+            if row['name'].lower() in transcript_lower and len(row['name']) > 3:
+                detected_ids.append(row['entity_id'])
+                if not entity_name:
+                    entity_name = row['name']
+
+        if detected_ids:
+            links = conn.execute(
+                'SELECT DISTINCT domain_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({})'.format(
+                    ','.join('?' * len(detected_ids))),
+                detected_ids
+            ).fetchall()
+            for link in links:
+                candidate_domains.add(link['domain_id'])
+
+    # Load all level 2+ nodes from candidate domains
+    for domain_id in candidate_domains:
+        nodes = conn.execute(
+            'SELECT id, title, description, date_start, date_end, key_facts FROM curriculum_nodes WHERE domain_id = ? AND level >= 2',
+            (domain_id,)
+        ).fetchall()
+        for n in nodes:
+            candidate_nodes.append({
+                'node_id': n['id'],
+                'domain_id': domain_id,
+                'title': n['title'],
+                'description': (n['description'] or '')[:200],
+            })
+
+    if not candidate_nodes:
+        # Last resort: check all domains for keyword matches in node titles
+        transcript_words = set(w.lower() for w in transcript.split() if len(w) > 4)
+        all_nodes = conn.execute(
+            'SELECT id, domain_id, title, description FROM curriculum_nodes WHERE level >= 2'
+        ).fetchall()
+        for n in all_nodes:
+            title_words = set(w.lower() for w in n['title'].split() if len(w) > 4)
+            if title_words & transcript_words:
+                candidate_nodes.append({
+                    'node_id': n['id'],
+                    'domain_id': n['domain_id'],
+                    'title': n['title'],
+                    'description': (n['description'] or '')[:200],
+                })
+                candidate_domains.add(n['domain_id'])
+
+    conn.close()
+
+    if not candidate_nodes:
+        print(f'[voice-capture] No candidate nodes found for entity={entity_id}, mode={mode}', flush=True)
+        return {
+            'error': 'no_curriculum_match',
+            'transcript': transcript,
+            'message': 'Could not find relevant curriculum nodes for this capture.',
+        }
+
+    print(f'[voice-capture] Found {len(candidate_nodes)} candidate nodes across {len(candidate_domains)} domains', flush=True)
+
+    # --- Build context section for prompt ---
+    if entity_id and entity_name:
+        context_section = f'CONTEXT: The learner is speaking about {entity_name}.'
+    elif entity_name:
+        context_section = f'CONTEXT: The learner appears to be discussing topics related to {entity_name}.'
+    else:
+        context_section = 'CONTEXT: The learner is sharing knowledge from a recent podcast, book, or personal study.'
+
+    # Build nodes list (limit to 40 most relevant to avoid prompt bloat)
+    nodes_for_prompt = candidate_nodes[:40]
+    nodes_list = '\n'.join(
+        f'- {n["node_id"]}: {n["title"]} — {n["description"]}'
+        for n in nodes_for_prompt
+    )
+
+    # --- Run Claude analysis (slow — no DB lock held) ---
+    prompt = VOICE_CAPTURE_ANALYSIS_PROMPT.format(
+        context_section=context_section,
+        nodes_list=nodes_list,
+        transcript=transcript,
+    )
+
+    analysis = call_claude_json(prompt, timeout=180)
+    if not isinstance(analysis, dict):
+        print(f'[voice-capture] LLM returned non-dict: {repr(str(analysis)[:200])}', flush=True)
+        analysis = {}
+
+    facts = analysis.get('facts', [])
+    node_assessments = analysis.get('node_assessments', [])
+    wonderings = analysis.get('wonderings', [])
+    entities_mentioned = analysis.get('entities_mentioned', [])
+
+    print(f'[voice-capture] Analysis: {len(facts)} facts, {len(node_assessments)} nodes assessed, '
+          f'{len(wonderings)} wonderings', flush=True)
+
+    # --- DB writes: upsert knowledge_items, update knowledge states ---
+    now_ms = int(time.time() * 1000)
+    knowledge_updates = []
+    items_created = 0
+    items_updated = 0
+    questions_queued = []
+
+    # Build a lookup from node_id to domain_id
+    node_domain_map = {n['node_id']: n['domain_id'] for n in candidate_nodes}
+
+    max_write_attempts = 3
+    for attempt in range(max_write_attempts):
+        try:
+            conn = get_connection()
+            conn.execute('PRAGMA busy_timeout = 60000')
+
+            for assessment in node_assessments:
+                nid = assessment.get('node_id', '')
+                did = node_domain_map.get(nid)
+                if not nid or not did:
+                    continue
+
+                knowledge_level = assessment.get('knowledge_level', 'engaged')
+                if knowledge_level not in ('mentioned', 'engaged', 'anchored'):
+                    knowledge_level = 'engaged'
+
+                confidence = min(1.0, (assessment.get('fact_count', 1) / 5.0) + 0.3)
+                item_id = f'{did}:{nid}'
+
+                # Gather facts for this node as source text
+                node_facts = [f['fact'] for f in facts if nid in f.get('node_ids', [])]
+                source_text = '; '.join(node_facts[:5]) if node_facts else assessment.get('summary', '')
+
+                new_source = {
+                    'source': 'voice_capture',
+                    'entity_id': entity_id,
+                    'entity_name': entity_name,
+                    'source_text': source_text[:400],
+                    'fact_count': len(node_facts),
+                    'added_at': now_ms,
+                }
+
+                existing = conn.execute(
+                    'SELECT id, sources FROM knowledge_items WHERE id = ?', (item_id,)
+                ).fetchone()
+
+                if existing:
+                    try:
+                        sources = json.loads(existing['sources'] or '[]')
+                    except Exception:
+                        sources = []
+                    sources.append(new_source)
+                    conn.execute(
+                        'UPDATE knowledge_items SET sources = ?, cached_question = NULL WHERE id = ?',
+                        (json.dumps(sources), item_id)
+                    )
+                    items_updated += 1
+                else:
+                    conn.execute('''
+                        INSERT INTO knowledge_items
+                        (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                         sources, question_history, created_at)
+                        VALUES (?,?,?,?,?,?,?,?)
+                    ''', (
+                        item_id, nid, did,
+                        INITIAL_STABILITY_DAYS, now_ms,
+                        json.dumps([new_source]), '[]', now_ms,
+                    ))
+                    items_created += 1
+
+                # Update knowledge state (only upgrades, per system rules)
+                update_knowledge(did, nid, knowledge=knowledge_level,
+                                 confidence=confidence, source='voice_capture', conn=conn)
+
+                # Update scheduling on knowledge_items
+                stability_mult = {'anchored': 2.5, 'engaged': 1.5, 'mentioned': 1.0}.get(knowledge_level, 1.0)
+                conn.execute("""
+                    UPDATE knowledge_items
+                    SET last_reviewed_at = ?,
+                        stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
+                        due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
+                        review_count = review_count + 1
+                    WHERE id = ?
+                """, (now_ms, stability_mult, now_ms, stability_mult, item_id))
+
+                questions_queued.append(item_id)
+                knowledge_updates.append({
+                    'node_id': nid,
+                    'domain_id': did,
+                    'knowledge_level': knowledge_level,
+                    'facts_captured': len(node_facts),
+                })
+
+            # Save entity notes (preserve existing behavior)
+            if entity_id and facts:
+                note_text = '\n'.join(f'• {f["fact"]}' for f in facts[:15])
+                conn.execute(
+                    'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
+                    (entity_id, note_text, now_ms))
+
+            conn.commit()
+            conn.close()
+            break  # success
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e) and attempt < max_write_attempts - 1:
+                print(f'[voice-capture] DB locked on write attempt {attempt + 1}, retrying...', flush=True)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                time.sleep(5 * (attempt + 1))
+            else:
+                print(f'[voice-capture] DB write failed: {e}', flush=True)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                break
+
+    print(f'[voice-capture] Knowledge updates: {items_created} created, {items_updated} updated, '
+          f'{len(knowledge_updates)} nodes touched', flush=True)
+
+    # --- Pre-generate questions in background ---
+    if questions_queued:
+        def _pregen_questions():
+            from db import get_connection as _gc
+            c = _gc()
+            generated = 0
+            for iid in questions_queued:
+                try:
+                    row = c.execute('SELECT cached_question FROM knowledge_items WHERE id = ?', (iid,)).fetchone()
+                    if row and not row['cached_question']:
+                        q = generate_question(iid, c)
+                        c.execute('UPDATE knowledge_items SET cached_question = ? WHERE id = ?',
+                                  (json.dumps(q), iid))
+                        c.commit()
+                        generated += 1
+                except Exception as e:
+                    print(f'[voice-capture] pre-gen failed {iid}: {e}', flush=True)
+            c.close()
+            print(f'[voice-capture] Pre-generated {generated}/{len(questions_queued)} questions', flush=True)
+        threading.Thread(target=_pregen_questions, daemon=True).start()
+
+    # --- Trigger microlearning from wonderings ---
+    ml_triggered = []
+    primary_domain = next(iter(candidate_domains)) if candidate_domains else None
+    primary_node = node_assessments[0]['node_id'] if node_assessments else None
+
+    for w in wonderings[:5]:
+        try:
+            card_id = create_microlearning_request(
+                query=w,
+                source_node_id=primary_node,
+                source_domain=primary_domain,
+            )
+            ml_triggered.append({'id': card_id, 'query': w})
+            print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice-capture→ml] failed: {e}', flush=True)
+
+    # --- Log transcript ---
+    _log_voice_transcript(
+        source='voice_capture',
+        node_id=primary_node or entity_id or 'general',
+        domain_id=primary_domain or '',
+        node_title=entity_name or 'general',
+        transcript=transcript,
+        audio_bytes=0,
+        llm_result={**analysis, 'knowledge_updates': knowledge_updates},
+        ml_triggered=ml_triggered,
+    )
+
+    result = {
+        'status': 'completed',
+        'transcript': transcript,
+        'facts_extracted': len(facts),
+        'nodes_assessed': len(node_assessments),
+        'node_assessments': node_assessments,
+        'knowledge_updates': knowledge_updates,
+        'items_created': items_created,
+        'items_updated': items_updated,
+        'questions_queued': len(questions_queued),
+        'wonderings': wonderings,
+        'entities_mentioned': entities_mentioned,
+        'microlearning_triggered': ml_triggered,
+        'overall_summary': analysis.get('overall_summary', ''),
+    }
+
+    print(f'[voice-capture] Done: {len(facts)} facts → {len(knowledge_updates)} nodes, '
+          f'{len(ml_triggered)} ML cards', flush=True)
     return result
 
 

@@ -4462,121 +4462,38 @@ JSON array only:"""
                 self._send_json_response(200, empty_result)
                 return
 
-        # --- LLM analysis ---
-        from gemini_llm import call_llm
+        # --- Rich knowledge graph processing via process_voice_capture ---
+        from review_engine import process_voice_capture
         from db import get_connection
 
-        entity_context = ''
-        if entity_id:
+        # Resolve entity_name from DB if we have entity_id but no name
+        if entity_id and not entity_name:
             conn = get_connection(readonly=True)
             row = conn.execute(
-                'SELECT name, description, entity_type FROM shared_entities WHERE entity_id = ?',
+                'SELECT name FROM shared_entities WHERE entity_id = ?',
                 (entity_id,)
             ).fetchone()
             if row:
-                entity_context = f"Entity: {row['name']} ({row['entity_type'] or 'unknown'})\nDescription: {row['description'] or 'N/A'}"
-                if not entity_name:
-                    entity_name = row['name']
+                entity_name = row['name']
             conn.close()
 
-        analysis_prompt = f"""Analyze this user input about {'the entity ' + (entity_name or entity_id or 'unknown') if mode == 'entity' else 'their study topics'}.
+        print(f'[explore/capture] Running rich pipeline: entity={entity_id}, name={entity_name}, '
+              f'mode={mode}, transcript={len(transcript)} chars', flush=True)
 
-User input: "{transcript}"
-{entity_context}
+        result = process_voice_capture(
+            transcript=transcript,
+            entity_id=entity_id,
+            entity_name=entity_name,
+            mode=mode,
+        )
 
-Extract:
-1. KNOWLEDGE_CLAIMS: What the user demonstrates knowing (factual statements they made). List as brief bullet points.
-2. QUERIES: Questions or "I wonder..." statements that should trigger research. List as research-ready queries.
-3. ENTITIES_MENTIONED: Names of historical figures, places, events, or concepts mentioned. List as simple names.
-
-Return JSON:
-{{"knowledge_claims": ["claim1", "claim2"], "queries": ["research query 1"], "entities_mentioned": ["Plato", "Athens"]}}"""
-
-        try:
-            raw = call_llm(analysis_prompt, model='gemini-2.5-flash', json_mode=True)
-            analysis = json.loads(raw) if isinstance(raw, str) else raw
-        except Exception as e:
-            print(f'[explore/capture] LLM analysis failed: {e}', flush=True)
-            analysis = {'knowledge_claims': [transcript[:200]], 'queries': [], 'entities_mentioned': []}
-
-        claims = analysis.get('knowledge_claims', [])
-        queries = analysis.get('queries', [])
-        entities_mentioned = analysis.get('entities_mentioned', [])
-
-        # --- Save notes (fast DB write, no lock held during slow work above) ---
-        conn = get_connection()
-        now_ms = int(time.time() * 1000)
-        notes_saved = 0
-
-        if entity_id and claims:
-            note_text = '\n'.join(f'• {c}' for c in claims)
-            conn.execute(
-                'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
-                (entity_id, note_text, now_ms))
-            notes_saved += 1
-
-        # For general mode: route to detected entities
-        if mode == 'general' and entities_mentioned:
-            rows = conn.execute(
-                'SELECT entity_id, name FROM shared_entities WHERE name IN ({})'.format(
-                    ','.join('?' * len(entities_mentioned))
-                ), entities_mentioned
-            ).fetchall()
-            for r in rows:
-                if claims:
-                    note_text = '\n'.join(f'• {c}' for c in claims)
-                    conn.execute(
-                        'INSERT INTO entity_notes (entity_id, note, created_at) VALUES (?, ?, ?)',
-                        (r['entity_id'], note_text, now_ms))
-                    notes_saved += 1
-
-        conn.commit()
-        conn.close()
-
-        # --- Trigger research (background threads, non-blocking) ---
-        from review_engine import create_microlearning_request
-        research_triggered = []
-        source_node_id = None
-        source_domain = None
-        if entity_id:
-            conn = get_connection(readonly=True)
-            link = conn.execute(
-                'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ? LIMIT 1',
-                (entity_id,)
-            ).fetchone()
-            conn.close()
-            if link:
-                source_node_id = link['node_id']
-                source_domain = link['domain_id']
-
-        for query in queries[:3]:
-            card_id = create_microlearning_request(
-                query, source_node_id=source_node_id, source_domain=source_domain)
-            research_triggered.append({'card_id': card_id, 'query': query})
-
-        # --- Log transcript ---
-        try:
-            conn = get_connection()
-            conn.execute(
-                '''INSERT INTO voice_transcripts
-                   (id, source, node_id, domain_id, node_title, transcript, audio_bytes, llm_result, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (request_id or f'exc_{int(time.time())}', 'explore_capture',
-                 source_node_id, source_domain, entity_name or 'general',
-                 transcript, 0, json.dumps(analysis), now_ms))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            print(f'[explore/capture] Failed to log transcript: {e}', flush=True)
-
-        # --- Build result, cache BEFORE sending (connection may drop) ---
-        result = {
-            'status': 'completed',
-            'transcript': transcript,
-            'notes_saved': notes_saved,
-            'research_triggered': research_triggered,
-            'entities_detected': entities_mentioned,
-        }
+        # Ensure backward-compatible fields for client
+        result.setdefault('notes_saved', result.get('items_created', 0) + result.get('items_updated', 0))
+        result.setdefault('research_triggered', [
+            {'card_id': m.get('id', ''), 'query': m.get('query', '')}
+            for m in result.get('microlearning_triggered', [])
+        ])
+        result.setdefault('entities_detected', result.get('entities_mentioned', []))
 
         if cache_path:
             try:
