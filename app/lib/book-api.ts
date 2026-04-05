@@ -481,6 +481,42 @@ export async function generateFollowUps(opts: {
   return resp.json();
 }
 
+export async function fetchAlsoWantToKnow(opts: {
+  itemId: string;
+  question: string;
+  entities: Array<{name: string; type?: string; entity_type?: string}>;
+}): Promise<{ suggestions: Array<{query: string; type: string; label: string}> }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/also-want-to-know`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_id: opts.itemId,
+      question: opts.question,
+      entities: opts.entities,
+    }),
+  });
+  if (!resp.ok) return { suggestions: [] };
+  return resp.json();
+}
+
+export async function submitTargetedQuiz(opts: {
+  itemId: string;
+  query: string;
+  type: string;
+}): Promise<{ card_id?: string; quiz_id?: string; question?: string; answer?: string }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/targeted-quiz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_id: opts.itemId,
+      query: opts.query,
+      type: opts.type,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Targeted quiz failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Entity API ---
 
 export async function fetchEntityDetails(

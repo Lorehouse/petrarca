@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petrarca Review System — State of Play</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --text-primary: #1a1a18;
+  --text-body: #333333;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --claim-new: #2a7a4a;
+  --claim-known: #d0ccc0;
+  --amber: #c9a84c;
+  --amber-light: #f5ecd0;
+  --rubric-faint: rgba(139, 37, 0, 0.06);
+  --rubric-light: rgba(139, 37, 0, 0.12);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--parchment);
+  color: var(--text-body);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 60px 28px 120px;
+}
+
+/* === HEADER === */
+.header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.header-ornament {
+  color: var(--rubric);
+  font-size: 22px;
+  letter-spacing: 12px;
+  margin-bottom: 16px;
+}
+
+h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 38px;
+  color: var(--ink);
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+/* Double rule */
+.double-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 24px 0;
+}
+.double-rule .thick { height: 2px; background: var(--ink); }
+.double-rule .thin { height: 1px; background: var(--rule); }
+
+/* === SECTIONS === */
+.section {
+  margin-top: 56px;
+}
+
+h2 {
+  font-family: 'EB Garamond', 'Cormorant Garamond', Georgia, serif;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--rubric);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h2::before {
+  content: '\2726';
+  font-size: 14px;
+}
+
+h3 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 24px;
+  color: var(--ink);
+  margin-bottom: 12px;
+  line-height: 1.25;
+}
+
+h4 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  margin-top: 28px;
+}
+
+p { margin-bottom: 14px; }
+
+strong { color: var(--ink); font-weight: 500; }
+
+/* === DASHBOARD GRID === */
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.metric {
+  padding: 20px 16px;
+  border: 1px solid var(--rule);
+  background: white;
+}
+
+.metric-number {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 42px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.metric-number .metric-sub {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.metric-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-secondary);
+}
+
+.metric-detail {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.metric.highlight {
+  border-left: 3px solid var(--rubric);
+}
+
+.metric.warning {
+  border-left: 3px solid var(--amber);
+}
+
+/* === BAR CHART === */
+.bar-chart {
+  margin: 28px 0;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 50px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.bar-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.bar-track {
+  height: 24px;
+  background: var(--parchment-dark);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1s ease;
+}
+
+.bar-fill.rubric { background: var(--rubric); }
+.bar-fill.ink { background: var(--ink); }
+.bar-fill.muted { background: var(--claim-known); }
+.bar-fill.green { background: var(--claim-new); }
+.bar-fill.amber { background: var(--amber); }
+
+.bar-value {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* === TIMELINE === */
+.timeline {
+  margin: 28px 0;
+  position: relative;
+  padding-left: 20px;
+  border-left: 2px solid var(--rule);
+}
+
+.timeline-event {
+  position: relative;
+  margin-bottom: 20px;
+  padding-left: 20px;
+}
+
+.timeline-event::before {
+  content: '';
+  position: absolute;
+  left: -25px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--parchment);
+  border: 2px solid var(--rubric);
+}
+
+.timeline-event.active::before {
+  background: var(--rubric);
+}
+
+.timeline-date {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--rubric);
+  margin-bottom: 2px;
+}
+
+.timeline-content {
+  font-size: 15px;
+  color: var(--text-body);
+}
+
+.timeline-stats {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* === TABLE === */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 15px;
+}
+
+thead th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--ink);
+}
+
+tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+tbody tr:hover {
+  background: var(--rubric-faint);
+}
+
+.priority-highest { color: var(--rubric); font-weight: 600; }
+.priority-high { color: var(--amber); font-weight: 500; }
+.priority-medium { color: var(--text-secondary); }
+.priority-low { color: var(--text-muted); }
+
+/* === CALLOUT === */
+.callout {
+  border-left: 3px solid var(--rubric);
+  padding: 16px 20px;
+  margin: 24px 0;
+  background: white;
+}
+
+.callout.amber {
+  border-left-color: var(--amber);
+  background: var(--amber-light);
+}
+
+.callout.green {
+  border-left-color: var(--claim-new);
+}
+
+.callout-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+/* === CHECKLIST === */
+.checklist {
+  list-style: none;
+  margin: 16px 0;
+}
+
+.checklist li {
+  padding: 8px 0;
+  padding-left: 28px;
+  position: relative;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.checklist li::before {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  font-size: 15px;
+}
+
+.checklist li.done::before {
+  content: '\2713';
+  color: var(--claim-new);
+  font-weight: 700;
+}
+
+.checklist li.open::before {
+  content: '\25A1';
+  color: var(--text-muted);
+}
+
+.checklist li.open strong {
+  color: var(--rubric);
+}
+
+/* === VOICE EXCERPT === */
+.voice-excerpt {
+  background: white;
+  border: 1px solid var(--rule);
+  padding: 16px 20px;
+  margin: 12px 0;
+  font-size: 15px;
+}
+
+.voice-meta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--rubric);
+  margin-bottom: 6px;
+}
+
+.voice-text {
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.voice-ml {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* === RECOMMENDATION === */
+.rec-list {
+  counter-reset: rec;
+  list-style: none;
+  margin: 20px 0;
+}
+
+.rec-list li {
+  counter-increment: rec;
+  padding: 14px 0 14px 52px;
+  position: relative;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rec-list li::before {
+  content: counter(rec);
+  position: absolute;
+  left: 0;
+  top: 12px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--rubric);
+  width: 36px;
+  text-align: center;
+}
+
+.rec-title {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.rec-detail {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* === MINI DONUT (CSS-only) === */
+.donut-row {
+  display: flex;
+  gap: 32px;
+  margin: 24px 0;
+  flex-wrap: wrap;
+}
+
+.donut-item {
+  text-align: center;
+}
+
+.donut {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--rubric) 0% var(--donut-pct),
+    var(--rule) var(--donut-pct) 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+}
+
+.donut-inner {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--parchment);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.donut-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+}
+
+/* === SECTION RULE === */
+.section-rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 48px 0 0;
+}
+
+/* === GROWTH VIZ === */
+.growth-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 120px;
+  margin: 24px 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+
+.growth-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.growth-bar-fill {
+  width: 100%;
+  max-width: 60px;
+  border-radius: 2px 2px 0 0;
+  position: relative;
+}
+
+.growth-bar-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  position: absolute;
+  bottom: -20px;
+  white-space: nowrap;
+}
+
+.growth-bar-value {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 640px) {
+  .dashboard { grid-template-columns: repeat(2, 1fr); }
+  h1 { font-size: 30px; }
+  .page { padding: 32px 16px 80px; }
+  .donut-row { gap: 16px; }
+}
+
+/* === PRINT === */
+@media print {
+  .page { max-width: none; padding: 20px; }
+  .metric, .callout, .voice-excerpt { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-ornament">✦ &nbsp; ✦ &nbsp; ✦</div>
+  <h1>Review System<br>State of Play</h1>
+  <div class="subtitle">Petrarca &mdash; April 5, 2026</div>
+  <div class="double-rule">
+    <div class="thick"></div>
+    <div class="thin"></div>
+  </div>
+</header>
+
+<!-- 1. DASHBOARD -->
+<section class="section">
+  <h2>System Health</h2>
+
+  <div class="dashboard">
+    <div class="metric highlight">
+      <div class="metric-number">253</div>
+      <div class="metric-label">Knowledge Items</div>
+      <div class="metric-detail">167 due now (66%)</div>
+    </div>
+    <div class="metric warning">
+      <div class="metric-number">228</div>
+      <div class="metric-label">Never Reviewed</div>
+      <div class="metric-detail">90% of all items</div>
+    </div>
+    <div class="metric">
+      <div class="metric-number">25</div>
+      <div class="metric-label">Ever Reviewed</div>
+      <div class="metric-detail">20 once, 5 twice</div>
+    </div>
+    <div class="metric highlight">
+      <div class="metric-number">108</div>
+      <div class="metric-label">ML Cards</div>
+      <div class="metric-detail">99 ok, 6 failed, 3 pending</div>
+    </div>
+    <div class="metric">
+      <div class="metric-number">18</div>
+      <div class="metric-label">Voice Transcripts</div>
+      <div class="metric-detail">15 elicitation, 3 explore</div>
+    </div>
+    <div class="metric">
+      <div class="metric-number">9</div>
+      <div class="metric-label">Curricula</div>
+      <div class="metric-detail">Sicily most active (15/35)</div>
+    </div>
+  </div>
+
+  <h4>Stability Distribution</h4>
+  <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">
+    Most items are at minimum stability (&lt;2 days) &mdash; the system is in &ldquo;first encounter&rdquo; mode, not yet doing real spaced repetition.
+  </p>
+
+  <div class="bar-chart">
+    <div class="bar-row">
+      <div class="bar-label">&lt; 2 days</div>
+      <div class="bar-track"><div class="bar-fill rubric" style="width: 63%"></div></div>
+      <div class="bar-value">160 (63%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">2&ndash;7 days</div>
+      <div class="bar-track"><div class="bar-fill muted" style="width: 2%"></div></div>
+      <div class="bar-value">5 (2%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">7&ndash;30 days</div>
+      <div class="bar-track"><div class="bar-fill ink" style="width: 24%"></div></div>
+      <div class="bar-value">62 (24%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">30&ndash;90 days</div>
+      <div class="bar-track"><div class="bar-fill amber" style="width: 10%"></div></div>
+      <div class="bar-value">25 (10%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">90+ days</div>
+      <div class="bar-track"><div class="bar-fill green" style="width: 0.4%"></div></div>
+      <div class="bar-value">1 (0.4%)</div>
+    </div>
+  </div>
+
+  <h4>Review by Domain</h4>
+  <div class="bar-chart">
+    <div class="bar-row">
+      <div class="bar-label">Sicily</div>
+      <div class="bar-track"><div class="bar-fill rubric" style="width: 43%"></div></div>
+      <div class="bar-value">15/35</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Anc. Greece</div>
+      <div class="bar-track"><div class="bar-fill ink" style="width: 5%"></div></div>
+      <div class="bar-value">3/60</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Roman</div>
+      <div class="bar-track"><div class="bar-fill ink" style="width: 7%"></div></div>
+      <div class="bar-value">3/42</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Byzantine</div>
+      <div class="bar-track"><div class="bar-fill ink" style="width: 4%"></div></div>
+      <div class="bar-value">2/56</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Islamic</div>
+      <div class="bar-track"><div class="bar-fill ink" style="width: 5%"></div></div>
+      <div class="bar-value">2/41</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Classical Rec.</div>
+      <div class="bar-track"><div class="bar-fill muted" style="width: 0%"></div></div>
+      <div class="bar-value">0/19</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 2. EXPONENTIAL GROWTH -->
+<section class="section">
+  <h2>The Exponential Growth Question</h2>
+
+  <h3>Good news: growth is linear, not exponential</h3>
+
+  <p>The concern was that tapping follow-up queries on microlearning cards would create a fractal explosion &mdash; each card spawning 3 more, each of those spawning 3 more. <strong>The data shows this isn&rsquo;t happening.</strong></p>
+
+  <div class="dashboard" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="metric green" style="border-left: 3px solid var(--claim-new);">
+      <div class="metric-number">4<span class="metric-sub">/108</span></div>
+      <div class="metric-label">Follow-ups Triggered</div>
+      <div class="metric-detail">3.7% trigger rate</div>
+    </div>
+    <div class="metric">
+      <div class="metric-number">58</div>
+      <div class="metric-label">From Voice / Direct</div>
+      <div class="metric-detail">Primary growth driver</div>
+    </div>
+    <div class="metric">
+      <div class="metric-number">50</div>
+      <div class="metric-label">From Review Items</div>
+      <div class="metric-detail">Secondary source</div>
+    </div>
+  </div>
+
+  <h4>Card Creation Timeline</h4>
+  <div class="growth-bars" style="height: 140px;">
+    <div class="growth-bar">
+      <div class="growth-bar-value">1</div>
+      <div class="growth-bar-fill" style="height: 2px; background: var(--rubric);"></div>
+      <span class="growth-bar-label">Apr 1</span>
+    </div>
+    <div class="growth-bar">
+      <div class="growth-bar-value" style="color: var(--text-muted);">0</div>
+      <div class="growth-bar-fill" style="height: 0px; background: var(--rule);"></div>
+      <span class="growth-bar-label">Apr 2</span>
+    </div>
+    <div class="growth-bar">
+      <div class="growth-bar-value">35</div>
+      <div class="growth-bar-fill" style="height: 50px; background: var(--rubric);"></div>
+      <span class="growth-bar-label">Apr 3</span>
+    </div>
+    <div class="growth-bar">
+      <div class="growth-bar-value">72</div>
+      <div class="growth-bar-fill" style="height: 100px; background: var(--rubric);"></div>
+      <span class="growth-bar-label">Apr 4</span>
+    </div>
+  </div>
+  <p style="margin-top: 28px; font-size: 14px; color: var(--text-secondary);">
+    The spike is from active testing, not organic exponential growth. Each voice elicitation triggers ~3 ML cards. 6 elicitation sessions on Apr 4 = ~18 cards. The rest came from batch generation and review-triggered research.
+  </p>
+
+  <div class="callout">
+    <div class="callout-title">The real problem isn&rsquo;t growth &mdash; it&rsquo;s the backlog</div>
+    <p style="margin: 0;">167 items due with only 25 ever reviewed. The system is generating knowledge faster than it&rsquo;s being reinforced. Spaced repetition hasn&rsquo;t truly started yet &mdash; almost everything is still in &ldquo;first encounter&rdquo; mode.</p>
+  </div>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 3. SCHEDULING -->
+<section class="section">
+  <h2>The Scheduling Problem</h2>
+
+  <h3>Screen time vs. book time</h3>
+
+  <p>The stated goal: <em>&ldquo;I should not spend more time reading on my screen than reading actual books.&rdquo;</em> The app should <strong>reinforce</strong> knowledge acquired from books, podcasts, and documentaries &mdash; not become the primary learning channel.</p>
+
+  <p>This creates a clear priority hierarchy:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Card Type</th>
+        <th>Priority</th>
+        <th>Scheduling</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>SR due</strong> (knowledge items)</td>
+        <td class="priority-highest">HIGHEST</td>
+        <td>Show first, unlimited</td>
+        <td>Strengthens existing knowledge. Fast to answer (5&ndash;15 sec each).</td>
+      </tr>
+      <tr>
+        <td><strong>Voice elicitation</strong> ML cards</td>
+        <td class="priority-high">HIGH</td>
+        <td>Interleave 1:3 with SR</td>
+        <td>Unexpected discoveries from free recall. Limited volume (~3 per session).</td>
+      </tr>
+      <tr>
+        <td><strong>First-encounter</strong> review cards</td>
+        <td class="priority-medium">MEDIUM</td>
+        <td>After SR due items</td>
+        <td>New topics need first exposure, but not at the cost of reinforcement.</td>
+      </tr>
+      <tr>
+        <td><strong>Follow-up</strong> ML cards</td>
+        <td class="priority-low">LOW</td>
+        <td>1 per 5&ndash;7 SR cards</td>
+        <td>Curiosity-driven but time-consuming to read. Shouldn&rsquo;t dominate.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout amber">
+    <div class="callout-title">Target: 20&ndash;30 SR reviews in 5 minutes</div>
+    <p style="margin: 0;">If the user has only a few minutes, spaced repetition should fill them entirely. ML cards (which require reading a paragraph) should only appear after the SR batch is done, or as a deliberate &ldquo;explore&rdquo; choice. The current interleaving ratio needs to shift heavily toward SR.</p>
+  </div>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 4. MISSING MECHANISM -->
+<section class="section">
+  <h2>The Missing Mechanism</h2>
+
+  <h3>&ldquo;I also want to know&hellip;&rdquo;</h3>
+
+  <p>During review, the user remembered <em>where</em> Cicero was assassinated but wanted a card for the <em>year</em>. There is currently no way to:</p>
+
+  <ul style="margin: 16px 0; padding-left: 24px;">
+    <li>Flag a specific fact gap during review</li>
+    <li>Request a specific card be generated</li>
+    <li>Split a question into sub-questions (WHERE vs. WHEN vs. WHY)</li>
+  </ul>
+
+  <div class="callout green">
+    <div class="callout-title">Recommendation: &ldquo;I also want to know&hellip;&rdquo; input</div>
+    <p>After answering a question, show a subtle text input: <em>&ldquo;Something else you want to remember?&rdquo;</em> The user types &ldquo;year Cicero assassinated&rdquo; and this becomes a targeted ML card with <strong>high priority</strong> &mdash; it&rsquo;s a specific, identified gap, not speculative exploration.</p>
+    <p style="margin-bottom: 0;">This also captures the &ldquo;I knew this but want to know more&rdquo; signal that is currently lost when the user taps &ldquo;knew&rdquo; on a card.</p>
+  </div>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 5. WHAT'S WORKING -->
+<section class="section">
+  <h2>Updated Audit: What&rsquo;s Working</h2>
+
+  <h3>Built since the initial audit (Sessions 45&ndash;49)</h3>
+
+  <ul class="checklist">
+    <li class="done">3-tab Review screen (Cards / Voice / Explore)</li>
+    <li class="done">Knowledge Explorer with timeline, persons (450), places (384)</li>
+    <li class="done">Enriched ML cards with sections, primary sources, entity markup</li>
+    <li class="done">Voice elicitation: Know Nothing / Skip, auto-load more prompts</li>
+    <li class="done">Tappable dates and entities throughout review cards</li>
+    <li class="done">Voice upload robustness (idempotent retry, auto-retry on foreground)</li>
+    <li class="done">Audio fingerprint deduplication (eliminated 35% duplicates)</li>
+    <li class="done">&ldquo;Generate more&rdquo; button for ML cards</li>
+    <li class="done">Sideways follow-ups (geography, counter-narratives, causes)</li>
+    <li class="done">Entity backlinks and notes capture</li>
+    <li class="done">Multi-quiz ML cards with independent FSRS scheduling</li>
+    <li class="done">Entity spans with markdown-safe offset computation</li>
+  </ul>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 6. STILL MISSING -->
+<section class="section">
+  <h2>Still Outstanding</h2>
+
+  <h3>Gaps from the initial audit</h3>
+
+  <ul class="checklist">
+    <li class="open"><strong>Reading Echoes in article reader</strong> &mdash; The #1 differentiator. Book claim embeddings run in pipeline, but zero UI shows &ldquo;cf. [Book], Ch. 3&rdquo; in article margins. ~3&ndash;4 hours to wire.</li>
+    <li class="open"><strong>Resurfacing engine</strong> &mdash; 760 lines of working code, never wired to an endpoint. Cross-book resonance prompts ready to go. ~1&ndash;2 hours.</li>
+    <li class="open"><strong>Paragraph dimming default</strong> &mdash; &ldquo;Dim familiar, don&rsquo;t hide&rdquo; works correctly at 0.55 opacity, but only in opt-in &ldquo;guided&rdquo; mode. Most users never see it. One-line default change.</li>
+    <li class="open"><strong>Synthesis &rarr; article read</strong> &mdash; Reading a synthesis marks claims but doesn&rsquo;t mark source articles as read. ~10 lines to fix.</li>
+    <li class="open"><strong>synthesis_pipeline.py</strong> &mdash; 1,416-line multi-stage pipeline, tested locally, never deployed to server.</li>
+    <li class="open"><strong>Key_facts beyond Sicily Greek</strong> &mdash; Only 299 facts for 1/15 of curriculum areas. The &ldquo;facts first&rdquo; principle has 7% of its data.</li>
+    <li class="open"><strong>FSRS / binary documentation</strong> &mdash; knowledge-engine.ts still uses full FSRS for article claims. Design said binary. Reality: FSRS is correct for curriculum review. Needs documentation, not code change.</li>
+    <li class="open"><strong>review-session.tsx</strong> &mdash; 730 lines of dead code, not registered in navigation.</li>
+  </ul>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 7. VOICE ELICITATION -->
+<section class="section">
+  <h2>Voice Elicitation Insights</h2>
+
+  <h3>15 sessions, 4 domains, rich recall data</h3>
+
+  <div class="donut-row">
+    <div class="donut-item">
+      <div class="donut" style="--donut-pct: 83%;">
+        <div class="donut-inner">83%</div>
+      </div>
+      <div class="donut-label">Elicitation</div>
+    </div>
+    <div class="donut-item">
+      <div class="donut" style="--donut-pct: 17%;">
+        <div class="donut-inner">17%</div>
+      </div>
+      <div class="donut-label">Explore</div>
+    </div>
+    <div class="donut-item">
+      <div class="donut" style="--donut-pct: 80%; background: conic-gradient(var(--amber) 0% 80%, var(--rule) 80% 100%);">
+        <div class="donut-inner">80%</div>
+      </div>
+      <div class="donut-label">&ldquo;Partly&rdquo; Score</div>
+    </div>
+  </div>
+
+  <p>The predominant score is <strong>&ldquo;partly&rdquo;</strong> &mdash; the system is correctly targeting the edge of knowledge, where the user knows <em>something</em> but not <em>enough</em>. This is exactly where learning happens.</p>
+
+  <h4>Sample Voice Excerpts</h4>
+
+  <div class="voice-excerpt">
+    <div class="voice-meta">Apr 4 &middot; Aragonese &amp; Spanish Rule &middot; Sicily</div>
+    <div class="voice-text">&ldquo;I remember that it started with the Spanish Vespers, the Sicilian Vespers, which was a revolt when they wanted to &mdash; somehow the Pope wanted to install a French king&hellip;&rdquo;</div>
+    <div class="voice-ml">&rarr; Triggered 3 ML cards on Vespers context, Aragonese administration, Spanish Sicily</div>
+  </div>
+
+  <div class="voice-excerpt">
+    <div class="voice-meta">Apr 4 &middot; Frederick II &ldquo;Stupor Mundi&rdquo; &middot; Sicily</div>
+    <div class="voice-text">&ldquo;Frederick II. I feel like he was maybe two generations after Roger I, but I&rsquo;m kind of confused if there was Roger I, who was a duke, and then Roger II&hellip;&rdquo;</div>
+    <div class="voice-ml">&rarr; Triggered 3 ML cards on Norman succession, Frederick&rsquo;s rule, Hohenstaufen dynasty</div>
+  </div>
+
+  <div class="voice-excerpt">
+    <div class="voice-meta">Apr 4 &middot; Battle of Himera &middot; Ancient Greece</div>
+    <div class="voice-text">&ldquo;For Himera, I don&rsquo;t remember much. I guess it was Himera was a city of the north of Sicily, and Gelon became tyrant in Syracuse and I don&rsquo;t know how a&hellip;&rdquo;</div>
+    <div class="voice-ml">&rarr; Triggered 3 ML cards on Gelon&rsquo;s strategy, battle significance, Greek-Carthaginian rivalry</div>
+  </div>
+
+  <div class="voice-excerpt">
+    <div class="voice-meta">Apr 4 &middot; Explore Capture &middot; Podcast notes</div>
+    <div class="voice-text">&ldquo;I just listened to a podcast about Sicily, German podcast, and they talked about the conquest of Sicily by the Arabs started quite late&hellip;&rdquo;</div>
+    <div class="voice-ml">Explore capture &mdash; no ML cards triggered (domain not set)</div>
+  </div>
+
+  <h4>Activity Timeline</h4>
+
+  <div class="timeline">
+    <div class="timeline-event">
+      <div class="timeline-date">March 27</div>
+      <div class="timeline-content">First review session &mdash; Sicily focus</div>
+      <div class="timeline-stats">8 items reviewed, 1 ML card</div>
+    </div>
+    <div class="timeline-event">
+      <div class="timeline-date">March 30</div>
+      <div class="timeline-content">Brief session &mdash; Greek religion, polis concept</div>
+      <div class="timeline-stats">2 items reviewed</div>
+    </div>
+    <div class="timeline-event">
+      <div class="timeline-date">April 3</div>
+      <div class="timeline-content">Active day &mdash; multi-domain expansion</div>
+      <div class="timeline-stats">13 items reviewed, 35 ML cards created, first voice elicitations</div>
+    </div>
+    <div class="timeline-event active">
+      <div class="timeline-date">April 4</div>
+      <div class="timeline-content">Most active day &mdash; voice elicitation across 5 domains</div>
+      <div class="timeline-stats">12 items reviewed, 72 ML cards created, 6 voice elicitations + 3 explore captures</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-rule"></div>
+
+<!-- 8. RECOMMENDATIONS -->
+<section class="section">
+  <h2>Recommendations</h2>
+
+  <h3>Priority order</h3>
+
+  <ol class="rec-list">
+    <li>
+      <div class="rec-title">Scheduling rebalance &mdash; SR first, ML interleaved sparingly</div>
+      <div class="rec-detail">Show all due SR cards before any ML reading. Interleave voice-elicitation ML at 1:3 ratio with SR. Follow-up ML cards at 1:7. Target: 20&ndash;30 quick SR reviews in 5 minutes.</div>
+    </li>
+    <li>
+      <div class="rec-title">&ldquo;I also want to know&hellip;&rdquo; input after review answers</div>
+      <div class="rec-detail">Capture specific knowledge gaps during review (the Cicero year problem). High-priority targeted ML cards from user-identified gaps.</div>
+    </li>
+    <li>
+      <div class="rec-title">Daily review budget</div>
+      <div class="rec-detail">Cap total review time or card count per session. Ensure SR takes priority within budget. Show progress: &ldquo;14/20 SR done, 2 ML cards today.&rdquo;</div>
+    </li>
+    <li>
+      <div class="rec-title">Voice elicitation ML cards get high priority</div>
+      <div class="rec-detail">Flag ML cards from voice sessions as high-signal. These are unexpected, edge-of-knowledge discoveries &mdash; more valuable than follow-up-triggered cards.</div>
+    </li>
+    <li>
+      <div class="rec-title">Reading Echoes in article reader</div>
+      <div class="rec-detail">Wire book claim embeddings into reader margins. The #1 unfulfilled differentiator. Book connections pipeline already runs &mdash; needs UI only.</div>
+    </li>
+    <li>
+      <div class="rec-title">Wire the resurfacing engine</div>
+      <div class="rec-detail">760 lines of working cross-book resurfacing code with zero integration points. 1&ndash;2 hours to wire endpoint + UI.</div>
+    </li>
+    <li>
+      <div class="rec-title">Extract key_facts for all 9 curricula</div>
+      <div class="rec-detail">Currently only Sicily Greek (299 facts, 70 nodes). The &ldquo;facts first&rdquo; principle needs data across all 719 nodes.</div>
+    </li>
+  </ol>
+</section>
+
+<!-- FOOTER -->
+<div class="double-rule" style="margin-top: 64px;">
+  <div class="thin"></div>
+  <div class="thick"></div>
+</div>
+
+<footer style="text-align: center; padding-top: 20px;">
+  <div style="color: var(--rubric); font-size: 18px; letter-spacing: 8px;">✦</div>
+  <p style="font-family: 'DM Sans', sans-serif; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-top: 12px;">
+    Generated from production data &middot; petrarca.db &middot; April 5, 2026
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

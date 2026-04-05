@@ -10,6 +10,7 @@ import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
   triggerFollowUp, generateFollowUps,
+  fetchAlsoWantToKnow, submitTargetedQuiz,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -266,6 +267,9 @@ function ReviewCard({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
+  const [suggestions, setSuggestions] = useState<{query: string; type: string; label: string}[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionSent, setSuggestionSent] = useState('');
   const revealedAtRef = useRef(0);
 
   const handleReveal = () => {
@@ -303,9 +307,71 @@ function ReviewCard({
   const handleGrade = (result: string) => {
     onResult(result);
     setGraded(true);
+    // Fetch "also want to know" suggestions in background
+    setSuggestionsLoading(true);
+    fetchAlsoWantToKnow({
+      itemId: item.question_id,
+      question: item.question,
+      entities: item.entities || [],
+    })
+      .then(data => setSuggestions(data.suggestions || []))
+      .catch(() => {})
+      .finally(() => setSuggestionsLoading(false));
+  };
+
+  const handleSuggestionTap = (s: {query: string; type: string; label: string}) => {
+    setSuggestionSent(s.label);
+    logEvent('also_want_to_know_tap', { item_id: item.question_id, query: s.query, type: s.type });
+    submitTargetedQuiz({ itemId: item.question_id, query: s.query, type: s.type })
+      .catch(() => {});
   };
 
   if (graded) {
+    // Show brief suggestions panel before card collapses
+    if (suggestions.length > 0 || suggestionsLoading) {
+      return (
+        <View style={cs.card}>
+          <Text style={cs.responded}>Recorded {'\u2713'}</Text>
+          {suggestionsLoading ? (
+            <Text style={[cs.contextText, { marginTop: 8 }]}>Loading suggestions...</Text>
+          ) : suggestionSent ? (
+            <Text style={[cs.contextText, { marginTop: 8, color: colors.claimNew }]}>
+              {'\u2713'} Added: {suggestionSent}
+            </Text>
+          ) : (
+            <View style={{ marginTop: 10 }}>
+              <Text style={[cs.contextText, { marginBottom: 6, color: colors.textSecondary }]}>
+                Also want to know?
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {suggestions.map((s, i) => (
+                  <Pressable
+                    key={i}
+                    onPress={() => handleSuggestionTap(s)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: s.type === 'simple_fact' ? colors.rubric : colors.rule,
+                      borderRadius: 14,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      backgroundColor: s.type === 'simple_fact' ? 'rgba(139,37,0,0.04)' : 'transparent',
+                    }}
+                  >
+                    <Text style={{
+                      fontFamily: fonts.ui,
+                      fontSize: 12,
+                      color: s.type === 'simple_fact' ? colors.rubric : colors.textSecondary,
+                    }}>
+                      {s.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+      );
+    }
     return (
       <View style={cs.card}>
         <Text style={cs.responded}>Recorded {'\u2713'}</Text>

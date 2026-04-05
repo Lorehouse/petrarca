@@ -316,6 +316,7 @@ def _route_and_enrich_feedback(feedback_id: str, transcript: str, context: dict)
                     query=query,
                     source_node_id=source_node or None,
                     source_domain=source_domain or None,
+                    source_type='voice_wondering',
                 )
                 # Store reference in feedback meta
                 if meta_path.exists():
@@ -4113,9 +4114,29 @@ JSON array only:"""
         source_item_id = body.get('source_item_id')
         source_node_id = body.get('source_node_id')
         source_domain = body.get('source_domain')
+        source_type = body.get('source_type', 'follow_up')
         if not query:
             self._send_json_response(400, {'error': 'query required'})
             return
+
+        # Determine source_type and generation_depth from parent
+        generation_depth = 0
+        if source_item_id and source_item_id.startswith('ml_'):
+            # Child of another ML card — follow_up unless explicitly overridden
+            if source_type == 'follow_up':
+                source_type = 'follow_up'
+            try:
+                from db import get_connection
+                pconn = get_connection()
+                parent = pconn.execute(
+                    'SELECT generation_depth FROM microlearning_cards WHERE id=?',
+                    (source_item_id,)).fetchone()
+                pconn.close()
+                if parent:
+                    generation_depth = (parent[0] or 0) + 1
+            except Exception:
+                pass
+
         try:
             from review_engine import create_microlearning_request
             card_id = create_microlearning_request(
@@ -4123,6 +4144,8 @@ JSON array only:"""
                 source_item_id=source_item_id,
                 source_node_id=source_node_id,
                 source_domain=source_domain,
+                source_type=source_type,
+                generation_depth=generation_depth,
             )
             self._send_json_response(202, {
                 'id': card_id,
@@ -4189,6 +4212,62 @@ JSON array only:"""
             self._send_json_response(200, {'follow_up_queries': fqs})
         except Exception as e:
             print(f'[follow-up-generate] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_also_want_to_know(self):
+        """POST /review/also-want-to-know — generate tappable suggestions after review."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        item_id = body.get('item_id', '')
+        question_text = body.get('question', '')
+        entities = body.get('entities', [])
+        if not item_id:
+            self._send_json_response(400, {'error': 'item_id required'})
+            return
+        try:
+            from review_engine import generate_also_want_to_know
+            suggestions = generate_also_want_to_know(item_id, question_text, entities)
+            self._send_json_response(200, {'suggestions': suggestions})
+        except Exception as e:
+            print(f'[also-want-to-know] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+
+    def _handle_targeted_quiz(self):
+        """POST /review/targeted-quiz — create a simple quiz for a specific fact gap."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        item_id = body.get('item_id', '')
+        query = body.get('query', '').strip()
+        query_type = body.get('type', 'simple_fact')
+        if not item_id or not query:
+            self._send_json_response(400, {'error': 'item_id and query required'})
+            return
+        try:
+            if query_type == 'simple_fact':
+                from review_engine import create_targeted_quiz
+                result = create_targeted_quiz(item_id, query)
+                self._send_json_response(200, result)
+            else:
+                # Complex/research → create ML card
+                from review_engine import create_microlearning_request
+                from db import get_connection
+                conn = get_connection()
+                ki = conn.execute(
+                    'SELECT curriculum_node_id, curriculum_domain FROM knowledge_items WHERE id=?',
+                    (item_id,)).fetchone()
+                conn.close()
+                card_id = create_microlearning_request(
+                    query=query,
+                    source_item_id=item_id,
+                    source_node_id=ki[0] if ki else None,
+                    source_domain=ki[1] if ki else None,
+                    source_type='user_request',
+                )
+                self._send_json_response(202, {
+                    'card_id': card_id, 'status': 'processing', 'query': query,
+                })
+        except Exception as e:
+            print(f'[targeted-quiz] Error: {e}', flush=True)
             self._send_json_response(500, {'error': str(e)})
 
     def _handle_entities_list(self):
@@ -5531,6 +5610,10 @@ JSON array only:"""
             return self._handle_follow_up_trigger()
         if self.path == '/review/follow-up/generate':
             return self._handle_follow_up_generate()
+        if self.path == '/review/also-want-to-know':
+            return self._handle_also_want_to_know()
+        if self.path == '/review/targeted-quiz':
+            return self._handle_targeted_quiz()
         if self.path == '/review/batch-generate':
             return self._handle_review_batch_generate()
         if self.path == '/entity/tap':

@@ -583,6 +583,10 @@ MIGRATIONS = [
     "ALTER TABLE kindle_books ADD COLUMN is_sideloaded INTEGER DEFAULT 0",
     "ALTER TABLE kindle_books ADD COLUMN epub_path TEXT",
     "ALTER TABLE kindle_books ADD COLUMN source TEXT DEFAULT 'kindle_mac'",
+    # ML card source tracking: voice_wondering, follow_up, entity_research, user_request
+    "ALTER TABLE microlearning_cards ADD COLUMN source_type TEXT DEFAULT 'follow_up'",
+    # Generation depth: 0 = root (from review/voice), 1+ = child of ML card
+    "ALTER TABLE microlearning_cards ADD COLUMN generation_depth INTEGER DEFAULT 0",
 ]
 
 

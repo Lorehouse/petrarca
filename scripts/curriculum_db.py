@@ -860,14 +860,27 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             elif fact_type in ('significance', 'connection'):
                 score -= 1.0  # defer until facts are solid
 
-            candidates.append((score, item))
+            # Deprioritize gap-fill items (no book evidence — prerequisites/siblings)
+            # Book-sourced items reinforce actual reading; gap-fills are speculative
+            try:
+                sources = json.loads(item.get('sources') or '[]')
+            except (json.JSONDecodeError, TypeError):
+                sources = []
+            is_gap_fill = sources and all(
+                s.get('book_id') is None for s in sources
+            )
+            if is_gap_fill:
+                score -= 5.0  # push below book-sourced items
+
+            candidates.append((score, item, is_gap_fill))
 
         # ── Interleave domains for variety ───────────────────────────
         # Group by domain, sort each group by score, then round-robin
+        # Cap gap-fill items at 3 per batch to avoid flooding with unexplored topics
         from collections import defaultdict
         domain_groups: dict[str, list] = defaultdict(list)
-        for score, item in candidates:
-            domain_groups[item['curriculum_domain']].append((score, item))
+        for score, item, is_gap_fill in candidates:
+            domain_groups[item['curriculum_domain']].append((score, item, is_gap_fill))
         for g in domain_groups.values():
             g.sort(key=lambda x: x[0], reverse=True)
 
@@ -875,12 +888,19 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
         sorted_domains = sorted(domain_groups.keys(),
                                 key=lambda d: len(domain_groups[d]), reverse=True)
         interleaved = []
+        gap_fill_count = 0
+        GAP_FILL_CAP = 3  # max gap-fill items per batch
         idx = 0
         while len(interleaved) < len(candidates):
             added = False
             for d in sorted_domains:
                 if idx < len(domain_groups[d]):
-                    interleaved.append(domain_groups[d][idx])
+                    _score, _item, _is_gap = domain_groups[d][idx]
+                    if _is_gap and gap_fill_count >= GAP_FILL_CAP:
+                        continue  # skip excess gap-fill items
+                    interleaved.append((_score, _item))
+                    if _is_gap:
+                        gap_fill_count += 1
                     added = True
             if not added:
                 break
@@ -1080,22 +1100,57 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'entity_spans': {'content': ml_spans} if ml_spans else {},
                 })
 
-            # New ML cards → front, due quizzes → interleaved
-            if seen_ml:
-                merged = []
-                ml_idx = 0
-                for i, item in enumerate(items):
-                    merged.append(item)
-                    if (i + 1) % 3 == 0 and ml_idx < len(seen_ml):
-                        merged.append(seen_ml[ml_idx])
-                        ml_idx += 1
-                while ml_idx < len(seen_ml):
-                    merged.append(seen_ml[ml_idx])
-                    ml_idx += 1
-                items = merged
+            # ── Priority-based ML interleaving ──────────────────────
+            # Split new ML cards by source_type for different interleave ratios:
+            # - voice_wondering / user_request: HIGH priority (1 per 3 SR cards)
+            # - follow_up / entity_research / legacy: LOW priority (1 per 7 SR cards)
+            high_ml = []  # voice + user_request
+            low_ml = []   # follow_up + entity + legacy
+            for card in new_ml:
+                # Check source_type on the underlying ML card row
+                card_id = card.get('question_id', '')
+                try:
+                    st_row = conn.execute(
+                        'SELECT source_type FROM microlearning_cards WHERE id=?',
+                        (card_id,)).fetchone()
+                    st = st_row[0] if st_row else None
+                except Exception:
+                    st = None
+                if st in ('voice_wondering', 'user_request'):
+                    high_ml.append(card)
+                else:
+                    low_ml.append(card)
 
-            if new_ml:
-                items = new_ml + items
+            # Merge: SR items first, then interleave ML cards
+            # High-priority ML (voice/user): every 3rd SR card
+            # Low-priority ML (follow-up) + due quizzes: every 7th SR card
+            merged = []
+            hi_idx = 0
+            lo_idx = 0
+            sq_idx = 0  # seen_ml (due quizzes)
+            low_pool = low_ml + seen_ml  # combine follow-up new cards with due quizzes
+
+            for i, item in enumerate(items):
+                merged.append(item)
+                pos = i + 1
+                # High-priority ML at 1:3
+                if pos % 3 == 0 and hi_idx < len(high_ml):
+                    merged.append(high_ml[hi_idx])
+                    hi_idx += 1
+                # Low-priority ML + due quizzes at 1:7
+                if pos % 7 == 0 and lo_idx < len(low_pool):
+                    merged.append(low_pool[lo_idx])
+                    lo_idx += 1
+
+            # Append any remaining ML cards at the tail (not front-loaded)
+            while hi_idx < len(high_ml):
+                merged.append(high_ml[hi_idx])
+                hi_idx += 1
+            while lo_idx < len(low_pool):
+                merged.append(low_pool[lo_idx])
+                lo_idx += 1
+
+            items = merged
         except Exception as e:
             print(f'[review-stream] microlearning query failed: {e}', flush=True)
             import traceback; traceback.print_exc()
