@@ -265,7 +265,6 @@ function ReviewCard({
   onResearch: (query: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
-  const [graded, setGraded] = useState(false);
   const revealedAtRef = useRef(0);
 
   const handleReveal = () => {
@@ -301,13 +300,8 @@ function ReviewCard({
   ];
 
   const handleGrade = (result: string) => {
-    setGraded(true);
     onResult(result);
   };
-
-  if (graded) {
-    return null;
-  }
 
   const displayAnswer = item.rich_answer || item.answer || '';
   const anchors = item.anchors || [];
