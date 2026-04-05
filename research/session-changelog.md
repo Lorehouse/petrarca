@@ -1,6 +1,33 @@
 # Knowledge System Implementation Status
 
-**Date**: April 5, 2026 (last updated — session 49: microlearning enrichment + follow-up overhaul)
+**Date**: April 5, 2026 (last updated — session 50: Kindle SQLite migration + browse screen)
+
+## Session 50: Kindle SQLite Migration + Amazon Scraper + Browse Screen (April 5, 2026)
+
+### Kindle SQLite Migration
+- Migrated `kindle_library.json` → `kindle_books` SQLite table (25 columns, key=ASIN/book_id/title hash)
+- New `available_epubs` table for indexing server-side EPUB files
+- Helper functions: `upsert_kindle_books()`, `get_kindle_books()` (full query with search/filter/sort/pagination), `get_kindle_book()`, `migrate_kindle_json_to_sqlite()`
+- All 7 existing Kindle endpoints rewritten from JSON to SQLite, backward-compatible response shapes
+- `process_kindle_books.py` updated to read from SQLite instead of JSON
+- Auto-migration runs on server startup
+
+### New API Endpoints
+- `GET /kindle/browse` — Full-featured query with search, status/category/tracked filters, sort, pagination. Returns `{books: [...], total: N}`
+- `POST /kindle/scan-epubs` — Scans `/opt/petrarca/data/epubs/*.epub`, extracts OPF metadata, fuzzy-matches against kindle_books by title
+
+### Amazon Library Scraper
+- `amazon_library_scraper.py` — Uses `agent-browser --auto-connect` to leverage running Chrome's Amazon login
+- Navigates to Amazon Content & Devices, extracts books via JS DOM evaluation (two strategies: data-asin attributes + /dp/ link parsing)
+- Handles pagination, deduplicates by ASIN, pushes to `POST /kindle/sync`
+- `com.petrarca.amazon-sync.plist` — daily launchd job (86400s interval)
+
+### Kindle Browse Screen (Expo)
+- `kindle-browse.tsx` — Search bar (300ms debounce), status/tracked filter chips, sort pills (recent/title/author/progress)
+- Virtualized FlatList with pagination (50 per page). Shows cover, title, author, category badge, EPUB badge, progress bar, tracked indicator
+- "Include" button for untracked books (→ addPhysicalBook), tap tracked books → book-detail
+- EPUB ingestion: when including a book with `epub_path`, triggers `ingest_book_petrarca.py` for full-text extraction instead of research agent
+- Navigation: ✦ drawer "Kindle Library" item, Library tab "Browse full Kindle library" link
 
 ## Session 49: Microlearning Card Enrichment + Follow-Up Overhaul (April 4–5, 2026)
 

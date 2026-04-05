@@ -13,7 +13,7 @@
 │                                                             │
 │ 2 tabs: Feed | Library                                      │
 │ ✦ drawer: Syntheses, Voice Notes, Queue, Knowledge Map,     │
-│           Projects, Review, Book Review                     │
+│           Projects, Review, Book Review, Kindle Library      │
 │                                                             │
 │ State: module-level vars in store.ts → AsyncStorage          │
 │ Sync:  content-sync.ts (manifest hash comparison + ?since=)  │
@@ -74,6 +74,7 @@
 | Hamarquizen | `hamarquizen.tsx` | Book-specific PRIME→READ→TEST review |
 | Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes + chapter/book recall. "Know nothing" vs "Skip" buttons. Auto-loads more prompts when batch exhausted. Fire-and-forget uploads with `request_id` caching. |
 | Voice Notes | `voice-notes.tsx` | Voice note list + playback |
+| Kindle Browse | `kindle-browse.tsx` | Full Kindle library browser — search, filter (status/category/tracked), sort, pagination, include books, EPUB badge |
 | Kindle Curation | `kindle-curation.tsx` | Triage screen for Kindle library |
 | Projects | `projects.tsx` | Project list |
 | Project Detail | `project-detail.tsx` | Project notes + voice routing |
@@ -118,6 +119,7 @@
 | `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. |
 | `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
 | `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. |
+| `book-api.ts` | Book API client — `fetchKindleBrowse()`, `includeKindleBook()`, `curateKindleBook()`, `classifyKindleBooks()` |
 | `types.ts` | `ArticleMeta`, `ArticleContent`, `Article`, `TopicSynthesis`, etc. |
 
 ## Server: Key Modules
@@ -151,8 +153,9 @@
 ### Books & Kindle
 | Script | Role |
 |--------|------|
-| `process_kindle_books.py` | Kindle → unified book conversion |
+| `process_kindle_books.py` | Kindle → unified book conversion (reads from SQLite) |
 | `kindle_sync.py` | Kindle library sync from Mac SQLite DB |
+| `amazon_library_scraper.py` | Amazon library scraper via agent-browser + Chrome cookies. Daily launchd job. |
 | `book_research_agent.py` | Autonomous book research via Gemini+Search |
 | `resurfacing_engine.py` | Cross-book resurfacing prompts |
 | `extract_key_facts.py` | Key facts extraction from curriculum nodes |
@@ -237,6 +240,8 @@
 | POST | `/kindle/resolve-titles` | Resolve Kindle titles |
 | GET | `/kindle/library` | Kindle library (filterable) |
 | GET | `/kindle/recently-started` | Recently started Kindle books |
+| GET | `/kindle/browse` | Full query: search, status/category/tracked filters, sort, pagination → `{books, total}` |
+| POST | `/kindle/scan-epubs` | Scan server EPUBs, extract metadata, fuzzy-match to kindle_books |
 | GET | `/kindle/highlights` | Kindle highlights |
 
 ### Curriculum
@@ -269,7 +274,7 @@
 
 **Content pipeline**: `articles`, `article_sections`, `atomic_claims`, `claim_similarities`, `nli_verdicts`, `article_similarities`, `article_novelty_matrix`, `paragraph_claim_map`, `article_curriculum_nodes`, `delta_reports`, `concept_clusters`, `near_duplicates`, `syntheses`, `pipeline_meta`, `cluster_meta`
 
-**Books & Kindle**: `physical_books`, `book_captures`, `book_curriculum_mappings`
+**Books & Kindle**: `physical_books`, `book_captures`, `book_curriculum_mappings`, `kindle_books`, `available_epubs`
 
 **Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities`, `entity_curriculum_links`
 
