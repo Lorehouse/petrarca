@@ -65,6 +65,8 @@ This project is exploratory — 47+ sessions in many directions. That means:
 ### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
 - **Review stream pipeline**: `generate_question_for_item()` → `cached_question` JSON on `knowledge_items` → `generate_review_stream()` in `curriculum_db.py` assembles cards → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
+- **Review scheduling priority**: SR cards first (book-sourced highest, gap-fill penalized -5.0 and capped at 3/batch). ML cards interleaved by `source_type`: voice_wondering at 1:3, follow_up at 1:7. Never front-load ML cards.
+- **"Also want to know"**: `POST /review/also-want-to-know` generates entity-based suggestions after grading. `POST /review/targeted-quiz` creates simple quiz cards. Both in `review_engine.py`.
 - **`curriculum_db.py`** for ALL runtime reads/writes. **`curriculum.py`** is ONLY for generation/CLI.
 - **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.
 - **Server-first**: All data lives on server. Local storage is cache only.
@@ -101,6 +103,7 @@ This project is exploratory — 47+ sessions in many directions. That means:
 - **limbic.amygdala**: `pip install -e ~/src/limbic`. Server: `/opt/limbic`. Used for embeddings, similarity, clustering.
 - **Standalone web pages**: HTML files in `scripts/` served via `_serve_html_file()` in research-server.py. Pattern: D3.js CDN, fetch from `/endpoint`, Petrarca design tokens. Examples: `curriculum_graph.html`, `curriculum_timeline.html`, `knowledge_atlas.html`.
 - **DB is server-only**: `petrarca.db` lives at `/opt/petrarca/data/` on Hetzner. Local Python can't query it. Verify functions with `ast.parse()` for syntax, then `curl` the live endpoint after deploy.
+- **Query server DB**: Write Python to `/tmp/script.py`, then `scp /tmp/script.py alif:/tmp/ && ssh alif "cd /opt/petrarca && python3 /tmp/script.py"`. Inline heredoc Python via SSH has quoting issues.
 
 ### Curriculum Generation
 - **Opus only** — Gemini Flash curricula have meaningless titles
