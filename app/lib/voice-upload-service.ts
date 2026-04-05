@@ -11,6 +11,7 @@ import {
   documentDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync,
 } from 'expo-file-system/legacy';
 import { sendVoiceElicitation, ElicitationResult } from './review-api';
+import { RESEARCH_BASE } from './chat-api';
 import { logEvent } from '../data/logger';
 
 const PENDING_DIR = `${documentDirectory}voice-elicitation/`;
@@ -71,6 +72,18 @@ async function savePending(items: PendingUpload[]) {
   await writeAsStringAsync(PENDING_META, JSON.stringify(items));
 }
 
+async function isServerReachable(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${RESEARCH_BASE}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function retryPendingUploads() {
   if (retrying) return;
   retrying = true;
@@ -78,6 +91,12 @@ async function retryPendingUploads() {
   try {
     const pending = await loadPending();
     if (pending.length === 0) return;
+
+    // Skip retry if server unreachable — saves 90s timeout per item
+    if (!(await isServerReachable())) {
+      console.log('[voice-upload-service] Server unreachable, skipping retry');
+      return;
+    }
 
     // Backfill requestId for old entries
     for (const p of pending) {
@@ -98,8 +117,15 @@ async function retryPendingUploads() {
         } else {
           remaining.push(p);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.log(`[voice-upload-service] Retry failed for ${p.nodeTitle}: ${e}`);
+        // Don't retry permanent client errors (400, 404, 422)
+        const status = e?.status;
+        if (status && status >= 400 && status < 500) {
+          logEvent('voice_upload_permanent_fail', { node_id: p.nodeId, status });
+          notifyListeners(p.nodeTitle, false);
+          continue;
+        }
         // Keep entries less than 48h old for future retry
         const ageHours = (Date.now() - p.recordedAt) / (1000 * 3600);
         if (ageHours < 48) {

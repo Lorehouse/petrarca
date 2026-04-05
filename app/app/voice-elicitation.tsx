@@ -85,13 +85,19 @@ export default function VoiceElicitation() {
   const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savedUriRef = useRef<string | null>(null);
+  const lastRequestIdRef = useRef<string | null>(null);
+  const lastCandRef = useRef<ElicitationCandidate | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const seenNodeIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setFeedbackContext({ screen: 'voice-elicitation' });
     checkPendingThenLoad();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
   // Resume from done if new candidates were loaded
@@ -227,6 +233,8 @@ export default function VoiceElicitation() {
       // Track as pending before upload attempt
       const cand = candidates[current];
       const requestId = `elicit_${ts}_${cand.node_id.slice(0, 40)}`;
+      lastRequestIdRef.current = requestId;
+      lastCandRef.current = cand;
       await savePendingUpload({
         audioUri: savedPath,
         nodeId: cand.node_id,
@@ -237,13 +245,13 @@ export default function VoiceElicitation() {
       });
 
       // Upload in background — don't block, move to next topic immediately
-      const candTitle = cand.node_title;
       setProcessingCount(c => c + 1);
-      uploadElicitation(savedPath, undefined, requestId).then(async () => {
+      uploadElicitation(savedPath, cand, requestId).then(async () => {
         await clearPendingUpload(savedPath);
       }).catch(() => {
-        // Stays in pending for retry next time
+        // Stays in pending — schedule auto-retry in 20s
         setProcessingCount(c => Math.max(0, c - 1));
+        scheduleRetry(savedPath, cand, requestId);
       });
 
       // Immediately advance to next topic
@@ -293,8 +301,27 @@ export default function VoiceElicitation() {
     });
   }
 
+  function scheduleRetry(uri: string, cand: ElicitationCandidate, requestId: string, attempt = 1) {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    // Backoff: 20s, 40s, 80s — max 3 in-session retries
+    if (attempt > 3) return;
+    const delayMs = 20_000 * Math.pow(2, attempt - 1);
+    console.log(`[voice-elicit] Scheduling retry #${attempt} in ${delayMs / 1000}s`);
+    retryTimerRef.current = setTimeout(async () => {
+      retryTimerRef.current = null;
+      try {
+        setProcessingCount(c => c + 1);
+        await uploadElicitation(uri, cand, requestId);
+        await clearPendingUpload(uri);
+      } catch {
+        setProcessingCount(c => Math.max(0, c - 1));
+        scheduleRetry(uri, cand, requestId, attempt + 1);
+      }
+    }, delayMs);
+  }
+
   async function uploadElicitation(uri: string, overrideCand?: ElicitationCandidate, requestId?: string) {
-    const cand = overrideCand || candidates[current];
+    const cand = overrideCand || lastCandRef.current || candidates[current];
     if (!cand?.node_id) {
       throw new Error('No candidate context for upload');
     }
@@ -539,7 +566,7 @@ export default function VoiceElicitation() {
                 setProcessingCount(c => c + 1);
                 setPendingUploads(prev => prev.filter(u => u.audioUri !== p.audioUri));
                 try {
-                  await uploadElicitation(p.audioUri, fakeCand);
+                  await uploadElicitation(p.audioUri, fakeCand, p.requestId);
                   await clearPendingUpload(p.audioUri);
                 } catch {
                   setProcessingCount(c => Math.max(0, c - 1));
@@ -574,7 +601,9 @@ export default function VoiceElicitation() {
         ) : null}
         <Pressable
           style={[styles.recordBtn, { marginBottom: 12 }]}
-          onPress={() => savedUriRef.current && uploadElicitation(savedUriRef.current)}
+          onPress={() => savedUriRef.current && uploadElicitation(
+            savedUriRef.current, lastCandRef.current || undefined, lastRequestIdRef.current || undefined
+          )}
         >
           <Text style={styles.recordBtnText}>Retry upload</Text>
         </Pressable>

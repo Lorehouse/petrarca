@@ -115,6 +115,18 @@ async function saveItems(name: string, items: QueuedUpload[]): Promise<void> {
   await FS.writeAsStringAsync(pendingPath(name), JSON.stringify(items));
 }
 
+async function isServerReachable(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${RESEARCH_BASE}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Generic multipart upload: audio + request_id + all metadata string fields. */
 async function uploadToServer(item: QueuedUpload): Promise<any> {
   const form = new FormData();
@@ -199,6 +211,12 @@ export function createAudioQueue(name: string): AudioQueue {
       try {
         const items = await loadItems(name);
         if (items.length === 0) return 0;
+
+        // Skip retry if server unreachable — saves 90s timeout per item
+        if (!(await isServerReachable())) {
+          console.log(`[audio-queue:${name}] Server unreachable, skipping retry`);
+          return 0;
+        }
 
         console.log(`[audio-queue:${name}] Retrying ${items.length} pending upload(s)`);
         const remaining: QueuedUpload[] = [];

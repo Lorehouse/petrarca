@@ -215,6 +215,10 @@ export async function sendVoiceElicitation(
     body: form,
     timeout: 90000,
   });
-  if (!res.ok) throw new Error(`voice-elicit failed: ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(`voice-elicit failed: ${res.status}`) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
