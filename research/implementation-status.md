@@ -131,7 +131,7 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview |
 | `claude_llm.py` | Claude wrapper for review_engine calls (migrated from Gemini in session 42) |
-| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()` |
+| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment) |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
 | `log_server.py` | Interaction log collection (:8091) |
@@ -214,7 +214,7 @@
 | POST | `/entity/questions` | Generate entity questions |
 | POST | `/entity/research` | Entity research via Gemini+Search |
 | POST | `/entity/notes` | Save user note about an entity |
-| POST | `/explore/capture` | Voice/text capture routed to entities + research |
+| POST | `/explore/capture` | Voice/text capture → entity detection → curriculum node mapping → knowledge state updates, quiz generation, microlearning from wonderings. Full knowledge graph ingestion via `process_voice_capture()`. |
 | GET | `/entities` | List all entities |
 | GET | `/entity/:id` | Entity detail (includes user notes) |
 

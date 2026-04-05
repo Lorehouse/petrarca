@@ -1,6 +1,40 @@
 # Knowledge System Implementation Status
 
-**Date**: April 5, 2026 (last updated — session 50: Kindle SQLite migration + browse screen)
+**Date**: April 5, 2026 (last updated — session 52: Rich voice capture pipeline)
+
+## Session 52: Rich Voice Capture Pipeline (April 5, 2026)
+
+### Problem
+Voice recordings from the Explore tab (person detail pages + top-level) used a thin Gemini Flash pipeline that only saved entity notes and logged transcripts. No knowledge state updates, no quiz generation, no curriculum node mapping. Three Sicily recordings from April 4 demonstrated the gap: zero entities detected, one claim each, no knowledge graph impact.
+
+### New `process_voice_capture()` Function (`review_engine.py`)
+Full knowledge graph ingestion pipeline for voice captures:
+1. **Entity detection**: Multi-word entity matching via word overlap (>60% significant words, handles "Arab Conquest of Sicily"). Word boundary checks for short names.
+2. **Node routing**: 4-phase priority system — directly linked nodes (entity_curriculum_links) → title-overlap siblings → primary domain fill → keyword fallback. Prevents prompt bloat from irrelevant domains.
+3. **Claude analysis**: Extracts facts, maps each to curriculum nodes, assesses knowledge level per node, extracts wonderings. Prompt explicitly rejects cross-era mappings.
+4. **Knowledge graph updates**: Upserts `knowledge_items` with voice capture sources (same pattern as `create_review_items_for_chapter()`), updates `knowledge_states`, clears `cached_question` to trigger re-generation.
+5. **Quiz generation**: Pre-generates questions in background thread (or synchronously via `sync=True`).
+6. **Microlearning**: Creates research cards from wonderings (up to 5).
+
+### `/explore/capture` Endpoint Upgrade
+Replaced thin Gemini Flash analysis with call to `process_voice_capture()`. Backward-compatible response shape. Entity name resolution from `shared_entities` DB.
+
+### Reprocessing Results (3 Sicily recordings from April 4)
+- **Recording 1** (Arab conquest podcast): 30 facts → 8 nodes. Arab Conquest of Sicily: **anchored** (18 facts), Norman Conquest: **anchored** (11), Palermo: **engaged** (9).
+- **Recording 2** (Linguistic evolution): 13 facts → 10 nodes across Sicily chronology. Frederick II, Norman Conquest, Sicilian School of Poetry: **engaged**.
+- **Recording 3** (Barbero/Frederick II): 49 facts → 7 nodes. Frederick II Stupor Mundi: **anchored** (49 facts!), Knowledge Transmission to Medieval Europe: **engaged**.
+- Total: 19 knowledge items with voice capture sources, 25+ quiz questions generated, 15 microlearning wonderings triggered.
+
+### Fixes During Development
+- **DB lock contention**: `sync=True` parameter runs question generation inline, skips background microlearning threads. Used by batch reprocessing to avoid deadlocks.
+- **Bad node mappings**: Prompt tightening + algorithm fix (Phase 3 only expands primary domain). Cleanup script removed 10 spurious Roman Republic mappings.
+- **Duplicate sources**: Dedup by source_text prefix from multiple test runs.
+
+### Key Files Changed
+- `scripts/review_engine.py`: `process_voice_capture()`, `VOICE_CAPTURE_ANALYSIS_PROMPT`
+- `scripts/research-server.py`: `_handle_explore_capture()` rewritten
+- `scripts/cleanup_voice_captures.py`: One-shot cleanup script
+- `scripts/reprocess_voice_captures.py`: Batch reprocessing script
 
 ## Session 50: Kindle SQLite Migration + Amazon Scraper + Browse Screen (April 5, 2026)
 
@@ -562,9 +596,19 @@ New events for algorithm tuning:
 - Server: `/ingest-youtube` — fetches transcript via `youtube-transcript-api`, processes through article pipeline
 - No API key needed, handles SPA navigation
 
-#### Podcast Integration (built, needs auth)
-- `podcast_sync.py` — Overcast export via `overcast-to-sqlite`
-- Unified media log: `POST /media/sync`, `GET /media/log` → `media_log.json`
+#### Podcast Integration (partial — metadata only, no knowledge pipeline)
+
+**What exists:**
+- `podcast_sync.py` — Overcast export via `overcast-to-sqlite` (uvx). Auth, list podcasts, list played, sync to server. `INCLUDE_PODCASTS` filter (currently empty).
+- Server: `POST /media/sync` → appends episodes to `/opt/petrarca/data/media_log.json` (flat JSON, deduped by ID)
+- Episode records include: title, source (feed name), overcast URL, enclosure URL, duration
+
+**What's missing to actually ingest episodes (e.g. Rest is History):**
+1. **Overcast auth** — need to run `python3 podcast_sync.py --auth` once (interactive login)
+2. **Transcript fetching** — `--transcript` flag declared in argparse but not implemented. Options: Whisper on `enclosureUrl` audio, Soniox API (already used for voice elicitation), or podcast RSS transcript tags
+3. **Article pipeline integration** — transcripts need to become article records in SQLite so claim extraction, entity linking, curriculum matching, and the reading/review pipeline work on them. YouTube ingest (`/ingest-youtube`) is the model — it does this end-to-end
+4. **SQLite storage** — episodes currently go to JSON file, invisible to the knowledge system. Need article records in `petrarca.db`
+5. **Episode selection UX** — no way to pick specific episodes from the app; would need CLI or a browse UI
 
 #### Server Data Files Added
 - `/opt/petrarca/data/kindle_library.json` — 2,776 books with categories, progress, titles
