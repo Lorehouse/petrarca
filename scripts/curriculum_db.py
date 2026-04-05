@@ -1454,3 +1454,365 @@ def get_knowledge_atlas_data(conn=None) -> dict:
     finally:
         if own:
             conn.close()
+
+
+def get_dashboard_stats(conn=None) -> dict:
+    """Build comprehensive statistics for the dashboard page.
+
+    Returns today's summary, knowledge state per curriculum, review/quiz stats,
+    reading progress, voice elicitation stats, and recent activity timeline.
+    All items include linkable IDs for navigation.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        now_ms = int(time.time() * 1000)
+        today_start_ms = now_ms - (now_ms % (24 * 60 * 60 * 1000))
+        day_7_ms = now_ms - 7 * 24 * 60 * 60 * 1000
+        day_30_ms = now_ms - 30 * 24 * 60 * 60 * 1000
+        end_today_ms = today_start_ms + 24 * 60 * 60 * 1000
+
+        # ── Today's summary ─────────────────────────────────────────
+        reviewed_today = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE last_reviewed_at >= ?',
+            (today_start_ms,)
+        ).fetchone()[0]
+        reviewed_today += conn.execute(
+            'SELECT COUNT(*) FROM microlearning_cards WHERE last_reviewed_at >= ?',
+            (today_start_ms,)
+        ).fetchone()[0]
+
+        due_today = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?',
+            (end_today_ms,)
+        ).fetchone()[0]
+        due_today += conn.execute(
+            "SELECT COUNT(*) FROM review_items WHERE due_at <= ? AND item_type != 'book_chapter'",
+            (end_today_ms,)
+        ).fetchone()[0]
+
+        elicitations_today = conn.execute(
+            "SELECT COUNT(*) FROM voice_transcripts WHERE source = 'elicitation' AND created_at >= ?",
+            (today_start_ms,)
+        ).fetchone()[0]
+
+        # Score distribution today
+        scores_today = {'knew': 0, 'partly': 0, 'missed': 0}
+        for tbl in ('knowledge_items', 'microlearning_cards'):
+            for row in conn.execute(
+                f'SELECT last_score FROM {tbl} WHERE last_reviewed_at >= ? AND last_score IS NOT NULL',
+                (today_start_ms,)
+            ).fetchall():
+                s = row[0]
+                if s in scores_today:
+                    scores_today[s] += 1
+
+        # ── Knowledge state per curriculum ──────────────────────────
+        curricula_stats = []
+        total_nodes = 0
+        total_upgraded_7d = 0
+        for meta in list_curricula(conn=conn):
+            domain_id = meta['id']
+            dist = {'unknown': 0, 'mentioned': 0, 'engaged': 0, 'anchored': 0}
+            nodes = conn.execute(
+                'SELECT cn.id, COALESCE(ks.knowledge, ?) as knowledge '
+                'FROM curriculum_nodes cn '
+                'LEFT JOIN knowledge_states ks ON cn.id = ks.node_id AND cn.domain_id = ks.domain_id '
+                'WHERE cn.domain_id = ?',
+                ('unknown', domain_id)
+            ).fetchall()
+            for n in nodes:
+                k = n['knowledge'] if n['knowledge'] in dist else 'unknown'
+                dist[k] += 1
+            node_count = len(nodes)
+            total_nodes += node_count
+
+            # Nodes upgraded this week (last_assessed within 7 days, not unknown)
+            upgraded = conn.execute(
+                "SELECT COUNT(*) FROM knowledge_states "
+                "WHERE domain_id = ? AND knowledge != 'unknown' AND last_assessed >= ?",
+                (domain_id, datetime.utcfromtimestamp(day_7_ms / 1000).isoformat())
+            ).fetchone()[0]
+            total_upgraded_7d += upgraded
+
+            curricula_stats.append({
+                'domain_id': domain_id,
+                'title': meta.get('title', domain_id),
+                'node_count': node_count,
+                'distribution': dist,
+                'upgraded_7d': upgraded,
+            })
+
+        # ── Review & quiz statistics ────────────────────────────────
+        def _count_reviews(table, since_ms=None):
+            if since_ms:
+                return conn.execute(
+                    f'SELECT COUNT(*) FROM {table} WHERE last_reviewed_at >= ? AND review_count > 0',
+                    (since_ms,)
+                ).fetchone()[0]
+            return conn.execute(
+                f'SELECT COUNT(*) FROM {table} WHERE review_count > 0'
+            ).fetchone()[0]
+
+        def _score_dist(table, since_ms=None):
+            dist = {'knew': 0, 'partly': 0, 'missed': 0}
+            where = 'WHERE last_score IS NOT NULL'
+            params = ()
+            if since_ms:
+                where += ' AND last_reviewed_at >= ?'
+                params = (since_ms,)
+            for row in conn.execute(
+                f'SELECT last_score, COUNT(*) as cnt FROM {table} {where} GROUP BY last_score',
+                params
+            ).fetchall():
+                if row['last_score'] in dist:
+                    dist[row['last_score']] = row['cnt']
+            return dist
+
+        review_counts = {
+            'all_time': _count_reviews('knowledge_items') + _count_reviews('microlearning_cards'),
+            '30d': _count_reviews('knowledge_items', day_30_ms) + _count_reviews('microlearning_cards', day_30_ms),
+            '7d': _count_reviews('knowledge_items', day_7_ms) + _count_reviews('microlearning_cards', day_7_ms),
+        }
+
+        score_30d_ki = _score_dist('knowledge_items', day_30_ms)
+        score_30d_ml = _score_dist('microlearning_cards', day_30_ms)
+        score_dist_30d = {
+            k: score_30d_ki.get(k, 0) + score_30d_ml.get(k, 0)
+            for k in ('knew', 'partly', 'missed')
+        }
+
+        followups_launched = conn.execute(
+            "SELECT COUNT(*) FROM microlearning_cards WHERE source_item_id IS NOT NULL"
+        ).fetchone()[0]
+
+        cards_in_pipeline = conn.execute(
+            "SELECT COUNT(*) FROM microlearning_cards WHERE status IN ('pending', 'processing')"
+        ).fetchone()[0]
+
+        avg_stability = conn.execute(
+            'SELECT AVG(stability_days) FROM knowledge_items WHERE review_count > 0'
+        ).fetchone()[0] or 0
+
+        quizzes_completed = conn.execute(
+            'SELECT COUNT(*) FROM microlearning_quizzes WHERE review_count > 0'
+        ).fetchone()[0]
+
+        # Per-curriculum review counts (30d)
+        reviews_by_domain = {}
+        for row in conn.execute(
+            'SELECT curriculum_domain, COUNT(*) as cnt FROM knowledge_items '
+            'WHERE last_reviewed_at >= ? AND review_count > 0 GROUP BY curriculum_domain',
+            (day_30_ms,)
+        ).fetchall():
+            reviews_by_domain[row['curriculum_domain']] = row['cnt']
+
+        # ── Reading progress ────────────────────────────────────────
+        books_reading = []
+        for row in conn.execute(
+            "SELECT id, title, author, current_page, page_count, current_chapter, reading_status "
+            "FROM physical_books WHERE reading_status = 'reading' ORDER BY last_interaction_at DESC"
+        ).fetchall():
+            pct = round(row['current_page'] / row['page_count'] * 100) if row['page_count'] and row['current_page'] else 0
+            books_reading.append({
+                'id': row['id'],
+                'title': row['title'],
+                'author': row['author'],
+                'current_page': row['current_page'] or 0,
+                'page_count': row['page_count'] or 0,
+                'current_chapter': row['current_chapter'],
+                'progress_pct': pct,
+            })
+
+        # Kindle books currently reading
+        for row in conn.execute(
+            "SELECT key, title, title_resolved, author, progress_pct "
+            "FROM kindle_books WHERE status = 'reading' ORDER BY last_read DESC LIMIT 5"
+        ).fetchall():
+            books_reading.append({
+                'id': row['key'],
+                'title': row['title_resolved'] or row['title'],
+                'author': row['author'],
+                'current_page': None,
+                'page_count': None,
+                'progress_pct': round(row['progress_pct'] or 0),
+                'kindle': True,
+            })
+
+        # ── Voice elicitation stats ─────────────────────────────────
+        voice_total = conn.execute(
+            "SELECT COUNT(*) FROM voice_transcripts WHERE source = 'elicitation'"
+        ).fetchone()[0]
+
+        voice_audio_bytes = conn.execute(
+            "SELECT SUM(audio_bytes) FROM voice_transcripts WHERE source = 'elicitation'"
+        ).fetchone()[0] or 0
+        # Rough estimate: ~16KB/s for compressed audio
+        voice_audio_minutes = round(voice_audio_bytes / 16000 / 60, 1) if voice_audio_bytes else 0
+
+        # Recall distribution from LLM results
+        recall_dist = {'full': 0, 'partial': 0, 'nothing': 0}
+        for row in conn.execute(
+            "SELECT llm_result FROM voice_transcripts WHERE source = 'elicitation' AND llm_result IS NOT NULL"
+        ).fetchall():
+            try:
+                result = json.loads(row['llm_result'])
+                level = result.get('knowledge_demonstrated', result.get('recall_level', ''))
+                if level in ('strong', 'full', 'good'):
+                    recall_dist['full'] += 1
+                elif level in ('partial', 'some', 'moderate'):
+                    recall_dist['partial'] += 1
+                else:
+                    recall_dist['nothing'] += 1
+            except (json.JSONDecodeError, TypeError):
+                recall_dist['nothing'] += 1
+
+        voice_cards_triggered = conn.execute(
+            "SELECT COUNT(*) FROM voice_transcripts "
+            "WHERE source = 'elicitation' AND microlearning_triggered != '[]' AND microlearning_triggered IS NOT NULL"
+        ).fetchone()[0]
+
+        # ── Recent activity timeline ────────────────────────────────
+        timeline = []
+
+        # Recent reviews (from knowledge_items)
+        for row in conn.execute(
+            'SELECT ki.curriculum_domain, ki.curriculum_node_id, ki.last_score, ki.last_reviewed_at, '
+            'cn.title as node_title, cd.title as domain_title '
+            'FROM knowledge_items ki '
+            'LEFT JOIN curriculum_nodes cn ON ki.curriculum_node_id = cn.id AND ki.curriculum_domain = cn.domain_id '
+            'LEFT JOIN curriculum_domains cd ON ki.curriculum_domain = cd.id '
+            'WHERE ki.last_reviewed_at IS NOT NULL '
+            'ORDER BY ki.last_reviewed_at DESC LIMIT 20'
+        ).fetchall():
+            timeline.append({
+                'type': 'review',
+                'ts': row['last_reviewed_at'],
+                'title': row['node_title'] or row['curriculum_node_id'],
+                'domain_id': row['curriculum_domain'],
+                'domain_title': row['domain_title'] or row['curriculum_domain'],
+                'node_id': row['curriculum_node_id'],
+                'score': row['last_score'],
+            })
+
+        # Recent voice elicitations
+        for row in conn.execute(
+            "SELECT id, node_id, domain_id, node_title, llm_result, created_at, microlearning_triggered "
+            "FROM voice_transcripts WHERE source = 'elicitation' "
+            "ORDER BY created_at DESC LIMIT 15"
+        ).fetchall():
+            recall = 'unknown'
+            try:
+                result = json.loads(row['llm_result'] or '{}')
+                level = result.get('knowledge_demonstrated', result.get('recall_level', ''))
+                if level in ('strong', 'full', 'good'):
+                    recall = 'full'
+                elif level in ('partial', 'some', 'moderate'):
+                    recall = 'partial'
+                else:
+                    recall = 'nothing'
+            except (json.JSONDecodeError, TypeError):
+                pass
+            cards_triggered = 0
+            try:
+                cards_triggered = len(json.loads(row['microlearning_triggered'] or '[]'))
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            domain_title = row['domain_id']
+            if row['domain_id']:
+                dt_row = conn.execute(
+                    'SELECT title FROM curriculum_domains WHERE id = ?', (row['domain_id'],)
+                ).fetchone()
+                if dt_row:
+                    domain_title = dt_row['title']
+
+            timeline.append({
+                'type': 'voice',
+                'ts': row['created_at'],
+                'title': row['node_title'] or 'Elicitation',
+                'domain_id': row['domain_id'],
+                'domain_title': domain_title,
+                'node_id': row['node_id'],
+                'recall': recall,
+                'cards_triggered': cards_triggered,
+            })
+
+        # Recent microlearning cards generated
+        for row in conn.execute(
+            'SELECT mc.id, mc.title, mc.query, mc.source_domain, mc.source_node_id, mc.created_at, '
+            'cd.title as domain_title '
+            'FROM microlearning_cards mc '
+            'LEFT JOIN curriculum_domains cd ON mc.source_domain = cd.id '
+            'WHERE mc.status = ? ORDER BY mc.created_at DESC LIMIT 10',
+            ('completed',)
+        ).fetchall():
+            timeline.append({
+                'type': 'card_generated',
+                'ts': row['created_at'],
+                'title': row['title'] or row['query'],
+                'card_id': row['id'],
+                'domain_id': row['source_domain'],
+                'domain_title': row['domain_title'] or row['source_domain'],
+                'node_id': row['source_node_id'],
+            })
+
+        # Recent book activity (captures)
+        for row in conn.execute(
+            "SELECT bc.book_id, bc.chapter, bc.page_number, bc.created_at, "
+            "bc.type as capture_type, pb.title as book_title, pb.author "
+            "FROM book_captures bc "
+            "JOIN physical_books pb ON bc.book_id = pb.id "
+            "ORDER BY bc.created_at DESC LIMIT 10"
+        ).fetchall():
+            timeline.append({
+                'type': 'book_capture',
+                'ts': row['created_at'],
+                'title': row['chapter'] or row['capture_type'],
+                'book_id': row['book_id'],
+                'book_title': row['book_title'],
+                'author': row['author'],
+                'page': row['page_number'],
+                'capture_type': row['capture_type'],
+            })
+
+        # Sort timeline by timestamp descending
+        timeline.sort(key=lambda x: x.get('ts') or 0, reverse=True)
+
+        return {
+            'today': {
+                'reviewed': reviewed_today,
+                'due': due_today,
+                'elicitations': elicitations_today,
+                'scores': scores_today,
+            },
+            'knowledge': {
+                'curricula': curricula_stats,
+                'total_nodes': total_nodes,
+                'upgraded_7d': total_upgraded_7d,
+            },
+            'review': {
+                'counts': review_counts,
+                'score_dist_30d': score_dist_30d,
+                'followups_launched': followups_launched,
+                'cards_in_pipeline': cards_in_pipeline,
+                'avg_stability_days': round(avg_stability, 1),
+                'quizzes_completed': quizzes_completed,
+                'by_domain': reviews_by_domain,
+            },
+            'reading': {
+                'books': books_reading,
+            },
+            'voice': {
+                'total': voice_total,
+                'audio_minutes': voice_audio_minutes,
+                'recall_dist': recall_dist,
+                'cards_triggered': voice_cards_triggered,
+            },
+            'timeline': timeline[:30],
+            'generated_at': datetime.utcnow().isoformat() + 'Z',
+        }
+    finally:
+        if own:
+            conn.close()

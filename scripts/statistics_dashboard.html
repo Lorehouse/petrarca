@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistics — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --success: #2a7a4a;
+  --warning: #92600e;
+  --info: #2a4a6a;
+}
+
+body {
+  font-family: 'Crimson Pro', serif;
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--rubric); }
+
+.wrap {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px 16px 32px;
+}
+
+/* ═══ Header ═══ */
+.header { text-align: center; margin-bottom: 4px; }
+.header-star { font-family: 'EB Garamond', serif; font-size: 11px; letter-spacing: 0.15em; color: var(--rubric); }
+.header-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 600; }
+.header-date { font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ═══ Double rule ═══ */
+.double-rule { border: none; border-top: 2px solid var(--ink); margin: 0; padding: 0; }
+.double-rule::after { content: ''; display: block; border-top: 1px solid var(--ink); margin-top: 5px; }
+
+.rule { border: none; border-top: 1px solid var(--rule); margin: 0; }
+
+/* ═══ Section header ═══ */
+.section-head {
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--rubric);
+  margin: 16px 0 8px;
+}
+
+/* ═══ Typography ═══ */
+.stat-num { font-family: 'Cormorant Garamond', serif; font-weight: 600; line-height: 1; }
+.stat-label { font-family: 'DM Sans', sans-serif; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.meta { font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--text-muted); }
+.entry-title { font-family: 'EB Garamond', serif; font-size: 14px; line-height: 1.35; }
+.metric-key { font-family: 'Crimson Pro', serif; font-size: 14px; color: var(--text-secondary); }
+.metric-val { font-family: 'EB Garamond', serif; font-size: 15px; }
+
+/* ═══ Grids ═══ */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+
+/* ═══ Bars ═══ */
+.stacked-bar { display: flex; height: 6px; gap: 1px; overflow: hidden; }
+.bar-track { height: 3px; background: var(--rule); width: 100%; }
+.bar-fill { height: 3px; }
+
+/* ═══ Metric row ═══ */
+.metric-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--parchment-dark); }
+.metric-row:last-child { border-bottom: none; }
+
+/* ═══ Codex page (card) ═══ */
+.codex-page {
+  background: var(--parchment);
+  border: 1px solid var(--rule);
+  border-top: 2px solid var(--ink);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.codex-page::before {
+  content: '';
+  display: block;
+  border-top: 1px solid var(--ink);
+  margin-top: -9px;
+  margin-bottom: 12px;
+}
+.page-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* ═══ Timeline ═══ */
+.tl { position: relative; padding-left: 26px; }
+.tl-line { position: absolute; left: 7px; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.tl-entry { position: relative; margin-bottom: 14px; }
+.tl-marker {
+  position: absolute; left: -22px; top: 4px;
+  width: 8px; height: 8px;
+  border: 1.5px solid var(--rubric);
+  background: var(--parchment);
+  border-radius: 50%;
+}
+.tl-marker.diamond { border-radius: 0; transform: rotate(45deg); left: -22px; top: 5px; width: 7px; height: 7px; }
+.tl-marker.square { border-radius: 1px; left: -22px; top: 5px; width: 7px; height: 7px; }
+
+/* Day header in timeline */
+.day-header { position: relative; margin-bottom: 10px; padding-top: 2px; }
+.day-header .tl-marker { width: 10px; height: 10px; background: var(--rubric); border-color: var(--rubric); left: -23px; top: 3px; }
+.day-label { font-family: 'EB Garamond', serif; font-size: 14px; font-weight: 500; }
+
+/* Marginalia (inline stats in timeline) */
+.marginalia {
+  background: var(--parchment-dark);
+  border-left: 2px solid var(--rubric);
+  padding: 10px 12px;
+  margin: 4px 0 14px;
+}
+
+/* ═══ Entry type pills ═══ */
+.entry-type {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 1px 5px;
+  border: 1px solid;
+  display: inline-block;
+  margin-bottom: 2px;
+}
+.type-review { color: var(--success); border-color: #c0dcc8; }
+.type-voice { color: var(--rubric); border-color: #e0c0b8; }
+.type-read { color: var(--info); border-color: #c0d0e0; }
+.type-book { color: var(--warning); border-color: #e0d8c0; }
+.type-card { color: var(--text-secondary); border-color: var(--rule); }
+
+/* ═══ Legend ═══ */
+.legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 3px; }
+.legend-dot { width: 8px; height: 8px; flex-shrink: 0; }
+
+/* ═══ Linkable ═══ */
+.link { cursor: pointer; border-bottom: 1px dotted var(--text-muted); }
+.link:hover { border-bottom-color: var(--rubric); color: var(--rubric); }
+
+/* ═══ Loading ═══ */
+.loading { text-align: center; padding: 60px 20px; }
+.loading-text { font-family: 'EB Garamond', serif; font-size: 16px; color: var(--text-secondary); }
+.spin { display: inline-block; animation: spin 2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ Nav bar ═══ */
+.nav { display: flex; gap: 16px; justify-content: center; margin-top: 6px; margin-bottom: 4px; }
+.nav a { font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--text-muted); text-decoration: none; }
+.nav a:hover { color: var(--rubric); }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app">
+  <div class="loading">
+    <div class="loading-text"><span class="spin">✦</span> Loading statistics…</div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+
+function fmt_ts(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today - 86400000);
+  const entry = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  if (entry.getTime() === today.getTime()) return `Today, ${time}`;
+  if (entry.getTime() === yesterday.getTime()) return `Yesterday, ${time}`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + `, ${time}`;
+}
+
+function day_key(ms) {
+  if (!ms) return 'unknown';
+  const d = new Date(ms);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today - 86400000);
+  const entry = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (entry.getTime() === today.getTime()) return 'today';
+  if (entry.getTime() === yesterday.getTime()) return 'yesterday';
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function day_label(key) {
+  if (key === 'today') return 'Today — ' + new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (key === 'yesterday') {
+    const y = new Date(Date.now() - 86400000);
+    return 'Yesterday — ' + y.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function pct(val, total) {
+  if (!total) return '0';
+  return Math.round(val / total * 100);
+}
+
+function curriculum_link(domain_id) {
+  return `${BASE}/curriculum/${domain_id}/coverage`;
+}
+
+function node_link(domain_id, node_id) {
+  return `${BASE}/knowledge/atlas`;
+}
+
+function book_link(book_id) {
+  return `${BASE}/book/research/${book_id}`;
+}
+
+function esc(s) {
+  const el = document.createElement('span');
+  el.textContent = s || '';
+  return el.innerHTML;
+}
+
+async function load() {
+  try {
+    const resp = await fetch('/stats/dashboard-data');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const D = await resp.json();
+    render(D);
+  } catch (err) {
+    document.getElementById('app').innerHTML = `
+      <div class="loading">
+        <div class="loading-text">Error loading statistics</div>
+        <div class="meta" style="margin-top: 8px;">${esc(err.message)}</div>
+        <div class="meta" style="margin-top: 12px; cursor: pointer; color: var(--rubric);" onclick="load()">Retry</div>
+      </div>`;
+  }
+}
+
+function render(D) {
+  const t = D.today;
+  const k = D.knowledge;
+  const r = D.review;
+  const v = D.voice;
+  const rd = D.reading;
+  const tl = D.timeline || [];
+
+  // Score bar helper
+  function scoreBar(dist, height) {
+    const total = (dist.knew || 0) + (dist.partly || 0) + (dist.missed || 0);
+    if (!total) return '<div class="stacked-bar" style="height:' + height + 'px"><div style="width:100%;background:var(--rule)"></div></div>';
+    return `<div class="stacked-bar" style="height:${height}px">
+      <div style="width:${pct(dist.knew, total)}%;background:var(--success)"></div>
+      <div style="width:${pct(dist.partly, total)}%;background:var(--warning)"></div>
+      <div style="width:${pct(dist.missed, total)}%;background:var(--rubric)"></div>
+    </div>`;
+  }
+
+  // Knowledge bar per curriculum
+  function knowledgeBar(dist) {
+    const total = (dist.anchored || 0) + (dist.engaged || 0) + (dist.mentioned || 0) + (dist.unknown || 0);
+    if (!total) return '';
+    return `<div class="stacked-bar">
+      <div style="width:${pct(dist.anchored, total)}%;background:var(--success)"></div>
+      <div style="width:${pct(dist.engaged, total)}%;background:var(--info)"></div>
+      <div style="width:${pct(dist.mentioned, total)}%;background:var(--warning)"></div>
+      <div style="width:${pct(dist.unknown, total)}%;background:var(--rule)"></div>
+    </div>`;
+  }
+
+  // ── Build timeline grouped by day ──
+  let timelineHTML = '';
+  if (tl.length) {
+    let currentDay = '';
+    timelineHTML += '<div class="tl"><div class="tl-line"></div>';
+
+    for (const ev of tl) {
+      const dk = day_key(ev.ts);
+      if (dk !== currentDay) {
+        currentDay = dk;
+        timelineHTML += `<div class="day-header"><div class="tl-marker"></div><div class="day-label">${esc(day_label(dk))}</div></div>`;
+      }
+
+      const time = ev.ts ? new Date(ev.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+
+      if (ev.type === 'review') {
+        const scoreClass = ev.score === 'knew' ? 'color:var(--success)' : ev.score === 'missed' ? 'color:var(--rubric)' : 'color:var(--warning)';
+        timelineHTML += `<div class="tl-entry">
+          <div class="tl-marker"></div>
+          <div class="meta" style="font-size:10px">${time}</div>
+          <span class="entry-type type-review">Review</span>
+          <div class="entry-title"><a class="link" href="${node_link(ev.domain_id, ev.node_id)}">${esc(ev.title)}</a></div>
+          <div class="meta"><a class="link" href="${curriculum_link(ev.domain_id)}">${esc(ev.domain_title)}</a> · <span style="${scoreClass}">${esc(ev.score)}</span></div>
+        </div>`;
+      } else if (ev.type === 'voice') {
+        const recallLabel = ev.recall === 'full' ? 'Full recall' : ev.recall === 'partial' ? 'Partial recall' : 'Know nothing';
+        const recallColor = ev.recall === 'full' ? 'var(--success)' : ev.recall === 'partial' ? 'var(--warning)' : 'var(--rubric)';
+        const cards = ev.cards_triggered ? ` · ${ev.cards_triggered} card${ev.cards_triggered > 1 ? 's' : ''} triggered` : '';
+        timelineHTML += `<div class="tl-entry">
+          <div class="tl-marker diamond"></div>
+          <div class="meta" style="font-size:10px">${time}</div>
+          <span class="entry-type type-voice">Voice</span>
+          <div class="entry-title">Voice elicitation: <a class="link" href="${node_link(ev.domain_id, ev.node_id)}">${esc(ev.title)}</a></div>
+          <div class="meta"><a class="link" href="${curriculum_link(ev.domain_id)}">${esc(ev.domain_title)}</a> · <span style="color:${recallColor}">${recallLabel}</span>${cards}</div>
+        </div>`;
+      } else if (ev.type === 'card_generated') {
+        timelineHTML += `<div class="tl-entry">
+          <div class="tl-marker square"></div>
+          <div class="meta" style="font-size:10px">${time}</div>
+          <span class="entry-type type-card">Card</span>
+          <div class="entry-title">${esc(ev.title)}</div>
+          <div class="meta"><a class="link" href="${curriculum_link(ev.domain_id)}">${esc(ev.domain_title)}</a></div>
+        </div>`;
+      } else if (ev.type === 'book_capture') {
+        const page = ev.page ? ` · p. ${ev.page}` : '';
+        const ctype = ev.capture_type === 'voice' ? 'voice note' : ev.capture_type === 'photo' ? 'photo' : 'note';
+        timelineHTML += `<div class="tl-entry">
+          <div class="tl-marker"></div>
+          <div class="meta" style="font-size:10px">${time}</div>
+          <span class="entry-type type-book">Book</span>
+          <div class="entry-title"><a class="link" href="${book_link(ev.book_id)}">${esc(ev.book_title)}</a>${ev.title ? ' — ' + esc(ev.title) : ''}</div>
+          <div class="meta">${esc(ev.author)} · ${ctype}${page}</div>
+        </div>`;
+      }
+    }
+    timelineHTML += '</div>';
+  }
+
+  // ── Render page ──
+  document.getElementById('app').innerHTML = `
+    <!-- Header -->
+    <div class="header">
+      <div class="header-star">✦</div>
+      <div class="header-title">Statistics & Activity</div>
+      <div class="header-date">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+    </div>
+    <div class="nav">
+      <a href="/knowledge/atlas">Atlas</a>
+      <a href="/curriculum/graph">Graph</a>
+      <a href="/curriculum/timeline">Timeline</a>
+    </div>
+    <div class="double-rule"></div>
+
+    <!-- ═══ TODAY (Folio-style compact hero) ═══ -->
+    <div class="section-head">Today</div>
+    <div class="grid-4" style="text-align:center;margin-bottom:10px">
+      <div>
+        <div class="stat-num" style="font-size:36px">${t.reviewed}</div>
+        <div class="stat-label">Reviewed</div>
+      </div>
+      <div>
+        <div class="stat-num" style="font-size:36px;color:var(--rubric)">${t.due}</div>
+        <div class="stat-label">Due</div>
+      </div>
+      <div>
+        <div class="stat-num" style="font-size:36px;color:var(--success)">${t.elicitations}</div>
+        <div class="stat-label">Elicited</div>
+      </div>
+      <div>
+        <div class="stat-num" style="font-size:36px;color:var(--info)">${rd.books.length}</div>
+        <div class="stat-label">Reading</div>
+      </div>
+    </div>
+    ${t.reviewed > 0 ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="meta">Today's scores</div>
+      <div style="flex:1">${scoreBar(t.scores, 6)}</div>
+      <div class="meta" style="white-space:nowrap">
+        <span style="color:var(--success)">${t.scores.knew}</span> /
+        <span style="color:var(--warning)">${t.scores.partly}</span> /
+        <span style="color:var(--rubric)">${t.scores.missed}</span>
+      </div>
+    </div>` : ''}
+    <div class="rule"></div>
+
+    <!-- ═══ KNOWLEDGE STATE (Codex-style card) ═══ -->
+    <div class="codex-page" style="margin-top:14px">
+      <div class="page-title">Knowledge State</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <div class="meta">${k.total_nodes} nodes across ${k.curricula.length} curricula</div>
+        ${k.upgraded_7d > 0 ? `<div class="meta" style="color:var(--success)">↑ ${k.upgraded_7d} this week</div>` : ''}
+      </div>
+
+      ${k.curricula.map(c => `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <a class="link" href="${curriculum_link(c.domain_id)}" style="font-family:'EB Garamond',serif;font-size:14px">${esc(c.title)}</a>
+            <span class="meta">${c.node_count} nodes</span>
+          </div>
+          ${knowledgeBar(c.distribution)}
+          <div style="display:flex;gap:8px;margin-top:2px">
+            <span class="meta" style="font-size:10px">${c.distribution.anchored} anch.</span>
+            <span class="meta" style="font-size:10px">${c.distribution.engaged} eng.</span>
+            <span class="meta" style="font-size:10px">${c.distribution.mentioned} ment.</span>
+            <span class="meta" style="font-size:10px">${c.distribution.unknown} unk.</span>
+          </div>
+        </div>
+      `).join('')}
+
+      <div class="legend" style="margin-top:8px;padding-top:6px;border-top:1px solid var(--rule)">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--success)"></div><span class="meta" style="font-size:10px">Anchored</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--info)"></div><span class="meta" style="font-size:10px">Engaged</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--warning)"></div><span class="meta" style="font-size:10px">Mentioned</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--rule)"></div><span class="meta" style="font-size:10px">Unknown</span></div>
+      </div>
+    </div>
+
+    <!-- ═══ REVIEW & QUIZ (Codex-style card) ═══ -->
+    <div class="codex-page">
+      <div class="page-title">Review & Quiz</div>
+
+      <div class="grid-3" style="text-align:center;margin-bottom:12px">
+        <div style="border-right:1px solid var(--rule);padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${r.counts.all_time}</div>
+          <div class="stat-label">All time</div>
+        </div>
+        <div style="border-right:1px solid var(--rule);padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${r.counts['7d']}</div>
+          <div class="stat-label">7 days</div>
+        </div>
+        <div style="padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${r.counts['30d']}</div>
+          <div class="stat-label">30 days</div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:8px">Score Distribution (30d)</div>
+      ${scoreBar(r.score_dist_30d, 10)}
+      <div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:12px">
+        <span class="meta"><span style="color:var(--success)">●</span> Knew ${pct(r.score_dist_30d.knew, r.score_dist_30d.knew + r.score_dist_30d.partly + r.score_dist_30d.missed)}%</span>
+        <span class="meta"><span style="color:var(--warning)">●</span> Partly ${pct(r.score_dist_30d.partly, r.score_dist_30d.knew + r.score_dist_30d.partly + r.score_dist_30d.missed)}%</span>
+        <span class="meta"><span style="color:var(--rubric)">●</span> Missed ${pct(r.score_dist_30d.missed, r.score_dist_30d.knew + r.score_dist_30d.partly + r.score_dist_30d.missed)}%</span>
+      </div>
+
+      <div style="border-top:1px solid var(--rule);padding-top:8px">
+        <div class="metric-row">
+          <span class="metric-key">Follow-up questions launched</span>
+          <span class="metric-val">${r.followups_launched}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-key">Cards in pipeline</span>
+          <span class="metric-val">${r.cards_in_pipeline}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-key">Average stability</span>
+          <span class="metric-val">${r.avg_stability_days} days</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-key">Quizzes completed</span>
+          <span class="metric-val">${r.quizzes_completed}</span>
+        </div>
+      </div>
+
+      ${Object.keys(r.by_domain).length ? `
+      <div style="border-top:1px solid var(--rule);padding-top:8px;margin-top:4px">
+        <div class="section-head" style="margin-top:0">By Curriculum (30d)</div>
+        ${Object.entries(r.by_domain).sort((a, b) => b[1] - a[1]).map(([did, cnt]) => {
+          const c = k.curricula.find(c => c.domain_id === did);
+          const title = c ? c.title : did;
+          return `<div class="metric-row">
+            <a class="link metric-key" href="${curriculum_link(did)}">${esc(title)}</a>
+            <span class="metric-val">${cnt}</span>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+    </div>
+
+    <!-- ═══ READING (Codex-style card) ═══ -->
+    ${rd.books.length ? `
+    <div class="codex-page">
+      <div class="page-title">Reading</div>
+      ${rd.books.map(b => `
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+            <a class="link" href="${book_link(b.id)}" style="font-family:'EB Garamond',serif;font-size:14px">${esc(b.title)}</a>
+            <span class="meta">${b.current_page && b.page_count ? `p. ${b.current_page} / ${b.page_count}` : `${b.progress_pct}%`}</span>
+          </div>
+          ${b.author ? `<div class="meta" style="font-size:10px;margin-bottom:3px">${esc(b.author)}${b.current_chapter ? ' · ' + esc(b.current_chapter) : ''}${b.kindle ? ' · Kindle' : ''}</div>` : ''}
+          <div class="bar-track"><div class="bar-fill" style="width:${b.progress_pct}%;background:var(--ink)"></div></div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+
+    <!-- ═══ VOICE ELICITATION (Codex-style card) ═══ -->
+    <div class="codex-page">
+      <div class="page-title">Voice Elicitation</div>
+      <div class="grid-2" style="text-align:center;margin-bottom:12px">
+        <div>
+          <div class="stat-num" style="font-size:34px">${v.total}</div>
+          <div class="stat-label">Total Sessions</div>
+        </div>
+        <div>
+          <div class="stat-num" style="font-size:34px">${v.audio_minutes}m</div>
+          <div class="stat-label">Audio Recorded</div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:4px">Recall Distribution</div>
+      ${(() => {
+        const vt = v.recall_dist.full + v.recall_dist.partial + v.recall_dist.nothing;
+        if (!vt) return '<div class="meta">No data yet</div>';
+        return `
+          <div class="stacked-bar" style="height:10px;margin-bottom:6px">
+            <div style="width:${pct(v.recall_dist.full, vt)}%;background:var(--success)"></div>
+            <div style="width:${pct(v.recall_dist.partial, vt)}%;background:var(--warning)"></div>
+            <div style="width:${pct(v.recall_dist.nothing, vt)}%;background:var(--rubric)"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+            <span class="meta"><span style="color:var(--success)">●</span> Full ${pct(v.recall_dist.full, vt)}%</span>
+            <span class="meta"><span style="color:var(--warning)">●</span> Partial ${pct(v.recall_dist.partial, vt)}%</span>
+            <span class="meta"><span style="color:var(--rubric)">●</span> Nothing ${pct(v.recall_dist.nothing, vt)}%</span>
+          </div>`;
+      })()}
+
+      <div style="border-top:1px solid var(--rule);padding-top:8px">
+        <div class="metric-row">
+          <span class="metric-key">Cards triggered from voice</span>
+          <span class="metric-val">${v.cards_triggered}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ ACTIVITY TIMELINE (Chronicle-style) ═══ -->
+    <div class="section-head" style="margin-top:4px">Recent Activity</div>
+    ${timelineHTML || '<div class="meta">No recent activity</div>'}
+
+    <div style="text-align:center;padding:12px 0 4px">
+      <div class="meta">Generated ${new Date(D.generated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
+    </div>
+  `;
+}
+
+load();
+</script>
+</body>
+</html>
