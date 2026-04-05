@@ -2705,16 +2705,27 @@ def process_voice_capture(transcript: str, entity_id: str = None,
 
     def _entity_matches_transcript(name: str) -> bool:
         """Match multi-word entity names by checking word overlap with transcript."""
+        if len(name) < 4:
+            return False
         name_lower = name.lower()
-        # Direct substring match (works for short names like "Sicily", "Frederick II")
+        # Direct substring match with word boundary check for short names
         if name_lower in transcript_lower:
+            # For short names (< 8 chars), verify word boundary to avoid false positives
+            if len(name) < 8:
+                import re as _re
+                if not _re.search(r'\b' + _re.escape(name_lower) + r'\b', transcript_lower):
+                    return False
             return True
-        # Word overlap: if >50% of significant entity words appear in transcript
+        # Word overlap: require >60% of significant words to match,
+        # and at least 2 matching words for multi-word entities
         name_words = set(w.lower() for w in re.split(r'\W+', name) if len(w) > 3)
         if not name_words:
             return False
-        overlap = len(name_words & transcript_words) / len(name_words)
-        return overlap >= 0.5
+        matching = name_words & transcript_words
+        overlap = len(matching) / len(name_words)
+        if len(name_words) == 1:
+            return overlap >= 1.0  # single-word entities must match exactly
+        return overlap >= 0.6 and len(matching) >= 2
 
     if entity_id:
         # Entity mode: get all curriculum links for this entity
