@@ -9,6 +9,7 @@ runs them through process_voice_capture(), and reports results.
 import json
 import sys
 import os
+import time
 
 # Add scripts dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +34,7 @@ def main():
     print(f'Found {len(rows)} explore_capture transcripts to reprocess')
     print('=' * 70)
 
-    for row in rows:
+    for i, row in enumerate(rows):
         print(f'\n--- {row["id"]} ({row["ts"]}) ---')
         print(f'  Title: {row["node_title"]}')
         print(f'  Transcript: {row["transcript"][:150]}...')
@@ -76,6 +77,11 @@ def main():
             print(f'    ? {w}')
         print(f'  ML cards triggered: {len(result.get("microlearning_triggered", []))}')
         print(f'  Summary: {result.get("overall_summary", "")}')
+
+        # Wait for background threads (question generation, microlearning) to settle
+        if i < len(rows) - 1:
+            print('  Waiting 30s for background threads to complete...')
+            time.sleep(30)
 
     print('\n' + '=' * 70)
     print('Done!')

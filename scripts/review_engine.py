@@ -2692,89 +2692,141 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     conn = get_connection(readonly=True)
 
     # --- Find candidate curriculum nodes ---
-    candidate_nodes = []
+    # Strategy: start with directly-linked nodes (high confidence), then expand
+    # with relevant sibling nodes from the same domains. Keep it focused to avoid
+    # bloating the LLM prompt with irrelevant nodes.
+    directly_linked_node_ids = set()  # highest priority
     candidate_domains = set()
+    detected_entity_ids = []
+
+    # Helper: check if entity name matches transcript via word overlap
+    transcript_lower = transcript.lower()
+    transcript_words = set(w.lower() for w in re.split(r'\W+', transcript) if len(w) > 3)
+
+    def _entity_matches_transcript(name: str) -> bool:
+        """Match multi-word entity names by checking word overlap with transcript."""
+        name_lower = name.lower()
+        # Direct substring match (works for short names like "Sicily", "Frederick II")
+        if name_lower in transcript_lower:
+            return True
+        # Word overlap: if >50% of significant entity words appear in transcript
+        name_words = set(w.lower() for w in re.split(r'\W+', name) if len(w) > 3)
+        if not name_words:
+            return False
+        overlap = len(name_words & transcript_words) / len(name_words)
+        return overlap >= 0.5
 
     if entity_id:
         # Entity mode: get all curriculum links for this entity
+        detected_entity_ids = [entity_id]
         links = conn.execute(
             'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ?',
             (entity_id,)
         ).fetchall()
         for link in links:
+            directly_linked_node_ids.add(link['node_id'])
             candidate_domains.add(link['domain_id'])
 
-        # Also get links for related entities (siblings in same domain)
-        if links:
-            primary_domain = links[0]['domain_id']
-            # Get other entities linked to the same domain nodes for broader context
-            sibling_entity_ids = conn.execute(
-                '''SELECT DISTINCT ecl2.entity_id FROM entity_curriculum_links ecl1
-                   JOIN entity_curriculum_links ecl2 ON ecl1.domain_id = ecl2.domain_id
-                   WHERE ecl1.entity_id = ? AND ecl2.entity_id != ?
-                   LIMIT 20''',
-                (entity_id, entity_id)
-            ).fetchall()
-            sibling_ids = [r['entity_id'] for r in sibling_entity_ids]
-            if sibling_ids:
-                extra_links = conn.execute(
-                    'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({})'.format(
-                        ','.join('?' * len(sibling_ids))),
-                    sibling_ids
-                ).fetchall()
-                for link in extra_links:
-                    candidate_domains.add(link['domain_id'])
-
-    # For general mode or as fallback: detect entities from transcript via keyword matching
-    if not candidate_domains:
+    # For general mode or as fallback: detect entities from transcript
+    if not entity_id or not candidate_domains:
         entity_rows = conn.execute(
             'SELECT entity_id, name FROM shared_entities'
         ).fetchall()
-        detected_ids = []
-        transcript_lower = transcript.lower()
         for row in entity_rows:
-            if row['name'].lower() in transcript_lower and len(row['name']) > 3:
-                detected_ids.append(row['entity_id'])
+            if _entity_matches_transcript(row['name']):
+                detected_entity_ids.append(row['entity_id'])
                 if not entity_name:
                     entity_name = row['name']
 
-        if detected_ids:
+        if detected_entity_ids:
             links = conn.execute(
-                'SELECT DISTINCT domain_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({})'.format(
-                    ','.join('?' * len(detected_ids))),
-                detected_ids
+                'SELECT DISTINCT domain_id, node_id, entity_id FROM entity_curriculum_links WHERE entity_id IN ({})'.format(
+                    ','.join('?' * len(detected_entity_ids))),
+                detected_entity_ids
             ).fetchall()
             for link in links:
+                directly_linked_node_ids.add(link['node_id'])
                 candidate_domains.add(link['domain_id'])
 
-    # Load all level 2+ nodes from candidate domains
-    for domain_id in candidate_domains:
+    print(f'[voice-capture] Detected entities: {detected_entity_ids[:10]}, '
+          f'directly linked nodes: {len(directly_linked_node_ids)}, '
+          f'domains: {candidate_domains}', flush=True)
+
+    # Build candidate nodes: start with directly-linked, then add relevant siblings
+    candidate_nodes = []
+    seen_node_ids = set()
+
+    # Phase 1: Directly linked nodes (always included)
+    if directly_linked_node_ids:
+        placeholders = ','.join('?' * len(directly_linked_node_ids))
         nodes = conn.execute(
-            'SELECT id, title, description, date_start, date_end, key_facts FROM curriculum_nodes WHERE domain_id = ? AND level >= 2',
-            (domain_id,)
+            f'SELECT id, domain_id, title, description FROM curriculum_nodes WHERE id IN ({placeholders})',
+            list(directly_linked_node_ids)
         ).fetchall()
         for n in nodes:
             candidate_nodes.append({
                 'node_id': n['id'],
-                'domain_id': domain_id,
+                'domain_id': n['domain_id'],
                 'title': n['title'],
                 'description': (n['description'] or '')[:200],
+                'priority': 'direct',
             })
+            seen_node_ids.add(n['id'])
 
+    # Phase 2: Sibling nodes from the same domains that have title word overlap with transcript
+    for domain_id in candidate_domains:
+        nodes = conn.execute(
+            'SELECT id, title, description FROM curriculum_nodes WHERE domain_id = ? AND level >= 2',
+            (domain_id,)
+        ).fetchall()
+        for n in nodes:
+            if n['id'] in seen_node_ids:
+                continue
+            title_words = set(w.lower() for w in re.split(r'\W+', n['title']) if len(w) > 3)
+            overlap = len(title_words & transcript_words)
+            if overlap > 0:
+                candidate_nodes.append({
+                    'node_id': n['id'],
+                    'domain_id': domain_id,
+                    'title': n['title'],
+                    'description': (n['description'] or '')[:200],
+                    'priority': 'sibling',
+                    'overlap': overlap,
+                })
+                seen_node_ids.add(n['id'])
+
+    # Phase 3: If still very few nodes, add all nodes from candidate domains
+    if len(candidate_nodes) < 10 and candidate_domains:
+        for domain_id in candidate_domains:
+            nodes = conn.execute(
+                'SELECT id, title, description FROM curriculum_nodes WHERE domain_id = ? AND level >= 2',
+                (domain_id,)
+            ).fetchall()
+            for n in nodes:
+                if n['id'] not in seen_node_ids:
+                    candidate_nodes.append({
+                        'node_id': n['id'],
+                        'domain_id': domain_id,
+                        'title': n['title'],
+                        'description': (n['description'] or '')[:200],
+                        'priority': 'domain',
+                    })
+                    seen_node_ids.add(n['id'])
+
+    # Phase 4: Last resort — scan all nodes for title keyword matches
     if not candidate_nodes:
-        # Last resort: check all domains for keyword matches in node titles
-        transcript_words = set(w.lower() for w in transcript.split() if len(w) > 4)
         all_nodes = conn.execute(
             'SELECT id, domain_id, title, description FROM curriculum_nodes WHERE level >= 2'
         ).fetchall()
         for n in all_nodes:
-            title_words = set(w.lower() for w in n['title'].split() if len(w) > 4)
+            title_words = set(w.lower() for w in re.split(r'\W+', n['title']) if len(w) > 3)
             if title_words & transcript_words:
                 candidate_nodes.append({
                     'node_id': n['id'],
                     'domain_id': n['domain_id'],
                     'title': n['title'],
                     'description': (n['description'] or '')[:200],
+                    'priority': 'keyword',
                 })
                 candidate_domains.add(n['domain_id'])
 
@@ -2787,6 +2839,11 @@ def process_voice_capture(transcript: str, entity_id: str = None,
             'transcript': transcript,
             'message': 'Could not find relevant curriculum nodes for this capture.',
         }
+
+    # Sort: direct links first, then siblings by overlap, then domain fillers
+    priority_order = {'direct': 0, 'sibling': 1, 'domain': 2, 'keyword': 3}
+    candidate_nodes.sort(key=lambda n: (priority_order.get(n.get('priority', 'keyword'), 3),
+                                         -n.get('overlap', 0)))
 
     print(f'[voice-capture] Found {len(candidate_nodes)} candidate nodes across {len(candidate_domains)} domains', flush=True)
 
