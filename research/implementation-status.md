@@ -57,7 +57,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Multi-quiz ML cards (3-5 quizzes, independently FSRS-scheduled). Enriched content with sections, primary sources, tappable dates+entities. Knowledge Explorer with timeline/persons/places. |
+| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Multi-quiz ML cards (3-5 quizzes, independently FSRS-scheduled). Enriched content with sections, primary sources, tappable dates+entities. Knowledge Explorer with timeline/persons/places. Review stream includes entity intro cards and nexus cards (cross-curriculum perspectives for high-connectivity entities). |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -131,8 +131,8 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview |
 | `claude_llm.py` | Claude wrapper for review_engine calls (migrated from Gemini in session 42) |
-| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment) |
-| `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()` |
+| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen |
+| `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
 | `log_server.py` | Interaction log collection (:8091) |
 
@@ -264,6 +264,7 @@
 | GET | `/curriculum/book-context/:id` | Book-curriculum context |
 | GET | `/curriculum/:domain` | Curriculum detail with knowledge annotations |
 | GET | `/curriculum/:domain/coverage` | Curriculum coverage stats |
+| GET | `/book/prescan/:id` | Book pre-scan: known/new nodes, missing prerequisites, cross-book overlaps |
 
 ### Other
 | POST | `/chat` | Research chat |
@@ -317,6 +318,9 @@
 ### Curriculum Mapping
 - Article claim → curriculum node: ≥ 0.65 cosine (broader than claim-claim)
 - Active book feed boost: +0.15
+- Multi-domain chapter mapping: top-2-3 curricula with book similarity score ≥ 0.40
+- Gap-fill: prerequisites only (siblings removed), enriched with book_curriculum_mappings when available
+- Gap-fill scoring: -5.0 penalty, capped at 3 per review batch
 
 ### Knowledge Decay (FSRS)
 - Stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
@@ -368,5 +372,8 @@ cd app && eas build --profile development --platform ios
 4. **knowledge-engine.ts** still has full FSRS code — intended to simplify to binary seen/unseen for articles
 5. **No centralized error boundaries** in React Native
 6. **Podcast ingestion** — sync script built (`podcast_sync.py`), server endpoint exists (`/media/sync`), but no transcript fetching, no article pipeline integration, and episodes only go to flat JSON file (not SQLite). See session-changelog podcast integration section for details.
-7. **466 curriculum nodes** with no knowledge_items — need discovery probes
+7. **466 curriculum nodes** with no knowledge_items — need discovery probes (multi-domain mapping will help activate more)
 8. **Key_facts only extracted for Sicily Greek** — remaining 8 curricula + 6 Sicily areas pending
+9. **3 curricula inactive** (AP European, AP World History Modern, Ancient & Classical World) — generated but no books mapped, 0 knowledge_items
+10. **Nexus cards not yet rendered in client** — `type: 'nexus'` cards returned in review stream but client review.tsx doesn't have a renderer for them yet
+11. **Book prescan not yet surfaced in UI** — endpoint works (`/book/prescan/:id`) but no client integration

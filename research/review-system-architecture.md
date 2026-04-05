@@ -1,7 +1,8 @@
 # Knowledge Review System — Architecture & Long-Term Design
 
 **Created:** 2026-03-27
-**Status:** Active design document — identifies structural flaws and proposes correct architecture
+**Updated:** 2026-04-05 (session 54: overlapping-curricula implementation)
+**Status:** Core architecture implemented. Cross-curriculum features (multi-domain mapping, nexus cards, temporal cross-refs) added in session 54. Some UI integration still pending.
 **Context:** Written after first end-to-end test with Syracuse book, 42 review items, autoresearch on question quality
 
 ---
@@ -149,36 +150,39 @@ This touches: Roman History, Byzantine history, Sicily, maybe Islamic expansion.
 
 ## 5. Multi-Curriculum Architecture
 
-### Curricula to build (in priority order)
-Based on your reading interests and the overlap with Sicily:
+### Active curricula (as of session 54)
+9 curricula generated, 6 active (with knowledge_items):
 
-| Curriculum | Overlap with Sicily | Priority |
-|------------|--------------------|-|
-| Ancient Greece | Athenian Expedition, Corinthian colonization, Greek tyranny | High |
-| Byzantine Empire | Belisarius, Justinian, Constantinople, iconoclasm | High |
-| Islamic Expansion | Arab conquest of Sicily, Aghlabids, Al-Idrisi, Fatimids | High |
-| Roman Republic/Empire | Punic Wars, Roman province, Cicero/Verres, Archimedes | Medium |
-| Medieval Italy | Norman kingdom, Holy Roman Empire, Frederick II | Medium |
-| Modern Italy | Risorgimento, Garibaldi in Sicily, unified Italy | Lower |
+| Curriculum | Nodes | Knowledge Items | Status |
+|------------|-------|----------------|--------|
+| Sicily | 70 | 38 | Active, deep engagement |
+| Rome | 55 | 42 | Active |
+| Ancient Greece | 67 | 60 | Active |
+| Byzantine | 86 | 56 | Active |
+| Islamic Civilization | 89 | 41 | Active |
+| Classical Reception | 106 | 19 | Active, early stage |
+| AP European History | 95 | 0 | Generated, not yet activated |
+| AP World History Modern | 78 | 0 | Generated, not yet activated |
+| Ancient & Classical World | 73 | 0 | Generated, not yet activated |
 
-### The cross-curriculum entity system (already built, underused)
+### Cross-curriculum features — IMPLEMENTED (Session 54)
 
-The `cross_curriculum_entities.json` already has 25 entities (Archimedes, Syracuse, etc.) with per-curriculum lenses. This infrastructure exists but isn't yet driving review behavior. It should:
+**Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps each chapter against top-2-3 curricula (embedding similarity >= 0.40), not just the primary domain. A Syracuse book now creates knowledge_items in Sicily AND Rome AND Greece.
 
-1. **Trigger cross-curriculum questions** once a learner has knowledge items in both curricula: "You know Archimedes from the Sicily curriculum and you've now read about the Punic Wars — how does knowing the Roman siege of 212 BC change your understanding of his work?"
+**Cross-curriculum context in questions**: `_get_cross_curriculum_context()` queries `entity_curriculum_links` + `knowledge_states` across domains. When generating a question about the Arab Conquest in Sicily, the prompt includes: "the learner already knows about the Byzantine Empire from the Islamic Civilization curriculum (engaged)."
 
-2. **Surface nexus points** in the review queue: when multiple curricula are active, occasionally schedule a "synthesis review" that explicitly bridges them.
+**Temporal cross-references**: `_get_temporal_cross_references()` finds contemporaneous events from other curricula (50-year overlap window). For Arab Conquest (~878 AD): "Meanwhile in Islamic Civilization: The Abbasid Revolution (~750 AD), The House of Wisdom (~750 AD), Al-Andalus (~711 AD)."
 
-3. **Adjust stability** at nexus points: if a concept appears in 3 curricula you're studying, reviewing it in one context counts as partial evidence toward the others.
+**Entity nexus cards**: When a review card references an entity with `nexus_score >= 3`, `_insert_nexus_cards()` adds a cross-perspective card: "You know Byzantine Empire from Sicily. How does their role differ in this context?" Currently 2 qualifying entities: Carthage, Byzantine Empire.
 
-### Node deduplication across curricula
+**Book pre-scan**: `GET /book/prescan/{book_id}` shows what the learner already knows, what's new, missing prerequisites, and cross-book overlaps. For Syracuse book: 16 known, 19 new, 10 missing prerequisites, 2 cross-book overlaps.
 
-Some nodes are essentially the same concept with different framing:
-- Sicily: "The Arab Conquest of Sicily"
-- Islamic expansion: "The Aghlabid Conquest of the Maghreb and Sicily"
-- Byzantine: "The Loss of Sicily to the Arabs"
+### Still TODO
 
-These should be **linked, not duplicated**. One "primary" knowledge_item, others are views. When you review the Sicily version, it partially credits the Byzantine version. This is the `cross_curriculum_entities` system extended to full nodes, not just entities.
+1. **Client rendering of nexus cards** — `type: 'nexus'` returned in stream but review.tsx doesn't have a component for them yet
+2. **Client integration of book prescan** — endpoint works but no UI
+3. **Cross-curriculum stability adjustment** — reviewing a concept in one domain doesn't yet partially credit the same concept in another domain
+4. **Node deduplication across curricula** — linked but not deduplicated. Sicily: "The Arab Conquest of Sicily" and Islamic: "The Aghlabid Conquest" are separate knowledge_items. Could be linked via shared_entities.
 
 ---
 

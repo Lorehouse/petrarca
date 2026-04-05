@@ -40,7 +40,7 @@ These principles are the intellectual foundation of the project. They override i
 | **UI changes** | `design/DESIGN_GUIDE.md` — MUST READ. "The Annotated Folio" Renaissance visual language. |
 | **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
 | **Microlearning cards** | `review_engine.py` (MICROLEARNING_PROMPT, _run_microlearning_research), `curriculum_db.py` (generate_review_stream ML mixing) |
-| **Curriculum/entities** | `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
+| **Curriculum/entities** | `research/curriculum-system-audit.md` (audit + code paths), `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
 | **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
@@ -64,8 +64,10 @@ This project is exploratory — 47+ sessions in many directions. That means:
 
 ### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
-- **Review stream pipeline**: `generate_question_for_item()` → `cached_question` JSON on `knowledge_items` → `generate_review_stream()` in `curriculum_db.py` assembles cards → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
+- **Review stream pipeline**: `generate_question()` → `cached_question` JSON on `knowledge_items` → `generate_review_stream()` in `curriculum_db.py` assembles cards (with entity intros + nexus cards) → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
 - **Review scheduling priority**: SR cards first (book-sourced highest, gap-fill penalized -5.0 and capped at 3/batch). ML cards interleaved by `source_type`: voice_wondering at 1:3, follow_up at 1:7. Never front-load ML cards.
+- **Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40), not just one domain. Cross-curriculum context + temporal cross-refs injected into question generation.
+- **Book pre-scan**: `GET /book/prescan/{book_id}` shows known/new/missing nodes + cross-book overlaps.
 - **"Also want to know"**: `POST /review/also-want-to-know` generates entity-based suggestions after grading. `POST /review/targeted-quiz` creates simple quiz cards. Both in `review_engine.py`.
 - **`curriculum_db.py`** for ALL runtime reads/writes. **`curriculum.py`** is ONLY for generation/CLI.
 - **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.

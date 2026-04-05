@@ -1,6 +1,31 @@
 # Knowledge System Implementation Status
 
-**Date**: April 5, 2026 (last updated — session 53: Statistics dashboard)
+**Date**: April 5, 2026 (last updated — session 54: Curriculum audit & overlapping curricula)
+
+## Session 54: Curriculum Audit & Overlapping Curricula (April 5, 2026)
+
+### What
+Comprehensive audit of the curriculum system — investigated where curricula earn their keep and where they don't. Identified that the "overlapping" in overlapping-curricula was unrealized (single-domain book mapping). Implemented the key missing features to realize the vision.
+
+### Investigation Findings
+- Curriculum essential for: deduplication (one node per concept), progress visualization (bounded 60-80 nodes), voice elicitation, key_facts deterministic questions
+- Biggest gap: `detect_curriculum()` returned ONE domain per book — Syracuse book only mapped to Sicily, not also to Rome and Greece
+- `shared_entities` (261 entities, 511 links) existed but wasn't queried during review
+- 3 of 9 curricula unused (AP European, AP World History, Ancient & Classical) — kept for future
+- Gap-fill was too aggressive (siblings within 200 years) and low-quality (curriculum description only)
+
+### Implementation
+1. **Multi-domain chapter mapping**: `create_review_items_for_chapter()` now uses `suggest_curricula_for_book()` to map against top-2-3 curricula (score >= 0.40)
+2. **Cross-curriculum context**: `_get_cross_curriculum_context()` queries `entity_curriculum_links` + `knowledge_states` across domains, injected into question generation prompts
+3. **Temporal cross-references**: `_get_temporal_cross_references()` finds contemporaneous events from other curricula, adds "Meanwhile in..." context to questions
+4. **Entity nexus cards**: `_insert_nexus_cards()` inserts cross-perspective cards in review stream for entities with nexus_score >= 3 (Carthage, Byzantine Empire currently qualify)
+5. **Improved gap-fill**: Prerequisites only (removed sibling expansion), enriched with `book_curriculum_mappings` when available
+6. **Book pre-scan**: `GET /book/prescan/{book_id}` — shows known/new nodes, missing prerequisites, cross-book overlaps
+
+### Files Changed
+- `scripts/review_engine.py` — multi-domain mapping, cross-curriculum/temporal helpers, gap-fill improvement
+- `scripts/curriculum_db.py` — nexus cards, book prescan function
+- `scripts/research-server.py` — prescan endpoint
 
 ## Session 53: Statistics Dashboard (April 5, 2026)
 

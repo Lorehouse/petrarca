@@ -144,34 +144,46 @@ Apply narrative + memory hooks + spaced retrieval to curriculum nodes:
 - Memory hooks: vivid, ridiculous mnemonics for key dates/people
 - Spaced retrieval: recycled questions about nexus points
 
-## Implementation Thoughts
+## Implementation Status
 
-### Phase 1: Cross-Curriculum Connections (lightweight)
-- Add `entity_id` or `cross_references` field to existing curriculum nodes
-- When displaying a curriculum, show "also appears in: [other curricula]"
-- Compute nexus scores
+### Phase 1: Cross-Curriculum Connections — IMPLEMENTED (Session 54)
+- ~~Add `entity_id` or `cross_references` field to existing curriculum nodes~~
+- ~~When displaying a curriculum, show "also appears in: [other curricula]"~~
+- ~~Compute nexus scores~~
+- **Done**: `shared_entities` table (261 entities, `nexus_score` column), `entity_curriculum_links` (511 links)
+- **Done**: Entity nexus cards inserted into review stream for entities with `nexus_score >= 3`
+- **Done**: Cross-curriculum context in question generation via `_get_cross_curriculum_context()`
 
-### Phase 2: Shared Entity Layer
-- Build entity registry linking curriculum nodes across domains
-- Track knowledge at entity level (not just node level)
-- Surface cross-curriculum insights in book context and article reading
+### Phase 2: Shared Entity Layer — PARTIALLY IMPLEMENTED
+- ~~Build entity registry linking curriculum nodes across domains~~ → **Done**: `shared_entities` + `entity_curriculum_links` tables
+- Track knowledge at entity level (not just node level) → **Not done**: knowledge still per-node, entity knowledge is inferred (highest linked node level)
+- ~~Surface cross-curriculum insights in book context and article reading~~ → **Done**: cross-curriculum context in review question generation
 
-### Phase 3: Temporal Context
-- Add approximate date ranges to curriculum nodes
-- "What else was happening in [century]?" queries across curricula
-- Timeline visualization showing multiple curricula in parallel
+### Phase 3: Temporal Context — IMPLEMENTED (Session 54)
+- ~~Add approximate date ranges to curriculum nodes~~ → **Done**: `date_start`/`date_end` on all curriculum nodes
+- ~~"What else was happening in [century]?" queries across curricula~~ → **Done**: `_get_temporal_cross_references()` finds contemporaneous events from other domains (50-year window)
+- Timeline visualization showing multiple curricula in parallel → **Not done**: timeline HTML shows single domain
 
-### Phase 4: Dynamic Curriculum Growth
+### Phase 4: Dynamic Curriculum Growth — NOT IMPLEMENTED
 - As reading reveals new interests, suggest generating new curricula
 - "You've been reading a lot about Arabic science. Generate an 'Islamic Golden Age' curriculum?"
 - New curriculum automatically finds overlaps with existing ones
 
+### Phase 5: Multi-Domain Book Mapping — IMPLEMENTED (Session 54)
+- **Done**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40)
+- **Done**: `suggest_curricula_for_book()` ranks all curricula by embedding similarity to book
+- **Done**: `GET /book/prescan/{book_id}` shows known/new nodes, missing prerequisites, cross-book overlaps
+- **Done**: Gap-fill restricted to prerequisites only (siblings removed as too speculative)
+
 ## Open Questions
 
 1. **Granularity of shared entities**: Are they people/events only, or also concepts like "hellenism" or "feudalism"?
+   - *Current answer*: Both — 261 entities include people, places, events, concepts, and periods.
 2. **Knowledge state per entity vs per node**: If I know "Archimedes the mathematician" deeply but not "Archimedes the Sicilian", is that one entity with two knowledge states, or two separate assessments?
+   - *Current answer*: Per-node. Entity knowledge is inferred as the max of linked node levels. True per-lens tracking not yet implemented.
 3. **Curriculum generation prompts**: Should we include existing curricula as context when generating new ones, to ensure good cross-references?
 4. **How many curricula before it gets unwieldy?** 5? 10? 20?
+   - *Current state*: 9 generated, 6 active. No performance issues yet.
 5. **Should curricula be static or grow?** Adding nodes to an existing curriculum vs. generating a new focused sub-curriculum.
 
 ## Connections to Prior Research
