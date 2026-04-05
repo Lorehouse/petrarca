@@ -376,7 +376,84 @@ export default function VoiceElicitation() {
     });
   }
 
-  // ── Render ──
+  // ── Render helpers ──
+
+  function renderProcessingHeader() {
+    if (processingCount === 0 && completedResults.length === 0) return null;
+    return (
+      <View style={{ paddingHorizontal: 16, paddingBottom: 10, gap: 4 }}>
+        {processingCount > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator size="small" color={colors.rubric} />
+            <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted }}>
+              Processing {processingCount} recording{processingCount > 1 ? 's' : ''}...
+            </Text>
+          </View>
+        )}
+        {completedResults.map((cr, i) => {
+          const expanded = expandedResultIdx === i;
+          const r = cr.result;
+          return (
+            <View key={i}>
+              <Pressable
+                onPress={() => setExpandedResultIdx(expanded ? null : i)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              >
+                <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.claimNew }}>
+                  {'\u2713'} {cr.node}: {r.coverage_pct}% coverage
+                  {r.microlearning_triggered?.length ? ` + ${r.microlearning_triggered.length} research` : ''}
+                </Text>
+                <Text style={{ fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted }}>
+                  {expanded ? '\u25B4' : '\u25BE'}
+                </Text>
+              </Pressable>
+              {expanded && (
+                <View style={{ paddingLeft: 12, paddingTop: 6, paddingBottom: 8, gap: 6 }}>
+                  {r.captured?.length > 0 && (
+                    <View>
+                      <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.claimNew, marginBottom: 2 }}>CAPTURED</Text>
+                      {r.captured.map((c: string, ci: number) => (
+                        <Text key={ci} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textBody, lineHeight: 17 }}>{'\u2022'} {c}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {r.missed?.length > 0 && (
+                    <View>
+                      <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>MISSED</Text>
+                      {r.missed.map((m: string, mi: number) => (
+                        <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {m}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {r.interesting?.length > 0 && (
+                    <View>
+                      <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: '#1e5f8a', marginBottom: 2 }}>INTERESTING</Text>
+                      {r.interesting.map((x: string, xi: number) => (
+                        <Text key={xi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {x}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {(r.microlearning_triggered ?? []).length > 0 && (
+                    <View>
+                      <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>{'\u2726'} RESEARCHING</Text>
+                      {(r.microlearning_triggered ?? []).map((ml: { id: string; query: string }, mi: number) => (
+                        <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17, fontStyle: 'italic' }}>{'\u21BB'} {ml.query}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {r.feedback_summary && (
+                    <Text style={{ fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>
+                      {r.feedback_summary}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
 
   if (phase === 'loading') {
     return (
@@ -514,10 +591,11 @@ export default function VoiceElicitation() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{'\u2726'} Voice Recall Complete</Text>
           <View style={styles.doubleRule} />
-          <Text style={styles.headerSubtext}>{results.length} topics recalled</Text>
+          <Text style={styles.headerSubtext}>{results.length} topic{results.length !== 1 ? 's' : ''} recalled</Text>
         </View>
-        <ScrollView style={styles.summaryList}>
-          {results.map((r, i) => (
+        <ScrollView style={styles.summaryList} contentContainerStyle={{ paddingBottom: 20 }}>
+          {renderProcessingHeader()}
+          {completedResults.length === 0 && processingCount === 0 && results.map((r, i) => (
             <View key={i} style={styles.summaryRow}>
               <Text style={[styles.summaryIcon, {
                 color: r.score === 'knew' ? '#2a7a4a' : r.score === 'partly' ? '#c9a84c' : '#cc4444'
@@ -569,82 +647,7 @@ export default function VoiceElicitation() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* Background processing indicator */}
-        {(processingCount > 0 || completedResults.length > 0) && (
-          <View style={{ paddingHorizontal: 4, paddingBottom: 10, gap: 4 }}>
-            {processingCount > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator size="small" color={colors.rubric} />
-                <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted }}>
-                  Processing {processingCount} recording{processingCount > 1 ? 's' : ''}...
-                </Text>
-              </View>
-            )}
-            {completedResults.slice(-3).map((cr, i) => {
-              const idx = completedResults.length - 3 + i;
-              const realIdx = Math.max(0, idx);
-              const expanded = expandedResultIdx === realIdx;
-              const r = cr.result;
-              return (
-                <View key={i}>
-                  <Pressable
-                    onPress={() => setExpandedResultIdx(expanded ? null : realIdx)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                  >
-                    <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.claimNew }}>
-                      {'\u2713'} {cr.node}: {r.coverage_pct}% coverage
-                      {r.microlearning_triggered?.length ? ` + ${r.microlearning_triggered.length} research` : ''}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted }}>
-                      {expanded ? '\u25B4' : '\u25BE'}
-                    </Text>
-                  </Pressable>
-                  {expanded && (
-                    <View style={{ paddingLeft: 12, paddingTop: 6, paddingBottom: 8, gap: 6 }}>
-                      {r.captured?.length > 0 && (
-                        <View>
-                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.claimNew, marginBottom: 2 }}>CAPTURED</Text>
-                          {r.captured.map((c: string, ci: number) => (
-                            <Text key={ci} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textBody, lineHeight: 17 }}>{'\u2022'} {c}</Text>
-                          ))}
-                        </View>
-                      )}
-                      {r.missed?.length > 0 && (
-                        <View>
-                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>MISSED</Text>
-                          {r.missed.map((m: string, mi: number) => (
-                            <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {m}</Text>
-                          ))}
-                        </View>
-                      )}
-                      {r.interesting?.length > 0 && (
-                        <View>
-                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: '#1e5f8a', marginBottom: 2 }}>INTERESTING</Text>
-                          {r.interesting.map((x: string, xi: number) => (
-                            <Text key={xi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17 }}>{'\u2022'} {x}</Text>
-                          ))}
-                        </View>
-                      )}
-                      {(r.microlearning_triggered ?? []).length > 0 && (
-                        <View>
-                          <Text style={{ fontFamily: fonts.ui, fontSize: 10, fontWeight: '600', color: colors.rubric, marginBottom: 2 }}>{'\u2726'} RESEARCHING</Text>
-                          {(r.microlearning_triggered ?? []).map((m: { id: string; query: string }, mi: number) => (
-                            <Text key={mi} style={{ fontFamily: fonts.reading, fontSize: 12, color: colors.textSecondary, lineHeight: 17, fontStyle: 'italic' }}>{'\u21BB'} {m.query}</Text>
-                          ))}
-                        </View>
-                      )}
-                      {r.feedback_summary && (
-                        <Text style={{ fontFamily: fonts.readingItalic, fontSize: 12, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>
-                          {r.feedback_summary}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
+        {renderProcessingHeader()}
 
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Prompt card */}
