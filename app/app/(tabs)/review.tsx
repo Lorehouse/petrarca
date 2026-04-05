@@ -310,9 +310,9 @@ function ReviewCard({
     // Fetch "also want to know" suggestions in background
     setSuggestionsLoading(true);
     fetchAlsoWantToKnow({
-      itemId: item.question_id,
-      question: item.question,
-      entities: item.entities || [],
+      itemId: item.question_id || '',
+      question: item.question || '',
+      entities: (item.entity_spans ? Object.keys(item.entity_spans).map(n => ({ name: n })) : []),
     })
       .then(data => setSuggestions(data.suggestions || []))
       .catch(() => {})
@@ -322,7 +322,7 @@ function ReviewCard({
   const handleSuggestionTap = (s: {query: string; type: string; label: string}) => {
     setSuggestionSent(s.label);
     logEvent('also_want_to_know_tap', { item_id: item.question_id, query: s.query, type: s.type });
-    submitTargetedQuiz({ itemId: item.question_id, query: s.query, type: s.type })
+    submitTargetedQuiz({ itemId: item.question_id || '', query: s.query, type: s.type })
       .catch(() => {});
   };
 
