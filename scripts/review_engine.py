@@ -1112,10 +1112,10 @@ def _generate_follow_up_queries(node_title: str, node_description: str,
     try:
         prompt = FOLLOW_UP_PROMPT.format(
             node_title=node_title,
-            node_description=node_description[:200],
+            node_description=node_description[:500],
             fact_context=fact_context or '(general review)',
         )
-        fq = call_claude_json(prompt, timeout=60, model='haiku')
+        fq = call_claude_json(prompt, timeout=60, model='sonnet')
         if isinstance(fq, list) and len(fq) >= 2:
             return fq[:3]
     except Exception as e:
@@ -1321,15 +1321,7 @@ def generate_question(item_id: str, conn) -> dict:
                 fqs = _generate_follow_up_queries(node_title, node_description, fact_ctx)
                 if fqs:
                     result['follow_up_queries'] = fqs
-                else:
-                    # Fallback: at least give something
-                    entities = fact.get('entities', [])
-                    entity_name = entities[0].replace('_', ' ').title() if entities else ''
-                    result['follow_up_queries'] = [
-                        f'What primary sources survive from the time of {entity_name or node_title}?',
-                        f'What art, literature, or opera features {entity_name or node_title}?',
-                        f'What can you still visit or see today connected to {entity_name or node_title}?',
-                    ]
+                # No fallback templates — empty is better than generic
                 return result
 
     # ── Serve from cache if no key_facts path applied ─────────────────────────

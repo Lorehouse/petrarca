@@ -10,7 +10,6 @@ import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
   triggerFollowUp, generateFollowUps,
-  fetchAlsoWantToKnow, submitTargetedQuiz,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -267,9 +266,6 @@ function ReviewCard({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
-  const [suggestions, setSuggestions] = useState<{query: string; type: string; label: string}[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [suggestionSent, setSuggestionSent] = useState('');
   const revealedAtRef = useRef(0);
 
   const handleReveal = () => {
@@ -305,78 +301,12 @@ function ReviewCard({
   ];
 
   const handleGrade = (result: string) => {
-    onResult(result);
     setGraded(true);
-    // Fetch "also want to know" suggestions in background
-    setSuggestionsLoading(true);
-    fetchAlsoWantToKnow({
-      itemId: item.question_id || '',
-      question: item.question || '',
-      entities: (item.entity_spans ? Object.keys(item.entity_spans).map(n => ({ name: n })) : []),
-    })
-      .then(data => setSuggestions(data.suggestions || []))
-      .catch(() => {})
-      .finally(() => setSuggestionsLoading(false));
-  };
-
-  const handleSuggestionTap = (s: {query: string; type: string; label: string}) => {
-    setSuggestionSent(s.label);
-    logEvent('also_want_to_know_tap', { item_id: item.question_id, query: s.query, type: s.type });
-    submitTargetedQuiz({ itemId: item.question_id || '', query: s.query, type: s.type })
-      .catch(() => {});
+    onResult(result);
   };
 
   if (graded) {
-    // Show brief suggestions panel before card collapses
-    if (suggestions.length > 0 || suggestionsLoading) {
-      return (
-        <View style={cs.card}>
-          <Text style={cs.responded}>Recorded {'\u2713'}</Text>
-          {suggestionsLoading ? (
-            <Text style={[cs.contextText, { marginTop: 8 }]}>Loading suggestions...</Text>
-          ) : suggestionSent ? (
-            <Text style={[cs.contextText, { marginTop: 8, color: colors.claimNew }]}>
-              {'\u2713'} Added: {suggestionSent}
-            </Text>
-          ) : (
-            <View style={{ marginTop: 10 }}>
-              <Text style={[cs.contextText, { marginBottom: 6, color: colors.textSecondary }]}>
-                Also want to know?
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {suggestions.map((s, i) => (
-                  <Pressable
-                    key={i}
-                    onPress={() => handleSuggestionTap(s)}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: s.type === 'simple_fact' ? colors.rubric : colors.rule,
-                      borderRadius: 14,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      backgroundColor: s.type === 'simple_fact' ? 'rgba(139,37,0,0.04)' : 'transparent',
-                    }}
-                  >
-                    <Text style={{
-                      fontFamily: fonts.ui,
-                      fontSize: 12,
-                      color: s.type === 'simple_fact' ? colors.rubric : colors.textSecondary,
-                    }}>
-                      {s.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      );
-    }
-    return (
-      <View style={cs.card}>
-        <Text style={cs.responded}>Recorded {'\u2713'}</Text>
-      </View>
-    );
+    return null;
   }
 
   const displayAnswer = item.rich_answer || item.answer || '';
@@ -918,6 +848,8 @@ export default function ReviewScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const cardShownAtRef = useRef<number>(Date.now());
   const scrollRef = useRef<ScrollView>(null);
+  const gradedIdsRef = useRef<Set<string>>(new Set());
+  const lastLoadedRef = useRef<number>(0);
 
   const loadStream = useCallback(async (reset = true) => {
     if (reset) {
@@ -932,16 +864,22 @@ export default function ReviewScreen() {
         limit: 20,
         offset: offsetRef.current,
       });
+      // Filter out items already graded in this session
+      const graded = gradedIdsRef.current;
+      const filtered = result.items.filter(
+        (it: ResurfacingItem) => !it.question_id || !graded.has(it.question_id)
+      );
       if (reset) {
-        setItems(result.items);
+        setItems(filtered);
         setCurrentIndex(0);
       } else {
-        setItems(prev => [...prev, ...result.items]);
+        setItems(prev => [...prev, ...filtered]);
       }
       setStreamMeta(result);
       offsetRef.current += result.items.length;
+      lastLoadedRef.current = Date.now();
       logEvent('review_stream_loaded', {
-        item_count: result.items.length,
+        item_count: filtered.length,
         total_candidates: result.total_candidates,
         due_count: result.due_count,
         offset: offsetRef.current,
@@ -956,7 +894,11 @@ export default function ReviewScreen() {
 
   useFocusEffect(useCallback(() => {
     setFeedbackContext({ screen: 'review' });
-    loadStream(true);
+    // Don't reload if we were away less than 60s — just resume where we left off
+    const elapsed = Date.now() - lastLoadedRef.current;
+    if (lastLoadedRef.current === 0 || elapsed > 60_000) {
+      loadStream(true);
+    }
   }, []));
 
   // Auto-load more when nearing end of items
@@ -1001,6 +943,7 @@ export default function ReviewScreen() {
   const handleResult = async (item: ResurfacingItem, result: string) => {
     const seconds = timeOnCard();
     if (item.question_id) {
+      gradedIdsRef.current.add(item.question_id);
       recordReviewResult(item.question_id, result).catch(e =>
         console.warn('[review] score failed:', e));
       logEvent('review_result', {
@@ -1014,15 +957,14 @@ export default function ReviewScreen() {
         card_type: item.type,
       });
     }
-    setTimeout(() => {
-      animateTransition(() => {
-        setCurrentIndex(i => i + 1);
-        maybeLoadMore();
-      });
-    }, 500);
+    animateTransition(() => {
+      setCurrentIndex(i => i + 1);
+      maybeLoadMore();
+    });
   };
 
   const handleSkip = (item: ResurfacingItem) => {
+    if (item.question_id) gradedIdsRef.current.add(item.question_id);
     logEvent('review_skip', {
       question_id: item.question_id,
       domain: item.domain,
@@ -1038,6 +980,7 @@ export default function ReviewScreen() {
 
   const handleDismissCard = (item: ResurfacingItem) => {
     if (item.question_id) {
+      gradedIdsRef.current.add(item.question_id);
       dismissMicrolearning({ cardId: item.question_id }).catch(e =>
         console.warn('[review] dismiss failed:', e));
     }
@@ -1069,8 +1012,10 @@ export default function ReviewScreen() {
   };
 
   const handleEntityIntroContinue = () => {
+    const cur = items[currentIndex];
+    if (cur?.entity_id) gradedIdsRef.current.add(cur.entity_id);
     logEvent('review_entity_intro_continue', {
-      entity_id: items[currentIndex]?.entity_id,
+      entity_id: cur?.entity_id,
       time_seconds: timeOnCard(),
     });
     animateTransition(() => {

@@ -787,13 +787,29 @@ def _insert_nexus_cards(items: list[dict], conn) -> list[dict]:
     return result
 
 
+_GENERIC_ENTITIES = {
+    # Modern countries/regions too generic to annotate
+    'italy', 'greece', 'sicily', 'venice', 'spain', 'france', 'germany', 'england',
+    'egypt', 'turkey', 'syria', 'india', 'china', 'europe', 'africa', 'asia',
+    'north africa', 'central asia', 'russia', 'united states', 'tunisia',
+    'gaul', 'persia', 'bulgaria', 'gaza', 'kiev',
+}
+
+
 def _load_entity_index(conn) -> list[dict]:
-    """Load all entities with their names and aliases for text matching."""
+    """Load all entities with their names and aliases for text matching.
+
+    Excludes generic/obvious place names (countries, continents) that add
+    noise without teaching anything.
+    """
     rows = conn.execute(
         'SELECT entity_id, name, entity_type, aliases FROM shared_entities'
     ).fetchall()
     index = []
     for r in rows:
+        # Skip generic places the reader obviously knows
+        if r['name'].lower() in _GENERIC_ENTITIES:
+            continue
         names = [r['name']]
         try:
             aliases = json.loads(r['aliases'] or '[]')
