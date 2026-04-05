@@ -689,6 +689,104 @@ def _build_entity_intro_items(items: list[dict], entity_knowledge: dict[str, str
     return result
 
 
+MAX_NEXUS_CARDS = 2  # max nexus cards per review batch
+
+
+def _insert_nexus_cards(items: list[dict], conn) -> list[dict]:
+    """Insert cross-curriculum perspective cards for high-nexus entities.
+
+    When a review card references an entity that appears in 3+ curricula,
+    and the learner knows it from a different domain than the card's domain,
+    insert a nexus card that surfaces the alternative perspective.
+    """
+    # Collect entity_ids referenced in review cards and their domains
+    card_entities: list[tuple[int, str, str]] = []  # (index, entity_id, card_domain)
+    for i, item in enumerate(items):
+        if item.get('type') not in ('review', 'question'):
+            continue
+        domain_id = item.get('domain_id', '')
+        entities = item.get('entities', [])
+        for eid in entities[:3]:
+            if isinstance(eid, str):
+                card_entities.append((i, eid, domain_id))
+
+    if not card_entities:
+        return items
+
+    # Find high-nexus entities (nexus_score >= 3)
+    unique_eids = list({eid for _, eid, _ in card_entities})
+    if not unique_eids:
+        return items
+
+    placeholders = ','.join('?' * len(unique_eids))
+    nexus_rows = conn.execute(f"""
+        SELECT entity_id, name, nexus_score
+        FROM shared_entities
+        WHERE entity_id IN ({placeholders}) AND nexus_score >= 3
+    """, unique_eids).fetchall()
+    nexus_map = {r['entity_id']: r for r in nexus_rows}
+
+    if not nexus_map:
+        return items
+
+    nexus_cards = []
+    seen_entities = set()
+    for idx, eid, card_domain in card_entities:
+        if eid not in nexus_map or eid in seen_entities:
+            continue
+        if len(nexus_cards) >= MAX_NEXUS_CARDS:
+            break
+
+        # Find a different curriculum perspective the learner knows
+        alt_row = conn.execute("""
+            SELECT ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
+                   cn.title as node_title, cn.description as node_description,
+                   cd.title as domain_title, ks.knowledge
+            FROM entity_curriculum_links ecl
+            JOIN curriculum_nodes cn ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
+            JOIN curriculum_domains cd ON cd.id = ecl.domain_id
+            LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+            WHERE ecl.entity_id = ?
+              AND ecl.domain_id != ?
+              AND ks.knowledge IN ('engaged', 'anchored')
+            ORDER BY CASE ks.knowledge WHEN 'anchored' THEN 0 ELSE 1 END
+            LIMIT 1
+        """, (eid, card_domain)).fetchone()
+
+        if alt_row:
+            entity_name = nexus_map[eid]['name']
+            nexus_cards.append((idx + 1, {
+                'type': 'nexus',
+                'entity_id': eid,
+                'entity_name': entity_name,
+                'nexus_score': nexus_map[eid]['nexus_score'],
+                'card_domain': card_domain,
+                'alt_domain_id': alt_row['domain_id'],
+                'alt_domain_title': alt_row['domain_title'],
+                'alt_node_title': alt_row['node_title'],
+                'alt_node_description': alt_row['node_description'][:300],
+                'alt_lens': alt_row['lens_title'] or alt_row['lens_emphasis'] or '',
+                'alt_knowledge': alt_row['knowledge'],
+                'prompt': (f"You know {entity_name} from {alt_row['domain_title']}. "
+                           f"How does their role differ in this context?"),
+            }))
+            seen_entities.add(eid)
+
+    if not nexus_cards:
+        return items
+
+    # Insert nexus cards after their triggering review card
+    result = []
+    nexus_by_idx = {}
+    for insert_idx, card in nexus_cards:
+        nexus_by_idx.setdefault(insert_idx, []).append(card)
+    for i, item in enumerate(items):
+        result.append(item)
+        for ncard in nexus_by_idx.get(i, []):
+            result.append(ncard)
+    return result
+
+
 def _load_entity_index(conn) -> list[dict]:
     """Load all entities with their names and aliases for text matching."""
     rows = conn.execute(
@@ -1163,6 +1261,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
         # Insert entity intro cards for unknown entities
         entity_knowledge = _load_entity_knowledge(conn)
         items = _build_entity_intro_items(items, entity_knowledge, conn)
+
+        # Insert nexus cards for high-connectivity entities (cross-curriculum perspective)
+        items = _insert_nexus_cards(items, conn)
 
         # ── Stats ────────────────────────────────────────────────────────
         total_items = conn.execute('SELECT COUNT(*) FROM knowledge_items').fetchone()[0]
@@ -1817,6 +1918,135 @@ def get_dashboard_stats(conn=None) -> dict:
             },
             'timeline': timeline[:30],
             'generated_at': datetime.utcnow().isoformat() + 'Z',
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def get_book_prescan(book_id: str, conn=None) -> dict:
+    """Generate a curriculum-based preview for a book before/during reading.
+
+    Shows:
+    - already_known: curriculum nodes covered by this book that the learner already knows
+    - will_learn: nodes covered by this book that are new to the learner
+    - missing_prerequisites: prerequisites of will_learn nodes that the learner doesn't know
+    - cross_book_overlaps: other books that cover some of the same nodes
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        # Get all curriculum mappings for this book
+        mappings = conn.execute("""
+            SELECT bcm.domain_id, bcm.node_id, bcm.coverage,
+                   cn.title as node_title, cn.description as node_description,
+                   cn.level, cn.date_start, cn.parent_id,
+                   cd.title as domain_title,
+                   ks.knowledge, ks.confidence
+            FROM book_curriculum_mappings bcm
+            JOIN curriculum_nodes cn ON cn.id = bcm.node_id AND cn.domain_id = bcm.domain_id
+            JOIN curriculum_domains cd ON cd.id = bcm.domain_id
+            LEFT JOIN knowledge_states ks ON ks.domain_id = bcm.domain_id AND ks.node_id = bcm.node_id
+            WHERE bcm.book_id = ?
+            ORDER BY bcm.domain_id, cn.level, cn.date_start
+        """, (book_id,)).fetchall()
+
+        if not mappings:
+            return {'book_id': book_id, 'mapped': False, 'already_known': [],
+                    'will_learn': [], 'missing_prerequisites': [], 'cross_book_overlaps': []}
+
+        already_known = []
+        will_learn = []
+        will_learn_ids = []  # (domain_id, node_id) for prerequisite lookup
+
+        for m in mappings:
+            node_info = {
+                'domain_id': m['domain_id'],
+                'domain_title': m['domain_title'],
+                'node_id': m['node_id'],
+                'node_title': m['node_title'],
+                'node_description': m['node_description'][:200],
+                'coverage': m['coverage'],
+                'level': m['level'],
+                'date_start': m['date_start'],
+            }
+            knowledge = m['knowledge'] or 'unknown'
+            if knowledge in ('engaged', 'anchored'):
+                node_info['knowledge'] = knowledge
+                node_info['confidence'] = m['confidence']
+                already_known.append(node_info)
+            else:
+                node_info['knowledge'] = knowledge
+                will_learn.append(node_info)
+                will_learn_ids.append((m['domain_id'], m['node_id']))
+
+        # Find missing prerequisites for will_learn nodes
+        missing_prerequisites = []
+        seen_prereqs = set()
+        for domain_id, node_id in will_learn_ids:
+            prereq_rows = conn.execute("""
+                SELECT cp.prerequisite_id, cn.title, cn.description,
+                       ks.knowledge
+                FROM curriculum_prerequisites cp
+                JOIN curriculum_nodes cn ON cn.id = cp.prerequisite_id AND cn.domain_id = cp.domain_id
+                LEFT JOIN knowledge_states ks ON ks.domain_id = cp.domain_id AND ks.node_id = cp.prerequisite_id
+                WHERE cp.domain_id = ? AND cp.node_id = ?
+                  AND COALESCE(ks.knowledge, 'unknown') IN ('unknown', 'mentioned')
+            """, (domain_id, node_id)).fetchall()
+
+            for pr in prereq_rows:
+                key = (domain_id, pr['prerequisite_id'])
+                if key in seen_prereqs:
+                    continue
+                seen_prereqs.add(key)
+                missing_prerequisites.append({
+                    'domain_id': domain_id,
+                    'node_id': pr['prerequisite_id'],
+                    'node_title': pr['title'],
+                    'node_description': pr['description'][:200] if pr['description'] else '',
+                    'knowledge': pr['knowledge'] or 'unknown',
+                    'needed_by': node_id,
+                })
+
+        # Find other books covering overlapping nodes
+        mapped_node_pairs = [(m['domain_id'], m['node_id']) for m in mappings]
+        cross_book_overlaps = []
+        if mapped_node_pairs:
+            overlap_rows = conn.execute("""
+                SELECT bcm.book_id, pb.title as book_title, COUNT(*) as shared_nodes
+                FROM book_curriculum_mappings bcm
+                LEFT JOIN physical_books pb ON pb.id = bcm.book_id
+                WHERE bcm.book_id != ?
+                  AND (bcm.domain_id, bcm.node_id) IN ({})
+                GROUP BY bcm.book_id
+                HAVING shared_nodes >= 2
+                ORDER BY shared_nodes DESC
+                LIMIT 5
+            """.format(','.join(f"('{d}','{n}')" for d, n in mapped_node_pairs)),
+                (book_id,)
+            ).fetchall()
+
+            for r in overlap_rows:
+                cross_book_overlaps.append({
+                    'book_id': r['book_id'],
+                    'book_title': r['book_title'] or r['book_id'],
+                    'shared_nodes': r['shared_nodes'],
+                })
+
+        return {
+            'book_id': book_id,
+            'mapped': True,
+            'already_known': already_known,
+            'will_learn': will_learn,
+            'missing_prerequisites': missing_prerequisites,
+            'cross_book_overlaps': cross_book_overlaps,
+            'summary': {
+                'total_nodes': len(mappings),
+                'known_count': len(already_known),
+                'new_count': len(will_learn),
+                'missing_prereqs_count': len(missing_prerequisites),
+            },
         }
     finally:
         if own:

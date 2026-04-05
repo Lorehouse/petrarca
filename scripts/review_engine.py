@@ -480,8 +480,14 @@ def _get_chapter_context(book_id: str, chapter_number: int, chapter_title: str) 
 
 
 def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
-                          chapter_number: int, chapter_title: str) -> list:
-    domain_id = detect_curriculum(book_title, book_topics)
+                          chapter_number: int, chapter_title: str,
+                          domain_id: str | None = None) -> list:
+    """Map a chapter to curriculum nodes in a specific domain.
+
+    If domain_id is None, auto-detects via detect_curriculum().
+    """
+    if not domain_id:
+        domain_id = detect_curriculum(book_title, book_topics)
     curriculum = load_curriculum(domain_id)
     if not curriculum:
         return []
@@ -514,10 +520,11 @@ def map_chapter_to_nodes(book_id: str, book_title: str, book_topics: list,
 
 
 def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int) -> int:
-    """Create lightweight knowledge_items for prerequisites and same-period siblings.
+    """Create knowledge_items for prerequisites of mapped nodes.
 
-    Only creates items for Level 2+ nodes that don't already exist in knowledge_items.
-    Uses the curriculum node description as the sole source (book_id=None).
+    Only creates items for Level 2+ prerequisite nodes that don't already exist.
+    Enriches gap-fill sources with book_curriculum_mappings when available,
+    rather than relying solely on the curriculum node description.
     Returns count of gap-fill items created.
     """
     curriculum = load_curriculum(domain_id)
@@ -527,26 +534,14 @@ def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int
     nodes_by_id = {n['id']: n for n in curriculum['nodes']}
     gaps_created = 0
 
+    # Only expand prerequisites (not siblings — too speculative)
     candidate_ids: set = set()
-
     for node_id in mapped_node_ids:
         node = nodes_by_id.get(node_id, {})
-        # Prerequisites of mapped nodes
         for prereq_id in node.get('prerequisites', []):
             prereq = nodes_by_id.get(prereq_id, {})
             if prereq.get('level', 1) >= 2:
                 candidate_ids.add(prereq_id)
-        # Siblings: same parent, same rough time period (within 200 years)
-        parent_id = node.get('parent_id')
-        node_start = node.get('date_start')
-        if parent_id and node_start is not None:
-            for sibling in curriculum['nodes']:
-                if (sibling.get('parent_id') == parent_id
-                        and sibling['id'] != node_id
-                        and sibling.get('level', 1) >= 2):
-                    sib_start = sibling.get('date_start')
-                    if sib_start is not None and abs(sib_start - node_start) <= 200:
-                        candidate_ids.add(sibling['id'])
 
     for cand_id in candidate_ids:
         if cand_id in mapped_node_ids:
@@ -559,15 +554,40 @@ def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int
             continue
 
         node = nodes_by_id.get(cand_id, {})
-        source = {
-            'book_id': None,
-            'chapter_number': None,
-            'chapter_title': 'Curriculum context — not yet in a book',
-            'source_text': node.get('description', '')[:400],
-            'lens': 'SIGNIFICANCE',
-            'temporal_hook': '',
-            'added_at': now,
-        }
+
+        # Try to enrich with book content: check if any book covers this node
+        book_source = conn.execute("""
+            SELECT bcm.book_id, bcm.coverage, pb.title as book_title
+            FROM book_curriculum_mappings bcm
+            LEFT JOIN physical_books pb ON pb.id = bcm.book_id
+            WHERE bcm.domain_id = ? AND bcm.node_id = ?
+            ORDER BY CASE bcm.coverage
+                WHEN 'deep' THEN 0 WHEN 'moderate' THEN 1 ELSE 2 END
+            LIMIT 1
+        """, (domain_id, cand_id)).fetchone()
+
+        if book_source:
+            source = {
+                'book_id': book_source['book_id'],
+                'chapter_number': None,
+                'chapter_title': f"Covered in: {book_source['book_title'] or book_source['book_id']}",
+                'source_text': node.get('description', '')[:400],
+                'lens': 'SIGNIFICANCE',
+                'temporal_hook': '',
+                'added_at': now,
+                'coverage': book_source['coverage'],
+            }
+        else:
+            source = {
+                'book_id': None,
+                'chapter_number': None,
+                'chapter_title': 'Prerequisite — not yet covered by a book',
+                'source_text': node.get('description', '')[:400],
+                'lens': 'SIGNIFICANCE',
+                'temporal_hook': '',
+                'added_at': now,
+            }
+
         try:
             conn.execute('''
                 INSERT INTO knowledge_items
@@ -586,16 +606,10 @@ def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int
     return gaps_created
 
 
-def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: list,
-                                     chapter_number: int, chapter_title: str, conn) -> dict:
-    """Map chapter to curriculum nodes and upsert into knowledge_items. Returns summary."""
-    mappings = map_chapter_to_nodes(book_id, book_title, book_topics, chapter_number, chapter_title)
-    domain_id = detect_curriculum(book_title, book_topics)
-    if not mappings:
-        return {'nodes_covered': [], 'items_created': 0, 'items_updated': 0,
-                'gaps_filled': 0, 'domain': domain_id}
-
-    now = int(time.time() * 1000)
+def _upsert_chapter_mappings(domain_id: str, mappings: list, book_id: str,
+                              chapter_number: int, chapter_title: str,
+                              conn, now: int) -> tuple[int, int, int, list]:
+    """Upsert knowledge_items for one domain's chapter mappings. Returns (created, updated, gaps, titles)."""
     created = 0
     updated = 0
     node_titles = []
@@ -620,7 +634,6 @@ def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: 
         ).fetchone()
 
         if existing:
-            # Merge new source into existing sources array (skip if same book+chapter already there)
             try:
                 sources = json.loads(existing['sources'] or '[]')
             except Exception:
@@ -652,19 +665,80 @@ def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: 
         node_titles.append(m.get('node_title', m['node_id']))
 
     gaps_filled = fill_prerequisite_gaps(domain_id, mapped_node_ids, conn, now)
-    conn.commit()
-    print(f'[review] Ch{chapter_number} mapped: {created} created, {updated} updated, '
-          f'{gaps_filled} gaps → {node_titles}', flush=True)
+    return created, updated, gaps_filled, node_titles
 
-    # Pre-generate questions in background for items with no cached_question
-    items_needing_questions = conn.execute(
-        '''SELECT id FROM knowledge_items
-           WHERE curriculum_domain=? AND cached_question IS NULL
-             AND id IN ({})'''.format(','.join('?' * len(mapped_node_ids))),
-        [domain_id] + [f"{domain_id}:{nid}" for nid in mapped_node_ids]
-    ).fetchall()
-    if items_needing_questions:
-        ids_to_gen = [r['id'] for r in items_needing_questions]
+
+def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: list,
+                                     chapter_number: int, chapter_title: str, conn) -> dict:
+    """Map chapter to curriculum nodes across multiple domains and upsert into knowledge_items.
+
+    Maps against the primary domain plus up to 2 secondary domains (score >= 0.40)
+    to realize the overlapping-curricula vision.
+    """
+    # Find relevant curricula ranked by similarity
+    suggestions = suggest_curricula_for_book(book_title, book_topics)
+    primary_domain = detect_curriculum(book_title, book_topics)
+
+    # Build ordered list: primary first, then high-scoring secondaries
+    SECONDARY_THRESHOLD = 0.40
+    MAX_SECONDARY = 2
+    domains_to_map = [primary_domain]
+    for s in suggestions:
+        if s['id'] == primary_domain:
+            continue
+        if s['score'] >= SECONDARY_THRESHOLD and len(domains_to_map) <= MAX_SECONDARY:
+            domains_to_map.append(s['id'])
+
+    now = int(time.time() * 1000)
+    total_created = 0
+    total_updated = 0
+    total_gaps = 0
+    all_node_titles = []
+    all_items_to_pregen = []
+    domains_mapped = []
+
+    for domain_id in domains_to_map:
+        mappings = map_chapter_to_nodes(
+            book_id, book_title, book_topics,
+            chapter_number, chapter_title,
+            domain_id=domain_id,
+        )
+        if not mappings:
+            continue
+
+        created, updated, gaps, titles = _upsert_chapter_mappings(
+            domain_id, mappings, book_id, chapter_number, chapter_title, conn, now,
+        )
+        total_created += created
+        total_updated += updated
+        total_gaps += gaps
+        all_node_titles.extend(titles)
+        domains_mapped.append(domain_id)
+
+        # Collect items needing question pre-generation
+        mapped_ids = [m['node_id'] for m in mappings]
+        items = conn.execute(
+            '''SELECT id FROM knowledge_items
+               WHERE curriculum_domain=? AND cached_question IS NULL
+                 AND id IN ({})'''.format(','.join('?' * len(mapped_ids))),
+            [domain_id] + [f"{domain_id}:{nid}" for nid in mapped_ids]
+        ).fetchall()
+        all_items_to_pregen.extend(r['id'] for r in items)
+
+        is_secondary = domain_id != primary_domain
+        label = f'(secondary)' if is_secondary else '(primary)'
+        print(f'[review] Ch{chapter_number} → {domain_id} {label}: '
+              f'{created} created, {updated} updated, {gaps} gaps → {titles}', flush=True)
+
+    if not domains_mapped:
+        return {'nodes_covered': [], 'items_created': 0, 'items_updated': 0,
+                'gaps_filled': 0, 'domain': primary_domain, 'domains_mapped': []}
+
+    conn.commit()
+
+    # Pre-generate questions in background
+    if all_items_to_pregen:
+        ids_to_gen = list(all_items_to_pregen)
         def _pregen():
             from db import get_connection as _conn
             c = _conn()
@@ -681,11 +755,12 @@ def create_review_items_for_chapter(book_id: str, book_title: str, book_topics: 
         threading.Thread(target=_pregen, daemon=True).start()
 
     return {
-        'nodes_covered': node_titles,
-        'items_created': created,
-        'items_updated': updated,
-        'gaps_filled': gaps_filled,
-        'domain': domain_id,
+        'nodes_covered': all_node_titles,
+        'items_created': total_created,
+        'items_updated': total_updated,
+        'gaps_filled': total_gaps,
+        'domain': primary_domain,
+        'domains_mapped': domains_mapped,
     }
 
 
@@ -1094,6 +1169,108 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str) ->
     }
 
 
+def _get_cross_curriculum_context(domain_id: str, node_id: str, conn) -> str:
+    """Find what the learner knows about related entities from OTHER curricula.
+
+    Queries shared_entities → entity_curriculum_links → knowledge_states to find
+    cross-domain perspectives the learner already has on entities in this node.
+    Returns a context string for question generation prompts.
+    """
+    # Find entities linked to this node
+    entity_rows = conn.execute("""
+        SELECT ecl.entity_id, se.name, ecl.lens_title
+        FROM entity_curriculum_links ecl
+        JOIN shared_entities se ON se.entity_id = ecl.entity_id
+        WHERE ecl.domain_id = ? AND ecl.node_id = ?
+    """, (domain_id, node_id)).fetchall()
+
+    if not entity_rows:
+        return ''
+
+    entity_ids = [r['entity_id'] for r in entity_rows]
+    # Find these entities in OTHER domains where the learner has engaged/anchored knowledge
+    cross_perspectives = []
+    for eid in entity_ids[:5]:
+        rows = conn.execute("""
+            SELECT ecl.domain_id, ecl.node_id, ecl.lens_title, ecl.lens_emphasis,
+                   se.name as entity_name,
+                   ks.knowledge, cn.title as node_title, cd.title as domain_title
+            FROM entity_curriculum_links ecl
+            JOIN shared_entities se ON se.entity_id = ecl.entity_id
+            LEFT JOIN knowledge_states ks ON ks.domain_id = ecl.domain_id AND ks.node_id = ecl.node_id
+            LEFT JOIN curriculum_nodes cn ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
+            LEFT JOIN curriculum_domains cd ON cd.id = ecl.domain_id
+            WHERE ecl.entity_id = ?
+              AND ecl.domain_id != ?
+              AND ks.knowledge IN ('engaged', 'anchored')
+        """, (eid, domain_id)).fetchall()
+
+        for r in rows:
+            lens = r['lens_title'] or r['lens_emphasis'] or r['node_title'] or ''
+            cross_perspectives.append(
+                f"- {r['entity_name']}: learner knows this from {r['domain_title']} "
+                f"({r['knowledge']}) — {lens}"
+            )
+
+    if not cross_perspectives:
+        return ''
+
+    return ('Cross-curriculum context (the learner knows these entities from other domains):\n'
+            + '\n'.join(cross_perspectives[:5]))
+
+
+def _get_temporal_cross_references(domain_id: str, node_id: str, conn) -> str:
+    """Find events in OTHER curricula happening at the same time as this node.
+
+    Uses date_start/date_end on curriculum_nodes to find contemporaneous events
+    the learner already knows about in different domains.
+    """
+    # Get this node's date range
+    node_row = conn.execute(
+        'SELECT date_start, date_end FROM curriculum_nodes WHERE id=? AND domain_id=?',
+        (node_id, domain_id)
+    ).fetchone()
+    if not node_row or node_row['date_start'] is None:
+        return ''
+
+    date_start = node_row['date_start']
+    date_end = node_row['date_end'] or date_start
+    # Allow 50-year overlap window
+    window = 50
+
+    # Find nodes in OTHER domains with overlapping dates where learner has knowledge
+    rows = conn.execute("""
+        SELECT cn.title, cn.date_start, cn.date_end, cn.domain_id,
+               cd.title as domain_title, ks.knowledge
+        FROM curriculum_nodes cn
+        JOIN curriculum_domains cd ON cd.id = cn.domain_id
+        JOIN knowledge_states ks ON ks.domain_id = cn.domain_id AND ks.node_id = cn.id
+        WHERE cn.domain_id != ?
+          AND cn.date_start IS NOT NULL
+          AND cn.date_start <= ? + ?
+          AND COALESCE(cn.date_end, cn.date_start) >= ? - ?
+          AND ks.knowledge IN ('engaged', 'anchored')
+          AND cn.level >= 2
+        ORDER BY ABS(cn.date_start - ?) ASC
+        LIMIT 4
+    """, (domain_id, date_end, window, date_start, window, date_start)).fetchall()
+
+    if not rows:
+        return ''
+
+    lines = []
+    for r in rows:
+        date_label = str(r['date_start'])
+        if r['date_start'] < 0:
+            date_label = f'{abs(r["date_start"])} BC'
+        elif r['date_start'] < 1000:
+            date_label = f'{r["date_start"]} AD'
+        lines.append(f"- Meanwhile in {r['domain_title']}: {r['title']} (~{date_label})")
+
+    return ('Contemporaneous events the learner knows from other domains:\n'
+            + '\n'.join(lines))
+
+
 def generate_question(item_id: str, conn) -> dict:
     # First try knowledge_items (node-centric); fall back to review_items (exploration/voice)
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
@@ -1200,9 +1377,19 @@ def generate_question(item_id: str, conn) -> dict:
         known_ctx = ('Other concepts the learner knows:\n'
                      + '\n'.join(f'- {t}' for t in known[:3]))
 
+    # Cross-curriculum context: what the learner knows about related entities from other domains
+    cross_ctx = _get_cross_curriculum_context(domain_id, node_id, conn)
+    if cross_ctx:
+        known_ctx = (known_ctx + '\n\n' + cross_ctx) if known_ctx else cross_ctx
+
     temporal_ctx = ''
     if temporal_hook:
         temporal_ctx = f"Temporal hook: {temporal_hook}"
+
+    # Temporal cross-references: contemporaneous events from other domains
+    temporal_xref = _get_temporal_cross_references(domain_id, node_id, conn)
+    if temporal_xref:
+        temporal_ctx = (temporal_ctx + '\n\n' + temporal_xref) if temporal_ctx else temporal_xref
 
     # Include mastered key_facts as context for analytical questions
     known_facts_ctx = ''

@@ -69,6 +69,7 @@ from curriculum_db import (
     import_assessment_answers,
     get_timeline,
     generate_review_stream,
+    get_book_prescan,
 )
 # Functions not yet migrated to SQLite — still use JSON files
 from curriculum import (
@@ -6287,6 +6288,14 @@ JSON array only:"""
             return self._serve_curriculum_timeline_html()
         if self.path == '/curriculum/entity-index':
             return self._send_json_response(200, get_entity_index())
+        if self.path.startswith('/book/prescan/'):
+            book_id = self.path.split('/book/prescan/')[1].split('?')[0]
+            conn = get_connection(readonly=True)
+            try:
+                data = get_book_prescan(book_id, conn=conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
         if self.path == '/stats/dashboard':
             return self._serve_html_file('statistics_dashboard.html')
         if self.path == '/stats/dashboard-data':
