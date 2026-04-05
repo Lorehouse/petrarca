@@ -103,15 +103,6 @@ hr.thin{border:none;border-top:1px solid var(--rule);margin:1.2rem 0}
 .finding-cite{font-size:.78rem;color:var(--muted);font-style:italic}
 
 /* === RESEARCHER CARDS === */
-.conv-group{margin:1.2rem 0}
-.conv-topic{font-family:'Cormorant Garamond',serif;font-size:1.05rem;font-weight:500;color:var(--ink);padding:.4rem .7rem;background:var(--parchment-dk);border-left:3px solid var(--rubric);margin-bottom:.5rem}
-.person{display:flex;gap:.8rem;padding:.5rem 0;border-bottom:1px solid var(--rule)}
-.person:last-child{border-bottom:none}
-.person-info{flex:1;min-width:0}
-.person-name{font-weight:600;color:var(--ink);font-size:.92rem}
-.person-inst{font-size:.76rem;color:var(--rubric)}
-.person-does{font-size:.82rem;color:var(--secondary);margin-top:.1rem}
-.person-discuss{font-size:.78rem;color:var(--muted);font-style:italic;margin-top:.15rem}
 
 /* === BUILD NEXT === */
 .build-item{padding:.9rem 0;border-bottom:1px solid var(--rule)}
@@ -204,8 +195,6 @@ section{animation:fadeIn .4s ease both}
     <a href="#measure">Measuring Knowledge</a>
     <a href="#voice-tech">Voice &amp; NLP</a>
     <a href="#system">What's Built</a>
-    <div class="nav-hd">People</div>
-    <a href="#people">Researchers to Talk To</a>
     <div class="nav-hd">What to Build</div>
     <a href="#build">Learning Improvements</a>
     <a href="#experiments">Experiments</a>
@@ -473,83 +462,11 @@ section{animation:fadeIn .4s ease both}
 <hr class="dbl">
 
 <!-- ═══════════════════════════════════════════════════════════ -->
-<!-- PART II: PEOPLE                                            -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-
-<section id="people">
-  <div class="sec-marker">Part II</div>
-  <h2>People Doing Related Work</h2>
-  <p>Organized by what we'd want to <em>talk</em> about — the conversation, not the CV.</p>
-
-  <div class="conv-group">
-    <div class="conv-topic">Reading across multiple sources</div>
-    <div class="person"><div class="person-info"><span class="person-name">Ivar Bråten</span> <span class="person-inst">University of Oslo (Emeritus)</span><div class="person-does">Pioneer of multiple-document literacy. Led Norwegian Research Council project (2009-2012). Epistemic beliefs shape multi-text processing.</div><div class="person-discuss">How do readers build integrated knowledge from books + articles? Does source attribution improve retention?</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Helge I. Strømsø</span> <span class="person-inst">University of Oslo</span><div class="person-does">Epistemic cognition, multiple-text comprehension. Three dimensions of justification in multi-source reading.</div><div class="person-discuss">How epistemic beliefs affect what Petrarca users extract from reading.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">M. Anne Britt</span> <span class="person-inst">Northern Illinois University</span><div class="person-does">Co-originator of Documents Model. The "mush model" problem. Integration-sourcing tradeoff.</div><div class="person-discuss">Does Petrarca's claim-level source tracking actually prevent the mush model?</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Alexandra List</span> <span class="person-inst">Penn State</span><div class="person-does">2025 framework on prior knowledge integration with multiple texts: assimilative vs critical use.</div><div class="person-discuss">How to model the way prior knowledge shapes new reading — the Matthew effect formalized.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">How to measure what someone knows</div>
-    <div class="person"><div class="person-info"><span class="person-name">Kenneth Koedinger</span> <span class="person-inst">CMU</span><div class="person-does">KLI framework, knowledge components, Cognitive Tutors, LearnLab.</div><div class="person-discuss">Applying Facts/Skills/Principles decomposition to curriculum nodes. How to assess "skills" like historical sequencing.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Andrew Lan</span> <span class="person-inst">UMass Amherst</span><div class="person-does">GENCAT (Feb 2026) — generative CAT with LLMs. Won US DoE reading comprehension scoring challenge. SPARFA-Trace.</div><div class="person-discuss">Using LLMs to assess open-ended voice responses for knowledge estimation. Connecting IRT to language generation.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Alberto Cañas</span> <span class="person-inst">IHMC, Florida</span><div class="person-does">CmapTools, concept mapping, Pathfinder networks for expert-novice comparison.</div><div class="person-discuss">Applying Pathfinder map-distance metrics to compare voice recall structure against curriculum graph.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Jeffrey Zemla</span> <span class="person-inst">Syracuse University</span><div class="person-does">SNAFU tool for estimating semantic networks from free recall. Memory &amp; Cognition 2026.</div><div class="person-discuss">Extracting knowledge structure from voice transcripts. Quantifying organization quality.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">Voice and free recall</div>
-    <div class="person"><div class="person-info"><span class="person-name">Jeffrey Karpicke</span> <span class="person-inst">Purdue</span><div class="person-does">Retrieval practice, testing effect, elaborative retrieval. Landmark 2011 Science paper.</div><div class="person-discuss">Voice free recall as simultaneously the best assessment AND the best learning exercise.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Janice Chen</span> <span class="person-inst">Johns Hopkins</span><div class="person-does">Naturalistic Free Recall dataset (229 participants). NLP scoring of narrative recalls using embeddings.</div><div class="person-discuss">Her methods for comparing recall against source narratives are almost exactly what Petrarca needs.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Jeremy Manning</span> <span class="person-inst">Dartmouth</span><div class="person-does">Automated scoring using LLM event segmentation + embedding-based scoring for narrative recall.</div><div class="person-discuss">Scoring voice dumps about historical domains. Event segmentation for curriculum node detection.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Danielle McNamara</span> <span class="person-inst">Arizona State</span><div class="person-does">Coh-Metrix (200+ discourse measures), iSTART (self-explanation strategy training).</div><div class="person-discuss">Applying Coh-Metrix indices (referential cohesion, deep cohesion, causal connectives) to score voice recall.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">Making knowledge visible</div>
-    <div class="person"><div class="person-info"><span class="person-name">Susan Bull</span> <span class="person-inst">U. of Birmingham</span><div class="person-does">Pioneer of open learner models. SMILI framework — how to show learners what the system thinks they know.</div><div class="person-discuss">Petrarca's knowledge map IS an open learner model. How to make it useful for metacognition, not anxiety.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Judy Kay</span> <span class="person-inst">U. of Sydney</span><div class="person-does">"Scrutable" learner models, lifelong personal user models (PUMLs). Personis user modelling.</div><div class="person-discuss">Long-term personal knowledge tracking. Making the model inspectable and negotiable.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Peter Brusilovsky</span> <span class="person-inst">U. of Pittsburgh</span><div class="person-does">20+ years in adaptive educational systems. Mastery Grids — social knowledge visualization.</div><div class="person-discuss">Curriculum node visualization. How to show 719 nodes without overwhelm.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">Spaced learning beyond flashcards</div>
-    <div class="person"><div class="person-info"><span class="person-name">Robert &amp; Elizabeth Bjork</span> <span class="person-inst">UCLA</span><div class="person-does">Desirable difficulties, spacing effect, interleaving, retrieval-induced forgetting.</div><div class="person-discuss">Natural spacing through related reading — ecological data on the spacing effect from real reading.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Andy Matuschak</span> <span class="person-inst">Independent</span><div class="person-does">Mnemonic medium, Orbit, timeful texts, programmable attention.</div><div class="person-discuss">Petrarca extends his vision: multiple sources, voice assessment, curriculum-based maps, not individual prompts.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Bodong Chen</span> <span class="person-inst">U. of Pennsylvania</span><div class="person-does">InkSpire project (2025-26, Sloan): AI-enhanced reading for science. Knowledge building + learning analytics.</div><div class="person-discuss">The closest active research project to Petrarca. AI-enhanced reading with knowledge tracking.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">Historical thinking &amp; assessment</div>
-    <div class="person"><div class="person-info"><span class="person-name">Sam Wineburg</span> <span class="person-inst">Stanford</span><div class="person-does">Historical thinking, how historians read, Stanford History Education Group (15M+ downloads).</div><div class="person-discuss">Operationalizing "situation model" detection in voice recall. What does historical understanding look like computationally?</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Peter Seixas</span> <span class="person-inst">UBC (Emeritus)</span><div class="person-does">Big Six Historical Thinking Concepts with graduated benchmarks. The Historical Thinking Project.</div><div class="person-discuss">Scoring voice narratives against the Big Six dimensions, not just factual coverage.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">Nordic learning technology</div>
-    <div class="person"><div class="person-info"><span class="person-name">Barbara Wasson</span> <span class="person-inst">SLATE / AI LEARN, U. of Bergen</span><div class="person-does">Director of SLATE &amp; AI LEARN (NOK 200M). Chairs LAK26 in Bergen (Apr 27-May 1, 2026).</div><div class="person-discuss">Petrarca as a case study for AI LEARN. Norwegian learning analytics community.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Sanna Järvelä</span> <span class="person-inst">U. of Oulu, Finland</span><div class="person-does">ELLA project (2025-28): "Empowering Lifelong Learning with AI-driven Self-regulation Tools." Past EARLI president.</div><div class="person-discuss">AI-driven self-regulation for lifelong learners is exactly what Petrarca does.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Anne Mangen</span> <span class="person-inst">U. of Stavanger</span><div class="person-does">E-READ COST Action (200 scholars, 33 countries). Digital vs. print reading. "Shallowing hypothesis."</div><div class="person-discuss">How Petrarca's reading interface affects comprehension. Dim-not-hide as print-preserving strategy.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Mohammad Khalil</span> <span class="person-inst">SLATE, U. of Bergen</span><div class="person-does">Meltzers award 2025. Learning analytics, privacy, synthetic data for education.</div><div class="person-discuss">Privacy-preserving learning analytics. Voice data handling.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Olga Viberg</span> <span class="person-inst">KTH, Sweden</span><div class="person-does">President of EATEL (2025). Former SoLAR VP. Mobile-assisted learning, self-regulated learning.</div><div class="person-discuss">Gateway to European learning technology community. Mobile reading systems.</div></div></div>
-  </div>
-
-  <div class="conv-group">
-    <div class="conv-topic">AI in education</div>
-    <div class="person"><div class="person-info"><span class="person-name">Ryan Baker</span> <span class="person-inst">U. of Pennsylvania</span><div class="person-does">Established educational data mining community. First Masters in learning analytics.</div><div class="person-discuss">Analytics methodology for n=1 learning studies. What metrics matter.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Chris Piech</span> <span class="person-inst">Stanford</span><div class="person-does">Deep Knowledge Tracing (DKT). Educational AI, Code.org data science.</div><div class="person-discuss">Adapting knowledge tracing to reading behavior — no explicit Q&A, just reading signals.</div></div></div>
-    <div class="person"><div class="person-info"><span class="person-name">Tobias Ley</span> <span class="person-inst">U. for Continuing Ed. Krems</span><div class="person-does">Rare combination: knowledge management + learning analytics + workplace learning. 100+ papers.</div><div class="person-discuss">How professionals maintain domain knowledge over years through reading.</div></div></div>
-  </div>
-</section>
-
-<hr class="dbl">
-
-<!-- ═══════════════════════════════════════════════════════════ -->
 <!-- PART III: WHAT TO BUILD                                    -->
 <!-- ═══════════════════════════════════════════════════════════ -->
 
 <section id="build">
-  <div class="sec-marker">Part III</div>
+  <div class="sec-marker">Part II</div>
   <h2>What to Build Next</h2>
   <p>Organized by "what problem does this solve for me as a reader?"</p>
 
@@ -601,7 +518,7 @@ section{animation:fadeIn .4s ease both}
 <!-- ═══════════════════════════════════════════════════════════ -->
 
 <section id="experiments">
-  <div class="sec-marker">Part IV</div>
+  <div class="sec-marker">Part III</div>
   <h2>Experiments That Matter</h2>
   <p>Not for publication — for making the system work better. Ordered by "do this first."</p>
 

@@ -357,6 +357,6 @@ cd app && eas build --profile development --platform ios
 3. **NLI cascade** (59% accurate) — may be adding noise rather than signal
 4. **knowledge-engine.ts** still has full FSRS code — intended to simplify to binary seen/unseen for articles
 5. **No centralized error boundaries** in React Native
-6. **Podcast sync** built but needs Overcast auth (deferred)
+6. **Podcast ingestion** — sync script built (`podcast_sync.py`), server endpoint exists (`/media/sync`), but no transcript fetching, no article pipeline integration, and episodes only go to flat JSON file (not SQLite). See session-changelog podcast integration section for details.
 7. **466 curriculum nodes** with no knowledge_items — need discovery probes
 8. **Key_facts only extracted for Sicily Greek** — remaining 8 curricula + 6 Sicily areas pending
