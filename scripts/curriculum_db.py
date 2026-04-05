@@ -1625,11 +1625,15 @@ def get_dashboard_stats(conn=None) -> dict:
                 'progress_pct': pct,
             })
 
-        # Kindle books currently reading
+        # Kindle books currently reading (exclude those already in physical_books via kindle_ prefix)
+        physical_ids = {b['id'] for b in books_reading}
         for row in conn.execute(
             "SELECT key, title, title_resolved, author, progress_pct "
             "FROM kindle_books WHERE status = 'reading' ORDER BY last_read DESC LIMIT 5"
         ).fetchall():
+            # Skip if already listed as physical book (physical books use kindle_ prefix)
+            if f"kindle_{row['key']}" in physical_ids:
+                continue
             books_reading.append({
                 'id': row['key'],
                 'title': row['title_resolved'] or row['title'],
@@ -1652,16 +1656,17 @@ def get_dashboard_stats(conn=None) -> dict:
         voice_audio_minutes = round(voice_audio_bytes / 16000 / 60, 1) if voice_audio_bytes else 0
 
         # Recall distribution from LLM results
+        # Format: suggested_score = 'knew'|'partly'|'missed', coverage_pct = 0-100
         recall_dist = {'full': 0, 'partial': 0, 'nothing': 0}
         for row in conn.execute(
             "SELECT llm_result FROM voice_transcripts WHERE source = 'elicitation' AND llm_result IS NOT NULL"
         ).fetchall():
             try:
                 result = json.loads(row['llm_result'])
-                level = result.get('knowledge_demonstrated', result.get('recall_level', ''))
-                if level in ('strong', 'full', 'good'):
+                score = result.get('suggested_score', '')
+                if score == 'knew':
                     recall_dist['full'] += 1
-                elif level in ('partial', 'some', 'moderate'):
+                elif score == 'partly':
                     recall_dist['partial'] += 1
                 else:
                     recall_dist['nothing'] += 1
@@ -1705,10 +1710,10 @@ def get_dashboard_stats(conn=None) -> dict:
             recall = 'unknown'
             try:
                 result = json.loads(row['llm_result'] or '{}')
-                level = result.get('knowledge_demonstrated', result.get('recall_level', ''))
-                if level in ('strong', 'full', 'good'):
+                score = result.get('suggested_score', '')
+                if score == 'knew':
                     recall = 'full'
-                elif level in ('partial', 'some', 'moderate'):
+                elif score == 'partly':
                     recall = 'partial'
                 else:
                     recall = 'nothing'
