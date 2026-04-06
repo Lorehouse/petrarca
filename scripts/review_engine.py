@@ -46,6 +46,7 @@ def _log_voice_transcript(source: str, node_id: str, domain_id: str,
 SCRIPT_DIR = Path(__file__).parent
 BOOK_RESEARCH_DIR = SCRIPT_DIR / 'data' / 'book_research'
 
+
 # ── FSRS (simplified) ─────────────────────────────────────────────────────────
 
 STABILITY_MULTIPLIERS = {'knew': 2.5, 'partly': 1.5}
@@ -253,6 +254,14 @@ The answer should be SHORT and specific (a date, a name, a 1-sentence event).
 
 {temporal_context}
 
+{learner_context}
+
+If LEARNER CONTEXT is provided, use it to:
+- Reference the learner's own connections and interests
+- Address any misconceptions noted in their voice recall
+- Build on what they found interesting, not just what they missed
+- Avoid asking about things they've already demonstrated mastery of
+
 Output JSON only:
 {{"question":"short factual question (6-15 words)","answer_guidance":"the specific factual answer (1-2 sentences max)","rich_answer":"4-5 sentences placing this fact in vivid context — who, what, when, why it matters. Include a temporal anchor to another known period. This is shown when the learner gets it wrong.","temporal_hook":"connection to another era the learner knows","curriculum_context":"brief placement in the larger history"}}"""
 
@@ -278,6 +287,14 @@ Lens options:
 - TEMPORAL: What else was happening simultaneously? What's the chronological anchor?
 - PATTERN: What recurring dynamic does this exemplify across Sicilian/Mediterranean history?
 - CONSEQUENCE: What long-term effects did this produce?
+
+{learner_context}
+
+If LEARNER CONTEXT is provided, use it to:
+- Reference the learner's own connections and interests
+- Address any misconceptions noted in their voice recall
+- Build on what they found interesting, not just what they missed
+- Avoid asking about things they've already demonstrated mastery of
 
 Keep question under 20 words.
 
@@ -315,6 +332,12 @@ Rules:
 - DO NOT ask about things already covered in the card content. Go sideways, not deeper.
 - NO templates like "How does X connect to Y?" or "What was happening elsewhere?" or "Tell me more about X"
 - Each question should feel like it could be its own microlearning rabbit hole
+
+{learner_context}
+
+If LEARNER CONTEXT is provided, avoid generating follow-ups that the learner has
+already explored via voice recall. Instead, find angles that complement their
+existing knowledge and curiosities.
 
 Output JSON array of 3 strings only: ["q1","q2","q3"]"""
 
@@ -1106,7 +1129,8 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> 
 
 
 def _generate_follow_up_queries(node_title: str, node_description: str,
-                                fact_context: str = '') -> list[str]:
+                                fact_context: str = '',
+                                conn=None, node_id=None, domain_id=None) -> list[str]:
     """Generate 3 LLM-powered follow-up queries for a review item.
     Returns empty list on failure (caller should fall back to templates).
 
@@ -1114,10 +1138,15 @@ def _generate_follow_up_queries(node_title: str, node_description: str,
     with claude -p subprocess).
     """
     try:
+        learner_ctx = ''
+        if conn and node_id and domain_id:
+            learner_ctx = get_learner_context(node_id, domain_id, conn)
+
         prompt = FOLLOW_UP_PROMPT.format(
             node_title=node_title,
             node_description=node_description[:500],
             fact_context=fact_context or '(general review)',
+            learner_context=learner_ctx,
         )
         from gemini_llm import call_llm
         raw = call_llm(prompt, model='gemini-2.0-flash',
@@ -1170,6 +1199,11 @@ Topic description: {node_description}
 Question: {question}
 Short answer: {answer}
 
+{learner_context}
+
+If learner context is provided, personalize the memory hook using connections the
+learner has already made. Reference their known temporal anchors rather than generic ones.
+
 Generate:
 1. rich_answer: 4-5 sentences expanding the answer. Include a concrete detail (a name, a place,
    a number), a vivid image, and why this fact matters in the bigger picture.
@@ -1180,7 +1214,8 @@ Output JSON only:
 {{"rich_answer":"...","memory_hook":"..."}}"""
 
 
-def _key_fact_to_question(fact: dict, node_title: str, node_description: str) -> dict:
+def _key_fact_to_question(fact: dict, node_title: str, node_description: str,
+                          conn=None, node_id=None, domain_id=None) -> dict:
     """Convert a key_fact to the cached_question format, with LLM enrichment."""
     result = {
         'question': fact['question'],
@@ -1192,6 +1227,11 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str) ->
         'fact_id': fact.get('id', ''),
         'entities': fact.get('entities', []),
     }
+    # Learner context for enrichment personalization
+    learner_ctx = ''
+    if conn and node_id and domain_id:
+        learner_ctx = get_learner_context(node_id, domain_id, conn)
+
     # Enrich bare answers with narrative + memory hook
     try:
         enriched = call_claude_json(_ENRICH_PROMPT.format(
@@ -1199,6 +1239,7 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str) ->
             node_description=node_description[:400],
             question=fact['question'],
             answer=fact['answer'],
+            learner_context=learner_ctx,
         ), timeout=90, model='sonnet')
         if enriched and isinstance(enriched, dict):
             if enriched.get('rich_answer'):
@@ -1355,11 +1396,13 @@ def generate_question(item_id: str, conn) -> dict:
             if fact:
                 node_title = node['title'] if node else ''
                 node_description = node.get('description', '') if node else ''
-                result = _key_fact_to_question(fact, node_title, node_description)
+                result = _key_fact_to_question(fact, node_title, node_description,
+                                                conn=conn, node_id=node_id, domain_id=domain_id)
                 fact_q = fact.get('question', '')
                 fact_a = fact.get('answer', '')
                 fact_ctx = f'{fact_q} — {fact_a}' if fact_a else fact_q
-                fqs = _generate_follow_up_queries(node_title, node_description, fact_ctx)
+                fqs = _generate_follow_up_queries(node_title, node_description, fact_ctx,
+                                                    conn=conn, node_id=node_id, domain_id=domain_id)
                 if fqs:
                     result['follow_up_queries'] = fqs
                 # No fallback templates — empty is better than generic
@@ -1433,6 +1476,9 @@ def generate_question(item_id: str, conn) -> dict:
             known_facts_ctx = 'Facts the learner already knows:\n' + '\n'.join(
                 f'- {f["question"]} → {f["answer"]}' for f in mastered[:6])
 
+    # Learner context from voice elicitation
+    learner_ctx = get_learner_context(node_id, domain_id, conn) if node_id and domain_id else ''
+
     if review_count <= 2 and not key_facts:
         # No key_facts available — use LLM factual prompt
         prompt = QUESTION_GEN_PROMPT_FACTUAL.format(
@@ -1440,6 +1486,7 @@ def generate_question(item_id: str, conn) -> dict:
             node_description=node_description,
             source_text=source_text[:400],
             temporal_context=temporal_ctx,
+            learner_context=learner_ctx,
         )
     else:
         if review_count == 3:
@@ -1455,6 +1502,7 @@ def generate_question(item_id: str, conn) -> dict:
             lens=lens,
             difficulty_instruction=difficulty,
             known_nodes_context=known_ctx, temporal_context=temporal_ctx,
+            learner_context=learner_ctx,
         )
         if known_facts_ctx:
             prompt += f'\n\n{known_facts_ctx}'
@@ -1474,7 +1522,8 @@ def generate_question(item_id: str, conn) -> dict:
     # Generate follow-up research queries via Claude
     if 'follow_up_queries' not in result:
         fqs = _generate_follow_up_queries(node_title, node_description,
-                                          source_text[:200] if source_text else '')
+                                          source_text[:200] if source_text else '',
+                                          conn=conn, node_id=node_id, domain_id=domain_id)
         if fqs:
             result['follow_up_queries'] = fqs
 
@@ -1624,6 +1673,12 @@ Research question: {query}
 Context — the learner was reviewing this curriculum concept:
 {node_title}: {node_description}
 
+{learner_context}
+
+If learner context is provided, tailor the card's depth to what the learner already knows.
+Don't explain what they've already demonstrated understanding of. Build on their
+existing connections and address their expressed curiosities.
+
 Write:
 1. A SHORT TITLE (under 60 chars) that names the specific subject with dates/years when relevant.
    Good: "The Catiline Conspiracy (63 BC)" or "Al-Idrisi's World Map for Roger II (1154)"
@@ -1661,6 +1716,12 @@ Entity: {entity_name} ({entity_type})
 
 Related entities from the same period or region that the learner has encountered:
 {related_entities}
+
+{learner_context}
+
+If learner context is provided, weave in what the learner already knows about this
+entity. Acknowledge their existing connections and build on them rather than repeating
+basics they've already demonstrated.
 
 Write:
 1. A SHORT TITLE (under 60 chars) with dates when relevant.
@@ -2009,6 +2070,7 @@ def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
     try:
         conn = get_connection(readonly=True)
         related = _find_related_entities(entity_id, entity_name, entity_type, conn)
+        learner_ctx = get_learner_context_for_entity(entity_name, conn)
         conn.close()
 
         related_text = '\n'.join(
@@ -2030,6 +2092,7 @@ def _run_entity_research(card_id: str, entity_id: str, entity_name: str,
             entity_type=entity_type,
             entity_description=description or '(no description available)',
             related_entities=related_text,
+            learner_context=learner_ctx,
         )
         if search_result:
             prompt += f'\n\nSearch results to incorporate:\n{search_result[:2000]}'
@@ -2324,19 +2387,21 @@ def _run_microlearning_research(card_id: str, query: str,
     """Background: run search + LLM, fill in the microlearning card."""
     from db import get_connection
     try:
-        # Load node context if available
+        # Load node context and learner context if available
         node_title = ''
         node_description = ''
+        learner_ctx = ''
         if node_id and domain_id:
             conn = get_connection(readonly=True)
             row = conn.execute(
                 'SELECT title, description FROM curriculum_nodes WHERE id=? AND domain_id=?',
                 (node_id, domain_id)
             ).fetchone()
-            conn.close()
             if row:
                 node_title = row['title']
                 node_description = row['description'] or ''
+            learner_ctx = get_learner_context(node_id, domain_id, conn)
+            conn.close()
 
         # Search for factual accuracy via Claude with web search
         search_result = None
@@ -2354,6 +2419,7 @@ def _run_microlearning_research(card_id: str, query: str,
             query=query,
             node_title=node_title or 'General history',
             node_description=node_description or '(no curriculum context)',
+            learner_context=learner_ctx,
         )
         if search_result:
             prompt += f"\n\nSearch results to incorporate:\n{search_result[:2000]}"
