@@ -1155,9 +1155,26 @@ def _pick_key_fact(key_facts: list, question_history: list) -> dict | None:
     return None
 
 
+_ENRICH_PROMPT = """A learner just answered a history review card. Enrich the answer into a learning moment.
+
+Topic: {node_title}
+Topic description: {node_description}
+Question: {question}
+Short answer: {answer}
+
+Generate:
+1. rich_answer: 4-5 sentences expanding the answer. Include a concrete detail (a name, a place,
+   a number), a vivid image, and why this fact matters in the bigger picture.
+2. memory_hook: One sentence connecting this to another period or event.
+   Be SPECIFIC with dates.
+
+Output JSON only:
+{{"rich_answer":"...","memory_hook":"..."}}"""
+
+
 def _key_fact_to_question(fact: dict, node_title: str, node_description: str) -> dict:
-    """Convert a key_fact to the cached_question format."""
-    return {
+    """Convert a key_fact to the cached_question format, with LLM enrichment."""
+    result = {
         'question': fact['question'],
         'answer_guidance': fact['answer'],
         'rich_answer': fact.get('rich_answer') or fact['answer'],
@@ -1167,6 +1184,22 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str) ->
         'fact_id': fact.get('id', ''),
         'entities': fact.get('entities', []),
     }
+    # Enrich bare answers with narrative + memory hook
+    try:
+        enriched = call_claude_json(_ENRICH_PROMPT.format(
+            node_title=node_title,
+            node_description=node_description[:400],
+            question=fact['question'],
+            answer=fact['answer'],
+        ), timeout=90, model='sonnet')
+        if enriched and isinstance(enriched, dict):
+            if enriched.get('rich_answer'):
+                result['rich_answer'] = enriched['rich_answer']
+            if enriched.get('memory_hook'):
+                result['memory_hook'] = enriched['memory_hook']
+    except Exception as e:
+        print(f'[review] enrich failed for {node_title}: {e}', flush=True)
+    return result
 
 
 def _get_cross_curriculum_context(domain_id: str, node_id: str, conn) -> str:
