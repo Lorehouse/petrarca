@@ -2219,145 +2219,99 @@ export default function ReaderScreen() {
         )}
       </View>
 
-      {/* Dropdown menu */}
+      {/* Dropdown menu with backdrop */}
       {showMenu && (
-        <View style={styles.menuDropdown}>
-          {/* Article ID */}
-          <Pressable onPress={() => {
-            Clipboard.setString(article.id);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            logEvent('reader_copy_id', { article_id: article.id });
-          }} style={styles.menuItem}>
-            <Text style={styles.menuItemLabel}>ID</Text>
-            <Text style={styles.menuItemValue} numberOfLines={1}>{article.id}</Text>
-          </Pressable>
-
-          {/* Source */}
-          <View style={styles.menuItem}>
-            <Text style={styles.menuItemLabel}>Source</Text>
-            <Text style={styles.menuItemValue} numberOfLines={1}>{article.hostname}</Text>
-          </View>
-
-          {/* Content type */}
-          <View style={styles.menuItem}>
-            <Text style={styles.menuItemLabel}>Type</Text>
-            <Text style={styles.menuItemValue}>{article.content_type}</Text>
-          </View>
-
-          {/* Word count + read time */}
-          <View style={styles.menuItem}>
-            <Text style={styles.menuItemLabel}>Length</Text>
-            <Text style={styles.menuItemValue}>{article.word_count?.toLocaleString()} words · {article.estimated_read_minutes} min</Text>
-          </View>
-
-          {/* Date */}
-          {article.date ? (
-            <View style={styles.menuItem}>
-              <Text style={styles.menuItemLabel}>Date</Text>
-              <Text style={styles.menuItemValue}>{formatDate(article.date)}</Text>
-            </View>
-          ) : null}
-
-          {/* Topics */}
-          {article.interest_topics && article.interest_topics.length > 0 ? (
-            <View style={styles.menuItem}>
-              <Text style={styles.menuItemLabel}>Topics</Text>
-              <Text style={styles.menuItemValue} numberOfLines={2}>
-                {article.interest_topics.map(t => t.broad).join(', ')}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Divider */}
-          <View style={styles.menuDivider} />
-
-          {/* Open source */}
-          <Pressable onPress={() => {
-            logEvent('reader_open_source', { article_id: article.id, url: article.source_url });
-            Linking.openURL(article.source_url);
-            setShowMenu(false);
-          }} style={styles.menuAction}>
-            <Text style={styles.menuActionText}>Open source →</Text>
-          </Pressable>
-
-          {/* Copy link */}
-          <Pressable onPress={() => {
-            Clipboard.setString(article.source_url);
-            logEvent('reader_copy_link', { article_id: article.id, url: article.source_url });
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setShowMenu(false);
-            setStatusMessage('Link copied');
-          }} style={styles.menuAction}>
-            <Text style={styles.menuActionText}>Copy link</Text>
-          </Pressable>
-
-          {/* Report bad scrape */}
-          <Pressable onPress={() => {
-            reportBadScrape(article.id, article.source_url, article.title);
-            logEvent('report_bad_scrape', { article_id: article.id });
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setShowMenu(false);
-            setStatusMessage('Reported');
-          }} style={styles.menuAction}>
-            <Text style={[styles.menuActionText, { color: colors.textMuted }]}>Report bad scrape</Text>
-          </Pressable>
-
-          {/* Ask AI */}
-          <Pressable onPress={() => {
-            setShowMenu(false);
-            setShowAIChat(true);
-            logEvent('ai_chat_open', { article_id: article.id });
-          }} style={styles.menuAction}>
-            <Text style={[styles.menuActionText, { color: colors.rubric }]}>✦ Ask AI</Text>
-          </Pressable>
-
-          {/* Voice note */}
-          <Pressable onPress={() => {
-            setShowMenu(false);
-            setShowVoiceFeedback(true);
-            logEvent('voice_note_open', { article_id: article.id });
-          }} style={styles.menuAction}>
-            <Text style={styles.menuActionText}>● Voice note</Text>
-          </Pressable>
-
-          {/* Research topics */}
-          {article.interest_topics && article.interest_topics.length > 0 ? (
-            <Pressable onPress={async () => {
-              const topic = article.interest_topics![0].broad;
+        <>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setShowMenu(false)}
+          />
+          <View style={styles.menuDropdown}>
+            {/* Compact article info */}
+            <Pressable onPress={() => {
+              Clipboard.setString(article.source_url);
+              logEvent('reader_copy_link', { article_id: article.id, url: article.source_url });
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               setShowMenu(false);
-              try {
-                await spawnTopicResearch(
-                  topic,
-                  `Article: ${article.title}\nSummary: ${article.one_line_summary}`,
-                  [article.title],
-                );
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                logEvent('research_spawned', { article_id: article.id, topic });
-              } catch (e) {
-                logEvent('research_spawn_error', { article_id: article.id, error: String(e) });
-              }
-            }} style={styles.menuAction}>
-              <Text style={[styles.menuActionText, { color: colors.claimNew }]}>
-                ↗ Research "{article.interest_topics[0].broad}"
+              setStatusMessage('Link copied');
+            }} style={styles.menuInfoRow}>
+              <Text style={styles.menuInfoText} numberOfLines={1}>
+                {article.hostname}
+                {article.date ? ` · ${formatDate(article.date)}` : ''}
+                {article.word_count ? ` · ${article.word_count.toLocaleString()} words` : ''}
               </Text>
+              <Text style={styles.menuInfoCopy}>Copy link</Text>
             </Pressable>
-          ) : null}
 
-          {/* Divider before destructive action */}
-          <View style={styles.menuDivider} />
+            <View style={styles.menuDivider} />
 
-          {/* Disregard */}
-          <Pressable onPress={() => {
-            dismissArticle(article.id, 'reader_disregard');
-            recordInterestSignal('swipe_dismiss', article.id);
-            logEvent('reader_disregard', { article_id: article.id });
-            setShowMenu(false);
-            setStatusMessage('Disregarded');
-            setTimeout(() => router.back(), 600);
-          }} style={styles.menuAction}>
-            <Text style={[styles.menuActionText, { color: colors.textMuted }]}>Disregard</Text>
-          </Pressable>
-        </View>
+            {/* Open source */}
+            <Pressable onPress={() => {
+              logEvent('reader_open_source', { article_id: article.id, url: article.source_url });
+              Linking.openURL(article.source_url);
+              setShowMenu(false);
+            }} style={styles.menuAction}>
+              <Text style={styles.menuActionText}>Open original →</Text>
+            </Pressable>
+
+            {/* Ask AI */}
+            <Pressable onPress={() => {
+              setShowMenu(false);
+              setShowAIChat(true);
+              logEvent('ai_chat_open', { article_id: article.id });
+            }} style={styles.menuAction}>
+              <Text style={[styles.menuActionText, { color: colors.rubric }]}>✦ Ask AI</Text>
+            </Pressable>
+
+            {/* Research topics */}
+            {article.interest_topics && article.interest_topics.length > 0 ? (
+              <Pressable onPress={async () => {
+                const topic = article.interest_topics![0].broad;
+                setShowMenu(false);
+                try {
+                  await spawnTopicResearch(
+                    topic,
+                    `Article: ${article.title}\nSummary: ${article.one_line_summary}`,
+                    [article.title],
+                  );
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  logEvent('research_spawned', { article_id: article.id, topic });
+                } catch (e) {
+                  logEvent('research_spawn_error', { article_id: article.id, error: String(e) });
+                }
+              }} style={styles.menuAction}>
+                <Text style={[styles.menuActionText, { color: colors.claimNew }]}>
+                  ↗ Research "{article.interest_topics[0].broad}"
+                </Text>
+              </Pressable>
+            ) : null}
+
+            <View style={styles.menuDivider} />
+
+            {/* Report bad scrape */}
+            <Pressable onPress={() => {
+              reportBadScrape(article.id, article.source_url, article.title);
+              logEvent('report_bad_scrape', { article_id: article.id });
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              setShowMenu(false);
+              setStatusMessage('Reported');
+            }} style={styles.menuAction}>
+              <Text style={[styles.menuActionText, { color: colors.textMuted }]}>Report bad extraction</Text>
+            </Pressable>
+
+            {/* Disregard */}
+            <Pressable onPress={() => {
+              dismissArticle(article.id, 'reader_disregard');
+              recordInterestSignal('swipe_dismiss', article.id);
+              logEvent('reader_disregard', { article_id: article.id });
+              setShowMenu(false);
+              setStatusMessage('Disregarded');
+              setTimeout(() => router.back(), 600);
+            }} style={styles.menuAction}>
+              <Text style={[styles.menuActionText, { color: colors.textMuted }]}>Disregard</Text>
+            </Pressable>
+          </View>
+        </>
       )}
 
       {/* Status toast */}
@@ -2893,12 +2847,21 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: fonts.display,
   },
+  menuBackdrop: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99,
+  },
   menuDropdown: {
     backgroundColor: colors.parchment,
     borderBottomWidth: 1,
     borderBottomColor: colors.rule,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    zIndex: 100,
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     } : {
@@ -2909,36 +2872,32 @@ const styles = StyleSheet.create({
       elevation: 3,
     }),
   },
-  menuItem: {
+  menuInfoRow: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-    paddingVertical: 5,
-    gap: 10,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 6,
+    gap: 12,
   },
-  menuItemLabel: {
-    fontFamily: fonts.uiMedium,
-    fontSize: 11,
+  menuInfoText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
     color: colors.textMuted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-    width: 50,
-    marginTop: 2,
-    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
-  },
-  menuItemValue: {
-    fontFamily: fonts.reading,
-    fontSize: 13,
-    color: colors.textBody,
     flex: 1,
+  },
+  menuInfoCopy: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.rubric,
   },
   menuDivider: {
     height: 1,
     backgroundColor: colors.rule,
-    marginVertical: 6,
+    marginVertical: 4,
   },
   menuAction: {
-    paddingVertical: 8,
-    minHeight: 36,
+    paddingVertical: 10,
+    minHeight: 40,
     justifyContent: 'center' as const,
   },
   menuActionText: {
