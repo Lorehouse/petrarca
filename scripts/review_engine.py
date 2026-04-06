@@ -3109,7 +3109,165 @@ def get_learner_context(node_id: str, domain_id: str, conn) -> str:
         display_text = display_text.replace('\n', ' ')
         lines.append(f'- [{chunk_type}] "{display_text}"')
 
+    # Prepend domain-level portrait if available
+    domain_summary = get_domain_summary(domain_id, conn)
+    if domain_summary:
+        lines.insert(0, f'DOMAIN KNOWLEDGE PORTRAIT:\n{domain_summary[:800]}\n')
+
     return 'LEARNER CONTEXT (from voice elicitation):\n' + '\n'.join(lines)
+
+
+def get_domain_summary(domain_id: str, conn) -> str | None:
+    """Retrieve the cached domain knowledge portrait, or None if not available."""
+    row = conn.execute(
+        'SELECT summary FROM domain_knowledge_summaries WHERE domain_id = ?',
+        (domain_id,)
+    ).fetchone()
+    if row:
+        return row['summary']
+    return None
+
+
+DOMAIN_SUMMARY_PROMPT = """Synthesize a learner knowledge portrait from their voice transcripts.
+
+DOMAIN: {domain_title}
+
+The learner has discussed these curriculum nodes via voice recall:
+
+{node_sections}
+
+Entities they've mentioned: {entities}
+
+Write a 300-500 word knowledge portrait covering:
+1. KNOWLEDGE FRAMEWORK: How does the learner organize this domain? What's their mental model?
+   (chronological? biographical? geographic? thematic?)
+2. STRONG AREAS: What do they know well? Cite specific facts and connections they made.
+3. GAPS AND MISCONCEPTIONS: What's missing or wrong? Be specific about what they got wrong
+   and what critical facts they're missing.
+4. INTERESTS AND CURIOSITIES: What topics excite them? What wonderings did they express?
+5. CONNECTIONS: What cross-domain or unexpected links have they made?
+6. RECOMMENDED NEXT STEPS: Based on this profile, what should they read or review next?
+
+Write in second person ("You know...", "Your strongest area..."). Be specific — cite
+their actual words and facts, don't generalize. This portrait will be injected into
+every LLM prompt in this domain to personalize the learner's experience.
+
+Output JSON:
+{{"portrait": "the full text portrait", "framework_type": "chronological|biographical|geographic|thematic|mixed", "strong_nodes": ["node_id_1", "node_id_2"], "weak_nodes": ["node_id_3"], "key_misconceptions": ["misconception 1"], "interests": ["topic 1", "topic 2"], "recommended_nodes": ["node_id to review next"]}}"""
+
+
+def generate_domain_summary(domain_id: str, conn) -> str | None:
+    """Generate a synthesized knowledge portrait for a domain from voice transcript chunks.
+
+    Queries all transcript_chunks linked to this domain, groups by node, and calls
+    Claude to synthesize a learner knowledge portrait. Stores the result in
+    domain_knowledge_summaries (UPSERT with version increment).
+
+    Returns the portrait text, or None if insufficient data.
+    """
+    import uuid
+
+    # Count chunks for this domain
+    chunk_count = conn.execute(
+        'SELECT COUNT(DISTINCT cnl.chunk_id) FROM chunk_node_links cnl WHERE cnl.domain_id = ?',
+        (domain_id,)
+    ).fetchone()[0]
+
+    if chunk_count < 10:
+        return None
+
+    # Get domain title
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return None
+    domain_title = curriculum.get('title', domain_id)
+
+    # Query chunks grouped by node
+    rows = conn.execute(
+        '''SELECT cn.id as node_id, cn.title as node_title,
+                  tc.chunk_type, tc.chunk_text
+           FROM chunk_node_links cnl
+           JOIN transcript_chunks tc ON cnl.chunk_id = tc.id
+           JOIN curriculum_nodes cn ON cnl.node_id = cn.id AND cnl.domain_id = cn.domain_id
+           WHERE cnl.domain_id = ?
+           ORDER BY cn.title, tc.chunk_type''',
+        (domain_id,)
+    ).fetchall()
+
+    # Group chunks by node
+    from collections import defaultdict
+    node_chunks = defaultdict(list)
+    node_ids = set()
+    for row in rows:
+        node_chunks[row['node_title']].append((row['chunk_type'], row['chunk_text']))
+        node_ids.add(row['node_id'])
+
+    # Format node sections
+    node_sections = []
+    for node_title, chunks in node_chunks.items():
+        section = f'### {node_title}\n'
+        for chunk_type, chunk_text in chunks[:8]:  # Limit per node to control prompt size
+            display = chunk_text[:300].replace('\n', ' ')
+            section += f'- [{chunk_type}] {display}\n'
+        node_sections.append(section)
+
+    # Query entities mentioned across domain
+    entity_rows = conn.execute(
+        '''SELECT DISTINCT cel.entity_name
+           FROM chunk_entity_links cel
+           JOIN chunk_node_links cnl ON cel.chunk_id = cnl.chunk_id
+           WHERE cnl.domain_id = ?
+           ORDER BY cel.entity_name
+           LIMIT 50''',
+        (domain_id,)
+    ).fetchall()
+    entities = ', '.join(r['entity_name'] for r in entity_rows)
+
+    # Truncate node_sections to fit prompt budget (~8k chars)
+    sections_text = '\n'.join(node_sections)
+    if len(sections_text) > 8000:
+        sections_text = sections_text[:8000] + '\n...(truncated)'
+
+    prompt = DOMAIN_SUMMARY_PROMPT.format(
+        domain_title=domain_title,
+        node_sections=sections_text,
+        entities=entities or '(none detected)',
+    )
+
+    result = call_claude_json(prompt, timeout=120)
+    if not result or 'portrait' not in result:
+        print(f'[domain-summary] Claude returned no portrait for {domain_id}', flush=True)
+        return None
+
+    portrait = result['portrait']
+    entity_count = len(entity_rows)
+    node_count = len(node_ids)
+
+    # Check existing version for UPSERT
+    existing = conn.execute(
+        'SELECT version FROM domain_knowledge_summaries WHERE domain_id = ?',
+        (domain_id,)
+    ).fetchone()
+    new_version = (existing['version'] + 1) if existing else 1
+
+    summary_id = str(uuid.uuid4())[:8]
+    conn.execute(
+        '''INSERT INTO domain_knowledge_summaries
+           (id, domain_id, summary, chunk_count, node_count, entity_count, version, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(domain_id) DO UPDATE SET
+               summary = excluded.summary,
+               chunk_count = excluded.chunk_count,
+               node_count = excluded.node_count,
+               entity_count = excluded.entity_count,
+               version = excluded.version,
+               updated_at = excluded.updated_at''',
+        (summary_id, domain_id, portrait, chunk_count, node_count, entity_count, new_version)
+    )
+    conn.commit()
+
+    print(f'[domain-summary] Generated portrait for {domain_title}: {len(portrait)} chars, v{new_version}', flush=True)
+    return portrait
 
 
 def get_learner_context_for_entity(entity_name: str, conn) -> str:

@@ -5645,6 +5645,113 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_knowledge_profile_get(self):
+        """GET /knowledge/profile/{domain_id} — return cached or regenerated domain portrait."""
+        from datetime import datetime, timedelta
+        from review_engine import generate_domain_summary, get_domain_summary
+        domain_id = self.path.split('/knowledge/profile/')[1].split('?')[0]
+        if not domain_id:
+            return self._send_json_response(400, {'error': 'Missing domain_id'})
+
+        conn = get_connection(readonly=True)
+        try:
+            row = conn.execute(
+                'SELECT * FROM domain_knowledge_summaries WHERE domain_id = ?',
+                (domain_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+
+        # Check freshness: if updated within last 24h, return cached
+        if row:
+            try:
+                updated = datetime.fromisoformat(row['updated_at'])
+                if datetime.now() - updated < timedelta(hours=24):
+                    return self._send_json_response(200, {
+                        'domain_id': domain_id,
+                        'portrait': row['summary'],
+                        'version': row['version'],
+                        'stats': {
+                            'chunk_count': row['chunk_count'],
+                            'node_count': row['node_count'],
+                            'entity_count': row['entity_count'],
+                        },
+                        'updated_at': row['updated_at'],
+                        'fresh': True,
+                    })
+            except (ValueError, TypeError):
+                pass  # stale or unparseable — regenerate
+
+        # Stale or missing — regenerate
+        conn = get_connection()
+        try:
+            portrait = generate_domain_summary(domain_id, conn)
+        finally:
+            conn.close()
+
+        if not portrait:
+            return self._send_json_response(404, {'error': 'Insufficient data for domain portrait'})
+
+        # Re-read the stored row for stats
+        conn = get_connection(readonly=True)
+        try:
+            row = conn.execute(
+                'SELECT * FROM domain_knowledge_summaries WHERE domain_id = ?',
+                (domain_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+
+        return self._send_json_response(200, {
+            'domain_id': domain_id,
+            'portrait': portrait,
+            'version': row['version'] if row else 1,
+            'stats': {
+                'chunk_count': row['chunk_count'] if row else 0,
+                'node_count': row['node_count'] if row else 0,
+                'entity_count': row['entity_count'] if row else 0,
+            },
+            'updated_at': row['updated_at'] if row else None,
+            'fresh': False,
+        })
+
+    def _handle_knowledge_profile_regenerate(self):
+        """POST /knowledge/profile/regenerate/{domain_id} — force regeneration."""
+        from review_engine import generate_domain_summary
+        domain_id = self.path.split('/knowledge/profile/regenerate/')[1].split('?')[0]
+        if not domain_id:
+            return self._send_json_response(400, {'error': 'Missing domain_id'})
+
+        conn = get_connection()
+        try:
+            portrait = generate_domain_summary(domain_id, conn)
+        finally:
+            conn.close()
+
+        if not portrait:
+            return self._send_json_response(404, {'error': 'Insufficient data for domain portrait'})
+
+        conn = get_connection(readonly=True)
+        try:
+            row = conn.execute(
+                'SELECT * FROM domain_knowledge_summaries WHERE domain_id = ?',
+                (domain_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+
+        return self._send_json_response(200, {
+            'domain_id': domain_id,
+            'portrait': portrait,
+            'version': row['version'] if row else 1,
+            'stats': {
+                'chunk_count': row['chunk_count'] if row else 0,
+                'node_count': row['node_count'] if row else 0,
+                'entity_count': row['entity_count'] if row else 0,
+            },
+            'updated_at': row['updated_at'] if row else None,
+        })
+
     def _handle_dashboard_stats(self):
         """GET /stats/dashboard-data — comprehensive dashboard statistics."""
         from curriculum_db import get_dashboard_stats
@@ -5795,6 +5902,8 @@ JSON array only:"""
             return self._handle_knowledge_update()
         if self.path == '/curriculum/knowledge/import-assessment':
             return self._handle_knowledge_import_assessment()
+        if self.path.startswith('/knowledge/profile/regenerate/'):
+            return self._handle_knowledge_profile_regenerate()
 
         # Review endpoints
         if self.path == '/review/book-complete':
@@ -6438,6 +6547,8 @@ JSON array only:"""
             finally:
                 conn.close()
             return self._send_json_response(200, data)
+        if self.path.startswith('/knowledge/profile/'):
+            return self._handle_knowledge_profile_get()
         if self.path.startswith('/curriculum/generate/status'):
             from urllib.parse import urlparse, parse_qs
             job_id = parse_qs(urlparse(self.path).query).get('id', [''])[0]

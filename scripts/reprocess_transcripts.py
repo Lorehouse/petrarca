@@ -96,6 +96,36 @@ def main():
     print(f'Node links: {node_links} (across {unique_nodes} unique nodes)')
     print(f'Entity links: {entity_links} (across {unique_entities} unique entities)')
 
+    # Generate domain summaries for domains with sufficient data
+    print('\n--- Generating domain summaries ---')
+    from review_engine import generate_domain_summary
+    conn = get_connection()
+    domains = conn.execute(
+        'SELECT DISTINCT domain_id FROM chunk_node_links WHERE domain_id IS NOT NULL AND domain_id != ""'
+    ).fetchall()
+    for row in domains:
+        domain_id = row[0]
+        chunk_count = conn.execute(
+            'SELECT COUNT(DISTINCT cnl.chunk_id) FROM chunk_node_links cnl WHERE cnl.domain_id = ?',
+            (domain_id,)
+        ).fetchone()[0]
+        if chunk_count >= 10:
+            try:
+                result = generate_domain_summary(domain_id, conn)
+                if result:
+                    ver = conn.execute(
+                        'SELECT version FROM domain_knowledge_summaries WHERE domain_id = ?',
+                        (domain_id,)
+                    ).fetchone()
+                    print(f'  Generated summary for {domain_id}: {len(result)} chars, v{ver["version"] if ver else 1}')
+                else:
+                    print(f'  Skipped {domain_id}: insufficient data')
+            except Exception as e:
+                print(f'  ERROR generating summary for {domain_id}: {e}')
+        else:
+            print(f'  Skipped {domain_id}: only {chunk_count} chunks (need 10+)')
+    conn.close()
+
 
 if __name__ == '__main__':
     main()

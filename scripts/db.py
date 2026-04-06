@@ -616,6 +616,8 @@ MIGRATIONS = [
     "ALTER TABLE microlearning_cards ADD COLUMN source_type TEXT DEFAULT 'follow_up'",
     # Generation depth: 0 = root (from review/voice), 1+ = child of ML card
     "ALTER TABLE microlearning_cards ADD COLUMN generation_depth INTEGER DEFAULT 0",
+    # Domain knowledge summaries — synthesized learner knowledge portraits
+    "CREATE TABLE IF NOT EXISTS domain_knowledge_summaries (id TEXT PRIMARY KEY, domain_id TEXT NOT NULL UNIQUE, summary TEXT NOT NULL, chunk_count INTEGER DEFAULT 0, node_count INTEGER DEFAULT 0, entity_count INTEGER DEFAULT 0, version INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
 ]
 
 
