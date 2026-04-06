@@ -453,20 +453,28 @@ function ReviewCard({
               onResearch={onResearch}
             />
 
-            {/* Related facts from the same topic — untested key_facts */}
+            {/* Related facts from the same topic */}
             {(item as any).related_facts?.length > 0 && (
               <View style={{ marginTop: 10 }}>
-                <Text style={cs.followUpLabel}>Also test yourself on</Text>
-                {(item as any).related_facts.map((f: { question: string; type: string }, i: number) => (
-                  <Pressable
-                    key={i}
-                    style={cs.relatedFactBtn}
-                    onPress={() => onResearch(f.question)}
-                  >
-                    <Text style={cs.relatedFactType}>{f.type}</Text>
-                    <Text style={cs.relatedFactText}>{f.question}</Text>
-                  </Pressable>
-                ))}
+                <Text style={cs.followUpLabel}>Same topic</Text>
+                {(item as any).related_facts.map((f: { question: string; type: string; status: string; score?: string }, i: number) => {
+                  const isTested = f.status === 'tested';
+                  return (
+                    <Pressable
+                      key={i}
+                      style={[cs.relatedFactBtn, isTested && cs.relatedFactTested]}
+                      onPress={isTested ? undefined : () => onResearch(f.question)}
+                      disabled={isTested}
+                    >
+                      <Text style={[cs.relatedFactType, isTested && { color: colors.textMuted }]}>
+                        {isTested ? (f.score === 'knew' ? '\u2713' : '\u25CB') : f.type}
+                      </Text>
+                      <Text style={[cs.relatedFactText, isTested && { color: colors.textMuted, opacity: 0.7 }]}>
+                        {f.question}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
 
@@ -1249,6 +1257,7 @@ const cs = StyleSheet.create({
   typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   domainLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, flex: 1 },
   relatedFactBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 4, backgroundColor: 'rgba(42,122,74,0.04)', borderRadius: 4, borderLeftWidth: 2, borderLeftColor: colors.claimNew },
+  relatedFactTested: { backgroundColor: 'transparent', borderLeftColor: colors.rule },
   relatedFactType: { fontFamily: fonts.uiMedium, fontSize: 9, color: colors.claimNew, textTransform: 'uppercase', letterSpacing: 0.3, minWidth: 40, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   relatedFactText: { fontFamily: fonts.reading, fontSize: 13, color: colors.textBody, flex: 1 },
   menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 },

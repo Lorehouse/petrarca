@@ -1055,7 +1055,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             if not cq or not cq.get('question'):
                 continue
 
-            # Build related_facts: untested key_facts from the same node
+            # Build related_facts: other key_facts from the same node
+            # Untested ones are actionable; tested ones provide peace of mind
             related_facts = []
             current_fact_id = cq.get('fact_id', '')
             node_id = item.get('curriculum_node_id')
@@ -1063,16 +1064,30 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             kfs = node_key_facts.get((domain_id, node_id), [])
             if kfs:
                 question_history = _parse_json_safe(item.get('question_history'), [])
-                tested_ids = {h.get('fact_id') for h in question_history if h.get('fact_id')}
-                tested_ids.add(current_fact_id)  # exclude current question's fact
+                tested_map = {}  # fact_id -> best score
+                for h in question_history:
+                    fid = h.get('fact_id')
+                    if fid:
+                        tested_map[fid] = h.get('score', 'partly')
                 for f in kfs:
-                    if f.get('id') not in tested_ids and f.get('question'):
+                    fid = f.get('id', '')
+                    if fid == current_fact_id or not f.get('question'):
+                        continue
+                    if fid in tested_map:
                         related_facts.append({
                             'question': f['question'],
                             'type': f.get('type', 'event'),
+                            'status': 'tested',
+                            'score': tested_map[fid],
                         })
-                        if len(related_facts) >= 3:
-                            break
+                    else:
+                        related_facts.append({
+                            'question': f['question'],
+                            'type': f.get('type', 'event'),
+                            'status': 'untested',
+                        })
+                    if len(related_facts) >= 5:
+                        break
 
             card = {
                 'type': 'review',
