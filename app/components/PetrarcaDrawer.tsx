@@ -128,6 +128,15 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             {/* System */}
             <Text style={styles.sectionLabel}>System</Text>
             <NavItem
+              title="Statistics"
+              subtitle="Knowledge progress & review stats"
+              onPress={() => {
+                logEvent('drawer_item_tap', { item: 'statistics' });
+                onClose();
+                Linking.openURL('http://alifstian.duckdns.org:8090/stats/dashboard');
+              }}
+            />
+            <NavItem
               title="Activity Log"
               subtitle="Pipeline activity & events"
               onPress={() => navigate('activity_log', '/log')}
