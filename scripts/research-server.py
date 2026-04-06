@@ -1625,20 +1625,15 @@ Return ONLY a JSON array:
   {{"question": "...", "connects_to": "..."}}
 ]"""
 
-    result = call_llm(prompt, max_tokens=1024)
+    result = call_llm(prompt, max_tokens=1024, response_mime_type='application/json')
     if not result:
         return []
 
-    # Parse JSON from response
     try:
-        cleaned = result.strip()
-        if cleaned.startswith('```'):
-            cleaned = re.sub(r'^```\w*\n?', '', cleaned)
-            cleaned = re.sub(r'\n?```$', '', cleaned)
-        questions = json.loads(cleaned)
+        questions = json.loads(result) if isinstance(result, str) else result
         if isinstance(questions, list):
             return [q for q in questions if isinstance(q, dict) and 'question' in q and 'connects_to' in q]
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         print(f'[generate-questions] JSON parse failed for article {article_id}', flush=True)
 
     return []

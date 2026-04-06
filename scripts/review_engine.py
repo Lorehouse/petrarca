@@ -1108,16 +1108,24 @@ def get_review_queue(limit: int = 20, book_id: str | None = None, conn=None) -> 
 def _generate_follow_up_queries(node_title: str, node_description: str,
                                 fact_context: str = '') -> list[str]:
     """Generate 3 LLM-powered follow-up queries for a review item.
-    Returns empty list on failure (caller should fall back to templates)."""
+    Returns empty list on failure (caller should fall back to templates).
+
+    Uses Gemini Flash directly for interactive latency (~2-5s vs 15-60s
+    with claude -p subprocess).
+    """
     try:
         prompt = FOLLOW_UP_PROMPT.format(
             node_title=node_title,
             node_description=node_description[:500],
             fact_context=fact_context or '(general review)',
         )
-        fq = call_claude_json(prompt, timeout=60, model='sonnet')
-        if isinstance(fq, list) and len(fq) >= 2:
-            return fq[:3]
+        from gemini_llm import call_llm
+        raw = call_llm(prompt, model='gemini-2.0-flash',
+                       response_mime_type='application/json')
+        if raw:
+            fq = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(fq, list) and len(fq) >= 2:
+                return fq[:3]
     except Exception as e:
         print(f'[review] follow-up gen failed for {node_title}: {e}', flush=True)
     return []
@@ -2229,6 +2237,7 @@ def create_targeted_quiz(item_id: str, query: str) -> dict:
         node_desc = (node[1] or '')[:300] if node else ''
 
         # Quick LLM call to generate Q+A for this specific fact
+        # Uses Gemini directly for interactive latency (~1-3s)
         prompt = f"""Generate a single quiz question and answer for this specific knowledge gap.
 
 Topic: {node_title}
@@ -2238,13 +2247,9 @@ User wants to know: {query}
 Return JSON: {{"question": "...", "answer": "..."}}
 The question should be direct and factual. The answer should be 1-2 sentences."""
 
-        try:
-            from claude_llm import call_claude_json
-            result = call_claude_json(prompt, model='haiku')
-        except Exception:
-            from gemini_llm import call_llm
-            raw = call_llm(prompt, model='gemini-2.0-flash-lite')
-            result = json.loads(raw) if isinstance(raw, str) else raw
+        from gemini_llm import call_llm
+        raw = call_llm(prompt, response_mime_type='application/json')
+        result = json.loads(raw) if isinstance(raw, str) else raw
 
         question = result.get('question', query)
         answer = result.get('answer', '')
