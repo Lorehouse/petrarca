@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 6, 2026 (session 55: Review card quality overhaul)
+**Last updated**: April 6, 2026 (session 56: Knowledge profile system)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -132,7 +132,8 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
 | `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
-| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen |
+| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
+| `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
 | `log_server.py` | Interaction log collection (:8091) |
@@ -277,7 +278,9 @@
 | POST | `/projects/note` | Add project note |
 | GET | `/projects` | List projects |
 | GET | `/stats/dashboard` | Statistics dashboard HTML page |
-| GET | `/stats/dashboard-data` | Dashboard stats JSON (today summary, knowledge per curriculum, review/quiz, books, voice, timeline) |
+| GET | `/stats/dashboard-data` | Dashboard stats JSON (today summary, knowledge per curriculum, review/quiz, books, voice, timeline, knowledge_profile) |
+| GET | `/knowledge/profile/{domain_id}` | Domain knowledge portrait (cached, auto-regenerates if >24h stale) |
+| POST | `/knowledge/profile/regenerate/{domain_id}` | Force-regenerate domain portrait |
 | GET | `/health` | Health check |
 
 ## SQLite Schema (petrarca.db)
@@ -291,6 +294,8 @@
 **Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities`, `entity_curriculum_links`
 
 **Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes`
+
+**Knowledge Profile**: `transcript_chunks` (embedded voice pieces), `chunk_node_links` (chunks↔nodes), `chunk_entity_links` (chunks↔entities), `domain_knowledge_summaries` (per-domain portraits)
 
 **Other**: `projects`, `project_notes`, `voice_transcripts`
 

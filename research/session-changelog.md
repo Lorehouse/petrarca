@@ -1,6 +1,67 @@
 # Knowledge System Implementation Status
 
-**Date**: April 6, 2026 (last updated — session 55: Review card quality overhaul)
+**Date**: April 6, 2026 (last updated — session 56: Knowledge profile system)
+
+## Session 56: Knowledge Profile System (April 6, 2026)
+
+### What
+Built a complete "digital twin" knowledge profile from voice transcripts. Every voice elicitation is now chunked, embedded, and linked to curriculum nodes and entities. This data is injected into all LLM prompts and surfaced on dashboard, atlas, and entity cards.
+
+### Infrastructure (Phase 1)
+- 3 new tables: `transcript_chunks` (embedded pieces), `chunk_node_links` (many-to-many), `chunk_entity_links` (many-to-many)
+- `create_transcript_chunks()` — chunks transcripts, batch-embeds with MiniLM 384d, links to nodes via entity cross-references
+- `get_learner_context(node_id, domain_id, conn)` — dual retrieval: relational (chunk_node_links) + semantic (cosine similarity ≥ 0.35)
+- `get_learner_context_for_entity(entity_name, conn)` — entity-scoped retrieval with fuzzy match fallback
+- `reprocess_transcripts.py` — backfill script, processed all 28 existing transcripts → 786 chunks, 13,743 node links, 80 entities
+
+### Prompt Injection (Phase 2)
+- `{learner_context}` added to 6 prompt templates: QUESTION_GEN_PROMPT_FACTUAL, QUESTION_GEN_PROMPT, FOLLOW_UP_PROMPT, _ENRICH_PROMPT, MICROLEARNING_PROMPT, ENTITY_RESEARCH_PROMPT
+- All call sites updated: `generate_question()`, `_key_fact_to_question()`, `_generate_follow_up_queries()`, `_run_microlearning_research()`, `_run_entity_research()`
+
+### Candidate Selection Fix (Phase 3)
+- `_elicitation_candidates_for_domain()` now checks `chunk_node_links` for cross-node coverage
+- Partially-covered nodes penalized -0.5 (not excluded) — confirmed working for 2 Byzantine nodes
+- "Don't know" flow returns `already_covered` hint if topic was discussed in adjacent elicitation
+
+### Elicitation Enrichment (Phase 4)
+- VOICE_ELICITATION_PROMPT now extracts: `entities_mentioned`, `confidence_tagged`, `organizing_framework`, `adjacent_nodes_covered`
+- `create_transcript_chunks()` wired into live `run_voice_elicitation()` pipeline with stable `vt_id` shared between chunk creation and transcript logging
+- VOICE_CAPTURE_ANALYSIS_PROMPT also got `confidence_tagged`
+
+### Domain Summaries (Phase 5)
+- `domain_knowledge_summaries` table — cached 300-500 word knowledge portraits per domain
+- `generate_domain_summary()` — follows read→close→LLM→reopen→write discipline
+- `get_domain_summary()` prepended to every `get_learner_context()` call
+- API: `GET /knowledge/profile/{domain}`, `POST /knowledge/profile/regenerate/{domain}`
+- Generated portraits for all 5 active domains (Sicily, Ancient Greece, Byzantine, Rome, Islamic Civ)
+
+### Visibility
+- **Dashboard** (`/stats/dashboard`): Knowledge Profile section with chunk counts, type breakdown, cross-node links, domain portrait metadata
+- **Atlas** (`/knowledge/atlas`): Node detail shows "Your Voice Recall", domain detail shows full portrait, entity detail shows "What You've Said"
+- **Entity cards** (mobile): `voice_context` array in API response, displayed under "What I know → From your voice recall"
+- **Entity API** (`/entity/{id}`): Returns `voice_context` from transcript chunks
+
+### Bug Fixes During Review
+- `get_domain_summary()` missing try/except for nonexistent table — would have crashed all review question generation
+- `generate_domain_summary()` write-lock violation — held conn during 5-15s LLM call. Fixed to read→close→LLM→reopen→write
+- `vt_id` mismatch — chunk transcript_id and voice_transcripts.id now use same pre-generated ID
+- `fonts.serif` → `fonts.body` in EntitySheet.tsx (TS error caught by push hook)
+
+### Files Changed
+- `scripts/db.py` — 3 new tables + 1 migration
+- `scripts/review_engine.py` — ~630 lines: chunking, retrieval, prompt injection, domain summaries
+- `scripts/research-server.py` — knowledge profile endpoints, entity voice context, candidate coverage hint
+- `scripts/curriculum_db.py` — dashboard stats + atlas data with voice chunks/portraits
+- `scripts/statistics_dashboard.html` — Knowledge Profile codex-page
+- `scripts/knowledge_atlas.html` — voice chunks in detail panels
+- `scripts/reprocess_transcripts.py` — new backfill script
+- `app/components/EntitySheet.tsx` — voice context display
+- `app/data/types.ts` — `voice_context` on EntityDetails
+
+### Known Limitations
+- NER regex fallback misses single-word entities ("Aristotle") — only fires when LLM `entities_mentioned` absent (old transcripts)
+- Cross-node linking depends on `shared_entities` coverage — "Fourth Crusade" not linked from Constantinople because entity wasn't extracted from old transcript. Future elicitations use LLM extraction.
+- Domain portraits require 10+ chunks. Portrait regeneration is synchronous (15-20s on first GET request).
 
 ## Session 55: Review Card Quality Overhaul (April 6, 2026)
 
