@@ -23,12 +23,14 @@ DATA_DIR = Path(os.environ.get('PETRARCA_DATA', '/opt/petrarca/data'))
 
 def _log_voice_transcript(source: str, node_id: str, domain_id: str,
                           node_title: str, transcript: str, audio_bytes: int,
-                          llm_result: dict, ml_triggered: list):
-    """Persist every voice transcript for later analysis."""
+                          llm_result: dict, ml_triggered: list,
+                          vt_id: str = None):
+    """Persist every voice transcript for later analysis. Returns the vt_id used."""
     try:
         from db import get_connection
         conn = get_connection()
-        vt_id = f'vt_{int(time.time())}_{hash(transcript) % 10000:04d}'
+        if not vt_id:
+            vt_id = f'vt_{int(time.time())}_{hash(transcript) % 10000:04d}'
         conn.execute(
             '''INSERT OR IGNORE INTO voice_transcripts
                (id, source, node_id, domain_id, node_title, transcript,
@@ -41,8 +43,10 @@ def _log_voice_transcript(source: str, node_id: str, domain_id: str,
         )
         conn.commit()
         conn.close()
+        return vt_id
     except Exception as e:
         print(f'[voice-log] Failed to persist transcript: {e}', flush=True)
+        return vt_id
 SCRIPT_DIR = Path(__file__).parent
 BOOK_RESEARCH_DIR = SCRIPT_DIR / 'data' / 'book_research'
 
@@ -380,6 +384,9 @@ TOPIC DEFINITION: {node_description}
 BOOK SOURCES (what the learner has read about this):
 {sources_text}
 
+AVAILABLE NODES IN THIS CURRICULUM:
+{available_nodes}
+
 LEARNER'S RECALL (transcribed speech):
 {transcript}
 
@@ -390,11 +397,15 @@ Compare the learner's recall against the topic definition and book sources. Iden
 3. INTERESTING: Things the learner said that go BEYOND the sources — personal connections, questions, hypotheses, links to other topics. These are valuable signals.
 4. WONDERINGS: Extract ALL questioning or curious statements — "I wonder...", "I'm not sure if...", "was it...?", "I'd like to know...", hedged questions, speculative connections, anything where the learner is reaching beyond what they know. These are the most valuable signals — err on the side of including too many. Rephrase as clear research questions.
 5. RESEARCH_QUESTIONS: Specific questions that could be researched to deepen the learner's understanding. Derive from wonderings, gaps in knowledge, and interesting but uncertain claims. Frame as searchable questions.
+6. ENTITIES_MENTIONED: List ALL people, places, events, and concepts the learner mentions by name. Use canonical forms (e.g., "Alexander the Great" not "Alexander").
+7. CONFIDENCE_TAGGED: For each key claim the learner makes, tag their apparent confidence: "certain" (stated as fact), "uncertain" (hedged, "I think...", "maybe..."), or "wrong" (stated confidently but incorrect).
+8. ORGANIZING_FRAMEWORK: How does the learner organize this knowledge? Options: "biographical_arc" (follows a person's life), "chronological" (events in order), "geographic" (places and regions), "thematic" (ideas and concepts), "causal" (cause and effect chains).
+9. ADJACENT_NODES_COVERED: If the learner discusses topics that clearly overlap with OTHER curriculum nodes (not this one), list the likely node_ids from the available nodes above.
 
 If the learner demonstrates extensive knowledge about adjacent or broader topics beyond the node definition, acknowledge this in feedback_summary and give partial credit in coverage_pct for related knowledge that connects to this topic.
 
 Output JSON:
-{{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["I wonder if X was related to Y", "Was it Z who did this?", "I'm curious whether..."], "research_questions": ["What was the relationship between X and Y?", "Did Z lead to the outcome described?"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
+{{"captured": ["fact1", "fact2"], "missed": ["important_fact1", "important_fact2"], "interesting": ["connection1"], "wonderings": ["I wonder if X was related to Y", "Was it Z who did this?", "I'm curious whether..."], "research_questions": ["What was the relationship between X and Y?", "Did Z lead to the outcome described?"], "entities_mentioned": ["Alexander the Great", "Plato", "Athens"], "confidence_tagged": [{{"fact": "Aristotle was student of Plato", "confidence": "certain"}}, {{"fact": "His father was a tutor to Philip", "confidence": "uncertain"}}], "organizing_framework": "biographical_arc|chronological|geographic|thematic|causal", "adjacent_nodes_covered": ["node_id_1", "node_id_2"], "coverage_pct": 65, "suggested_score": "knew|partly|missed", "feedback_summary": "2-3 sentence personalized feedback highlighting what was strong and what key thing was missed"}}"""
 
 
 VOICE_CAPTURE_ANALYSIS_PROMPT = """Analyze a voice capture where a learner describes what they know about a topic.
@@ -417,12 +428,14 @@ Instructions:
    - "engaged": learner demonstrates real knowledge but with gaps or uncertainty
    - "mentioned": learner references the topic but with little substance
 4. Extract ALL wonderings, questions, uncertainties, "I think...", "I'm not sure if...", speculative statements. These are the most valuable signals. Rephrase as clear research questions.
+5. CONFIDENCE_TAGGED: For each key factual claim, tag the learner's apparent confidence: "certain" (stated as fact), "uncertain" (hedged, "I think...", "maybe..."), or "wrong" (stated confidently but incorrect).
 
 Output JSON:
 {{"facts": [{{"fact": "specific factual claim", "node_ids": ["node_id_1"], "source_excerpt": "relevant 1-2 sentences from transcript"}}],
 "node_assessments": [{{"node_id": "...", "node_title": "...", "knowledge_level": "anchored|engaged|mentioned", "fact_count": 3, "summary": "brief summary of what learner knows about this node"}}],
 "wonderings": ["research question 1", "research question 2"],
 "entities_mentioned": ["entity name 1", "entity name 2"],
+"confidence_tagged": [{{"fact": "specific claim", "confidence": "certain|uncertain|wrong"}}],
 "overall_summary": "2-3 sentence summary of what the learner shared"}}"""
 
 
@@ -3300,11 +3313,23 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
 
     print(f'[voice-elicit] Sources: {len(sources_text)} chars', flush=True)
 
+    # Build available nodes list for adjacent_nodes_covered detection
+    available_nodes_text = ''
+    if domain_id:
+        curriculum = load_curriculum(domain_id)
+        if curriculum:
+            available_nodes_text = '\n'.join(
+                f'- {n["id"]}: {n["title"]}'
+                for n in curriculum.get('nodes', [])
+                if n.get('level', 0) >= 2 and n['id'] != node_id
+            )[:2000]  # cap at 2000 chars
+
     # Run LLM analysis
     prompt = VOICE_ELICITATION_PROMPT.format(
         node_title=node['title'],
         node_description=node['description'],
         sources_text=sources_text or 'No specific book sources available.',
+        available_nodes=available_nodes_text or 'Not available',
         transcript=transcript,
     )
 
@@ -3318,6 +3343,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     result['node_title'] = node['title']
     result['node_description'] = node['description']
     result['transcript'] = transcript
+
+    # Generate stable transcript ID for both chunk creation and voice_transcripts logging
+    vt_id = f'vt_{int(time.time())}_{hash(transcript) % 10000:04d}'
 
     # DB writes with retry — the expensive work (transcription + LLM) is done,
     # so we retry only the cheap write portion if the DB is locked.
@@ -3417,6 +3445,21 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
                     WHERE curriculum_node_id = ? AND curriculum_domain = ?
                 """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
 
+            # Create transcript chunks for knowledge profile
+            try:
+                chunks_created = create_transcript_chunks(
+                    transcript_id=vt_id,
+                    node_id=node_id,
+                    domain_id=domain_id,
+                    transcript=transcript,
+                    llm_result=result,
+                    conn=conn,
+                )
+                if chunks_created > 0:
+                    print(f'[voice-elicit] Created {chunks_created} transcript chunks for knowledge profile', flush=True)
+            except Exception as e:
+                print(f'[voice-elicit] Failed to create transcript chunks: {e}', flush=True)
+
             conn.commit()
             conn.close()
             break  # success
@@ -3492,6 +3535,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         node_title=node['title'], transcript=transcript,
         audio_bytes=audio_path.stat().st_size if audio_path.exists() else 0,
         llm_result=result, ml_triggered=ml_triggered,
+        vt_id=vt_id,
     )
 
     return result
