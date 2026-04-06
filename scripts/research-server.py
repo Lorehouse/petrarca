@@ -5288,9 +5288,14 @@ JSON array only:"""
                 if age_hours <= 24:
                     try:
                         cached = json.loads(cache_path.read_text())
-                        print(f'[voice-elicit] Header cache hit for {header_request_id}, skipping body read', flush=True)
-                        self._send_json_response(200, cached)
-                        return
+                        # Only return if the cached result has actual analysis content
+                        if cached.get('captured') or cached.get('missed') or cached.get('feedback_summary'):
+                            print(f'[voice-elicit] Header cache hit for {header_request_id}, skipping body read', flush=True)
+                            self._send_json_response(200, cached)
+                            return
+                        else:
+                            print(f'[voice-elicit] Header cache for {header_request_id} is empty, re-processing', flush=True)
+                            cache_path.unlink(missing_ok=True)
                     except Exception:
                         pass
                 else:
@@ -5351,9 +5356,13 @@ JSON array only:"""
                 else:
                     try:
                         cached = json.loads(cache_path.read_text())
-                        print(f'[voice-elicit] Cache hit for {request_id}, returning cached result', flush=True)
-                        self._send_json_response(200, cached)
-                        return
+                        if cached.get('captured') or cached.get('missed') or cached.get('feedback_summary'):
+                            print(f'[voice-elicit] Cache hit for {request_id}, returning cached result', flush=True)
+                            self._send_json_response(200, cached)
+                            return
+                        else:
+                            print(f'[voice-elicit] Cached result for {request_id} is empty, re-processing', flush=True)
+                            cache_path.unlink(missing_ok=True)
                     except Exception:
                         pass  # corrupted cache, re-process
 
@@ -5376,7 +5385,10 @@ JSON array only:"""
             audio_path.unlink(missing_ok=True)
 
         # Cache successful results before sending (connection may drop)
-        if cache_path and result and not result.get('error'):
+        # Validate that analysis actually produced content — don't cache empty results
+        has_analysis = (result and not result.get('error')
+                        and (result.get('captured') or result.get('missed') or result.get('feedback_summary')))
+        if cache_path and has_analysis:
             try:
                 cache_path.write_text(json.dumps(result))
             except Exception:
@@ -5397,6 +5409,9 @@ JSON array only:"""
 
         Returns the cached result (200) or 404 if not found. This allows clients
         to check before re-uploading the full audio file on retry.
+
+        DELETE /review/voice-elicit-check?request_id=X — invalidate a cached result.
+        Used when the cached result is incomplete/malformed and needs re-processing.
         """
         from urllib.parse import parse_qs, urlparse
         params = parse_qs(urlparse(self.path).query)
@@ -5413,6 +5428,12 @@ JSON array only:"""
                 return
             try:
                 cached = json.loads(cache_path.read_text())
+                # Validate the cached result has actual analysis content
+                if not (cached.get('captured') or cached.get('missed') or cached.get('feedback_summary')):
+                    print(f'[voice-elicit] Cached result for {request_id} is empty, invalidating', flush=True)
+                    cache_path.unlink(missing_ok=True)
+                    self._send_json_response(404, {'status': 'invalid_cache'})
+                    return
                 print(f'[voice-elicit] Check cache hit for {request_id}', flush=True)
                 self._send_json_response(200, cached)
                 return
