@@ -5481,6 +5481,29 @@ JSON array only:"""
                         domain_id = row['curriculum_domain']
                 finally:
                     tmp.close()
+        # Check if the user already covered this topic via adjacent elicitations
+        already_covered_hint = None
+        if domain_id:
+            try:
+                from db import get_connection as gc2
+                rconn = gc2(readonly=True)
+                try:
+                    link_row = rconn.execute("""
+                        SELECT cnl.chunk_id, vt.node_id AS source_node_id
+                        FROM chunk_node_links cnl
+                        JOIN transcript_chunks tc ON tc.id = cnl.chunk_id
+                        JOIN voice_transcripts vt ON vt.id = tc.transcript_id
+                        WHERE cnl.node_id = ? AND cnl.domain_id = ?
+                        LIMIT 1
+                    """, (node_id, domain_id)).fetchone()
+                    if link_row:
+                        source_node = link_row['source_node_id'] or 'another topic'
+                        already_covered_hint = f"You discussed this during your {source_node} recall"
+                finally:
+                    rconn.close()
+            except Exception:
+                pass  # chunk_node_links table might not exist yet
+
         from db import get_connection
         conn = get_connection()
         try:
@@ -5490,7 +5513,11 @@ JSON array only:"""
                                  source='voice_elicit_know_nothing', conn=conn)
             conn.commit()
             print(f'[voice-elicit] Know nothing: node={node_id}, domain={domain_id or "(none)"}', flush=True)
-            self._send_json_response(200, {'ok': True})
+            response = {'ok': True}
+            if already_covered_hint:
+                response['already_covered'] = True
+                response['hint'] = already_covered_hint
+            self._send_json_response(200, response)
         finally:
             conn.close()
 

@@ -3925,7 +3925,12 @@ def _generate_temporal_hook(node: dict, domain_id: str, conn) -> str:
 
 
 def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
-    """Get elicitation candidates for a single domain (internal helper)."""
+    """Get elicitation candidates for a single domain (internal helper).
+
+    Excludes nodes with direct elicitations (voice_transcripts) and penalises
+    nodes partially covered by cross-node transcript links (chunk_node_links)
+    so that topics already discussed during adjacent elicitations are deprioritised.
+    """
     curriculum = load_curriculum(domain_id)
     if not curriculum:
         return []
@@ -3953,6 +3958,17 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
     except Exception:
         pass  # table might not exist yet
 
+    # Nodes partially covered by cross-node transcript links (spoke about in other elicitations)
+    covered_nodes = set()
+    try:
+        covered_rows = conn.execute(
+            "SELECT DISTINCT node_id FROM chunk_node_links WHERE domain_id = ?",
+            (domain_id,)
+        ).fetchall()
+        covered_nodes = {r[0] for r in covered_rows} - recent_nodes  # exclude already-excluded
+    except Exception:
+        pass  # table might not exist yet
+
     candidates = []
     for node in curriculum.get('nodes', []):
         if node['level'] < 2:
@@ -3968,6 +3984,8 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
 
         # Score: prefer medium confidence (peak at 0.5)
         score = 1.0 - abs(confidence - 0.5) * 2  # peaks at 0.5
+        if node['id'] in covered_nodes:
+            score -= 0.5  # already partially covered by other elicitations
         if knowledge == 'engaged':
             score += 0.3  # bonus for engaged (most to gain)
         elif knowledge == 'mentioned':
