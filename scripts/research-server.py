@@ -4016,7 +4016,29 @@ JSON array only:"""
         finally:
             conn.close()
 
-    # _handle_curriculum_review_status removed — retrieval_questions table archived
+    def _handle_review_suspend(self):
+        """POST /curriculum/review/suspend — suspend a knowledge_item for 1 year."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length))
+        item_id = body.get('item_id', '').strip()
+        if not item_id:
+            self._send_json_response(400, {'error': 'item_id required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            now_ms = int(time.time() * 1000)
+            one_year = 365 * 24 * 60 * 60 * 1000
+            conn.execute(
+                'UPDATE knowledge_items SET due_at=?, last_score=? WHERE id=?',
+                (now_ms + one_year, 'suspended', item_id))
+            conn.commit()
+            print(f'[review] suspended {item_id}', flush=True)
+            self._send_json_response(200, {'status': 'suspended', 'item_id': item_id})
+        except Exception as e:
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
 
     def _handle_review_batch_generate(self):
         """POST /review/batch-generate — batch-generate cached_questions for knowledge_items."""
@@ -5616,6 +5638,8 @@ JSON array only:"""
             return self._handle_curriculum_review_result()
         if self.path == '/review/microlearning':
             return self._handle_microlearning_request()
+        if self.path == '/curriculum/review/suspend':
+            return self._handle_review_suspend()
         if self.path == '/review/microlearning/dismiss':
             return self._handle_microlearning_dismiss()
         if self.path == '/review/follow-up/trigger':

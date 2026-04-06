@@ -400,6 +400,15 @@ export async function recordReviewResult(
   return resp.json();
 }
 
+export async function suspendReviewItem(itemId: string): Promise<void> {
+  const resp = await fetch(`${RESEARCH_BASE}/curriculum/review/suspend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId }),
+  });
+  if (!resp.ok) throw new Error(`Suspend failed (${resp.status})`);
+}
+
 // Legacy wrapper for backwards compatibility
 export async function generateCurriculumReview(
   domain?: string,

@@ -9,7 +9,7 @@ import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/ty
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
-  triggerFollowUp, generateFollowUps,
+  triggerFollowUp, generateFollowUps, suspendReviewItem,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -253,6 +253,7 @@ function ReviewCard({
   item,
   onResult,
   onSkip,
+  onSuspend,
   onEntityTap,
   onDateTap,
   onResearch,
@@ -260,11 +261,13 @@ function ReviewCard({
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
+  onSuspend: () => void;
   onEntityTap: (entityId: string) => void;
   onDateTap: (year: number) => void;
   onResearch: (query: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const revealedAtRef = useRef(0);
 
   const handleReveal = () => {
@@ -308,13 +311,23 @@ function ReviewCard({
 
   return (
     <View style={cs.card}>
-      {/* Header: type badge + domain */}
+      {/* Header: type badge + domain + menu */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
           <Text style={cs.typeBadgeText}>{typeLabel}</Text>
         </View>
-        <Text style={cs.domainLabel} numberOfLines={1}>{domainLabel}</Text>
+        <Text style={[cs.domainLabel, { flex: 1 }]} numberOfLines={1}>{domainLabel}</Text>
+        <Pressable onPress={() => setShowMenu(v => !v)} hitSlop={8}>
+          <Text style={cs.menuDots}>{'\u22EF'}</Text>
+        </Pressable>
       </View>
+      {showMenu && (
+        <View style={cs.menuRow}>
+          <Pressable style={cs.menuItem} onPress={() => { setShowMenu(false); onSuspend(); }}>
+            <Text style={cs.menuItemText}>Suspend this topic</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Node title (context) + timeline link */}
       {revealed && item.node_title ? (
@@ -972,6 +985,23 @@ export default function ReviewScreen() {
     });
   };
 
+  const handleSuspend = (item: ResurfacingItem) => {
+    if (item.question_id) {
+      gradedIdsRef.current.add(item.question_id);
+      suspendReviewItem(item.question_id).catch(e =>
+        console.warn('[review] suspend failed:', e));
+    }
+    logEvent('review_suspend', {
+      question_id: item.question_id,
+      node_title: item.node_title,
+      domain: item.domain,
+    });
+    animateTransition(() => {
+      setCurrentIndex(i => i + 1);
+      maybeLoadMore();
+    });
+  };
+
   const handleDismissCard = (item: ResurfacingItem) => {
     if (item.question_id) {
       gradedIdsRef.current.add(item.question_id);
@@ -1144,6 +1174,7 @@ export default function ReviewScreen() {
                     item={currentItem}
                     onResult={(result) => handleResult(currentItem, result)}
                     onSkip={() => handleSkip(currentItem)}
+                    onSuspend={() => handleSuspend(currentItem)}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
                     onDateTap={handleDateTap}
@@ -1199,6 +1230,10 @@ const cs = StyleSheet.create({
   typeBadge: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
   typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   domainLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, flex: 1 },
+  menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 },
+  menuRow: { flexDirection: 'row', marginBottom: 8 },
+  menuItem: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 },
+  menuItemText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary },
   nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   timelineLink: { paddingVertical: 2, paddingHorizontal: 6 },
