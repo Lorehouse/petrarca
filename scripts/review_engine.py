@@ -3119,12 +3119,15 @@ def get_learner_context(node_id: str, domain_id: str, conn) -> str:
 
 def get_domain_summary(domain_id: str, conn) -> str | None:
     """Retrieve the cached domain knowledge portrait, or None if not available."""
-    row = conn.execute(
-        'SELECT summary FROM domain_knowledge_summaries WHERE domain_id = ?',
-        (domain_id,)
-    ).fetchone()
-    if row:
-        return row['summary']
+    try:
+        row = conn.execute(
+            'SELECT summary FROM domain_knowledge_summaries WHERE domain_id = ?',
+            (domain_id,)
+        ).fetchone()
+        if row:
+            return row['summary']
+    except Exception:
+        pass  # table might not exist yet
     return None
 
 
@@ -3156,33 +3159,44 @@ Output JSON:
 {{"portrait": "the full text portrait", "framework_type": "chronological|biographical|geographic|thematic|mixed", "strong_nodes": ["node_id_1", "node_id_2"], "weak_nodes": ["node_id_3"], "key_misconceptions": ["misconception 1"], "interests": ["topic 1", "topic 2"], "recommended_nodes": ["node_id to review next"]}}"""
 
 
-def generate_domain_summary(domain_id: str, conn) -> str | None:
+def generate_domain_summary(domain_id: str, conn=None) -> str | None:
     """Generate a synthesized knowledge portrait for a domain from voice transcript chunks.
 
     Queries all transcript_chunks linked to this domain, groups by node, and calls
     Claude to synthesize a learner knowledge portrait. Stores the result in
     domain_knowledge_summaries (UPSERT with version increment).
 
+    Follows write-lock discipline: reads → close → LLM call → reopen → write.
+    If conn is provided, it's used for the initial read only and NOT held during
+    the LLM call. A fresh connection is opened for the final write.
+
     Returns the portrait text, or None if insufficient data.
     """
     import uuid
+    from db import get_connection
 
-    # Count chunks for this domain
+    # Phase 1: Read all data (fast)
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection(readonly=True)
+
     chunk_count = conn.execute(
         'SELECT COUNT(DISTINCT cnl.chunk_id) FROM chunk_node_links cnl WHERE cnl.domain_id = ?',
         (domain_id,)
     ).fetchone()[0]
 
     if chunk_count < 10:
+        if own_conn:
+            conn.close()
         return None
 
-    # Get domain title
     curriculum = load_curriculum(domain_id)
     if not curriculum:
+        if own_conn:
+            conn.close()
         return None
     domain_title = curriculum.get('title', domain_id)
 
-    # Query chunks grouped by node
     rows = conn.execute(
         '''SELECT cn.id as node_id, cn.title as node_title,
                   tc.chunk_type, tc.chunk_text
@@ -3194,7 +3208,6 @@ def generate_domain_summary(domain_id: str, conn) -> str | None:
         (domain_id,)
     ).fetchall()
 
-    # Group chunks by node
     from collections import defaultdict
     node_chunks = defaultdict(list)
     node_ids = set()
@@ -3202,16 +3215,14 @@ def generate_domain_summary(domain_id: str, conn) -> str | None:
         node_chunks[row['node_title']].append((row['chunk_type'], row['chunk_text']))
         node_ids.add(row['node_id'])
 
-    # Format node sections
     node_sections = []
     for node_title, chunks in node_chunks.items():
         section = f'### {node_title}\n'
-        for chunk_type, chunk_text in chunks[:8]:  # Limit per node to control prompt size
+        for chunk_type, chunk_text in chunks[:8]:
             display = chunk_text[:300].replace('\n', ' ')
             section += f'- [{chunk_type}] {display}\n'
         node_sections.append(section)
 
-    # Query entities mentioned across domain
     entity_rows = conn.execute(
         '''SELECT DISTINCT cel.entity_name
            FROM chunk_entity_links cel
@@ -3222,8 +3233,20 @@ def generate_domain_summary(domain_id: str, conn) -> str | None:
         (domain_id,)
     ).fetchall()
     entities = ', '.join(r['entity_name'] for r in entity_rows)
+    entity_count = len(entity_rows)
+    node_count = len(node_ids)
 
-    # Truncate node_sections to fit prompt budget (~8k chars)
+    # Check existing version before closing
+    existing = conn.execute(
+        'SELECT version FROM domain_knowledge_summaries WHERE domain_id = ?',
+        (domain_id,)
+    ).fetchone()
+    new_version = (existing['version'] + 1) if existing else 1
+
+    if own_conn:
+        conn.close()
+
+    # Phase 2: LLM call (slow — no DB connection held)
     sections_text = '\n'.join(node_sections)
     if len(sections_text) > 8000:
         sections_text = sections_text[:8000] + '\n...(truncated)'
@@ -3240,31 +3263,27 @@ def generate_domain_summary(domain_id: str, conn) -> str | None:
         return None
 
     portrait = result['portrait']
-    entity_count = len(entity_rows)
-    node_count = len(node_ids)
 
-    # Check existing version for UPSERT
-    existing = conn.execute(
-        'SELECT version FROM domain_knowledge_summaries WHERE domain_id = ?',
-        (domain_id,)
-    ).fetchone()
-    new_version = (existing['version'] + 1) if existing else 1
-
-    summary_id = str(uuid.uuid4())[:8]
-    conn.execute(
-        '''INSERT INTO domain_knowledge_summaries
-           (id, domain_id, summary, chunk_count, node_count, entity_count, version, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-           ON CONFLICT(domain_id) DO UPDATE SET
-               summary = excluded.summary,
-               chunk_count = excluded.chunk_count,
-               node_count = excluded.node_count,
-               entity_count = excluded.entity_count,
-               version = excluded.version,
-               updated_at = excluded.updated_at''',
-        (summary_id, domain_id, portrait, chunk_count, node_count, entity_count, new_version)
-    )
-    conn.commit()
+    # Phase 3: Write result (fast — new connection)
+    write_conn = get_connection()
+    try:
+        summary_id = str(uuid.uuid4())[:8]
+        write_conn.execute(
+            '''INSERT INTO domain_knowledge_summaries
+               (id, domain_id, summary, chunk_count, node_count, entity_count, version, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(domain_id) DO UPDATE SET
+                   summary = excluded.summary,
+                   chunk_count = excluded.chunk_count,
+                   node_count = excluded.node_count,
+                   entity_count = excluded.entity_count,
+                   version = excluded.version,
+                   updated_at = excluded.updated_at''',
+            (summary_id, domain_id, portrait, chunk_count, node_count, entity_count, new_version)
+        )
+        write_conn.commit()
+    finally:
+        write_conn.close()
 
     print(f'[domain-summary] Generated portrait for {domain_title}: {len(portrait)} chars, v{new_version}', flush=True)
     return portrait

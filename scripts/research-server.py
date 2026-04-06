@@ -5682,12 +5682,8 @@ JSON array only:"""
             except (ValueError, TypeError):
                 pass  # stale or unparseable — regenerate
 
-        # Stale or missing — regenerate
-        conn = get_connection()
-        try:
-            portrait = generate_domain_summary(domain_id, conn)
-        finally:
-            conn.close()
+        # Stale or missing — regenerate (manages its own connections)
+        portrait = generate_domain_summary(domain_id)
 
         if not portrait:
             return self._send_json_response(404, {'error': 'Insufficient data for domain portrait'})
@@ -5722,11 +5718,7 @@ JSON array only:"""
         if not domain_id:
             return self._send_json_response(400, {'error': 'Missing domain_id'})
 
-        conn = get_connection()
-        try:
-            portrait = generate_domain_summary(domain_id, conn)
-        finally:
-            conn.close()
+        portrait = generate_domain_summary(domain_id)  # manages its own connections
 
         if not portrait:
             return self._send_json_response(404, {'error': 'Insufficient data for domain portrait'})
