@@ -322,14 +322,14 @@ function ReviewCard({
           <Text style={cs.typeBadgeText}>{typeLabel}</Text>
         </View>
         <Text style={[cs.domainLabel, { flex: 1 }]} numberOfLines={1}>{domainLabel}</Text>
-        <Pressable onPress={() => setShowMenu(v => !v)} hitSlop={8}>
-          <Text style={cs.menuDots}>{'\u22EF'}</Text>
+        <Pressable onPress={() => setShowMenu(v => !v)} hitSlop={8} style={cs.menuDotsBtn}>
+          <Text style={cs.menuDots}>{showMenu ? '\u2715' : '\u22EF'}</Text>
         </Pressable>
       </View>
       {showMenu && (
-        <View style={cs.menuRow}>
-          <Pressable style={cs.menuItem} onPress={() => { setShowMenu(false); onSuspend(); }}>
-            <Text style={cs.menuItemText}>Suspend this topic</Text>
+        <View style={cs.menuDropdown}>
+          <Pressable style={cs.menuDropdownItem} onPress={() => { setShowMenu(false); onSuspend(); }}>
+            <Text style={cs.menuDropdownText}>Suspend this topic</Text>
           </Pressable>
         </View>
       )}
@@ -1260,10 +1260,11 @@ const cs = StyleSheet.create({
   relatedFactTested: { backgroundColor: 'transparent', borderLeftColor: colors.rule },
   relatedFactType: { fontFamily: fonts.uiMedium, fontSize: 9, color: colors.claimNew, textTransform: 'uppercase', letterSpacing: 0.3, minWidth: 40, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   relatedFactText: { fontFamily: fonts.reading, fontSize: 13, color: colors.textBody, flex: 1 },
-  menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 },
-  menuRow: { flexDirection: 'row', marginBottom: 8 },
-  menuItem: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 },
-  menuItemText: { fontFamily: fonts.ui, fontSize: 12, color: colors.textSecondary },
+  menuDotsBtn: { minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
+  menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted },
+  menuDropdown: { backgroundColor: colors.parchmentDark, borderWidth: 1, borderColor: colors.rule, borderRadius: 6, paddingVertical: 4, marginBottom: 12, ...(Platform.OS === 'web' ? { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }) },
+  menuDropdownItem: { paddingVertical: 10, paddingHorizontal: 14 },
+  menuDropdownText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textSecondary },
   nodeTitle: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSecondary, marginBottom: 8, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
   nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   timelineLink: { paddingVertical: 2, paddingHorizontal: 6 },

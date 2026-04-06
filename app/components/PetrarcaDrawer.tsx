@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, Platform, Linking, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { logEvent } from '../data/logger';
-import { getReadArticles, getSyntheses } from '../data/store';
+import { getReadArticles } from '../data/store';
 import { getQueuedArticleIds } from '../data/queue';
 import { colors, fonts } from '../design/tokens';
 import { showFeedbackButton } from './FeedbackCapture';
@@ -21,10 +21,6 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
   );
   const queueCount = useMemo(
     () => (visible ? getQueuedArticleIds().length : 0),
-    [visible],
-  );
-  const synthesesCount = useMemo(
-    () => (visible ? getSyntheses().length : 0),
     [visible],
   );
 
@@ -64,101 +60,98 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
             <View style={styles.handle} />
           </View>
 
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerOrnament}>{'\u2726'}</Text>
-            <Text style={styles.headerTitle}>Petrarca</Text>
-          </View>
+          <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.headerOrnament}>{'\u2726'}</Text>
+              <Text style={styles.headerTitle}>Petrarca</Text>
+            </View>
 
-          {/* Quick actions */}
-          <View style={styles.quickActions}>
-            <Pressable style={styles.quickBox} onPress={() => quickAction('triage')}>
-              <Text style={styles.quickTitle}>Triage</Text>
-              <Text style={styles.quickSubtitle}>Card-by-card decisions</Text>
-            </Pressable>
-            <Pressable style={styles.quickBox} onPress={() => quickAction('voice_note')}>
-              <Text style={styles.quickTitle}>Voice Note</Text>
-              <Text style={styles.quickSubtitle}>Record a thought</Text>
-            </Pressable>
-          </View>
+            {/* Quick actions */}
+            <View style={styles.quickActions}>
+              <Pressable style={styles.quickBox} onPress={() => quickAction('voice_note')}>
+                <Text style={styles.quickTitle}>Voice Note</Text>
+                <Text style={styles.quickSubtitle}>Record a thought</Text>
+              </Pressable>
+              <Pressable style={styles.quickBox} onPress={() => navigate('queue', '/queue')}>
+                <Text style={styles.quickTitle}>Queue</Text>
+                <Text style={styles.quickSubtitle}>{queueCount} articles</Text>
+              </Pressable>
+            </View>
 
-          {/* Navigation items */}
-          <NavItem
-            title="Syntheses"
-            subtitle={`${synthesesCount} synthesized topic threads`}
-            onPress={() => navigate('syntheses', '/(tabs)/topics')}
-          />
-          <NavItem
-            title="Voice Notes"
-            subtitle="3 notes"
-            onPress={() => navigate('voice_notes', '/voice-notes')}
-          />
-          <NavItem
-            title="Activity Log"
-            subtitle="Pipeline activity & events"
-            onPress={() => navigate('activity_log', '/log')}
-          />
-          <NavItem
-            title="Your Landscape"
-            subtitle={`${readCount} articles · topics & connections`}
-            onPress={() => navigate('landscape', '/landscape')}
-          />
-          <NavItem
-            title="Knowledge Map"
-            subtitle="Your learning progress & gaps"
-            onPress={() => navigate('knowledge_map', '/knowledge-map')}
-          />
-          {/* Voice Recall and Book Review now accessible via Review tab */}
-          <NavItem
-            title="Knowledge Explorer"
-            subtitle="Timeline, persons & places"
-            onPress={() => navigate('timeline', '/timeline')}
-          />
-          <NavItem
-            title="Ancient Map"
-            subtitle="Places from your curriculum"
-            onPress={() => navigate('map', '/map')}
-          />
-          <NavItem
-            title="Projects"
-            subtitle="Collect notes around a theme"
-            onPress={() => navigate('projects', '/projects')}
-          />
-          <NavItem
-            title="Kindle Library"
-            subtitle="Browse & manage your full Kindle library"
-            onPress={() => navigate('kindle_browse', '/kindle-browse')}
-          />
-          <NavItem
-            title="Reading Trails"
-            subtitle="Follow threads of ideas"
-            onPress={() => navigate('trails', '/trails')}
-          />
-          <NavItem
-            title="Queue"
-            subtitle={`${queueCount} articles queued`}
-            badge={queueCount > 0 ? queueCount : undefined}
-            onPress={() => navigate('queue', '/queue')}
-          />
-          <NavItem
-            title="User Guide"
-            subtitle="How everything works"
-            onPress={() => {
-              logEvent('drawer_item_tap', { item: 'user_guide' });
-              onClose();
-              const url = Platform.OS === 'web' ? '/guide/' : 'https://alifstian.duckdns.org:8084/guide/';
-              Linking.openURL(url);
-            }}
-          />
-          <NavItem
-            title="Show Feedback Button"
-            subtitle="Re-enable the \u2726 feedback capture"
-            onPress={() => {
-              logEvent('drawer_item_tap', { item: 'show_feedback' });
-              showFeedbackButton();
-              onClose();
-            }}
-          />
+            {/* Explore */}
+            <Text style={styles.sectionLabel}>Explore</Text>
+            <NavItem
+              title="Knowledge Map"
+              subtitle="Your learning progress & gaps"
+              onPress={() => navigate('knowledge_map', '/knowledge-map')}
+            />
+            <NavItem
+              title="Knowledge Explorer"
+              subtitle="Timeline, persons & places"
+              onPress={() => navigate('timeline', '/timeline')}
+            />
+            <NavItem
+              title="Your Landscape"
+              subtitle={`${readCount} articles · topics & connections`}
+              onPress={() => navigate('landscape', '/landscape')}
+            />
+            <NavItem
+              title="Ancient Map"
+              subtitle="Places from your curriculum"
+              onPress={() => navigate('map', '/map')}
+            />
+
+            {/* Reading */}
+            <Text style={styles.sectionLabel}>Reading</Text>
+            <NavItem
+              title="Kindle Library"
+              subtitle="Browse & manage your full Kindle library"
+              onPress={() => navigate('kindle_browse', '/kindle-browse')}
+            />
+            <NavItem
+              title="Reading Trails"
+              subtitle="Follow threads of ideas"
+              onPress={() => navigate('trails', '/trails')}
+            />
+            <NavItem
+              title="Voice Notes"
+              subtitle="Your recorded thoughts"
+              onPress={() => navigate('voice_notes', '/voice-notes')}
+            />
+            <NavItem
+              title="Projects"
+              subtitle="Collect notes around a theme"
+              onPress={() => navigate('projects', '/projects')}
+            />
+
+            {/* System */}
+            <Text style={styles.sectionLabel}>System</Text>
+            <NavItem
+              title="Activity Log"
+              subtitle="Pipeline activity & events"
+              onPress={() => navigate('activity_log', '/log')}
+            />
+            <NavItem
+              title="User Guide"
+              subtitle="How everything works"
+              onPress={() => {
+                logEvent('drawer_item_tap', { item: 'user_guide' });
+                onClose();
+                const url = Platform.OS === 'web' ? '/guide/' : 'https://alifstian.duckdns.org:8084/guide/';
+                Linking.openURL(url);
+              }}
+            />
+            <NavItem
+              title="Show Feedback Button"
+              subtitle="Re-enable the \u2726 feedback capture"
+              onPress={() => {
+                logEvent('drawer_item_tap', { item: 'show_feedback' });
+                showFeedbackButton();
+                onClose();
+              }}
+            />
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -207,6 +200,7 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     width: '100%',
     maxWidth: 600,
+    maxHeight: '85%',
   },
 
   handleWrap: {
@@ -299,5 +293,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 14,
     color: 'rgba(247, 244, 236, 0.2)',
+  },
+  sectionLabel: {
+    fontFamily: fonts.uiMedium,
+    fontSize: 10,
+    color: 'rgba(247, 244, 236, 0.3)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 16,
+    marginBottom: 4,
+    ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}),
   },
 });
