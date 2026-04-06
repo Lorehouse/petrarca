@@ -2760,6 +2760,328 @@ def process_voice_memo(item_id: str, audio_path: Path, conn, transcribe_fn) -> d
     return result
 
 
+# ── Knowledge profile: transcript chunking & learner context ──────────────
+
+def _extract_entities_from_text(text: str) -> list[str]:
+    """Extract likely entity names from text using capitalized multi-word phrases.
+
+    Simple NER fallback when llm_result doesn't include entities_mentioned.
+    Looks for sequences of capitalized words (2+ words) that likely represent
+    people, places, or events.
+    """
+    entities = set()
+    # Match sequences of 2+ capitalized words (e.g., "Alexander the Great", "Philip II")
+    for match in re.finditer(r'\b([A-Z][a-z]+(?:\s+(?:the|of|de|di|von|van|al-|el-|ibn|and|in)\s+)?(?:[A-Z][a-z]+(?:\s+[IVX]+)?)+)', text):
+        name = match.group(0).strip()
+        # Filter out common sentence starters and short matches
+        if len(name) > 4 and name not in ('The', 'This', 'That', 'These', 'Those', 'What', 'When', 'Where', 'Which', 'There'):
+            entities.add(name)
+    return sorted(entities)
+
+
+def create_transcript_chunks(transcript_id: str, node_id: str, domain_id: str,
+                              transcript: str, llm_result: dict, conn) -> int:
+    """Create embedded chunks from a voice transcript and link to nodes/entities.
+
+    Handles both elicitation (captured/missed/interesting/wonderings/feedback_summary)
+    and capture (facts/wonderings/entities_mentioned/overall_summary) llm_result formats.
+
+    Returns the number of chunks created.
+    """
+    import uuid
+    import numpy as np
+    from limbic.amygdala import EmbeddingModel
+
+    # Check idempotency: skip if chunks already exist for this transcript
+    existing = conn.execute(
+        'SELECT COUNT(*) FROM transcript_chunks WHERE transcript_id = ?',
+        (transcript_id,)
+    ).fetchone()
+    if existing[0] > 0:
+        return 0
+
+    if not llm_result:
+        llm_result = {}
+
+    # Collect all chunks as (text, type) tuples
+    chunks = []
+
+    # Elicitation format: captured, interesting, wonderings, feedback_summary
+    for fact in llm_result.get('captured', []):
+        if isinstance(fact, str) and fact.strip():
+            chunks.append((fact.strip(), 'captured_fact'))
+
+    for item in llm_result.get('interesting', []):
+        if isinstance(item, str) and item.strip():
+            chunks.append((item.strip(), 'interesting'))
+
+    # Capture format: facts[].fact
+    for fact_obj in llm_result.get('facts', []):
+        fact_text = fact_obj.get('fact', '') if isinstance(fact_obj, dict) else str(fact_obj)
+        if fact_text.strip():
+            chunks.append((fact_text.strip(), 'captured_fact'))
+
+    # Wonderings (same key in both formats)
+    for w in llm_result.get('wonderings', []):
+        if isinstance(w, str) and w.strip():
+            chunks.append((w.strip(), 'wondering'))
+
+    # Research questions (elicitation format)
+    for q in llm_result.get('research_questions', []):
+        text = q.get('question', '') if isinstance(q, dict) else str(q)
+        if text.strip():
+            chunks.append((text.strip(), 'wondering'))
+
+    # Feedback summary (elicitation) or overall_summary (capture)
+    feedback = llm_result.get('feedback_summary', '') or llm_result.get('overall_summary', '')
+    if feedback and feedback.strip():
+        chunks.append((feedback.strip(), 'feedback'))
+
+    # Raw speech: split transcript into paragraphs or sentence groups
+    if transcript:
+        paragraphs = [p.strip() for p in transcript.split('\n') if p.strip()]
+        if len(paragraphs) <= 1 and transcript.strip():
+            # Single block — split by sentences into ~100-word groups
+            words = transcript.split()
+            for i in range(0, len(words), 80):
+                segment = ' '.join(words[i:i + 80])
+                if segment.strip():
+                    chunks.append((segment.strip(), 'raw_speech'))
+        else:
+            for p in paragraphs:
+                if len(p.split()) >= 5:  # skip tiny fragments
+                    chunks.append((p, 'raw_speech'))
+
+    if not chunks:
+        return 0
+
+    # Batch embed all chunk texts
+    model = EmbeddingModel()
+    texts = [c[0] for c in chunks]
+    embeddings = model.embed_batch(texts)
+
+    # Insert chunks
+    chunk_ids = []
+    for i, (text, chunk_type) in enumerate(chunks):
+        chunk_id = uuid.uuid4().hex[:12]
+        chunk_ids.append(chunk_id)
+        embedding_blob = embeddings[i].astype(np.float32).tobytes()
+        conn.execute(
+            'INSERT OR IGNORE INTO transcript_chunks (id, transcript_id, chunk_text, chunk_type, embedding) VALUES (?,?,?,?,?)',
+            (chunk_id, transcript_id, text, chunk_type, embedding_blob)
+        )
+
+    # Primary node link for all chunks
+    if node_id and domain_id:
+        for chunk_id in chunk_ids:
+            conn.execute(
+                'INSERT OR IGNORE INTO chunk_node_links (chunk_id, node_id, domain_id, relevance) VALUES (?,?,?,?)',
+                (chunk_id, node_id, domain_id, 1.0)
+            )
+
+    # Extract entities — prefer llm_result, fallback to NER
+    entity_names = []
+    for e in llm_result.get('entities_mentioned', []):
+        name = e if isinstance(e, str) else str(e)
+        if name.strip():
+            entity_names.append(name.strip())
+    if not entity_names:
+        entity_names = _extract_entities_from_text(transcript or '')
+
+    # Create entity links and find secondary node links via entity_curriculum_links
+    for entity_name in entity_names:
+        for chunk_id in chunk_ids:
+            conn.execute(
+                'INSERT OR IGNORE INTO chunk_entity_links (chunk_id, entity_name, relevance) VALUES (?,?,?)',
+                (chunk_id, entity_name, 1.0)
+            )
+
+        # Find curriculum nodes linked to this entity for cross-node linking
+        # Look up entity_id from shared_entities by name match
+        entity_row = conn.execute(
+            'SELECT entity_id FROM shared_entities WHERE name = ? OR name LIKE ?',
+            (entity_name, f'%{entity_name}%')
+        ).fetchone()
+        if entity_row:
+            linked_nodes = conn.execute(
+                'SELECT domain_id, node_id FROM entity_curriculum_links WHERE entity_id = ?',
+                (entity_row['entity_id'],)
+            ).fetchall()
+            for link in linked_nodes:
+                # Skip the primary node (already linked above)
+                if link['node_id'] == node_id and link['domain_id'] == domain_id:
+                    continue
+                for chunk_id in chunk_ids:
+                    conn.execute(
+                        'INSERT OR IGNORE INTO chunk_node_links (chunk_id, node_id, domain_id, relevance) VALUES (?,?,?,?)',
+                        (chunk_id, link['node_id'], link['domain_id'], 0.7)
+                    )
+
+    # Node assessments from capture format — add direct links for assessed nodes
+    for assessment in llm_result.get('node_assessments', []):
+        assessed_node = assessment.get('node_id', '')
+        if not assessed_node or (assessed_node == node_id):
+            continue
+        # Try to find the domain for this node
+        node_row = conn.execute(
+            'SELECT domain_id FROM curriculum_nodes WHERE id = ?', (assessed_node,)
+        ).fetchone()
+        if node_row:
+            for chunk_id in chunk_ids:
+                conn.execute(
+                    'INSERT OR IGNORE INTO chunk_node_links (chunk_id, node_id, domain_id, relevance) VALUES (?,?,?,?)',
+                    (chunk_id, assessed_node, node_row['domain_id'], 0.9)
+                )
+
+    conn.commit()
+    return len(chunks)
+
+
+def get_learner_context(node_id: str, domain_id: str, conn) -> str:
+    """Retrieve learner's own words about a curriculum node for prompt injection.
+
+    Combines two retrieval strategies:
+    1. Relational: chunks directly linked to this node via chunk_node_links
+    2. Semantic: top-5 most similar chunks across ALL chunks via cosine similarity
+       against the node's description
+
+    Returns a formatted string suitable for injection into LLM prompts, or empty
+    string if no relevant chunks exist.
+    """
+    import numpy as np
+    from limbic.amygdala import EmbeddingModel
+
+    seen_ids = set()
+    results = []  # (chunk_id, chunk_type, chunk_text, relevance_score)
+
+    # Strategy 1: Relational retrieval — chunks linked to this node
+    linked = conn.execute(
+        '''SELECT tc.id, tc.chunk_type, tc.chunk_text, cnl.relevance
+           FROM transcript_chunks tc
+           JOIN chunk_node_links cnl ON tc.id = cnl.chunk_id
+           WHERE cnl.node_id = ? AND cnl.domain_id = ?
+           ORDER BY cnl.relevance DESC
+           LIMIT 20''',
+        (node_id, domain_id)
+    ).fetchall()
+
+    for row in linked:
+        if row['id'] not in seen_ids:
+            seen_ids.add(row['id'])
+            results.append((row['id'], row['chunk_type'], row['chunk_text'], float(row['relevance'])))
+
+    # Strategy 2: Semantic retrieval — embed node description, find similar chunks
+    node_row = conn.execute(
+        'SELECT title, description FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+        (node_id, domain_id)
+    ).fetchone()
+
+    if node_row:
+        node_text = f"{node_row['title']}. {node_row['description'] or ''}"
+        model = EmbeddingModel()
+        query_vec = model.embed(node_text)
+
+        # Load all chunks with embeddings (exclude raw_speech for semantic search
+        # to prioritize structured knowledge)
+        all_chunks = conn.execute(
+            '''SELECT id, chunk_type, chunk_text, embedding
+               FROM transcript_chunks
+               WHERE embedding IS NOT NULL AND chunk_type != 'raw_speech'
+               LIMIT 2000'''
+        ).fetchall()
+
+        scored = []
+        for chunk in all_chunks:
+            if chunk['id'] in seen_ids:
+                continue
+            chunk_vec = np.frombuffer(chunk['embedding'], dtype=np.float32)
+            similarity = float(np.dot(query_vec, chunk_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec) + 1e-9))
+            if similarity >= 0.35:
+                scored.append((chunk['id'], chunk['chunk_type'], chunk['chunk_text'], similarity))
+
+        scored.sort(key=lambda x: -x[3])
+        for item in scored[:5]:
+            if item[0] not in seen_ids:
+                seen_ids.add(item[0])
+                results.append(item)
+
+    if not results:
+        return ''
+
+    # Deduplicate by text similarity (skip near-identical chunks)
+    unique_results = []
+    seen_texts = set()
+    for chunk_id, chunk_type, chunk_text, score in results:
+        # Simple dedup: skip if first 60 chars match something already included
+        text_key = chunk_text[:60].lower().strip()
+        if text_key not in seen_texts:
+            seen_texts.add(text_key)
+            unique_results.append((chunk_id, chunk_type, chunk_text, score))
+
+    if not unique_results:
+        return ''
+
+    # Format output — limit to top 10 most relevant chunks
+    unique_results.sort(key=lambda x: -x[3])
+    lines = []
+    for _, chunk_type, chunk_text, _ in unique_results[:10]:
+        # Truncate very long chunks
+        display_text = chunk_text[:200] + '...' if len(chunk_text) > 200 else chunk_text
+        display_text = display_text.replace('\n', ' ')
+        lines.append(f'- [{chunk_type}] "{display_text}"')
+
+    return 'LEARNER CONTEXT (from voice elicitation):\n' + '\n'.join(lines)
+
+
+def get_learner_context_for_entity(entity_name: str, conn) -> str:
+    """Retrieve learner's own words about a specific entity for prompt injection.
+
+    Queries chunk_entity_links to find chunks where the learner mentioned this entity.
+    Returns a formatted string suitable for injection into LLM prompts.
+    """
+    rows = conn.execute(
+        '''SELECT tc.id, tc.chunk_type, tc.chunk_text, cel.relevance
+           FROM transcript_chunks tc
+           JOIN chunk_entity_links cel ON tc.id = cel.chunk_id
+           WHERE cel.entity_name = ?
+           ORDER BY cel.relevance DESC
+           LIMIT 15''',
+        (entity_name,)
+    ).fetchall()
+
+    if not rows:
+        # Try fuzzy match on entity name
+        rows = conn.execute(
+            '''SELECT tc.id, tc.chunk_type, tc.chunk_text, cel.relevance
+               FROM transcript_chunks tc
+               JOIN chunk_entity_links cel ON tc.id = cel.chunk_id
+               WHERE cel.entity_name LIKE ?
+               ORDER BY cel.relevance DESC
+               LIMIT 15''',
+            (f'%{entity_name}%',)
+        ).fetchall()
+
+    if not rows:
+        return ''
+
+    # Deduplicate by text prefix
+    seen_texts = set()
+    lines = []
+    for row in rows:
+        text_key = row['chunk_text'][:60].lower().strip()
+        if text_key in seen_texts:
+            continue
+        seen_texts.add(text_key)
+        display_text = row['chunk_text'][:200] + '...' if len(row['chunk_text']) > 200 else row['chunk_text']
+        display_text = display_text.replace('\n', ' ')
+        lines.append(f'- [{row["chunk_type"]}] "{display_text}"')
+
+    if not lines:
+        return ''
+
+    return f'LEARNER CONTEXT about {entity_name} (from voice elicitation):\n' + '\n'.join(lines[:10])
+
+
 # ── Voice elicitation (free recall) ─────────────────────────────────────────
 
 def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, transcribe_fn) -> dict:
