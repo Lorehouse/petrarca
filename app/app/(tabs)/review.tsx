@@ -452,6 +452,24 @@ function ReviewCard({
               nodeDescription={item.node_description}
               onResearch={onResearch}
             />
+
+            {/* Related facts from the same topic — untested key_facts */}
+            {(item as any).related_facts?.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={cs.followUpLabel}>Also test yourself on</Text>
+                {(item as any).related_facts.map((f: { question: string; type: string }, i: number) => (
+                  <Pressable
+                    key={i}
+                    style={cs.relatedFactBtn}
+                    onPress={() => onResearch(f.question)}
+                  >
+                    <Text style={cs.relatedFactType}>{f.type}</Text>
+                    <Text style={cs.relatedFactText}>{f.question}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
@@ -1230,6 +1248,9 @@ const cs = StyleSheet.create({
   typeBadge: { backgroundColor: colors.ink, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 2 },
   typeBadgeText: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.parchment, textTransform: 'uppercase', letterSpacing: 0.5, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   domainLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, flex: 1 },
+  relatedFactBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 4, backgroundColor: 'rgba(42,122,74,0.04)', borderRadius: 4, borderLeftWidth: 2, borderLeftColor: colors.claimNew },
+  relatedFactType: { fontFamily: fonts.uiMedium, fontSize: 9, color: colors.claimNew, textTransform: 'uppercase', letterSpacing: 0.3, minWidth: 40, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  relatedFactText: { fontFamily: fonts.reading, fontSize: 13, color: colors.textBody, flex: 1 },
   menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 },
   menuRow: { flexDirection: 'row', marginBottom: 8 },
   menuItem: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 },

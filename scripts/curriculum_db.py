@@ -1034,11 +1034,45 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             except (json.JSONDecodeError, TypeError):
                 return default
 
+        # Pre-load key_facts for all nodes in this batch so we can suggest untested facts
+        node_key_facts: dict[tuple[str, str], list] = {}
+        for _score, item in selected:
+            node_id = item.get('curriculum_node_id')
+            domain_id = item.get('curriculum_domain')
+            if node_id and domain_id and (domain_id, node_id) not in node_key_facts:
+                try:
+                    kf_row = conn.execute(
+                        'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+                        (node_id, domain_id)).fetchone()
+                    if kf_row and kf_row['key_facts']:
+                        node_key_facts[(domain_id, node_id)] = json.loads(kf_row['key_facts'])
+                except Exception:
+                    pass
+
         items = []
         for _score, item in selected:
             cq = _parse_json_safe(item['cached_question'], {})
             if not cq or not cq.get('question'):
                 continue
+
+            # Build related_facts: untested key_facts from the same node
+            related_facts = []
+            current_fact_id = cq.get('fact_id', '')
+            node_id = item.get('curriculum_node_id')
+            domain_id = item.get('curriculum_domain')
+            kfs = node_key_facts.get((domain_id, node_id), [])
+            if kfs:
+                question_history = _parse_json_safe(item.get('question_history'), [])
+                tested_ids = {h.get('fact_id') for h in question_history if h.get('fact_id')}
+                tested_ids.add(current_fact_id)  # exclude current question's fact
+                for f in kfs:
+                    if f.get('id') not in tested_ids and f.get('question'):
+                        related_facts.append({
+                            'question': f['question'],
+                            'type': f.get('type', 'event'),
+                        })
+                        if len(related_facts) >= 3:
+                            break
 
             card = {
                 'type': 'review',
@@ -1064,6 +1098,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'triggered_follow_ups': _parse_json_safe(item.get('triggered_follow_ups'), []),
                 'fact_id': cq.get('fact_id', ''),
                 'entities': cq.get('entities', []),
+                'related_facts': related_facts,
             }
             items.append(card)
 
