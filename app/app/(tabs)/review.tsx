@@ -129,6 +129,7 @@ function FollowUpLinks({
   );
   const [extraQueries, setExtraQueries] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState(false);
 
   const allQueries = [...(queries || []), ...extraQueries];
   if (allQueries.length === 0) return null;
@@ -145,6 +146,7 @@ function FollowUpLinks({
 
   const handleGenerateMore = async () => {
     setGenerating(true);
+    setGenError(false);
     try {
       const allTriggered = [...tapped, ...allQueries];
       const resp = await generateFollowUps({
@@ -154,9 +156,12 @@ function FollowUpLinks({
       });
       if (resp.follow_up_queries?.length) {
         setExtraQueries(prev => [...prev, ...resp.follow_up_queries]);
+      } else {
+        setGenError(true);
       }
     } catch (e) {
       console.warn('[follow-up] generate more failed:', e);
+      setGenError(true);
     } finally {
       setGenerating(false);
     }
@@ -186,7 +191,7 @@ function FollowUpLinks({
         disabled={generating}
       >
         <Text style={cs.followUpText}>
-          {generating ? 'Generating...' : '\u2726 Generate 3 more questions'}
+          {generating ? 'Generating...' : genError ? 'Failed — tap to retry' : '\u2726 Generate 3 more questions'}
         </Text>
       </Pressable>
     </>
@@ -453,26 +458,21 @@ function ReviewCard({
               onResearch={onResearch}
             />
 
-            {/* Related facts from the same topic */}
+            {/* Related facts from the same topic — informational checklist */}
             {(item as any).related_facts?.length > 0 && (
               <View style={{ marginTop: 10 }}>
                 <Text style={cs.followUpLabel}>Same topic</Text>
                 {(item as any).related_facts.map((f: { question: string; type: string; status: string; score?: string }, i: number) => {
                   const isTested = f.status === 'tested';
                   return (
-                    <Pressable
-                      key={i}
-                      style={[cs.relatedFactBtn, isTested && cs.relatedFactTested]}
-                      onPress={isTested ? undefined : () => onResearch(f.question)}
-                      disabled={isTested}
-                    >
+                    <View key={i} style={[cs.relatedFactBtn, isTested && cs.relatedFactTested]}>
                       <Text style={[cs.relatedFactType, isTested && { color: colors.textMuted }]}>
-                        {isTested ? (f.score === 'knew' ? '\u2713' : '\u25CB') : f.type}
+                        {isTested ? (f.score === 'knew' ? '\u2713' : '\u25CB') : '\u25CB'}
                       </Text>
                       <Text style={[cs.relatedFactText, isTested && { color: colors.textMuted, opacity: 0.7 }]}>
                         {f.question}
                       </Text>
-                    </Pressable>
+                    </View>
                   );
                 })}
               </View>

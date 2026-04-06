@@ -476,18 +476,25 @@ export async function generateFollowUps(opts: {
   factContext?: string;
   exclude?: string[];
 }): Promise<{ follow_up_queries: string[] }> {
-  const resp = await fetch(`${RESEARCH_BASE}/review/follow-up/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      node_title: opts.nodeTitle,
-      node_description: opts.nodeDescription || '',
-      fact_context: opts.factContext || '',
-      exclude: opts.exclude || [],
-    }),
-  });
-  if (!resp.ok) throw new Error(`Follow-up generate failed (${resp.status})`);
-  return resp.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const resp = await fetch(`${RESEARCH_BASE}/review/follow-up/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        node_title: opts.nodeTitle,
+        node_description: opts.nodeDescription || '',
+        fact_context: opts.factContext || '',
+        exclude: opts.exclude || [],
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`Follow-up generate failed (${resp.status})`);
+    return resp.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fetchAlsoWantToKnow(opts: {
@@ -513,17 +520,24 @@ export async function submitTargetedQuiz(opts: {
   query: string;
   type: string;
 }): Promise<{ card_id?: string; quiz_id?: string; question?: string; answer?: string }> {
-  const resp = await fetch(`${RESEARCH_BASE}/review/targeted-quiz`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      item_id: opts.itemId,
-      query: opts.query,
-      type: opts.type,
-    }),
-  });
-  if (!resp.ok) throw new Error(`Targeted quiz failed (${resp.status})`);
-  return resp.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const resp = await fetch(`${RESEARCH_BASE}/review/targeted-quiz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: opts.itemId,
+        query: opts.query,
+        type: opts.type,
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`Targeted quiz failed (${resp.status})`);
+    return resp.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // --- Entity API ---
