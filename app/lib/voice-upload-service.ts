@@ -10,7 +10,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import {
   documentDirectory, readAsStringAsync, writeAsStringAsync, makeDirectoryAsync,
 } from 'expo-file-system/legacy';
-import { sendVoiceElicitation, ElicitationResult } from './review-api';
+import { sendVoiceElicitation, checkVoiceElicitCache, ElicitationResult } from './review-api';
 import { RESEARCH_BASE } from './chat-api';
 import { logEvent } from '../data/logger';
 
@@ -24,6 +24,7 @@ interface PendingUpload {
   nodeTitle: string;
   recordedAt: number;
   requestId: string;
+  lastRetryAt?: number;
 }
 
 type UploadResultListener = (nodeTitle: string, success: boolean, result?: ElicitationResult) => void;
@@ -107,7 +108,27 @@ async function retryPendingUploads() {
     const remaining: PendingUpload[] = [];
 
     for (const p of pending) {
+      // Skip items retried very recently (another retry loop may be handling them)
+      if (p.lastRetryAt && (Date.now() - p.lastRetryAt) < 30_000) {
+        remaining.push(p);
+        continue;
+      }
+
       try {
+        // Check cache first — avoids re-uploading 3MB+ audio on flaky connections
+        if (p.requestId) {
+          const cached = await checkVoiceElicitCache(p.requestId);
+          if (cached && (cached.captured?.length || cached.missed?.length || cached.feedback_summary)) {
+            console.log(`[voice-upload-service] Cache hit for ${p.nodeTitle}, no re-upload needed`);
+            logEvent('voice_upload_auto_retry_success', {
+              node_id: p.nodeId, request_id: p.requestId, from_cache: true,
+            });
+            notifyListeners(p.nodeTitle, true, cached);
+            continue;
+          }
+        }
+
+        p.lastRetryAt = Date.now();
         const res = await sendVoiceElicitation(p.nodeId, p.domainId, p.audioUri, p.requestId);
         if (res && (res.captured?.length || res.missed?.length || res.feedback_summary)) {
           logEvent('voice_upload_auto_retry_success', {

@@ -202,6 +202,23 @@ export async function reportKnowNothing(
   return post('/review/elicit-know-nothing', { node_id: nodeId, domain_id: domainId });
 }
 
+/**
+ * Lightweight check: does a cached result already exist for this request_id?
+ * Returns the cached result or null. Never throws — returns null on any error.
+ */
+export async function checkVoiceElicitCache(requestId: string): Promise<ElicitationResult | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `${RESEARCH_BASE}/review/voice-elicit-check?request_id=${encodeURIComponent(requestId)}`,
+      { timeout: 5000 },
+    );
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendVoiceElicitation(
   nodeId: string, domainId: string, audioUri: string, requestId?: string
 ): Promise<ElicitationResult> {
@@ -210,8 +227,11 @@ export async function sendVoiceElicitation(
   form.append('domain_id', domainId);
   if (requestId) form.append('request_id', requestId);
   form.append('audio', { uri: audioUri, type: 'audio/m4a', name: 'elicit.m4a' } as any);
+  const headers: Record<string, string> = {};
+  if (requestId) headers['X-Request-ID'] = requestId;
   const res = await fetchWithTimeout(`${RESEARCH_BASE}/review/voice-elicit`, {
     method: 'POST',
+    headers,
     body: form,
     timeout: 90000,
   });

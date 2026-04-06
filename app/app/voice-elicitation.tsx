@@ -11,8 +11,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, fonts } from '../design/tokens';
 import {
-  getElicitationCandidates, sendVoiceElicitation, reportKnowNothing,
-  ElicitationCandidate, ElicitationResult,
+  getElicitationCandidates, sendVoiceElicitation, checkVoiceElicitCache,
+  reportKnowNothing, ElicitationCandidate, ElicitationResult,
 } from '../lib/review-api';
 import { logEvent } from '../data/logger';
 import { setFeedbackContext } from '../lib/feedback-context';
@@ -311,6 +311,7 @@ export default function VoiceElicitation() {
       retryTimerRef.current = null;
       try {
         setProcessingCount(c => c + 1);
+        // uploadElicitation checks cache first — no redundant audio re-upload
         await uploadElicitation(uri, cand, requestId);
         await clearPendingUpload(uri);
       } catch {
@@ -327,6 +328,17 @@ export default function VoiceElicitation() {
     }
     const nodeTitle = cand.node_title || 'Unknown';
     try {
+      // Check cache first — if the server already processed this, skip the full audio upload
+      if (requestId) {
+        const cached = await checkVoiceElicitCache(requestId);
+        if (cached && (cached.captured?.length || cached.missed?.length || cached.feedback_summary)) {
+          console.log(`[voice-elicit] Cache hit for ${nodeTitle}, skipping upload`);
+          setProcessingCount(c => Math.max(0, c - 1));
+          setCompletedResults(prev => [...prev, { node: nodeTitle, result: cached }]);
+          return;
+        }
+      }
+
       logEvent('voice_elicitation_submitted', {
         node_id: cand.node_id, duration_s: recordingDuration,
       });

@@ -5274,20 +5274,46 @@ JSON array only:"""
         Accepts optional request_id for idempotent retries. If a result was already
         computed for this request_id, returns it from cache instantly (no re-processing).
         This handles mobile connections dropping during the 40-50s processing time.
+
+        The request_id can be sent as X-Request-ID header (checked before reading body)
+        or in the multipart form data. Header is preferred for retries since it allows
+        the server to short-circuit without reading the full audio upload.
         """
+        # Phase 2: Check header-based request_id BEFORE reading body
+        header_request_id = self.headers.get('X-Request-ID', '')
+        if header_request_id:
+            cache_path = VOICE_ELICIT_CACHE_DIR / f'{header_request_id}.json'
+            if cache_path.exists():
+                age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+                if age_hours <= 24:
+                    try:
+                        cached = json.loads(cache_path.read_text())
+                        print(f'[voice-elicit] Header cache hit for {header_request_id}, skipping body read', flush=True)
+                        self._send_json_response(200, cached)
+                        return
+                    except Exception:
+                        pass
+                else:
+                    cache_path.unlink(missing_ok=True)
+
         import cgi
         content_type = self.headers.get('Content-Type', '')
         if 'multipart' not in content_type:
             self._send_json_response(400, {'error': 'Expected multipart'})
             return
         length = int(self.headers.get('Content-Length', 0))
-        data = self.rfile.read(length)
+        # Phase 3: Catch connection drops during upload
+        try:
+            data = self.rfile.read(length)
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f'[voice-elicit] Client disconnected during upload ({e})', flush=True)
+            return
         environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
         import io
         fs = cgi.FieldStorage(fp=io.BytesIO(data), environ=environ, keep_blank_values=True)
         node_id = fs.getvalue('node_id', '')
         domain_id = fs.getvalue('domain_id', '')
-        request_id = fs.getvalue('request_id', '')
+        request_id = fs.getvalue('request_id', '') or header_request_id
         audio_field = fs['audio'] if 'audio' in fs else None
         if not node_id or audio_field is None:
             self._send_json_response(400, {'error': 'Missing node_id or audio'})
@@ -5365,6 +5391,34 @@ JSON array only:"""
                 print(f'[voice-elicit] Client disconnected but result cached as {request_id}', flush=True)
             else:
                 print(f'[voice-elicit] Client disconnected, result lost (no request_id)', flush=True)
+
+    def _handle_voice_elicit_check(self):
+        """GET /review/voice-elicit-check?request_id=X — check if a cached result exists.
+
+        Returns the cached result (200) or 404 if not found. This allows clients
+        to check before re-uploading the full audio file on retry.
+        """
+        from urllib.parse import parse_qs, urlparse
+        params = parse_qs(urlparse(self.path).query)
+        request_id = params.get('request_id', [''])[0]
+        if not request_id:
+            self._send_json_response(400, {'error': 'Missing request_id'})
+            return
+        cache_path = VOICE_ELICIT_CACHE_DIR / f'{request_id}.json'
+        if cache_path.exists():
+            age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+            if age_hours > 24:
+                cache_path.unlink(missing_ok=True)
+                self._send_json_response(404, {'status': 'expired'})
+                return
+            try:
+                cached = json.loads(cache_path.read_text())
+                print(f'[voice-elicit] Check cache hit for {request_id}', flush=True)
+                self._send_json_response(200, cached)
+                return
+            except Exception:
+                pass
+        self._send_json_response(404, {'status': 'not_found'})
 
     def _handle_elicit_candidates(self):
         """GET /review/elicit-candidates?domain_id=X&limit=5 — nodes suitable for voice elicitation.
@@ -6260,6 +6314,8 @@ JSON array only:"""
             return self._handle_review_stats()
         if self.path.startswith('/review/elicit-candidates'):
             return self._handle_elicit_candidates()
+        if self.path.startswith('/review/voice-elicit-check'):
+            return self._handle_voice_elicit_check()
         if self.path == '/media/log':
             media_log_path = Path(os.environ.get('MEDIA_LOG_PATH', '/opt/petrarca/data/media_log.json'))
             try:
