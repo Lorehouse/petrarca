@@ -2874,10 +2874,14 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         if existing and existing['llm_result']:
             try:
                 cached = json.loads(existing['llm_result'])
-                cached['from_cache'] = True
-                print(f'[voice-elicit] Dedup hit: node={node_id}, audio={audio_size} bytes — returning cached result', flush=True)
-                conn.close()
-                return cached
+                # Only return if the cached result has actual analysis content
+                if cached.get('captured') or cached.get('missed') or cached.get('feedback_summary'):
+                    cached['from_cache'] = True
+                    print(f'[voice-elicit] Dedup hit: node={node_id}, audio={audio_size} bytes — returning cached result', flush=True)
+                    conn.close()
+                    return cached
+                else:
+                    print(f'[voice-elicit] Dedup match for {node_id} has empty analysis, re-processing', flush=True)
             except (json.JSONDecodeError, TypeError):
                 pass
 
