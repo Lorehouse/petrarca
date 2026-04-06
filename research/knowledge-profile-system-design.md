@@ -277,6 +277,116 @@ Usage:
 
 ---
 
+---
+
+## System-Wide Integration Points
+
+The knowledge profile doesn't just fix voice elicitation — it should permeate every LLM interaction and UI surface. Here's every touchpoint, what it currently knows about the user, and what the profile adds.
+
+### A. Review question generation (HIGH PRIORITY)
+
+**Current context sent to LLM**: node title/description, source text[:400], 3 known nodes in same domain, temporal cross-refs, 6 mastered key_facts  
+**What's missing**: what the user actually said about this topic, their misconceptions, their connections, their confidence per sub-topic, what they found interesting
+
+**With knowledge profile**:
+- Include relevant transcript chunks: "The learner mentioned the Alexander-Aristotle relationship with enthusiasm but confused Nicomachus's role"
+- Gate prompt types by knowledge level: don't ask "how does X compare to Y" unless both nodes are at engaged+
+- Reference the user's stated interests: "The learner cares about the French neoclassical drama reception of Aristotle's Poetics — frame connections through this lens"
+- Include known misconceptions: "The learner thinks Nicomachus was a tutor to Philip (actually physician to Amyntas III) — address this"
+
+### B. Microlearning card generation (HIGH PRIORITY)
+
+**Current context**: just the query + node title/description  
+**What's missing**: what the user already knows about this topic, why they asked, their explanation level
+
+**With knowledge profile**:
+- Include knowledge level on the target node: "The learner has engaged knowledge of this topic (confidence 0.6) — don't explain basics"
+- Include what sparked the query: "This wondering came from a voice elicitation about Constantinople where the user asked about the Venetian role"
+- Include related knowledge: "The learner knows about the Norman kingdom of Sicily — draw connections to Venetian Mediterranean trade"
+
+### C. Rich answers / memory hooks on review cards (MEDIUM)
+
+**Current context**: node title, question, short answer  
+**What's missing**: what connections the user has already made, what anchors would work for this specific user
+
+**With knowledge profile**:
+- Personalize memory hooks to use the user's own connections: "The learner connected Aristotle to French drama theory — use this as a hook"
+- Reference the user's temporal scaffold: "The learner has strong anchors around 480 BC (Salamis/Himera) — connect this date to their existing scaffold"
+
+### D. Follow-up query generation (MEDIUM)
+
+**Current context**: node title, fact context  
+**What's missing**: which angles the user naturally gravitates to, what they've already explored
+
+**With knowledge profile**:
+- Avoid generating follow-ups the user has already explored via voice
+- Prefer angles matching the user's demonstrated interests (e.g., if they naturally make cross-domain connections, suggest more of those)
+
+### E. Book pre-scan / chapter context (HIGH PRIORITY)
+
+**Current context**: book topics, chapters, article connections  
+**What's missing**: what the user already knows about nodes this book covers
+
+**With knowledge profile**:
+- Before starting a book, show: "You already have engaged knowledge of 12/35 nodes this book covers. Your strongest areas: [X, Y]. Key gaps this book will fill: [A, B]"
+- Per chapter: "This chapter covers [node]. From your voice recall, you already know [captured facts]. Watch for: [missed facts from your elicitation]"
+- If the user read a book but we don't have the text: infer probable knowledge from curriculum coverage + table of contents
+
+### F. Entity cards (MEDIUM — visible to user)
+
+**Current context**: entity description, related entities, curriculum links with knowledge state, ML backlinks  
+**What's missing**: what the user has specifically said about this entity across all transcripts
+
+**With knowledge profile**:
+- Show "What you know" section on entity cards: aggregated from all transcript chunks linked to this entity
+- Show which curricula the user has encountered this entity through
+- Show the user's own questions/wonderings about this entity
+- Highlight misconceptions to address
+
+### G. Curriculum browsing (NEW FEATURE)
+
+**Currently**: Knowledge Map shows per-node knowledge state. Knowledge Atlas shows D3 visualization. But there's no way to browse nodes within a curriculum, see descriptions, explore the structure.
+
+**Proposed**: A curriculum browser screen (or section in the drawer) where the user can:
+- See all nodes in a curriculum with knowledge state indicators
+- Tap a node to see: definition, their knowledge profile for it, sources, related entities
+- See gap analysis: "You know 28/45 nodes. Key unknowns that would unlock connections: [X, Y, Z]"
+- See a "guided path" — which nodes to elicit or review next for maximum knowledge density improvement
+
+### H. Dashboard tracking (LOW — but visible wins)
+
+**Current metrics**: review counts, score distributions, stability, knowledge state per curriculum  
+**What's missing**: growth trajectory, knowledge structure quality
+
+**With knowledge profile**:
+- **Knowledge growth timeline**: show knowledge state changes over time (when did nodes move from mentioned → engaged → anchored?)
+- **Voice elicitation coverage**: how many nodes have been elicited? what percentage of curriculum is mapped?
+- **Breadth vs. depth chart**: how many nodes does the user know shallowly vs. deeply?
+- **Cross-domain bridge count**: how many cross-curriculum connections has the user articulated?
+- **Entity mastery**: how many entities does the user know at each depth level?
+
+### I. Feed / article ranking (FUTURE)
+
+**Current**: articles ranked by novelty  
+**What's missing**: what the user needs to read based on knowledge gaps
+
+**With knowledge profile**:
+- Boost articles that cover nodes the user has "mentioned" knowledge of (can push to "engaged")
+- Boost articles that provide cross-domain connections the user would appreciate
+- De-boost articles covering topics the user has already elicited deeply
+
+### J. Hamarquizen (MEDIUM)
+
+**Current context**: knowledge_level, confidence  
+**What's missing**: specific error patterns, what facts were already mastered
+
+**With knowledge profile**:
+- Include learner's error patterns from question_history
+- If learner consistently gets dates wrong, adjust the PRIME to emphasize temporal anchoring
+- Reference the user's own connections in the READ segment
+
+---
+
 ## Open Questions
 
 1. **Chunk granularity**: Should each `captured` fact be its own chunk, or should we keep them grouped per elicitation? Individual facts are more precise for linking; grouped facts provide better context for prompts.
@@ -288,3 +398,5 @@ Usage:
 4. **Voice notes integration**: Open-ended voice notes (not tied to curriculum nodes) need entity/topic routing to find the right nodes. This could be a separate script or integrated into the capture pipeline.
 
 5. **Book proxy**: "If I read a book about Alexander the Great and we don't have the text, what do I probably know?" This could be a curriculum-generation task: given a book title + table of contents, generate probable knowledge coverage per curriculum node.
+
+6. **Curriculum browsing UI**: The drawer already has Knowledge Map and Knowledge Explorer. Should curriculum browsing be a new screen, or integrated into the existing Knowledge Map? The Knowledge Map shows per-curriculum bars but doesn't let you explore individual nodes.
