@@ -1952,6 +1952,35 @@ def get_dashboard_stats(conn=None) -> dict:
         # Sort timeline by timestamp descending
         timeline.sort(key=lambda x: x.get('ts') or 0, reverse=True)
 
+        # ── Knowledge profile stats ────────────────────────────────
+        kp = {}
+        try:
+            kp['total_chunks'] = conn.execute('SELECT COUNT(*) FROM transcript_chunks').fetchone()[0]
+            kp['chunks_by_type'] = {}
+            for row in conn.execute('SELECT chunk_type, COUNT(*) as cnt FROM transcript_chunks GROUP BY chunk_type'):
+                kp['chunks_by_type'][row['chunk_type']] = row['cnt']
+            kp['total_node_links'] = conn.execute('SELECT COUNT(*) FROM chunk_node_links').fetchone()[0]
+            kp['cross_node_links'] = conn.execute('SELECT COUNT(*) FROM chunk_node_links WHERE relevance < 1.0').fetchone()[0]
+            kp['total_entity_links'] = conn.execute('SELECT COUNT(*) FROM chunk_entity_links').fetchone()[0]
+            kp['unique_entities'] = conn.execute('SELECT COUNT(DISTINCT entity_name) FROM chunk_entity_links').fetchone()[0]
+            kp['nodes_with_voice'] = conn.execute('SELECT COUNT(DISTINCT node_id) FROM chunk_node_links').fetchone()[0]
+
+            # Domain portraits
+            kp['portraits'] = []
+            try:
+                for row in conn.execute('''
+                    SELECT dks.domain_id, dks.chunk_count, dks.node_count, dks.entity_count,
+                           dks.version, dks.updated_at, cd.title as domain_title
+                    FROM domain_knowledge_summaries dks
+                    LEFT JOIN curriculum_domains cd ON cd.id = dks.domain_id
+                    ORDER BY dks.chunk_count DESC
+                ''').fetchall():
+                    kp['portraits'].append(dict(row))
+            except Exception:
+                pass
+        except Exception:
+            pass  # tables might not exist yet
+
         return {
             'today': {
                 'reviewed': reviewed_today,
@@ -1982,6 +2011,7 @@ def get_dashboard_stats(conn=None) -> dict:
                 'recall_dist': recall_dist,
                 'cards_triggered': voice_cards_triggered,
             },
+            'knowledge_profile': kp,
             'timeline': timeline[:30],
             'generated_at': datetime.utcnow().isoformat() + 'Z',
         }

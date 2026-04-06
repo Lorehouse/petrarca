@@ -539,6 +539,66 @@ function render(D) {
       </div>
     </div>
 
+    <!-- ═══ KNOWLEDGE PROFILE (Codex-style card) ═══ -->
+    ${(() => {
+      const kp = D.knowledge_profile;
+      if (!kp || !kp.total_chunks) return '';
+      const bt = kp.chunks_by_type || {};
+      const primaryLinks = (kp.total_node_links || 0) - (kp.cross_node_links || 0);
+      return `
+    <div class="codex-page">
+      <div class="page-title">Knowledge Profile</div>
+
+      <div class="grid-3" style="text-align:center;margin-bottom:12px">
+        <div style="border-right:1px solid var(--rule);padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${kp.total_chunks}</div>
+          <div class="stat-label">Chunks</div>
+        </div>
+        <div style="border-right:1px solid var(--rule);padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${kp.nodes_with_voice || 0}</div>
+          <div class="stat-label">Nodes mapped</div>
+        </div>
+        <div style="padding:0 4px">
+          <div class="stat-num" style="font-size:30px">${kp.unique_entities || 0}</div>
+          <div class="stat-label">Entities</div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:4px">Chunk Breakdown</div>
+      ${['captured_fact', 'wondering', 'interesting', 'raw_speech', 'feedback'].map(t => {
+        const cnt = bt[t];
+        if (!cnt) return '';
+        const label = t.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+        return `<div class="metric-row">
+          <span class="metric-key">${esc(label)}</span>
+          <span class="metric-val">${cnt}</span>
+        </div>`;
+      }).join('')}
+
+      <div class="section-head">Node Connections</div>
+      <div class="metric-row">
+        <span class="metric-key">Primary links</span>
+        <span class="metric-val">${primaryLinks}</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Cross-node links</span>
+        <span class="metric-val">${kp.cross_node_links || 0}</span>
+      </div>
+
+      ${kp.portraits && kp.portraits.length ? `
+      <div class="section-head">Domain Portraits</div>
+      ${kp.portraits.map(p => `
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <a class="link" href="/knowledge/profile/${esc(p.domain_id)}" style="font-family:'EB Garamond',serif;font-size:14px">${esc(p.domain_title || p.domain_id)}</a>
+            <span class="meta">v${p.version || 1}</span>
+          </div>
+          <div class="meta" style="font-size:10px">${p.chunk_count} chunks · ${p.node_count} nodes · ${p.entity_count} entities${p.updated_at ? ' · ' + new Date(p.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}</div>
+        </div>
+      `).join('')}` : ''}
+    </div>`;
+    })()}
+
     <!-- ═══ ACTIVITY TIMELINE (Chronicle-style) ═══ -->
     <div class="section-head" style="margin-top:4px">Recent Activity</div>
     ${timelineHTML || '<div class="meta">No recent activity</div>'}
