@@ -1,6 +1,37 @@
 # Knowledge System Implementation Status
 
-**Date**: April 5, 2026 (last updated — session 54: Curriculum audit & overlapping curricula)
+**Date**: April 6, 2026 (last updated — session 55: Review card quality overhaul)
+
+## Session 55: Review Card Quality Overhaul (April 6, 2026)
+
+### What
+End-to-end audit and fix of the review card experience. Every card now has rich narrative answers, temporal memory hooks, and quality follow-up questions. Added suspend functionality and related-facts checklist.
+
+### UX Fixes
+- **Flash after grading**: Removed "also want to know" suggestions panel + 500ms delay. Cards stay rendered during fade-out, instant transition to next card
+- **Cards re-appearing**: Added `gradedIdsRef` tracking graded/skipped/dismissed IDs in session. Stream only reloads if away >60s (was every focus event). Manual Refresh clears the set
+- **Generic entity filtering**: `_GENERIC_ENTITIES` set excludes ~20 obvious places (Italy, Venice, Greece, Sicily, Spain, etc.) from entity span annotations
+- **Suspend button**: ⋯ menu on review cards → "Suspend this topic" pushes `due_at` 1 year forward. `POST /curriculum/review/suspend` endpoint
+
+### Quality Pipeline Fixes
+- **Follow-up queries**: Switched from Haiku → Sonnet, increased context 200→500 chars, removed template fallback. Regenerated all 100 items — 0% template queries remaining
+- **Answer enrichment**: `_key_fact_to_question()` now calls Sonnet for rich_answer (4-5 sentences) + memory_hook at generation time. Backfilled all 96 bare items
+- **Related facts checklist**: "Same topic" section shows other key_facts from the same node — tested (✓/○) and untested (○). Informational peace-of-mind, not action buttons. Up to 5 facts shown per card
+
+### Data Quality Before/After
+| Metric | Before | After |
+|--------|--------|-------|
+| Good follow-up queries | 17% | 100% |
+| Rich narrative answers | 4% | 100% |
+| Memory hooks | 4% | 96% |
+| Template follow-ups | 83% | 0% |
+
+### Files Changed
+- `app/app/(tabs)/review.tsx` — removed suggestions panel, added gradedIdsRef, suspend menu, related facts checklist
+- `app/lib/book-api.ts` — added `suspendReviewItem()`
+- `scripts/review_engine.py` — Sonnet for follow-ups + key_fact enrichment, `_ENRICH_PROMPT`
+- `scripts/curriculum_db.py` — `_GENERIC_ENTITIES` filter, `related_facts` in stream, `question_history` tracking for tested/untested
+- `scripts/research-server.py` — `POST /curriculum/review/suspend` endpoint
 
 ## Session 54: Curriculum Audit & Overlapping Curricula (April 5, 2026)
 

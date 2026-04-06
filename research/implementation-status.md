@@ -1,6 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
+**Last updated**: April 6, 2026 (session 55: Review card quality overhaul)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -57,7 +58,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Multi-quiz ML cards (3-5 quizzes, independently FSRS-scheduled). Enriched content with sections, primary sources, tappable dates+entities. Knowledge Explorer with timeline/persons/places. Review stream includes entity intro cards and nexus cards (cross-curriculum perspectives for high-connectivity entities). |
+| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Review cards with rich narrative answers, memory hooks (temporal anchors), Sonnet-generated sideways follow-ups, and "Same topic" checklist (tested ✓ / untested ○ key_facts). Suspend via ⋯ menu. Instant fade transitions, session persistence (graded cards don't reappear within 60s). Generic entities filtered. Multi-quiz ML cards. Entity intro + nexus cards. Knowledge Explorer. |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -129,8 +130,8 @@
 |--------|------|
 | `research-server.py` | HTTP server (:8090) — all API endpoints, LLM orchestration |
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
-| `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview |
-| `claude_llm.py` | Claude wrapper for review_engine calls (migrated from Gemini in session 42) |
+| `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
+| `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
 | `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |

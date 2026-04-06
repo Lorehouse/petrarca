@@ -64,11 +64,11 @@ This project is exploratory — 47+ sessions in many directions. That means:
 
 ### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
-- **Review stream pipeline**: `generate_question()` → `cached_question` JSON on `knowledge_items` → `generate_review_stream()` in `curriculum_db.py` assembles cards (with entity intros + nexus cards) → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
+- **Review stream pipeline**: `generate_question()` → `cached_question` JSON on `knowledge_items` (includes rich_answer, memory_hook, follow_up_queries via Gemini Flash) → `generate_review_stream()` in `curriculum_db.py` assembles cards (with entity intros + nexus cards + related_facts checklist) → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
+- **Review card features**: ⋯ suspend menu (`POST /curriculum/review/suspend`), instant fade transitions, session-tracked graded IDs (no re-showing within 60s), generic entity filtering (`_GENERIC_ENTITIES`), "Same topic" related_facts checklist (tested ✓ / untested ○ key_facts from same node).
 - **Review scheduling priority**: SR cards first (book-sourced highest, gap-fill penalized -5.0 and capped at 3/batch). ML cards interleaved by `source_type`: voice_wondering at 1:3, follow_up at 1:7. Never front-load ML cards.
 - **Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40), not just one domain. Cross-curriculum context + temporal cross-refs injected into question generation.
 - **Book pre-scan**: `GET /book/prescan/{book_id}` shows known/new/missing nodes + cross-book overlaps.
-- **"Also want to know"**: `POST /review/also-want-to-know` generates entity-based suggestions after grading. `POST /review/targeted-quiz` creates simple quiz cards. Both in `review_engine.py`.
 - **`curriculum_db.py`** for ALL runtime reads/writes. **`curriculum.py`** is ONLY for generation/CLI.
 - **Knowledge levels only upgrade**: unknown → mentioned → engaged → anchored. Never downgrade.
 - **Server-first**: All data lives on server. Local storage is cache only.
@@ -93,6 +93,12 @@ This project is exploratory — 47+ sessions in many directions. That means:
 - ALL research in `research/`, linked from `research/README.md`
 - `research/experiment-log.md` is **append-only** — new entries at top, log BEFORE making changes
 
+### LLM Calling Discipline
+- **`claude -p` subprocess (`claude_llm.py`)** is for batch/pipeline work only — process spawn + CLI startup adds 5-15s of overhead on top of the actual API call. Free via Max plan.
+- **Gemini direct API (`gemini_llm.py`)** is for user-facing interactive paths — follow-up generation, targeted quizzes, article question generation. ~2-5s latency. Use `response_mime_type='application/json'` for guaranteed valid JSON.
+- **Rule of thumb**: If the user is waiting on a spinner, use Gemini direct API. If it's a cron job or batch pipeline, `claude -p` is fine.
+- **Curriculum generation**: Still Opus only via `claude -p` — Gemini Flash curricula have meaningless titles.
+
 ### Code Conventions
 - **Entity spans are offset-based on plain text.** `_compute_entity_spans()` in `review_engine.py` uses `text.find(name)`. Content must be markdown-stripped before span computation — use `_strip_markdown()`. Structured display uses `sections` JSON alongside flat `content`.
 - Branch prefix: `sh/` for all GitHub branches
@@ -108,7 +114,6 @@ This project is exploratory — 47+ sessions in many directions. That means:
 - **Query server DB**: Write Python to `/tmp/script.py`, then `scp /tmp/script.py alif:/tmp/ && ssh alif "cd /opt/petrarca && python3 /tmp/script.py"`. Inline heredoc Python via SSH has quoting issues.
 
 ### Curriculum Generation
-- **Opus only** — Gemini Flash curricula have meaningless titles
 - Generate locally via `claude -p`, parse JSON, run through `curriculum.py` node builder
 
 ## User Preferences
