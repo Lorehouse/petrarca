@@ -544,6 +544,35 @@ CREATE TABLE IF NOT EXISTS voice_transcripts (
 );
 CREATE INDEX IF NOT EXISTS idx_vt_source ON voice_transcripts(source);
 CREATE INDEX IF NOT EXISTS idx_vt_created ON voice_transcripts(created_at);
+
+-- Transcript chunks: embedded pieces of voice transcripts for knowledge profile
+CREATE TABLE IF NOT EXISTS transcript_chunks (
+    id TEXT PRIMARY KEY,
+    transcript_id TEXT NOT NULL,
+    chunk_text TEXT NOT NULL,
+    chunk_type TEXT NOT NULL,  -- 'raw_speech', 'captured_fact', 'interesting', 'wondering', 'feedback'
+    embedding BLOB,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tc_transcript ON transcript_chunks(transcript_id);
+CREATE INDEX IF NOT EXISTS idx_tc_type ON transcript_chunks(chunk_type);
+
+CREATE TABLE IF NOT EXISTS chunk_node_links (
+    chunk_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    domain_id TEXT NOT NULL,
+    relevance REAL DEFAULT 1.0,
+    PRIMARY KEY (chunk_id, node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cnl_node ON chunk_node_links(node_id, domain_id);
+
+CREATE TABLE IF NOT EXISTS chunk_entity_links (
+    chunk_id TEXT NOT NULL,
+    entity_name TEXT NOT NULL,
+    relevance REAL DEFAULT 1.0,
+    PRIMARY KEY (chunk_id, entity_name)
+);
+CREATE INDEX IF NOT EXISTS idx_cel_entity ON chunk_entity_links(entity_name);
 """
 
 MIGRATIONS = [
