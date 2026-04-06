@@ -6396,6 +6396,8 @@ JSON array only:"""
             return self._serve_html_file('statistics_dashboard.html')
         if self.path == '/stats/dashboard-data':
             return self._handle_dashboard_stats()
+        if self.path == '/research/elicitation-analysis':
+            return self._serve_html_file('knowledge_elicitation_analysis.html')
         if self.path == '/knowledge/atlas':
             return self._serve_html_file('knowledge_atlas.html')
         if self.path == '/knowledge/atlas-data':

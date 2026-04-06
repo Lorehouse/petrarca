@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Elicitation Analysis — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --rubric-light: rgba(139, 37, 0, 0.08);
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --success: #2a7a4a;
+  --success-bg: rgba(42, 122, 74, 0.06);
+  --warning: #92600e;
+  --warning-bg: rgba(146, 96, 14, 0.06);
+  --info: #2a4a6a;
+  --info-bg: rgba(42, 74, 106, 0.06);
+  --danger: #8b2500;
+  --danger-bg: rgba(139, 37, 0, 0.05);
+}
+
+body {
+  font-family: 'Crimson Pro', serif;
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+/* Header */
+.header { text-align: center; margin-bottom: 8px; }
+.header-star { font-family: 'EB Garamond', serif; font-size: 11px; letter-spacing: 0.15em; color: var(--rubric); }
+.header-title { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 600; margin-top: 4px; }
+.header-subtitle { font-family: 'Crimson Pro', serif; font-size: 16px; color: var(--text-secondary); margin-top: 4px; font-style: italic; }
+.header-date { font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+
+.double-rule { border: none; border-top: 2px solid var(--ink); margin: 0; padding: 0; }
+.double-rule::after { content: ''; display: block; border-top: 1px solid var(--ink); margin-top: 5px; }
+
+.single-rule { border: none; border-top: 1px solid var(--rule); margin: 24px 0; }
+
+/* Navigation */
+.toc {
+  background: var(--parchment-dark);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin: 20px 0 28px;
+}
+.toc-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.toc a {
+  font-family: 'Crimson Pro', serif;
+  font-size: 15px;
+  color: var(--ink);
+  text-decoration: none;
+  display: block;
+  padding: 3px 0;
+  border-bottom: 1px solid transparent;
+}
+.toc a:hover { color: var(--rubric); }
+
+/* Sections */
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--rubric);
+  margin-bottom: 4px;
+}
+h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  scroll-margin-top: 20px;
+}
+h3 {
+  font-family: 'EB Garamond', serif;
+  font-size: 17px;
+  font-weight: 500;
+  margin: 20px 0 8px;
+  color: var(--ink);
+}
+
+p { margin-bottom: 12px; font-size: 16px; }
+
+/* Callout boxes */
+.callout {
+  border-left: 3px solid var(--rubric);
+  padding: 14px 16px;
+  margin: 16px 0;
+  border-radius: 0 6px 6px 0;
+}
+.callout-danger { background: var(--danger-bg); border-color: var(--danger); }
+.callout-success { background: var(--success-bg); border-color: var(--success); }
+.callout-warning { background: var(--warning-bg); border-color: var(--warning); }
+.callout-info { background: var(--info-bg); border-color: var(--info); }
+.callout-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.callout-danger .callout-title { color: var(--danger); }
+.callout-success .callout-title { color: var(--success); }
+.callout-warning .callout-title { color: var(--warning); }
+.callout-info .callout-title { color: var(--info); }
+.callout p:last-child { margin-bottom: 0; }
+
+/* Data flow diagram */
+.flow-diagram {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+.flow-box {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.flow-source { background: var(--info-bg); color: var(--info); border: 1px solid rgba(42,74,106,0.15); }
+.flow-stored { background: var(--success-bg); color: var(--success); border: 1px solid rgba(42,122,74,0.15); }
+.flow-used { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(146,96,14,0.15); }
+.flow-dead { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(139,37,0,0.15); text-decoration: line-through; opacity: 0.7; }
+.flow-arrow { color: var(--text-muted); font-size: 14px; }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--ink);
+  color: var(--text-secondary);
+}
+td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.status-dead { color: var(--danger); font-weight: 500; }
+.status-partial { color: var(--warning); font-weight: 500; }
+.status-used { color: var(--success); font-weight: 500; }
+
+/* Proposal cards */
+.proposal {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 16px 0;
+}
+.proposal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.proposal-letter {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--rubric);
+  line-height: 1;
+  flex-shrink: 0;
+}
+.proposal-title {
+  font-family: 'EB Garamond', serif;
+  font-size: 18px;
+  font-weight: 500;
+  flex: 1;
+}
+.proposal-badges {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.badge {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.badge-impact-high { background: var(--success-bg); color: var(--success); }
+.badge-impact-very-high { background: #1a5c32; color: white; }
+.badge-effort-low { background: var(--info-bg); color: var(--info); }
+.badge-effort-medium { background: var(--warning-bg); color: var(--warning); }
+.proposal-body { font-size: 15px; }
+.proposal-body p { margin-bottom: 8px; }
+
+.impl-detail {
+  background: var(--parchment-dark);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+}
+.impl-detail code {
+  font-size: 12px;
+  background: rgba(0,0,0,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* Research cards */
+.research-card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.research-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.research-name {
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+.research-affil {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.research-insight {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.research-action {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--rubric);
+  font-weight: 500;
+}
+
+/* Two-mode diagram */
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+@media (max-width: 500px) { .mode-grid { grid-template-columns: 1fr; } }
+.mode-card {
+  border-radius: 8px;
+  padding: 16px;
+}
+.mode-distant { background: var(--info-bg); border: 1px solid rgba(42,74,106,0.15); }
+.mode-fresh { background: var(--success-bg); border: 1px solid rgba(42,122,74,0.15); }
+.mode-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.mode-distant .mode-label { color: var(--info); }
+.mode-fresh .mode-label { color: var(--success); }
+.mode-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.mode-list {
+  font-size: 13px;
+  padding-left: 16px;
+  color: var(--text-secondary);
+}
+.mode-list li { margin-bottom: 4px; }
+
+/* Priority matrix */
+.priority-matrix {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  margin: 16px 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+}
+.pm-cell {
+  padding: 10px 6px;
+  text-align: center;
+  border-radius: 4px;
+}
+.pm-header { font-weight: 600; background: var(--parchment-dark); color: var(--text-secondary); }
+.pm-1 { background: #1a5c32; color: white; font-weight: 600; }
+.pm-2 { background: var(--success-bg); color: var(--success); font-weight: 500; }
+.pm-3 { background: var(--warning-bg); color: var(--warning); }
+.pm-4 { background: var(--info-bg); color: var(--info); }
+
+/* Metric */
+.big-metric {
+  text-align: center;
+  padding: 20px;
+  margin: 16px 0;
+}
+.big-metric-number {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 56px;
+  font-weight: 600;
+  color: var(--rubric);
+  line-height: 1;
+}
+.big-metric-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Quote */
+blockquote {
+  border-left: 2px solid var(--rubric);
+  padding: 8px 16px;
+  margin: 16px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+blockquote cite {
+  display: block;
+  font-style: normal;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+ul, ol { padding-left: 20px; margin-bottom: 12px; }
+li { margin-bottom: 4px; font-size: 15px; }
+
+strong { font-weight: 500; }
+em { font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- Header -->
+<div class="header">
+  <div class="header-star">&#x2726; RESEARCH ANALYSIS &#x2726;</div>
+  <div class="header-title">The Voice Elicitation Gap</div>
+  <div class="header-subtitle">How the richest knowledge signal in Petrarca is captured, stored, and mostly forgotten</div>
+  <div class="header-date">6 April 2026 &middot; Session 56</div>
+</div>
+<hr class="double-rule">
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <a href="#headline">I. The Headline Finding</a>
+  <a href="#data-flow">II. Data Flow: What&rsquo;s Captured vs. What&rsquo;s Used</a>
+  <a href="#two-modes">III. Two Modes of Elicitation</a>
+  <a href="#digital-twin">IV. The &ldquo;Digital Twin&rdquo; Gap</a>
+  <a href="#research">V. What the Research Says</a>
+  <a href="#proposals">VI. Five Proposals</a>
+  <a href="#priority">VII. Priority &amp; Implementation Order</a>
+  <a href="#questions">VIII. Open Questions</a>
+</div>
+
+<!-- I. Headline -->
+<div class="section-num">Section I</div>
+<h2 id="headline">The Headline Finding</h2>
+
+<div class="big-metric">
+  <div class="big-metric-number">~3%</div>
+  <div class="big-metric-label">of available LLM context window used by review prompts<br>The rest is empty space where user knowledge could go</div>
+</div>
+
+<p>Voice elicitation generates the richest, most personal knowledge data in the entire system &mdash; the user&rsquo;s actual words, their connections, their uncertainties, what stuck and what didn&rsquo;t. <strong>Almost none of this data flows back into the system&rsquo;s prompts or decisions.</strong></p>
+
+<div class="callout callout-danger">
+  <div class="callout-title">The core disconnect</div>
+  <p>When generating a review card about &ldquo;Aristotle and the Lyceum,&rdquo; the LLM has <strong>zero knowledge</strong> that you found the Alexander-Aristotle relationship fascinating, connected it to Macedonian politics, wondered about Stagira being destroyed, or confused Nicomachus&rsquo;s role. It receives only: <em>knowledge_state: engaged, confidence: 0.45, last_score: partly.</em></p>
+</div>
+
+<p>The transcript is stored and forgotten. The system treats voice elicitation as a one-shot grading event rather than a continuous knowledge accumulation mechanism.</p>
+
+<!-- II. Data Flow -->
+<hr class="single-rule">
+<div class="section-num">Section II</div>
+<h2 id="data-flow">Data Flow: What&rsquo;s Captured vs. What&rsquo;s Used</h2>
+
+<p>Each voice elicitation produces a rich LLM analysis. Here is where each field goes:</p>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Stored</th><th>Read back?</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>transcript</strong> (full text)</td>
+      <td>voice_transcripts.transcript</td>
+      <td>Only for audio dedup</td>
+      <td class="status-dead">Write-only</td>
+    </tr>
+    <tr>
+      <td><strong>captured</strong> (facts recalled)</td>
+      <td>voice_transcripts.llm_result</td>
+      <td>Statistics dashboard only</td>
+      <td class="status-dead">Audit data</td>
+    </tr>
+    <tr>
+      <td><strong>missed</strong> (key omissions)</td>
+      <td>voice_transcripts.llm_result</td>
+      <td>Triggers 1 ML card</td>
+      <td class="status-partial">Minimal use</td>
+    </tr>
+    <tr>
+      <td><strong>interesting</strong> (beyond sources)</td>
+      <td>voice_transcripts.llm_result</td>
+      <td>Never queried</td>
+      <td class="status-dead">Never used</td>
+    </tr>
+    <tr>
+      <td><strong>wonderings</strong> (questions)</td>
+      <td>review_items + ML cards</td>
+      <td>Drives ML generation</td>
+      <td class="status-used">Actively used</td>
+    </tr>
+    <tr>
+      <td><strong>research_questions</strong></td>
+      <td>microlearning_cards</td>
+      <td>Drives ML generation</td>
+      <td class="status-used">Actively used</td>
+    </tr>
+    <tr>
+      <td><strong>coverage_pct</strong></td>
+      <td>scoring logic</td>
+      <td>Sets knowledge level once</td>
+      <td class="status-partial">Used once</td>
+    </tr>
+    <tr>
+      <td><strong>suggested_score</strong></td>
+      <td>knowledge_items.last_score</td>
+      <td>Drives SRS scheduling</td>
+      <td class="status-used">Actively used</td>
+    </tr>
+    <tr>
+      <td><strong>feedback_summary</strong></td>
+      <td>voice_transcripts.llm_result</td>
+      <td>Displayed once to user</td>
+      <td class="status-dead">Shown &amp; forgotten</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warning">
+  <div class="callout-title">The conversion loss</div>
+  <p>Hours of rich voice data &mdash; the user&rsquo;s actual words, their mental model, their connections and uncertainties &mdash; are reduced to <strong>two numbers</strong>: a score (knew/partly/missed) and a coverage percentage. That is the entire user model per topic.</p>
+</div>
+
+<h3>What review prompts actually receive about the user</h3>
+<div class="flow-diagram">
+  <div class="flow-row">
+    <span class="flow-box flow-used">node_title + description</span>
+    <span class="flow-arrow">&rarr;</span>
+    <span style="font-size:13px;color:var(--text-secondary)">From curriculum (static)</span>
+  </div>
+  <div class="flow-row">
+    <span class="flow-box flow-used">source_text[:400]</span>
+    <span class="flow-arrow">&rarr;</span>
+    <span style="font-size:13px;color:var(--text-secondary)">First 400 chars of book source</span>
+  </div>
+  <div class="flow-row">
+    <span class="flow-box flow-used">3 known nodes in domain</span>
+    <span class="flow-arrow">&rarr;</span>
+    <span style="font-size:13px;color:var(--text-secondary)">Other topics user knows</span>
+  </div>
+  <div class="flow-row">
+    <span class="flow-box flow-used">temporal cross-refs</span>
+    <span class="flow-arrow">&rarr;</span>
+    <span style="font-size:13px;color:var(--text-secondary)">&ldquo;Meanwhile in...&rdquo; events</span>
+  </div>
+  <div class="flow-row">
+    <span class="flow-box flow-used">6 mastered key_facts</span>
+    <span class="flow-arrow">&rarr;</span>
+    <span style="font-size:13px;color:var(--text-secondary)">Facts user got right before</span>
+  </div>
+  <div style="margin:10px 0 4px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--danger)">What&rsquo;s missing</div>
+  <div class="flow-row">
+    <span class="flow-box flow-dead">what user actually said</span>
+    <span class="flow-box flow-dead">connections they made</span>
+    <span class="flow-box flow-dead">their misconceptions</span>
+  </div>
+  <div class="flow-row">
+    <span class="flow-box flow-dead">what they found interesting</span>
+    <span class="flow-box flow-dead">their open questions</span>
+    <span class="flow-box flow-dead">confidence per sub-topic</span>
+  </div>
+</div>
+
+<!-- III. Two Modes -->
+<hr class="single-rule">
+<div class="section-num">Section III</div>
+<h2 id="two-modes">Two Modes of Elicitation</h2>
+
+<p>Voice elicitation serves fundamentally different purposes depending on temporal distance from learning:</p>
+
+<div class="mode-grid">
+  <div class="mode-card mode-distant">
+    <div class="mode-label">Distant recall</div>
+    <div class="mode-title">Salience mapping</div>
+    <p style="font-size:14px;margin-bottom:8px">Byzantium, 1814, Karl XII, Henry VIII &mdash; topics studied long ago through many sources</p>
+    <ul class="mode-list">
+      <li>Reveals <strong>what matters to the learner</strong></li>
+      <li>Shows which connections they built naturally</li>
+      <li>Exposes their organizing framework</li>
+      <li>&ldquo;Interesting&rdquo; field is gold &mdash; original thinking</li>
+      <li>Less about gaps, more about personal salience</li>
+    </ul>
+  </div>
+  <div class="mode-card mode-fresh">
+    <div class="mode-label">Fresh recall</div>
+    <div class="mode-title">Retention prevention</div>
+    <p style="font-size:14px;margin-bottom:8px">Chapter just read, podcast just heard &mdash; recent encoding, fact-rich</p>
+    <ul class="mode-list">
+      <li>Without active processing, only <strong>gists survive</strong></li>
+      <li>&ldquo;Sicily was part of Ancient Greece&rdquo; stays; names and sequences become mush</li>
+      <li>Specific dates, figures, sequences need reinforcement</li>
+      <li>&ldquo;Missed&rdquo; field directly identifies retention targets</li>
+      <li>The system&rsquo;s core anti-forgetting function</li>
+    </ul>
+  </div>
+</div>
+
+<blockquote>
+  &ldquo;I don&rsquo;t think I&rsquo;ll ever forget that Sicily was dominated by Arabs around the year 1000, because those are gists linked to strong anchors. But all of the different names, sequences, when was Hiero the First, when was Archimedes &mdash; it&rsquo;s all going to be a mush.&rdquo;
+</blockquote>
+
+<div class="callout callout-info">
+  <div class="callout-title">Design implication</div>
+  <p>The system already distinguishes <code>chapter_recall</code> vs. curriculum recall at the UI level. This distinction should propagate to storage and downstream use: distant recall feeds <strong>salience scoring and personalization</strong>; fresh recall feeds <strong>retention targeting</strong>.</p>
+</div>
+
+<!-- IV. Digital Twin -->
+<hr class="single-rule">
+<div class="section-num">Section IV</div>
+<h2 id="digital-twin">The &ldquo;Digital Twin&rdquo; Gap</h2>
+
+<h3>What a digital twin would know</h3>
+<ul>
+  <li>&ldquo;Stian finds the Alexander-Aristotle relationship fascinating&rdquo;</li>
+  <li>&ldquo;He consistently connects Macedonian politics to Athenian intellectual life&rdquo;</li>
+  <li>&ldquo;He confuses the chronology of Hiero I and Archimedes&rdquo;</li>
+  <li>&ldquo;His mental model of Byzantine history is organized around Constantinople as a city, not around emperors&rdquo;</li>
+  <li>&ldquo;When thinking about Aristotle, he naturally reaches for French neoclassical drama connections&rdquo;</li>
+  <li>&ldquo;He has strong knowledge of Arab Sicily but weak on Norman succession&rdquo;</li>
+</ul>
+
+<h3>What the system currently knows</h3>
+<div class="impl-detail">
+  <code>knowledge_state: "engaged"</code><br>
+  <code>confidence: 0.45</code><br>
+  <code>last_score: "partly"</code><br>
+  <code>review_count: 3</code>
+</div>
+
+<p>That&rsquo;s the entire user model for a topic. The rich signal from voice elicitation is reduced to these fields.</p>
+
+<!-- V. Research -->
+<hr class="single-rule">
+<div class="section-num">Section V</div>
+<h2 id="research">What the Research Says</h2>
+
+<p>Recent research from <code>research/knowledge-systems-deep-dive.md</code>, <code>research/knowledge-assessment-research.md</code>, and <code>research/academic-landscape-and-collaborations.md</code> directly supports a richer approach:</p>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">Free Recall Reveals Knowledge Structure</span>
+    <span class="research-affil">Tulving, Karpicke, Zemla &amp; Austerweil</span>
+  </div>
+  <div class="research-insight">&ldquo;Tell me what you know about Sicily&rdquo; exposes <em>how</em> knowledge is organized &mdash; what clusters together, what sequences connect, what&rsquo;s central vs. peripheral. Expert-novice differences aren&rsquo;t amount but <strong>organization</strong>.</div>
+  <div class="research-action">Actionable &rarr; Analyze transcript structure (clustering, ordering) not just content. Track organization quality over time as a learning metric.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">Pathfinder Networks</span>
+    <span class="research-affil">Goldsmith, Johnson &amp; Acton (1991)</span>
+  </div>
+  <div class="research-insight">Similarity between learner&rsquo;s knowledge network and expert curriculum graph (C metric) correlates with exam performance at <strong>r = .74</strong> &mdash; the single best predictor of learning outcomes.</div>
+  <div class="research-action">Actionable &rarr; Compare the connections made in voice transcripts against curriculum graph structure. The distance IS the learning metric.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">SNAFU</span>
+    <span class="research-affil">Zemla &amp; Austerweil &mdash; Syracuse / Memory &amp; Cognition 2026</span>
+  </div>
+  <div class="research-insight">Estimates semantic network structure from free recall using U-INVITE (random walk on semantic net). Can analyze individual-level knowledge structure from verbal fluency data.</div>
+  <div class="research-action">Actionable &rarr; Apply SNAFU to voice transcripts to build per-domain knowledge graphs. Compare these against curriculum graphs monthly.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">GENCAT: Generative Adaptive Testing</span>
+    <span class="research-affil">Feng &amp; Lan &mdash; UMass Amherst (Feb 2026)</span>
+  </div>
+  <div class="research-insight">Uses LLMs to both generate and <em>predict</em> student open-ended responses. A student&rsquo;s latent knowledge vector conditions expected responses. 4.3% AUC improvement over traditional IRT.</div>
+  <div class="research-action">Actionable &rarr; Closest academic system to Petrarca&rsquo;s voice assessment. The idea of predicting expected responses given knowledge state, then comparing to actual transcript, is directly applicable.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">Matuschak&rsquo;s Pivot</span>
+    <span class="research-affil">Andy Matuschak &mdash; Orbit / Salience prompts (2024&ndash;2026)</span>
+  </div>
+  <div class="research-insight">Key distinction: <strong>retrieval prompts</strong> test recall; <strong>salience prompts</strong> keep ideas top-of-mind so you notice opportunities to apply them. Standard SRS scheduling is wrong for salience. Orbit development has stalled.</div>
+  <div class="research-action">Actionable &rarr; Curriculum framework nodes (&ldquo;causes of Roman decline&rdquo;) should activate when reading new material, not just be recallable. Different scheduling for salience vs. retrieval items.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">Prior Knowledge Dominates</span>
+    <span class="research-affil">Recht &amp; Leslie (1988) &mdash; Journal of Educational Psychology</span>
+  </div>
+  <div class="research-insight">High-knowledge poor readers recalled more than low-knowledge good readers. <strong>Knowledge structure trumps reading skill</strong> for comprehension and retention.</div>
+  <div class="research-action">Actionable &rarr; The factual scaffold built through voice elicitation IS the system&rsquo;s primary value. Investing in richer knowledge storage directly improves everything downstream.</div>
+</div>
+
+<div class="research-card">
+  <div class="research-card-header">
+    <span class="research-name">Historical Thinking Frameworks</span>
+    <span class="research-affil">Seixas, Wineburg, AP History</span>
+  </div>
+  <div class="research-insight">Historical understanding isn&rsquo;t just knowing facts &mdash; it&rsquo;s sourcing, contextualization, corroboration, cause/consequence, perspective-taking. Voice transcripts reveal which of these thinking skills the learner employs naturally.</div>
+  <div class="research-action">Actionable &rarr; When the user says &ldquo;I wonder if Athens willingly joined Alexander&rsquo;s campaign&rdquo; that&rsquo;s perspective-taking. Tag these thinking skills in the learner profile.</div>
+</div>
+
+<!-- VI. Proposals -->
+<hr class="single-rule">
+<div class="section-num">Section VI</div>
+<h2 id="proposals">Five Proposals</h2>
+
+<div class="proposal">
+  <div class="proposal-header">
+    <div class="proposal-letter">D</div>
+    <div class="proposal-title">Inject existing voice data into review prompts</div>
+    <div class="proposal-badges">
+      <span class="badge badge-impact-high">High impact</span>
+      <span class="badge badge-effort-low">Very low effort</span>
+    </div>
+  </div>
+  <div class="proposal-body">
+    <p>The simplest possible improvement. When generating a review question for node X, query <code>voice_transcripts</code> for the most recent elicitation and append the existing <code>captured</code>, <code>missed</code>, <code>interesting</code>, and <code>wonderings</code> fields to the prompt.</p>
+    <div class="impl-detail">
+      <strong>Implementation:</strong> In <code>generate_question()</code> (review_engine.py:1315), add a query:
+      <code>SELECT llm_result FROM voice_transcripts WHERE node_id = ? AND source = 'elicitation' ORDER BY created_at DESC LIMIT 1</code>.
+      Parse the JSON, format as &ldquo;LEARNER CONTEXT&rdquo; section, append to prompt. ~300-500 extra tokens.
+    </div>
+    <p><strong>What changes:</strong> The review question can now target known gaps, build on connections the learner already made, and avoid re-testing what they clearly know. Zero new infrastructure &mdash; just a DB query and string formatting.</p>
+  </div>
+</div>
+
+<div class="proposal">
+  <div class="proposal-header">
+    <div class="proposal-letter">A</div>
+    <div class="proposal-title">Learner Knowledge Profile per node</div>
+    <div class="proposal-badges">
+      <span class="badge badge-impact-very-high">Very high impact</span>
+      <span class="badge badge-effort-medium">Medium effort</span>
+    </div>
+  </div>
+  <div class="proposal-body">
+    <p>After each voice elicitation, compile a structured &ldquo;learner knowledge profile&rdquo; that <strong>accumulates</strong> across elicitations. Not a replacement &mdash; a merge. Knowledge grows.</p>
+    <div class="impl-detail">
+      <strong>Schema:</strong><br>
+      <code>node_id, domain_id</code><br>
+      <code>facts_known: [&ldquo;Aristotle was student of Plato&rdquo;, &ldquo;Tutored Alexander&rdquo;, ...]</code><br>
+      <code>facts_missed: [&ldquo;Invented formal logic&rdquo;, ...]</code><br>
+      <code>misconceptions: [&ldquo;Father was tutor to Philip (actually physician to Amyntas III)&rdquo;]</code><br>
+      <code>connections_made: [&ldquo;Alexander-Aristotle personal relationship&rdquo;, ...]</code><br>
+      <code>interests: [&ldquo;French neoclassical drama reception&rdquo;]</code><br>
+      <code>organizing_framework: &ldquo;Biographical arc + political context&rdquo;</code><br>
+      <code>thinking_skills: [&ldquo;perspective-taking&rdquo;, &ldquo;contextualization&rdquo;]</code>
+    </div>
+    <p><strong>Research connection:</strong> This is the Petrarca equivalent of Pathfinder&rsquo;s learner network. Each profile entry represents a node in the learner&rsquo;s actual semantic network, with its connections and weights.</p>
+    <p><strong>Cost:</strong> One Gemini Flash call per elicitation to merge new data into existing profile. ~200-500 tokens stored per node.</p>
+  </div>
+</div>
+
+<div class="proposal">
+  <div class="proposal-header">
+    <div class="proposal-letter">B</div>
+    <div class="proposal-title">Cross-topic knowledge retrieval (RAG)</div>
+    <div class="proposal-badges">
+      <span class="badge badge-impact-very-high">Very high impact</span>
+      <span class="badge badge-effort-medium">Medium effort</span>
+    </div>
+  </div>
+  <div class="proposal-body">
+    <p>When generating content about a topic, retrieve relevant snippets from <strong>all</strong> the user&rsquo;s voice data &mdash; not just the current node.</p>
+    <p><strong>Example:</strong> When generating a review card about &ldquo;The Lyceum,&rdquo; pull in what the user said about Plato (Aristotle&rsquo;s teacher), Alexander (his student), Athens (its location), Arab transmission of Greek philosophy (its legacy).</p>
+    <div class="impl-detail">
+      <strong>Implementation:</strong> Use <code>limbic.amygdala</code> embeddings on transcript chunks (paragraph-level). Store in <code>transcript_embeddings</code> table. At review time, embed the node description, cosine-search top-k passages, include as &ldquo;what the learner has said about related topics.&rdquo;
+    </div>
+    <p><strong>Research connection:</strong> This is how SNAFU&rsquo;s semantic network estimation works &mdash; by analyzing how concepts cluster across free recall episodes. The embedding similarity IS the semantic distance.</p>
+  </div>
+</div>
+
+<div class="proposal">
+  <div class="proposal-header">
+    <div class="proposal-letter">C</div>
+    <div class="proposal-title">Entity-level knowledge aggregation</div>
+    <div class="proposal-badges">
+      <span class="badge badge-impact-high">High impact</span>
+      <span class="badge badge-effort-medium">Medium effort</span>
+    </div>
+  </div>
+  <div class="proposal-body">
+    <p>For each entity (person, place, event) mentioned across all voice data, build an aggregated &ldquo;what the user knows about X.&rdquo;</p>
+    <p><strong>Example for &ldquo;Alexander the Great&rdquo;:</strong></p>
+    <ul>
+      <li>From Aristotle elicitation: &ldquo;Tutored by Aristotle, sent specimens back, destroyed Stagira&rdquo;</li>
+      <li>From Sicily elicitation: &ldquo;Part of the Hellenistic world after Alexander&rdquo;</li>
+      <li>From Persian Empire (future): &ldquo;Defeated Darius, spread Greek culture east&rdquo;</li>
+    </ul>
+    <div class="impl-detail">
+      <strong>Research connection:</strong> The <code>entity-profiles-design.md</code> already specifies a 4-layer scaffold: identity &rarr; context &rarr; connections &rarr; significance. Voice data populates all four layers with the user&rsquo;s actual knowledge, not just curriculum definitions. The overlapping curricula vision means entity knowledge should be tracked <strong>per lens</strong> (Alexander-the-general vs. Alexander-the-patron-of-learning).
+    </div>
+  </div>
+</div>
+
+<div class="proposal">
+  <div class="proposal-header">
+    <div class="proposal-letter">E</div>
+    <div class="proposal-title">Domain knowledge summaries (&ldquo;the digital twin&rdquo;)</div>
+    <div class="proposal-badges">
+      <span class="badge badge-impact-very-high">Very high impact</span>
+      <span class="badge badge-effort-low">Low effort (once A+B exist)</span>
+    </div>
+  </div>
+  <div class="proposal-body">
+    <p>Periodically compile ALL voice data for a domain into a 1&ndash;2 page &ldquo;learner knowledge portrait.&rdquo; This becomes the primary context for all content generation in that domain.</p>
+    <p>Instead of passing raw node descriptions, pass: <em>&ldquo;Here&rsquo;s what this specific learner knows, thinks, and cares about in Ancient Greece.&rdquo;</em></p>
+    <div class="impl-detail">
+      <strong>Implementation:</strong> One Opus call per domain, run after every 3 new elicitations. Store as document. Include: knowledge map (what&rsquo;s strong, what&rsquo;s weak), organizing frameworks, cross-domain connections the learner makes, open questions, interests, misconceptions to address.
+    </div>
+    <p><strong>This is the actual digital twin</strong> &mdash; a document that represents you. It can be inspected, edited, and shared. It grows richer with every voice interaction.</p>
+  </div>
+</div>
+
+<!-- VII. Priority -->
+<hr class="single-rule">
+<div class="section-num">Section VII</div>
+<h2 id="priority">Priority &amp; Implementation Order</h2>
+
+<div class="priority-matrix">
+  <div class="pm-cell pm-header">Proposal</div>
+  <div class="pm-cell pm-header">Impact</div>
+  <div class="pm-cell pm-header">Effort</div>
+  <div class="pm-cell pm-header">Sessions</div>
+  <div class="pm-cell pm-header">Order</div>
+
+  <div class="pm-cell"><strong>D</strong> Enriched prompts</div>
+  <div class="pm-cell pm-2">High</div>
+  <div class="pm-cell pm-1">Very low</div>
+  <div class="pm-cell">&frac12;</div>
+  <div class="pm-cell pm-1">1st</div>
+
+  <div class="pm-cell"><strong>A</strong> Learner profiles</div>
+  <div class="pm-cell pm-1">Very high</div>
+  <div class="pm-cell pm-3">Medium</div>
+  <div class="pm-cell">1&ndash;2</div>
+  <div class="pm-cell pm-2">2nd</div>
+
+  <div class="pm-cell"><strong>B</strong> Cross-topic RAG</div>
+  <div class="pm-cell pm-1">Very high</div>
+  <div class="pm-cell pm-3">Medium</div>
+  <div class="pm-cell">1&ndash;2</div>
+  <div class="pm-cell pm-3">3rd</div>
+
+  <div class="pm-cell"><strong>C</strong> Entity aggregation</div>
+  <div class="pm-cell pm-2">High</div>
+  <div class="pm-cell pm-3">Medium</div>
+  <div class="pm-cell">1</div>
+  <div class="pm-cell pm-4">4th</div>
+
+  <div class="pm-cell"><strong>E</strong> Domain summaries</div>
+  <div class="pm-cell pm-1">Very high</div>
+  <div class="pm-cell pm-2">Low*</div>
+  <div class="pm-cell">&frac12;*</div>
+  <div class="pm-cell pm-4">5th</div>
+</div>
+<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">* Once A + B exist, E is mostly prompt engineering</p>
+
+<h3>The path</h3>
+<ol>
+  <li><strong>Proposal D</strong> &mdash; immediate win. Query existing <code>voice_transcripts.llm_result</code> and inject into prompts. Can be done in half a session. Proves the concept.</li>
+  <li><strong>Proposal A</strong> &mdash; the foundation. Structured profiles that accumulate. This is what all other proposals build on.</li>
+  <li><strong>Proposal B</strong> &mdash; the connections. limbic embeddings on transcripts. Enables &ldquo;what has the user said about topics related to X?&rdquo;</li>
+  <li><strong>C + E emerge naturally</strong> from the infrastructure built in A + B.</li>
+</ol>
+
+<h3>Elicitation prompt enhancements (all proposals)</h3>
+<p>The <code>VOICE_ELICITATION_PROMPT</code> should also be enriched to extract more structured data:</p>
+<ul>
+  <li><strong>Confidence tagging:</strong> &ldquo;I&rsquo;m pretty sure&rdquo; vs. &ldquo;I wonder if&rdquo; &mdash; tag each fact with user&rsquo;s apparent certainty</li>
+  <li><strong>Framework detection:</strong> &ldquo;What organizing principle does the learner use?&rdquo; (chronological, biographical, geographic)</li>
+  <li><strong>Connection classification:</strong> For each &ldquo;interesting&rdquo; item: temporal, causal, cross-domain, personal interpretation</li>
+  <li><strong>Thinking skills:</strong> Sourcing, contextualization, corroboration, perspective-taking (per Seixas/Wineburg)</li>
+</ul>
+
+<!-- VIII. Open Questions -->
+<hr class="single-rule">
+<div class="section-num">Section VIII</div>
+<h2 id="questions">Open Questions</h2>
+
+<div class="callout callout-info">
+  <div class="callout-title">When should profiles be regenerated?</div>
+  <p>After every elicitation (incremental merge), or batched? Incremental is more responsive but risks drift from accumulation errors. A periodic full recompile (every 3 elicitations) might be more reliable.</p>
+</div>
+
+<div class="callout callout-info">
+  <div class="callout-title">Pre-existing vs. app-learned knowledge</div>
+  <p>Should the system distinguish &ldquo;I knew this before Petrarca&rdquo; from &ldquo;I learned this through the app&rdquo;? Distant recall of pre-existing knowledge is different from demonstrating retention of app-presented material. Both are valuable but for different purposes.</p>
+</div>
+
+<div class="callout callout-info">
+  <div class="callout-title">Filter bubble risk</div>
+  <p>If the system knows the user finds X interesting, should it surface more X-related content? This creates a filter bubble. Counter: the curriculum structure already provides breadth; personalization only affects <em>how</em> content is presented, not <em>what</em> is shown.</p>
+</div>
+
+<div class="callout callout-info">
+  <div class="callout-title">Voice notes integration</div>
+  <p>Open-ended voice notes (not tied to curriculum nodes) contain knowledge too. Should they feed the same profile system? They&rsquo;re harder to route to specific nodes but may contain the most interesting cross-domain connections.</p>
+</div>
+
+<div class="callout callout-info">
+  <div class="callout-title">Measurement</div>
+  <p>How do we know if richer prompts produce better review cards? The <code>publishable-experiments-research.md</code> outlines N-of-1 methodology: A/B test enriched vs. standard prompts, measure retention at 2-week and 4-week intervals using Tau-U effect sizes. The voice elicitation itself is the measurement instrument &mdash; does knowledge structure improve faster with personalized cards?</p>
+</div>
+
+<!-- Footer -->
+<hr class="double-rule">
+<div style="text-align:center;margin-top:16px">
+  <div style="font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.15em;color:var(--rubric)">&#x2726;</div>
+  <div style="font-family:'DM Sans',sans-serif;font-size:10px;color:var(--text-muted);margin-top:4px">
+    Generated from code analysis + research synthesis &middot; Session 56 &middot; 6 April 2026
+  </div>
+  <div style="font-family:'DM Sans',sans-serif;font-size:10px;color:var(--text-muted);margin-top:2px">
+    Source: research/knowledge-elicitation-deep-analysis.md
+  </div>
+</div>
+
+</div>
+</body>
+</html>
