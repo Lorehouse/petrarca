@@ -6,6 +6,33 @@
 
 ---
 
+## Key Files (for implementation)
+
+| What | Where |
+|------|-------|
+| Voice elicitation processing | `scripts/review_engine.py` — `run_voice_elicitation()` (line ~2765), `VOICE_ELICITATION_PROMPT` (line 352) |
+| Voice elicitation candidate selection | `scripts/review_engine.py` — `get_elicitation_candidates()` (line ~3668), `_elicitation_candidates_for_domain()` (line ~3620) |
+| Review question generation | `scripts/review_engine.py` — `generate_question()` (line ~1315), `QUESTION_GEN_PROMPT` (line 260), `QUESTION_GEN_PROMPT_FACTUAL` (line 231) |
+| Microlearning card generation | `scripts/review_engine.py` — `_run_microlearning_research()` (line ~2322), `MICROLEARNING_PROMPT` (line 1617) |
+| Rich answer / memory hook | `scripts/review_engine.py` — `_ENRICH_PROMPT` (line 1166) |
+| Follow-up queries | `scripts/review_engine.py` — `FOLLOW_UP_PROMPT` (line 288) |
+| Entity research prompt | `scripts/review_engine.py` — `ENTITY_RESEARCH_PROMPT` (line 1656) |
+| Entity card API | `scripts/research-server.py` — `_handle_entity_lookup()` (line ~4329) |
+| Hamarquizen prompt | `scripts/review_engine.py` — `HAMARQUIZEN_PROMPT` (line 406) |
+| Book pre-scan | `scripts/research-server.py` — `_handle_book_prescan()`, `scripts/book_research_agent.py` |
+| Database schema | `scripts/db.py` — `voice_transcripts` table (line ~533) |
+| Elicitation candidates API | `scripts/research-server.py` — `_handle_elicit_candidates()` (line ~5444) |
+| Voice elicitation upload API | `scripts/research-server.py` — `_handle_voice_elicitation()` (line ~5271) |
+| Dashboard stats | `scripts/curriculum_db.py` — `get_dashboard_stats()` (line ~1626) |
+| Knowledge state updates | `scripts/curriculum_db.py` — `update_knowledge()` (line ~191) |
+| Client: entity card | `app/components/EntitySheet.tsx` |
+| Client: voice elicitation | `app/app/voice-elicitation.tsx` |
+| Client: review API | `app/lib/review-api.ts` |
+| Embeddings | `limbic.amygdala` — `pip install -e ~/src/limbic`, server: `/opt/limbic` |
+| DB location | Server only: `/opt/petrarca/data/petrarca.db`. Local Python can't query it. Use `scp` + `ssh` pattern. |
+
+---
+
 ## Problem Statement
 
 Voice elicitation captures the richest knowledge data in the system — the user's actual words, connections, uncertainties, what stuck and what didn't. But this data is stored and forgotten:
