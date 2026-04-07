@@ -25,6 +25,9 @@ interface PendingUpload {
   recordedAt: number;
   requestId: string;
   lastRetryAt?: number;
+  /** Set when server returns 422 — keeps audio but skips auto-retry */
+  failedAt?: number;
+  failReason?: string;
 }
 
 type UploadResultListener = (nodeTitle: string, success: boolean, result?: ElicitationResult) => void;
@@ -96,6 +99,60 @@ async function updateLastRetry(audioUri: string, ts: number) {
   } catch { /* ignore */ }
 }
 
+/** Mark an entry as validation-failed — keeps audio, skips auto-retry */
+async function markFailed(audioUri: string, reason: string) {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    const entry = pending.find(p => p.audioUri === audioUri);
+    if (entry) {
+      entry.failedAt = Date.now();
+      entry.failReason = reason;
+      await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
+    }
+  } catch { /* ignore */ }
+}
+
+/** Get failed uploads for UI display */
+export async function getFailedUploads(): Promise<PendingUpload[]> {
+  const pending = await loadPending();
+  return pending.filter(p => p.failedAt);
+}
+
+/** Retry a specific failed upload — clears the failed flag so auto-retry picks it up */
+export async function retryFailedUpload(audioUri: string) {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    const entry = pending.find(p => p.audioUri === audioUri);
+    if (entry) {
+      delete entry.failedAt;
+      delete entry.failReason;
+      entry.lastRetryAt = undefined;
+      await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
+    }
+  } catch { /* ignore */ }
+  // Trigger immediate retry
+  retryPendingUploads();
+}
+
+/** Retry all failed uploads */
+export async function retryAllFailed() {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    for (const p of pending) {
+      if (p.failedAt) {
+        delete p.failedAt;
+        delete p.failReason;
+        p.lastRetryAt = undefined;
+      }
+    }
+    await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
+  } catch { /* ignore */ }
+  retryPendingUploads();
+}
+
 async function isServerReachable(): Promise<boolean> {
   try {
     const controller = new AbortController();
@@ -131,6 +188,9 @@ async function retryPendingUploads() {
     let cleared = 0;
 
     for (const p of pending) {
+      // Skip validation-failed entries — kept for manual retry only
+      if (p.failedAt) continue;
+
       // Skip items retried very recently (another retry loop may be handling them)
       if (p.lastRetryAt && (Date.now() - p.lastRetryAt) < 30_000) {
         continue;
@@ -140,7 +200,7 @@ async function retryPendingUploads() {
         // Check cache first — avoids re-uploading 3MB+ audio on flaky connections
         if (p.requestId) {
           const cached = await checkVoiceElicitCache(p.requestId);
-          if (cached && (cached.captured?.length || cached.missed?.length || cached.feedback_summary)) {
+          if (cached && !cached.error && (cached.captured?.length || cached.missed?.length || cached.feedback_summary)) {
             console.log(`[voice-upload-service] Cache hit for ${p.nodeTitle}, no re-upload needed`);
             logEvent('voice_upload_auto_retry_success', {
               node_id: p.nodeId, request_id: p.requestId, from_cache: true,
@@ -155,6 +215,12 @@ async function retryPendingUploads() {
         p.lastRetryAt = Date.now();
         await updateLastRetry(p.audioUri, p.lastRetryAt);
         const res = await sendVoiceElicitation(p.nodeId, p.domainId, p.audioUri, p.requestId);
+        // 422 responses come back as data with error field — mark as failed, keep audio
+        if (res?.error) {
+          console.log(`[voice-upload-service] Validation error for ${p.nodeTitle}: ${res.error}`);
+          await markFailed(p.audioUri, res.error);
+          continue;
+        }
         if (res && (res.captured?.length || res.missed?.length || res.feedback_summary)) {
           logEvent('voice_upload_auto_retry_success', {
             node_id: p.nodeId, request_id: p.requestId,
@@ -165,13 +231,11 @@ async function retryPendingUploads() {
         }
       } catch (e: any) {
         console.log(`[voice-upload-service] Retry failed for ${p.nodeTitle}: ${e}`);
-        // Don't retry permanent client errors (400, 404, 422)
+        // Don't retry permanent client errors (400, 404)
         const status = e?.status;
         if (status && status >= 400 && status < 500) {
           logEvent('voice_upload_permanent_fail', { node_id: p.nodeId, status });
-          notifyListeners(p.nodeTitle, false);
-          await clearEntry(p.audioUri);
-          cleared++;
+          await markFailed(p.audioUri, `HTTP ${status}`);
           continue;
         }
         // Expire entries older than 48h

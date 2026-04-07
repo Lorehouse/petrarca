@@ -186,6 +186,8 @@ export interface ElicitationResult {
   transcript: string;
   research_triggers: Array<{ id: string; question: string }>;
   microlearning_triggered?: Array<{ id: string; query: string }>;
+  /** Set on validation errors (422) — e.g. 'too_short', 'Transcription failed' */
+  error?: string;
 }
 
 export async function getElicitationCandidates(

@@ -26,6 +26,8 @@ interface PendingUpload {
   nodeTitle: string;
   recordedAt: number;
   requestId: string;
+  failedAt?: number;
+  failReason?: string;
 }
 
 const PENDING_DIR = `${documentDirectory}voice-elicitation/`;
@@ -345,6 +347,13 @@ export default function VoiceElicitation() {
         node_id: cand.node_id, duration_s: recordingDuration,
       });
       const res = await sendVoiceElicitation(cand.node_id, cand.domain_id, uri, requestId);
+      // 422 validation errors return data with error field — keep audio for manual retry
+      if (res?.error) {
+        console.log(`[voice-elicit] Validation error: ${res.error}`);
+        setProcessingCount(c => Math.max(0, c - 1));
+        // Don't clear from pending — markFailed happens in background service
+        return;
+      }
       if (!res || (!res.captured?.length && !res.missed?.length && !res.feedback_summary)) {
         throw new Error('Server returned empty analysis');
       }
@@ -521,16 +530,20 @@ export default function VoiceElicitation() {
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 12 }}>
           {pendingUploads.map((p, i) => (
-            <View key={p.audioUri} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 16, borderWidth: 1, borderColor: colors.rule }}>
+            <View key={p.audioUri} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 16, borderWidth: 1, borderColor: p.failedAt ? '#c0392b' : colors.rule }}>
               <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.ink, marginBottom: 4 }}>{p.nodeTitle}</Text>
-              <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>
+              <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginBottom: p.failedAt ? 4 : 12 }}>
                 Recorded {new Date(p.recordedAt).toLocaleString()}
               </Text>
+              {p.failedAt && (
+                <Text style={{ fontFamily: fonts.ui, fontSize: 11, color: '#c0392b', marginBottom: 12 }}>
+                  Failed: {p.failReason || 'unknown'} — {new Date(p.failedAt).toLocaleString()}
+                </Text>
+              )}
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <Pressable
                   style={[styles.recordBtn, { flex: 1 }]}
                   onPress={async () => {
-                    // Set up context for upload
                     savedUriRef.current = p.audioUri;
                     const fakeCand: ElicitationCandidate = {
                       node_id: p.nodeId,
@@ -542,9 +555,10 @@ export default function VoiceElicitation() {
                       elicitation_score: 0,
                     };
                     setProcessingCount(c => c + 1);
-                    // Remove from pending list immediately and show processing
                     setPendingUploads(prev => prev.filter(u => u.audioUri !== p.audioUri));
-                    uploadElicitation(p.audioUri, fakeCand, p.requestId).then(async () => {
+                    // Use a fresh request_id for retry so server doesn't return cached error
+                    const freshId = `elicit_${Date.now()}_${p.nodeId.slice(0, 40)}`;
+                    uploadElicitation(p.audioUri, fakeCand, freshId).then(async () => {
                       await clearPendingUpload(p.audioUri);
                     }).catch(() => {
                       setProcessingCount(c => Math.max(0, c - 1));
