@@ -1340,8 +1340,10 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
         entity_knowledge = _load_entity_knowledge(conn)
         items = _build_entity_intro_items(items, entity_knowledge, conn)
 
-        # Insert nexus cards for high-connectivity entities (cross-curriculum perspective)
-        items = _insert_nexus_cards(items, conn)
+        # Nexus cards disabled — detection works (entities spanning 3+ curricula)
+        # but cards lack synthesized content. Needs LLM-generated connection
+        # insights before re-enabling. See _insert_nexus_cards().
+        # items = _insert_nexus_cards(items, conn)
 
         # ── Stats ────────────────────────────────────────────────────────
         total_items = conn.execute('SELECT COUNT(*) FROM knowledge_items').fetchone()[0]
