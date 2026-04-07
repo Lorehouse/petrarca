@@ -38,6 +38,7 @@ Comprehensive overhaul of the review system: replaced simple multiplicative sche
 - **`/review/create-factual-quiz`** endpoint + `createFactualQuiz()` client API
 - **Removed** "Generate 3 more questions" button (was adding latency; 6 initial follow-ups is sufficient)
 - **Removed** entity intro cards (`MAX_INTRO_CARDS = 0`; rich answer cards now cover entity context)
+- **Disabled** nexus cards — detection works (`_insert_nexus_cards()`) but cards lack synthesized content; showed as empty CONCEPT cards because client had no renderer for `type: 'nexus'`
 
 ### Bug Fix: Write-Lock Violation in record_answer
 - `record_answer()` called `update_knowledge()` without passing `conn`, causing second connection to deadlock on WAL write lock
