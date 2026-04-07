@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, Pressable, TextInput, Modal, StyleSheet,
-  ActivityIndicator, Platform, FlatList,
+  ActivityIndicator, KeyboardAvoidingView, Platform, FlatList,
 } from 'react-native';
 import { colors, fonts, layout } from '../design/tokens';
 import { logEvent } from '../data/logger';
@@ -54,6 +54,7 @@ export default function ProjectPicker({ visible, onSelect, onClose }: ProjectPic
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handleWrap}>
@@ -110,6 +111,7 @@ export default function ProjectPicker({ visible, onSelect, onClose }: ProjectPic
           )}
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

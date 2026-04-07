@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Platform, TextInput,
-  Alert,
+  Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -123,6 +123,7 @@ export default function AddBookScreen() {
   }, [title, author, pageCount, router]);
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Pressable style={styles.backButton} onPress={() => router.back()}>
         <Text style={styles.backText}>{'\u2039'} Cancel</Text>
@@ -172,6 +173,7 @@ export default function AddBookScreen() {
         </View>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

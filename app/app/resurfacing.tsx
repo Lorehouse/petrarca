@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { logEvent } from '../data/logger';
@@ -384,6 +384,7 @@ export default function ResurfacingScreen() {
   };
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Pressable style={styles.backButton} onPress={() => router.back()}>
         <Text style={styles.backText}>{'\u2039'} Library</Text>
@@ -478,6 +479,7 @@ export default function ResurfacingScreen() {
         </Text>
       )}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
