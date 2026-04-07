@@ -2,6 +2,34 @@
 
 **Date**: April 6, 2026 (last updated — session 56: Knowledge profile system)
 
+## Session 57: Voice Upload Reliability + Review Tuning (April 7, 2026)
+
+### What
+Fixed three interconnected bugs causing voice upload failures and review questions resurfacing for well-known topics.
+
+### Voice Upload Fixes
+- **HTTP status code fix**: Server returned 500 for validation errors (too_short, transcription_failed), causing infinite client retry loops. Now returns 422 for validation errors, 500 only for real server errors. Validation results cached to prevent re-processing.
+- **pending.json race condition**: Both `voice-elicitation.tsx` and `voice-upload-service.ts` did read-modify-write on the same `pending.json`. New recordings would resurrect already-cleared entries (caused the Sicily 1693 zombie retries — 12+ cache hits over 4 hours). Fixed: background service now clears entries individually with fresh reads; `savePendingUpload` deduplicates by requestId.
+- **Removed too_short quality gate**: All recordings now get full LLM analysis regardless of length. The downstream coverage scoring handles quality.
+- **422 retention**: Validation-failed uploads keep audio on device with `failedAt`/`failReason` flags. Auto-retry skips them. Manual retry via pending uploads UI with fresh request_id. Exported `getFailedUploads()`, `retryFailedUpload()`, `retryAllFailed()` for menu integration.
+
+### Review Stream Tuning
+- **Knowledge weight inversion**: `engaged: 8.0` (actively learning, highest priority), `anchored: 3.0` (well-known, deprioritized). Previously anchored was 8.0, boosting mastered topics.
+- **Anchored skip**: Items with `knowledge='anchored'` + `last_score='knew'` + `confidence >= 0.5` + not yet overdue are skipped entirely from the review river.
+- **Voice stability multipliers doubled**: Elicitation/capture now 5.0x (knew) / 3.0x (partly), up from 2.5x/1.5x. Retroactively adjusted 21 recently voice-reviewed items.
+
+### Pipeline Verification
+- All 13 voice uploads from April 6 processed correctly — transcripts, LLM analysis, chunks, embeddings, knowledge state updates all present.
+- 2 duplicate transcript pairs found (same node, 14s/35s apart — race condition in retry, mitigated by pending.json fix).
+
+### Files Changed
+- `scripts/research-server.py` — 422 status for validation errors, cache validation results
+- `scripts/review_engine.py` — removed too_short gate, voice stability 5.0x/3.0x
+- `scripts/curriculum_db.py` — review stream: anchored skip + weight inversion
+- `app/lib/review-api.ts` — handle 422 response body, `error` field on ElicitationResult
+- `app/lib/voice-upload-service.ts` — per-entry clearing, failedAt/failReason, manual retry exports
+- `app/app/voice-elicitation.tsx` — dedup savePendingUpload, show fail reason, fresh request_id on retry
+
 ## Session 56: Knowledge Profile System (April 6, 2026)
 
 ### What

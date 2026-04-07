@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 6, 2026 (session 56: Knowledge profile system)
+**Last updated**: April 7, 2026 (session 57: Voice upload reliability + review tuning)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -117,9 +117,8 @@
 | `interest-model.ts` | Topic-level interest tracking with Bayesian smoothing, 30-day decay |
 | `queue.ts` | Reading queue with AsyncStorage persistence + content prefetch |
 | `logger.ts` | Interaction event logging (`logEvent()`) — daily JSONL files |
-| `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. |
+| `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. Failed uploads (422) kept on device for manual retry. |
 | `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
-| `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. |
 | `book-api.ts` | Book API client — `fetchKindleBrowse()`, `includeKindleBook()`, `curateKindleBook()`, `classifyKindleBooks()` |
 | `types.ts` | `ArticleMeta`, `ArticleContent`, `Article`, `TopicSynthesis`, etc. |
 
