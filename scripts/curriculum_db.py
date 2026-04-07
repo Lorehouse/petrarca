@@ -1146,6 +1146,11 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                         'type': f.get('type', 'fact'),
                     })
 
+            # Remove related_facts that already appear in quiz_suggestions
+            qs_questions = {s['question'].lower().strip() for s in quiz_suggestions}
+            related_facts = [f for f in related_facts
+                             if f['question'].lower().strip() not in qs_questions]
+
             card = {
                 'type': 'review',
                 'question_id': item['id'],  # knowledge_item id for scoring
