@@ -1110,6 +1110,42 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     if len(related_facts) >= 5:
                         break
 
+            # Build quiz_suggestions live: key_facts not yet covered by
+            # knowledge_items (which means they don't have review cards yet)
+            quiz_suggestions = []
+            if kfs and node_id and domain_id:
+                # Find which fact questions already have knowledge_items
+                existing_ki_questions = set()
+                try:
+                    ki_rows = conn.execute(
+                        'SELECT cached_question FROM knowledge_items '
+                        'WHERE curriculum_node_id=? AND curriculum_domain=?',
+                        (node_id, domain_id)).fetchall()
+                    for ki_row in ki_rows:
+                        ki_cq = _parse_json_safe(ki_row['cached_question'], {})
+                        if ki_cq and ki_cq.get('question'):
+                            existing_ki_questions.add(ki_cq['question'].lower().strip())
+                except Exception:
+                    pass
+
+                for f in kfs:
+                    if len(quiz_suggestions) >= 3:
+                        break
+                    fq = (f.get('question') or '').strip()
+                    fa = (f.get('answer') or '').strip()
+                    if not fq or not fa:
+                        continue
+                    if f.get('id') == current_fact_id:
+                        continue
+                    if fq.lower().strip() in existing_ki_questions:
+                        continue
+                    quiz_suggestions.append({
+                        'question': fq,
+                        'answer': fa,
+                        'fact_id': f.get('id', ''),
+                        'type': f.get('type', 'fact'),
+                    })
+
             card = {
                 'type': 'review',
                 'question_id': item['id'],  # knowledge_item id for scoring
@@ -1135,7 +1171,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'fact_id': cq.get('fact_id', ''),
                 'entities': cq.get('entities', []),
                 'related_facts': related_facts,
-                'quiz_suggestions': cq.get('quiz_suggestions', []),
+                'quiz_suggestions': quiz_suggestions,
             }
             items.append(card)
 
