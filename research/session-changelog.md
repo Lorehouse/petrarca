@@ -1,6 +1,58 @@
 # Knowledge System Implementation Status
 
-**Date**: April 6, 2026 (last updated — session 56: Knowledge profile system)
+**Date**: April 7, 2026 (last updated — session 58: Review system overhaul)
+
+## Session 58: Review System Overhaul — FSRS, Logging, Entities, Card Gen (April 7, 2026)
+
+### What
+Comprehensive overhaul of the review system: replaced simple multiplicative scheduling with FSRS-6 (py-fsrs), rebuilt broken interaction logging, enriched entity database (+85 entities), changed card generation (6 follow-ups + factual quiz suggestions), removed entity intro cards and generate-more button.
+
+### FSRS-6 Scheduling
+- **Replaced** simple `stability × 2.5` multiplier with `py-fsrs 6.3.0`
+- Parameters: `desired_retention=0.80`, `learning_steps=()`, `relearning_steps=()`, `enable_fuzzing=True`, `maximum_interval=365`
+- Grade mapping: `knew` → Rating.Easy (~28d first due), `partly` → Rating.Good (~8d), `missed` → Rating.Again (~1d)
+- `learning_steps=()` critical — without it FSRS schedules "Again" for 1 minute later (wrong for daily review)
+- Added `fsrs_card_json TEXT` column to knowledge_items, review_items, microlearning_cards, microlearning_quizzes
+- Migrated all 1342 existing items with stability preserved
+- Fixed 23 items with NULL `last_score` from session 57 voice bulk update (set to 'partly')
+- New knowledge_items and voice_followup review_items now initialized with FSRS card state
+
+### Interaction Logging Rebuild
+- **Problem**: Separate `log_server.py` on port 8091 was hung/unresponsive. Zero review events logged from mobile.
+- **Fix**: Added `/log/events` endpoint to research-server.py (port 8090). Dual-layer: SQLite `interaction_log` table + JSONL files.
+- New `interaction_log` table with event, item_id, score, session_id, response_ms, card_type, domain, node_title, extra
+- Client logger URL changed from `:8091/log` to `:8090/log/events`
+- Server-side `log_interaction()` called in both grading endpoints (`/curriculum/review/result` AND `/review/answer`) + suspend
+- `server_log.py` extended with `log_interaction()` and `log_client_events()`
+
+### Entity Linking Improvements
+- Added `content` to second-pass entity annotation field list (was only annotating rich_answer, memory_hook, question)
+- Created `enrich_entities.py` batch script: Gemini Flash extraction from all card content
+- **Result**: 85 new entities (261→346). Includes Diodorus Siculus, Plutarch, Herodotus, Polybius, Cappella Palatina, Battle of Himera, etc.
+- Deduplication: case-insensitive name + alias matching, require 2+ references across cards
+
+### Card Generation Changes
+- Follow-up questions: 6 instead of 3 (FOLLOW_UP_PROMPT, MICROLEARNING_PROMPT, ENTITY_RESEARCH_PROMPT all updated)
+- **Factual quiz suggestions**: `_build_quiz_suggestions()` deterministically finds key_facts not yet quizzed (up to 3 per card)
+- **QuizSuggestions UI component**: Green-accented "Quick quiz" chips below follow-up links. One-tap creates microlearning_quiz.
+- **`/review/create-factual-quiz`** endpoint + `createFactualQuiz()` client API
+- **Removed** "Generate 3 more questions" button (was adding latency; 6 initial follow-ups is sufficient)
+- **Removed** entity intro cards (`MAX_INTRO_CARDS = 0`; rich answer cards now cover entity context)
+
+### Bug Fix: Write-Lock Violation in record_answer
+- `record_answer()` called `update_knowledge()` without passing `conn`, causing second connection to deadlock on WAL write lock
+- Fixed: all `update_knowledge()` calls now receive `conn` parameter
+
+### Files Changed
+- `scripts/review_engine.py` — FSRS-6 scheduler, record_answer(), follow-up prompts (6), quiz suggestions, FSRS card init
+- `scripts/db.py` — fsrs_card_json columns, interaction_log table
+- `scripts/research-server.py` — /log/events, /review/create-factual-quiz, instrumented grading endpoints
+- `scripts/server_log.py` — dual-layer logging (log_interaction, log_client_events)
+- `scripts/curriculum_db.py` — entity annotation field list (+content), MAX_INTRO_CARDS=0
+- `scripts/enrich_entities.py` — NEW: entity enrichment batch script
+- `app/data/logger.ts` — URL change to :8090/log/events
+- `app/app/(tabs)/review.tsx` — QuizSuggestions component, removed generate-more button
+- `app/lib/book-api.ts` — createFactualQuiz()
 
 ## Session 57: Voice Upload Reliability + Review Tuning (April 7, 2026)
 

@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 7, 2026 (session 57: Voice upload reliability + review tuning)
+**Last updated**: April 7, 2026 (session 58: Review system overhaul — FSRS, logging, entities, card gen)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -26,8 +26,8 @@
 │                                                             │
 │ nginx :8083 — static content (JSON fallback)                 │
 │ nginx :8084 — web app (static dist/)                         │
-│ research-server.py :8090 — API + LLM orchestration           │
-│ log_server.py :8091 — interaction log collection             │
+│ research-server.py :8090 — API + LLM orchestration + logging │
+│ log_server.py :8091 — legacy (replaced by /log/events)       │
 │                                                             │
 │ petrarca.db (SQLite, WAL) — canonical data store             │
 │ /opt/petrarca/data/ — JSON fallback + cache files            │
@@ -49,7 +49,7 @@
 
 ## Content Numbers (as of Apr 4, 2026)
 
-~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 9 curricula (719 nodes), 299 key_facts (Sicily Greek).
+~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 9 curricula (719 nodes), 299 key_facts (Sicily Greek), 346 shared_entities.
 
 ## App Screens
 
@@ -58,7 +58,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. Review cards with rich narrative answers, memory hooks (temporal anchors), Sonnet-generated sideways follow-ups, and "Same topic" checklist (tested ✓ / untested ○ key_facts). Suspend via ⋯ menu. Instant fade transitions, session persistence (graded cards don't reappear within 60s). Generic entities filtered. Multi-quiz ML cards. Entity intro + nexus cards. Knowledge Explorer. |
+| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. FSRS-6 scheduled review cards with rich narrative answers, memory hooks, 6 sideways follow-ups, factual quiz suggestions (one-tap creation), "Same topic" checklist. Suspend via ⋯ menu. Instant fade transitions, session persistence. Generic entities filtered. Multi-quiz ML cards. Nexus cards. Knowledge Explorer. |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -116,7 +116,7 @@
 | `book-store.ts` | Book + capture persistence. Reactive listeners (`onBookStoreChange`). |
 | `interest-model.ts` | Topic-level interest tracking with Bayesian smoothing, 30-day decay |
 | `queue.ts` | Reading queue with AsyncStorage persistence + content prefetch |
-| `logger.ts` | Interaction event logging (`logEvent()`) — daily JSONL files |
+| `logger.ts` | Interaction event logging (`logEvent()`) — sends to `/log/events` (research-server.py :8090), dual-layer: SQLite `interaction_log` + JSONL |
 | `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. Failed uploads (422) kept on device for manual retry. |
 | `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
 | `book-api.ts` | Book API client — `fetchKindleBrowse()`, `includeKindleBook()`, `curateKindleBook()`, `classifyKindleBooks()` |
@@ -131,11 +131,13 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
 | `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
-| `review_engine.py` | FSRS scheduling, `record_answer()`, `generate_question()`, `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
+| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
 | `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
-| `log_server.py` | Interaction log collection (:8091) |
+| `log_server.py` | Legacy interaction log collection (:8091) — replaced by `/log/events` in research-server.py |
+| `server_log.py` | Dual-layer logging: `log_interaction()` (SQLite + JSONL), `log_client_events()` (batch JSONL parser) |
+| `enrich_entities.py` | Entity enrichment batch: Gemini Flash extraction from card content → shared_entities dedup + insert |
 
 ### Pipeline (runs via cron every 4h)
 | Script | Role |
@@ -210,7 +212,9 @@
 | POST | `/review/microlearning/dismiss` | Dismiss card or individual quiz (card_id and/or quiz_id) |
 | POST | `/review/batch-generate` | Batch generate questions for knowledge items |
 | POST | `/review/follow-up/trigger` | Trigger microlearning from follow-up query |
-| POST | `/review/follow-up/generate` | Generate sideways follow-up queries via Haiku |
+| POST | `/review/follow-up/generate` | Generate sideways follow-up queries via Gemini Flash |
+| POST | `/review/create-factual-quiz` | One-click create microlearning_quiz from key_fact suggestion |
+| POST | `/log/events` | Client interaction event ingestion (replaces log_server.py:8091). JSONL body. Dual-layer: SQLite + JSONL. |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |
 | POST | `/review/voice-elicit` | Voice free-recall elicitation (transcription + LLM). Supports curriculum nodes, `chapter:{id}:{num}`, and `book:{id}` node types. Auto-detects domain_id for book/chapter. Idempotent via `request_id`. |
@@ -284,7 +288,7 @@
 
 ## SQLite Schema (petrarca.db)
 
-31 tables organized into 5 areas:
+32 tables organized into 6 areas:
 
 **Content pipeline**: `articles`, `article_sections`, `atomic_claims`, `claim_similarities`, `nli_verdicts`, `article_similarities`, `article_novelty_matrix`, `paragraph_claim_map`, `article_curriculum_nodes`, `delta_reports`, `concept_clusters`, `near_duplicates`, `syntheses`, `pipeline_meta`, `cluster_meta`
 
@@ -296,9 +300,11 @@
 
 **Knowledge Profile**: `transcript_chunks` (embedded voice pieces), `chunk_node_links` (chunks↔nodes), `chunk_entity_links` (chunks↔entities), `domain_knowledge_summaries` (per-domain portraits)
 
+**Interaction Logging**: `interaction_log` (dual-layer with JSONL — event, item_id, score, session_id, response_ms, card_type, domain, node_title, extra)
+
 **Other**: `projects`, `project_notes`, `voice_transcripts`
 
-**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)` (one claim ID in multiple articles). `knowledge_items` is the review data source (replaces archived `retrieval_questions`). `microlearning_quizzes` holds individual quiz questions from ML cards, each independently FSRS-scheduled — the ML card is a content container, quizzes are the review atoms. ML cards have `triggered_follow_ups` and `title` columns. Voice uploads use `request_id` for idempotent retry caching. `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
+**Key relationships**: `atomic_claims` uses composite PK `(article_id, id)`. `knowledge_items` is the review data source. `microlearning_quizzes` holds individual quiz questions from ML cards, each independently FSRS-scheduled — the ML card is a content container, quizzes are the review atoms. All scheduling tables have `fsrs_card_json TEXT` for py-fsrs Card state. Voice uploads use `request_id` for idempotent retry caching. `curriculum_db.py` reads from SQLite; `curriculum.py` reads from JSON.
 
 ## Algorithm Parameters (experiment-validated)
 
@@ -327,9 +333,12 @@
 - Gap-fill: prerequisites only (siblings removed), enriched with book_curriculum_mappings when available
 - Gap-fill scoring: -5.0 penalty, capped at 3 per review batch
 
-### Knowledge Decay (FSRS)
-- Stability: skim=9d, read=30d, highlight=60d, reinforcement=2.5×
-- Used for curriculum review scheduling (NOT for article novelty — that's binary seen/unseen)
+### Review Scheduling (FSRS-6)
+- **Algorithm**: py-fsrs 6.3.0, `desired_retention=0.80`, `learning_steps=()`, `relearning_steps=()`
+- **Grade mapping**: knew→Easy (~8.3d initial stability, ~28d first due), partly→Good (~2.3d, ~8d), missed→Again (~0.2d, ~1d)
+- **Easy progression**: 8.3d → 13d → 20d → 30d → ... stability
+- **FSRS card state**: stored as `fsrs_card_json` JSON column on all scheduling tables
+- **Article novelty**: binary seen/unseen (NOT FSRS-based)
 
 ### Feed Scoring
 - Curiosity peak: 70% novelty, Gaussian σ=0.15
@@ -361,8 +370,8 @@ cd app && eas build --profile development --platform ios
 ### Infrastructure
 - SSH: `ssh alif`
 - nginx :8083 (content JSON), :8084 (web app static)
-- research-server.py :8090 (API)
-- log_server.py :8091 (interaction logs)
+- research-server.py :8090 (API + interaction logging via /log/events)
+- log_server.py :8091 (legacy — replaced by /log/events)
 - Cron: `/etc/cron.d/petrarca-refresh` (every 4 hours)
 - DuckDNS: `/etc/cron.d/duckdns` (every 30 min)
 - Config: `~/src/expo/config.json` (ports, services, paths)
