@@ -593,7 +593,13 @@ function MicrolearningCard({
               {sec.heading ? (
                 <Text style={ml.sectionHeading}>{sec.heading}</Text>
               ) : null}
-              <Text style={ml.content}>{sec.text}</Text>
+              <AnnotatedText
+                text={sec.text}
+                spans={item.entity_spans?.[`section_${i}`]}
+                style={ml.content}
+                onEntityTap={onEntityTap}
+                onDateTap={onDateTap}
+              />
             </View>
           ))}
         </View>

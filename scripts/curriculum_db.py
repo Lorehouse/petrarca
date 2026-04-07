@@ -874,6 +874,15 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
             spans = annotate_entity_spans(text, entity_index)
             if spans:
                 all_spans[field] = spans
+    # Annotate individual section texts (microlearning cards with sections)
+    sections = item.get('sections')
+    if sections and isinstance(sections, list):
+        for i, sec in enumerate(sections):
+            text = sec.get('text', '')
+            if text:
+                spans = annotate_entity_spans(text, entity_index)
+                if spans:
+                    all_spans[f'section_{i}'] = spans
     if all_spans:
         # Merge with existing entity_spans (e.g., microlearning 'content' spans)
         existing = item.get('entity_spans') or {}
