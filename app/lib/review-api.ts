@@ -235,6 +235,11 @@ export async function sendVoiceElicitation(
     body: form,
     timeout: 90000,
   });
+  // 422 = validation error (too_short, transcription_failed) — return the body
+  // which contains feedback_summary. Don't throw — let caller show the feedback.
+  if (res.status === 422) {
+    return res.json();
+  }
   if (!res.ok) {
     const err = new Error(`voice-elicit failed: ${res.status}`) as Error & { status: number };
     err.status = res.status;

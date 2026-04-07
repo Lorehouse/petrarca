@@ -941,9 +941,18 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             if not item.get('cached_question'):
                 continue
 
-            # Knowledge-weighted base score
+            # Anchored items the user already answered correctly: skip unless overdue
+            # and the user is actually struggling (last missed). Voice elicitations and
+            # successful reviews both set anchored — no need to keep drilling.
+            node_confidence = item.get('node_confidence') or 0.0
+            if (node_knowledge == 'anchored' and node_confidence >= 0.5
+                    and item['last_score'] == 'knew' and due_at > now_ms):
+                continue
+
+            # Knowledge-weighted base score — engaged items (actively learning) get
+            # highest priority; anchored items are deprioritized (already well known)
             knowledge_weight = {
-                'anchored': 8.0, 'engaged': 6.0, 'mentioned': 4.0,
+                'anchored': 3.0, 'engaged': 8.0, 'mentioned': 4.0,
             }.get(node_knowledge, 2.0)
 
             if review_count == 0:
@@ -960,8 +969,11 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 score = knowledge_weight + 1.0
             else:
                 # Not due yet — include with low priority for infinite river
+                # Anchored items not yet due get extra deprioritization
                 days_until = (due_at - now_ms) / (24 * 3600 * 1000)
                 score = max(0.1, knowledge_weight - days_until * 0.5)
+                if node_knowledge == 'anchored':
+                    score = max(0.05, score - 3.0)
 
             # Boost concrete factual questions (date/event/person) over abstract ones
             try:

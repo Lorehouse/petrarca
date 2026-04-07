@@ -5302,10 +5302,11 @@ JSON array only:"""
                 if age_hours <= 24:
                     try:
                         cached = json.loads(cache_path.read_text())
-                        # Only return if the cached result has actual analysis content
+                        # Return cached result (including validation errors like too_short)
                         if cached.get('captured') or cached.get('missed') or cached.get('feedback_summary'):
+                            cache_status = 422 if cached.get('error') else 200
                             print(f'[voice-elicit] Header cache hit for {header_request_id}, skipping body read', flush=True)
-                            self._send_json_response(200, cached)
+                            self._send_json_response(cache_status, cached)
                             return
                         else:
                             print(f'[voice-elicit] Header cache for {header_request_id} is empty, re-processing', flush=True)
@@ -5371,8 +5372,9 @@ JSON array only:"""
                     try:
                         cached = json.loads(cache_path.read_text())
                         if cached.get('captured') or cached.get('missed') or cached.get('feedback_summary'):
+                            cache_status = 422 if cached.get('error') else 200
                             print(f'[voice-elicit] Cache hit for {request_id}, returning cached result', flush=True)
-                            self._send_json_response(200, cached)
+                            self._send_json_response(cache_status, cached)
                             return
                         else:
                             print(f'[voice-elicit] Cached result for {request_id} is empty, re-processing', flush=True)
@@ -5398,22 +5400,34 @@ JSON array only:"""
         finally:
             audio_path.unlink(missing_ok=True)
 
-        # Cache successful results before sending (connection may drop)
-        # Validate that analysis actually produced content — don't cache empty results
-        has_analysis = (result and not result.get('error')
+        # Cache results before sending (connection may drop)
+        # Cache both successful results AND validation errors (too_short, transcription_failed)
+        # so retries don't re-upload and re-process the same audio
+        VALIDATION_ERRORS = {'too_short', 'Transcription failed'}
+        error_val = result.get('error', '') if result else ''
+        is_validation_error = error_val in VALIDATION_ERRORS
+        is_server_error = bool(error_val) and not is_validation_error
+
+        has_analysis = (result and not is_server_error
                         and (result.get('captured') or result.get('missed') or result.get('feedback_summary')))
-        if cache_path and has_analysis:
+        if cache_path and (has_analysis or is_validation_error):
             try:
                 cache_path.write_text(json.dumps(result))
             except Exception:
                 pass
 
         # Send response (may fail with ConnectionReset on flaky mobile connections)
+        # 200 = success, 422 = validation error (don't retry), 500 = server error (retry)
         try:
-            status = 500 if result.get('error') else 200
+            if is_server_error:
+                status = 500
+            elif is_validation_error:
+                status = 422
+            else:
+                status = 200
             self._send_json_response(status, result)
         except (ConnectionResetError, BrokenPipeError):
-            if cache_path and result and not result.get('error'):
+            if cache_path and not is_server_error:
                 print(f'[voice-elicit] Client disconnected but result cached as {request_id}', flush=True)
             else:
                 print(f'[voice-elicit] Client disconnected, result lost (no request_id)', flush=True)

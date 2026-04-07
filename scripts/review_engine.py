@@ -3594,7 +3594,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
                                  confidence=confidence, source='voice_elicitation', conn=conn)
 
             now_ms = int(time.time() * 1000)
-            stability_mult = {'knew': 2.5, 'partly': 1.5, 'missed': 0.4}.get(score, 1.0)
+            # Voice elicitations are a stronger signal than individual review cards —
+            # they cover the entire node, so push scheduling further out
+            stability_mult = {'knew': 5.0, 'partly': 3.0, 'missed': 0.4}.get(score, 1.0)
             if is_chapter_recall or is_book_recall:
                 # Update all matched knowledge_items for book/chapter recall
                 if book_id and domain_id:
@@ -4029,7 +4031,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                                  confidence=confidence, source='voice_capture', conn=conn)
 
                 # Update scheduling on knowledge_items
-                stability_mult = {'anchored': 2.5, 'engaged': 1.5, 'mentioned': 1.0}.get(knowledge_level, 1.0)
+                stability_mult = {'anchored': 5.0, 'engaged': 3.0, 'mentioned': 1.0}.get(knowledge_level, 1.0)
                 conn.execute("""
                     UPDATE knowledge_items
                     SET last_reviewed_at = ?,
