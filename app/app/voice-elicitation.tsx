@@ -38,6 +38,8 @@ async function savePendingUpload(upload: PendingUpload) {
     const raw = await readAsStringAsync(PENDING_META);
     pending = JSON.parse(raw);
   } catch { /* no file yet */ }
+  // Don't re-add entries already pending (race with background retry service)
+  if (pending.some(p => p.requestId === upload.requestId)) return;
   pending.push(upload);
   await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
 }

@@ -73,6 +73,29 @@ async function savePending(items: PendingUpload[]) {
   await writeAsStringAsync(PENDING_META, JSON.stringify(items));
 }
 
+/** Remove a single entry by audioUri — reads fresh state to avoid race with savePendingUpload */
+async function clearEntry(audioUri: string) {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    const filtered = pending.filter(p => p.audioUri !== audioUri);
+    await writeAsStringAsync(PENDING_META, JSON.stringify(filtered));
+  } catch { /* ignore */ }
+}
+
+/** Update lastRetryAt on a single entry without rewriting the whole array from stale state */
+async function updateLastRetry(audioUri: string, ts: number) {
+  try {
+    const raw = await readAsStringAsync(PENDING_META);
+    const pending: PendingUpload[] = JSON.parse(raw);
+    const entry = pending.find(p => p.audioUri === audioUri);
+    if (entry) {
+      entry.lastRetryAt = ts;
+      await writeAsStringAsync(PENDING_META, JSON.stringify(pending));
+    }
+  } catch { /* ignore */ }
+}
+
 async function isServerReachable(): Promise<boolean> {
   try {
     const controller = new AbortController();
@@ -105,12 +128,11 @@ async function retryPendingUploads() {
     }
 
     console.log(`[voice-upload-service] Retrying ${pending.length} pending upload(s)`);
-    const remaining: PendingUpload[] = [];
+    let cleared = 0;
 
     for (const p of pending) {
       // Skip items retried very recently (another retry loop may be handling them)
       if (p.lastRetryAt && (Date.now() - p.lastRetryAt) < 30_000) {
-        remaining.push(p);
         continue;
       }
 
@@ -124,19 +146,22 @@ async function retryPendingUploads() {
               node_id: p.nodeId, request_id: p.requestId, from_cache: true,
             });
             notifyListeners(p.nodeTitle, true, cached);
+            await clearEntry(p.audioUri);
+            cleared++;
             continue;
           }
         }
 
         p.lastRetryAt = Date.now();
+        await updateLastRetry(p.audioUri, p.lastRetryAt);
         const res = await sendVoiceElicitation(p.nodeId, p.domainId, p.audioUri, p.requestId);
         if (res && (res.captured?.length || res.missed?.length || res.feedback_summary)) {
           logEvent('voice_upload_auto_retry_success', {
             node_id: p.nodeId, request_id: p.requestId,
           });
           notifyListeners(p.nodeTitle, true, res);
-        } else {
-          remaining.push(p);
+          await clearEntry(p.audioUri);
+          cleared++;
         }
       } catch (e: any) {
         console.log(`[voice-upload-service] Retry failed for ${p.nodeTitle}: ${e}`);
@@ -145,22 +170,23 @@ async function retryPendingUploads() {
         if (status && status >= 400 && status < 500) {
           logEvent('voice_upload_permanent_fail', { node_id: p.nodeId, status });
           notifyListeners(p.nodeTitle, false);
+          await clearEntry(p.audioUri);
+          cleared++;
           continue;
         }
-        // Keep entries less than 48h old for future retry
+        // Expire entries older than 48h
         const ageHours = (Date.now() - p.recordedAt) / (1000 * 3600);
-        if (ageHours < 48) {
-          remaining.push(p);
-        } else {
+        if (ageHours >= 48) {
           logEvent('voice_upload_expired', { node_id: p.nodeId, age_hours: Math.round(ageHours) });
           notifyListeners(p.nodeTitle, false);
+          await clearEntry(p.audioUri);
+          cleared++;
         }
       }
     }
 
-    await savePending(remaining);
-    if (remaining.length < pending.length) {
-      console.log(`[voice-upload-service] ${pending.length - remaining.length} upload(s) succeeded, ${remaining.length} remaining`);
+    if (cleared > 0) {
+      console.log(`[voice-upload-service] ${cleared} upload(s) resolved, ${pending.length - cleared} remaining`);
     }
   } catch (e) {
     console.error('[voice-upload-service] Error:', e);
