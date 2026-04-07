@@ -642,15 +642,17 @@ def fill_prerequisite_gaps(domain_id: str, mapped_node_ids: list, conn, now: int
             }
 
         try:
+            _new_card = FsrsCard()
             conn.execute('''
                 INSERT INTO knowledge_items
                 (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
-                 sources, question_history, created_at)
-                VALUES (?,?,?,?,?,?,?,?)
+                 sources, question_history, created_at, fsrs_card_json)
+                VALUES (?,?,?,?,?,?,?,?,?)
             ''', (
                 item_id, cand_id, domain_id,
                 INITIAL_STABILITY_DAYS, now,
                 json.dumps([source]), '[]', now,
+                json.dumps(_new_card.to_dict()),
             ))
             gaps_created += 1
         except Exception as e:
@@ -3616,17 +3618,21 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
                     continue
                 trigger_id = f'wonder_{node_id}_{int(time.time() * 1000)}'
                 try:
+                    # Initialize with FSRS card state
+                    _new_card = FsrsCard()
+                    _card_json = json.dumps(_new_card.to_dict())
+                    _initial_due = int(_new_card.due.timestamp() * 1000)
                     conn.execute("""
                         INSERT INTO review_items
                           (id, item_type, curriculum_domain, curriculum_node_id, curriculum_node_title,
-                           source_text, lens, stability_days, due_at, review_count, created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                           source_text, lens, stability_days, due_at, review_count, created_at, fsrs_card_json)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         trigger_id, 'voice_followup',
                         domain_id, node_id, node['title'],
                         w, 'SIGNIFICANCE', 1.0,
-                        int(time.time() * 1000) + 4 * 3600 * 1000,  # due in 4h
-                        0, int(time.time() * 1000),
+                        _initial_due,
+                        0, int(time.time() * 1000), _card_json,
                     ))
                     research_triggers.append({'id': trigger_id, 'question': w})
                 except Exception:
