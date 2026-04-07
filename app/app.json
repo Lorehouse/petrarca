@@ -38,7 +38,8 @@
       "expo-dev-client",
       "expo-router",
       "expo-font",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-sqlite"
     ],
     "extra": {
       "router": {},
