@@ -3473,22 +3473,8 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     if not transcript:
         return {'error': 'Transcription failed'}
 
-    # Quality gate: reject very short/interrupted recordings
     word_count = len(transcript.split())
-    if word_count < 15:
-        print(f'[voice-elicit] Too short ({word_count} words), skipping LLM analysis', flush=True)
-        return {
-            'error': 'too_short',
-            'transcript': transcript,
-            'word_count': word_count,
-            'node_title': node['title'],
-            'feedback_summary': 'Recording too short for analysis. Try speaking for at least 30 seconds about what you remember.',
-            'captured': [], 'missed': [], 'interesting': [], 'wonderings': [],
-            'coverage_pct': 0, 'suggested_score': 'missed',
-            'research_triggers': [], 'microlearning_triggered': [],
-        }
-
-    print(f'[voice-elicit] Sources: {len(sources_text)} chars', flush=True)
+    print(f'[voice-elicit] Transcript: {word_count} words. Sources: {len(sources_text)} chars', flush=True)
 
     # Build available nodes list for adjacent_nodes_covered detection
     available_nodes_text = ''
