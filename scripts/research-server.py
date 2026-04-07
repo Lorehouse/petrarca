@@ -4029,6 +4029,8 @@ JSON array only:"""
                 (now_ms + one_year, 'suspended', item_id))
             conn.commit()
             print(f'[review] suspended {item_id}', flush=True)
+            from server_log import log_interaction
+            log_interaction('review_suspend', item_id=item_id)
             self._send_json_response(200, {'status': 'suspended', 'item_id': item_id})
         except Exception as e:
             self._send_json_response(500, {'error': str(e)})
@@ -4231,6 +4233,61 @@ JSON array only:"""
         except Exception as e:
             print(f'[follow-up-generate] Error: {e}', flush=True)
             self._send_json_response(500, {'error': str(e)})
+
+    def _handle_create_factual_quiz(self):
+        """POST /review/create-factual-quiz — create a quiz from a factual suggestion."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        item_id = body.get('item_id', '').strip()
+        question = body.get('question', '').strip()
+        answer = body.get('answer', '').strip()
+        if not item_id or not question or not answer:
+            self._send_json_response(400, {'error': 'item_id, question, and answer required'})
+            return
+        from db import get_connection
+        import hashlib
+        conn = get_connection()
+        try:
+            # Find the parent ML card for this knowledge_item (or create a virtual one)
+            ki = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
+            if not ki:
+                self._send_json_response(404, {'error': 'item not found'})
+                return
+            # Find or create a ML card to host this quiz
+            mc = conn.execute(
+                'SELECT id FROM microlearning_cards WHERE source_node_id=? AND source_domain=? LIMIT 1',
+                (ki['curriculum_node_id'], ki['curriculum_domain'])).fetchone()
+            if mc:
+                card_id = mc['id']
+            else:
+                # Create a minimal ML card as quiz container
+                card_id = hashlib.md5(f"{ki['curriculum_node_id']}:{ki['curriculum_domain']}:factual".encode()).hexdigest()[:12]
+                now_ms = int(time.time() * 1000)
+                conn.execute('''
+                    INSERT OR IGNORE INTO microlearning_cards
+                    (id, query, source_node_id, source_domain, content, status, created_at, source_type)
+                    VALUES (?,?,?,?,?,?,?,?)
+                ''', (card_id, f"Factual quiz: {question[:60]}", ki['curriculum_node_id'],
+                      ki['curriculum_domain'], '', 'completed', now_ms, 'follow_up'))
+            # Create the quiz
+            quiz_id = hashlib.md5(f"{card_id}:{question}".encode()).hexdigest()[:12]
+            now_ms = int(time.time() * 1000)
+            conn.execute('''
+                INSERT OR IGNORE INTO microlearning_quizzes
+                (id, card_id, question, answer, status, stability_days, due_at, review_count, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            ''', (quiz_id, card_id, question, answer, 'active', 1.0, now_ms + 86400000, 0, now_ms))
+            conn.commit()
+            from server_log import log_interaction
+            log_interaction('factual_quiz_created', item_id=quiz_id, node_title=question[:60],
+                            domain=ki['curriculum_domain'])
+            self._send_json_response(200, {'quiz_id': quiz_id, 'status': 'created'})
+        except Exception as e:
+            print(f'[factual-quiz] Error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
 
     def _handle_also_want_to_know(self):
         """POST /review/also-want-to-know — generate tappable suggestions after review."""
@@ -5229,9 +5286,31 @@ JSON array only:"""
         conn = get_connection()
         try:
             result = record_answer(item_id, score, conn)
+            # Dual-layer interaction logging
+            from server_log import log_interaction
+            log_interaction('review_answer', item_id=item_id, score=score,
+                            card_type=body.get('card_type'),
+                            new_stability=result.get('new_stability_days'),
+                            next_due=result.get('next_due_at'))
             self._send_json_response(200, result)
         finally:
             conn.close()
+
+    def _handle_log_events(self):
+        """POST /log/events — receive client-side interaction events.
+
+        Replaces the broken separate log_server.py on port 8091.
+        Accepts JSONL body (one JSON object per line).
+        """
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > 1_000_000:
+            self.send_response(413)
+            self.end_headers()
+            return
+        body = self.rfile.read(content_length).decode('utf-8', errors='replace')
+        from server_log import log_client_events
+        lines_written = log_client_events(body)
+        self._send_json_response(200, {'ok': True, 'lines': lines_written})
 
     def _handle_review_explore(self):
         """POST /review/explore — generate follow-up exploration items."""
@@ -5874,6 +5953,8 @@ JSON array only:"""
             return self._handle_also_want_to_know()
         if self.path == '/review/targeted-quiz':
             return self._handle_targeted_quiz()
+        if self.path == '/review/create-factual-quiz':
+            return self._handle_create_factual_quiz()
         if self.path == '/review/batch-generate':
             return self._handle_review_batch_generate()
         if self.path == '/entity/tap':
@@ -5924,6 +6005,10 @@ JSON array only:"""
             return self._handle_knowledge_import_assessment()
         if self.path.startswith('/knowledge/profile/regenerate/'):
             return self._handle_knowledge_profile_regenerate()
+
+        # Client interaction logging (replaces broken log_server.py:8091)
+        if self.path == '/log/events':
+            return self._handle_log_events()
 
         # Review endpoints
         if self.path == '/review/book-complete':

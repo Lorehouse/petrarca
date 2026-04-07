@@ -586,7 +586,7 @@ def get_timeline(domain_id: str, conn=None) -> list[dict]:
 REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60, 120]
 QUESTIONS_PER_SESSION = 8
 ORDERING_PER_SESSION = 2
-MAX_INTRO_CARDS = 3
+MAX_INTRO_CARDS = 0  # Disabled — rich answer cards now provide entity context
 
 
 def _load_entity_knowledge(conn) -> dict[str, str]:
@@ -868,7 +868,7 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
         return item
     # Annotate rich_answer, memory_hook, and question
     all_spans = {}
-    for field in ('rich_answer', 'memory_hook', 'question'):
+    for field in ('rich_answer', 'memory_hook', 'question', 'content'):
         text = item.get(field)
         if text and isinstance(text, str):
             spans = annotate_entity_spans(text, entity_index)

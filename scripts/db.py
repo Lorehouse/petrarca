@@ -618,6 +618,30 @@ MIGRATIONS = [
     "ALTER TABLE microlearning_cards ADD COLUMN generation_depth INTEGER DEFAULT 0",
     # Domain knowledge summaries — synthesized learner knowledge portraits
     "CREATE TABLE IF NOT EXISTS domain_knowledge_summaries (id TEXT PRIMARY KEY, domain_id TEXT NOT NULL UNIQUE, summary TEXT NOT NULL, chunk_count INTEGER DEFAULT 0, node_count INTEGER DEFAULT 0, entity_count INTEGER DEFAULT 0, version INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
+    # FSRS-6 card state storage (py-fsrs Card serialized as JSON)
+    "ALTER TABLE knowledge_items ADD COLUMN fsrs_card_json TEXT",
+    "ALTER TABLE review_items ADD COLUMN fsrs_card_json TEXT",
+    "ALTER TABLE microlearning_cards ADD COLUMN fsrs_card_json TEXT",
+    "ALTER TABLE microlearning_quizzes ADD COLUMN fsrs_card_json TEXT",
+    # Interaction logging table — dual-layer with JSONL (replaces broken log_server.py:8091)
+    """CREATE TABLE IF NOT EXISTS interaction_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        item_id TEXT,
+        item_type TEXT,
+        score TEXT,
+        session_id TEXT,
+        response_ms INTEGER,
+        card_type TEXT,
+        domain TEXT,
+        node_id TEXT,
+        node_title TEXT,
+        extra TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_il_event ON interaction_log(event)",
+    "CREATE INDEX IF NOT EXISTS idx_il_item ON interaction_log(item_id)",
+    "CREATE INDEX IF NOT EXISTS idx_il_created ON interaction_log(created_at)",
 ]
 
 

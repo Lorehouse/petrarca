@@ -9,7 +9,7 @@ import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/ty
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
-  triggerFollowUp, generateFollowUps, suspendReviewItem,
+  triggerFollowUp, suspendReviewItem,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -127,12 +127,7 @@ function FollowUpLinks({
   const [tapped, setTapped] = useState<Set<string>>(
     new Set(triggeredFromServer || []),
   );
-  const [extraQueries, setExtraQueries] = useState<string[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState(false);
-
-  const allQueries = [...(queries || []), ...extraQueries];
-  if (allQueries.length === 0) return null;
+  if (!queries || queries.length === 0) return null;
 
   const handleTap = (q: string) => {
     if (tapped.has(q)) return;
@@ -144,33 +139,10 @@ function FollowUpLinks({
     }
   };
 
-  const handleGenerateMore = async () => {
-    setGenerating(true);
-    setGenError(false);
-    try {
-      const allTriggered = [...tapped, ...allQueries];
-      const resp = await generateFollowUps({
-        nodeTitle: nodeTitle || '',
-        nodeDescription: nodeDescription || '',
-        exclude: allTriggered,
-      });
-      if (resp.follow_up_queries?.length) {
-        setExtraQueries(prev => [...prev, ...resp.follow_up_queries]);
-      } else {
-        setGenError(true);
-      }
-    } catch (e) {
-      console.warn('[follow-up] generate more failed:', e);
-      setGenError(true);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   return (
     <>
       <Text style={cs.followUpLabel}>{'\uD83D\uDD0D'} Go deeper</Text>
-      {allQueries.map((q, i) => {
+      {queries.map((q, i) => {
         const isTriggered = tapped.has(q);
         return (
           <Pressable
@@ -185,15 +157,6 @@ function FollowUpLinks({
           </Pressable>
         );
       })}
-      <Pressable
-        style={[cs.followUpBtn, cs.generateMoreBtn]}
-        onPress={handleGenerateMore}
-        disabled={generating}
-      >
-        <Text style={cs.followUpText}>
-          {generating ? 'Generating...' : genError ? 'Failed — tap to retry' : '\u2726 Generate 3 more questions'}
-        </Text>
-      </Pressable>
     </>
   );
 }

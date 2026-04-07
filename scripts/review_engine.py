@@ -51,8 +51,25 @@ SCRIPT_DIR = Path(__file__).parent
 BOOK_RESEARCH_DIR = SCRIPT_DIR / 'data' / 'book_research'
 
 
-# ── FSRS (simplified) ─────────────────────────────────────────────────────────
+# ── FSRS-6 scheduling (py-fsrs) ──────────────────────────────────────────────
+from datetime import datetime, timezone
+from fsrs import Scheduler as _FsrsScheduler, Card as FsrsCard, Rating as FsrsRating
 
+_fsrs_scheduler = _FsrsScheduler(
+    desired_retention=0.80,     # More aggressive than default 0.90
+    learning_steps=(),          # Skip — daily review app, not per-minute
+    relearning_steps=(),        # Skip — same reason
+    enable_fuzzing=True,
+    maximum_interval=365,
+)
+
+SCORE_TO_FSRS = {
+    'knew':   FsrsRating.Easy,     # ~8.3d initial stability, ~28d first due
+    'partly': FsrsRating.Good,     # ~2.3d initial stability, ~8d first due
+    'missed': FsrsRating.Again,    # ~0.2d initial stability, ~1d first due
+}
+
+# Legacy constants — kept for voice elicitation and backward compat
 STABILITY_MULTIPLIERS = {'knew': 2.5, 'partly': 1.5}
 INITIAL_STABILITY_DAYS = 1.0
 MAX_STABILITY_DAYS = 365.0
@@ -306,7 +323,7 @@ Output JSON only:
 {{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
-FOLLOW_UP_PROMPT = """A history reader just reviewed a topic. Generate 3 follow-up research questions
+FOLLOW_UP_PROMPT = """A history reader just reviewed a topic. Generate 6 follow-up research questions
 that go SIDEWAYS — exploring adjacent angles the card didn't cover, not drilling deeper into
 what was already said. The reader should think "oh, I never thought about it from THAT angle."
 
@@ -343,7 +360,7 @@ If LEARNER CONTEXT is provided, avoid generating follow-ups that the learner has
 already explored via voice recall. Instead, find angles that complement their
 existing knowledge and curiosities.
 
-Output JSON array of 3 strings only: ["q1","q2","q3"]"""
+Output JSON array of 6 strings only: ["q1","q2","q3","q4","q5","q6"]"""
 
 
 EXPLORE_PROMPT = """A learner reviewed this concept and wants to explore further.
@@ -1167,7 +1184,7 @@ def _generate_follow_up_queries(node_title: str, node_description: str,
         if raw:
             fq = json.loads(raw) if isinstance(raw, str) else raw
             if isinstance(fq, list) and len(fq) >= 2:
-                return fq[:3]
+                return fq[:6]
     except Exception as e:
         print(f'[review] follow-up gen failed for {node_title}: {e}', flush=True)
     return []
@@ -1540,7 +1557,58 @@ def generate_question(item_id: str, conn) -> dict:
         if fqs:
             result['follow_up_queries'] = fqs
 
+    # Factual quiz suggestions — deterministic from key_facts not yet quizzed
+    if conn and node_id and domain_id:
+        result['quiz_suggestions'] = _build_quiz_suggestions(node_id, domain_id, conn)
+
     return result
+
+
+def _build_quiz_suggestions(node_id: str, domain_id: str, conn) -> list[dict]:
+    """Build up to 3 factual quiz suggestions from key_facts not yet covered by quizzes."""
+    try:
+        node = conn.execute(
+            'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+            (node_id, domain_id)).fetchone()
+        if not node or not node['key_facts']:
+            return []
+        key_facts = json.loads(node['key_facts'])
+        if not key_facts:
+            return []
+
+        # Find which questions already exist as microlearning_quizzes (via parent knowledge_item)
+        ki = conn.execute(
+            'SELECT id FROM knowledge_items WHERE curriculum_node_id=? AND curriculum_domain=?',
+            (node_id, domain_id)).fetchone()
+        existing_qs = set()
+        if ki:
+            # Check quizzes from ML cards sourced from this node
+            quiz_rows = conn.execute('''
+                SELECT mq.question FROM microlearning_quizzes mq
+                JOIN microlearning_cards mc ON mq.card_id = mc.id
+                WHERE mc.source_node_id = ? AND mc.source_domain = ?
+            ''', (node_id, domain_id)).fetchall()
+            existing_qs = {r['question'].lower().strip() for r in quiz_rows if r['question']}
+
+        suggestions = []
+        for fact in key_facts:
+            if len(suggestions) >= 3:
+                break
+            question = fact.get('question', '').strip()
+            answer = fact.get('answer', '').strip()
+            if not question or not answer:
+                continue
+            if question.lower().strip() in existing_qs:
+                continue
+            suggestions.append({
+                'question': question,
+                'answer': answer,
+                'fact_id': fact.get('id', ''),
+                'type': fact.get('type', 'fact'),
+            })
+        return suggestions
+    except Exception:
+        return []
 
 
 # ── Record answer ─────────────────────────────────────────────────────────────
@@ -1568,21 +1636,31 @@ def record_answer(item_id: str, score: str, conn) -> dict:
     item = dict(row)
 
     now = int(time.time() * 1000)
-    if score == 'missed':
-        new_stability = INITIAL_STABILITY_DAYS
-    else:
-        new_stability = min(item['stability_days'] * STABILITY_MULTIPLIERS.get(score, 1.0), MAX_STABILITY_DAYS)
 
-    next_due = now + int(new_stability * 24 * 60 * 60 * 1000)
+    # ── FSRS-6 scheduling ────────────────────────────────────────────────────
+    card_json = item.get('fsrs_card_json')
+    if card_json:
+        card_data = json.loads(card_json) if isinstance(card_json, str) else card_json
+        card = FsrsCard.from_dict(card_data)
+    else:
+        card = FsrsCard()
+
+    fsrs_rating = SCORE_TO_FSRS.get(score, FsrsRating.Again)
+    now_dt = datetime.now(timezone.utc)
+    new_card, _review_log = _fsrs_scheduler.review_card(card, fsrs_rating, now_dt)
+    new_stability = new_card.stability or 1.0
+    next_due = int(new_card.due.timestamp() * 1000)
+    card_dict = new_card.to_dict()
+    fsrs_json = json.dumps(card_dict)
 
     if table == 'microlearning_quizzes':
         # Individual quiz from a microlearning card
         conn.execute("""
             UPDATE microlearning_quizzes SET stability_days=?, due_at=?, last_reviewed_at=?,
-              last_score=?, review_count=review_count+1
+              last_score=?, review_count=review_count+1, fsrs_card_json=?
             WHERE id=?
-        """, (new_stability, next_due, now, score, item_id))
-        print(f'[review] ml_quiz {item_id}: {score} → stability={new_stability:.1f}d', flush=True)
+        """, (new_stability, next_due, now, score, fsrs_json, item_id))
+        print(f'[review] ml_quiz {item_id}: {score} → stability={new_stability:.1f}d due={new_card.due.strftime("%m-%d")}', flush=True)
 
         # Propagate knowledge update via the parent card's curriculum context
         parent = conn.execute(
@@ -1592,29 +1670,29 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
             update_knowledge(parent['source_domain'], parent['source_node_id'],
                              knowledge=knowledge_val, confidence=confidence_val,
-                             source=f"microlearning:{item_id}")
+                             source=f"microlearning:{item_id}", conn=conn)
 
     elif table == 'microlearning_cards':
         # Legacy: whole microlearning card as review unit
         conn.execute("""
             UPDATE microlearning_cards SET stability_days=?, due_at=?, last_reviewed_at=?,
-              last_score=?, review_count=review_count+1
+              last_score=?, review_count=review_count+1, fsrs_card_json=?
             WHERE id=?
-        """, (new_stability, next_due, now, score, item_id))
+        """, (new_stability, next_due, now, score, fsrs_json, item_id))
         print(f'[review] microlearning {item_id}: {score} → stability={new_stability:.1f}d', flush=True)
 
         if item.get('source_domain') and item.get('source_node_id'):
             knowledge_val, confidence_val = SCORE_TO_KNOWLEDGE.get(score, ('unknown', 0.0))
             update_knowledge(item['source_domain'], item['source_node_id'],
                              knowledge=knowledge_val, confidence=confidence_val,
-                             source=f"microlearning:{item_id}")
+                             source=f"microlearning:{item_id}", conn=conn)
     else:
         # Regular knowledge_items / review_items
         conn.execute(f"""
             UPDATE {table} SET stability_days=?, due_at=?, last_reviewed_at=?,
-              last_score=?, review_count=review_count+1, cached_question=NULL
+              last_score=?, review_count=review_count+1, cached_question=NULL, fsrs_card_json=?
             WHERE id=?
-        """, (new_stability, next_due, now, score, item_id))
+        """, (new_stability, next_due, now, score, fsrs_json, item_id))
 
     # Knowledge state update for non-microlearning items
     if table != 'microlearning_cards' and item.get('curriculum_domain') and item.get('curriculum_node_id'):
@@ -1632,7 +1710,7 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             src_chapter = item.get('source_chapter_number', '')
         update_knowledge(item['curriculum_domain'], item['curriculum_node_id'],
                          knowledge=knowledge_val, confidence=confidence_val,
-                         source=f"review:{src_book}:{src_chapter}")
+                         source=f"review:{src_book}:{src_chapter}", conn=conn)
 
     # Reschedule dependents on miss (applies to all card types with curriculum context)
     domain = item.get('curriculum_domain') or item.get('source_domain')
@@ -1711,14 +1789,14 @@ Write:
 3. 3-5 quiz questions testing SPECIFIC facts from the content. Short questions (6-15 words)
    with short specific answers (1-2 sentences). Each targets a different detail.
 
-4. 3 follow-up queries that go SIDEWAYS — exploring angles the card DIDN'T cover. Don't repeat
+4. 6 follow-up queries that go SIDEWAYS — exploring angles the card DIDN'T cover. Don't repeat
    what's already in the content. Think: geography as explanation, counter-narratives, structural
    causes, transmission history, modern echoes, connected figures. Each should open a new rabbit hole.
 
 5. Entities mentioned — people, places, events, concepts with canonical IDs.
 
 Output JSON only:
-{{"title":"short title with dates","sections":[{{"heading":null,"text":"opening narrative"}},{{"heading":"Sources","text":"primary source info"}},{{"heading":"Still Visible","text":"material evidence"}}],"quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
+{{"title":"short title with dates","sections":[{{"heading":null,"text":"opening narrative"}},{{"heading":"Sources","text":"primary source info"}},{{"heading":"Still Visible","text":"material evidence"}}],"quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3","q4","q5","q6"],"entities":[{{"name":"Archimedes","canonical":"archimedes_of_syracuse","type":"person"}}]}}"""
 
 
 ENTITY_RESEARCH_PROMPT = """You are a knowledgeable historian. Write a rich microlearning card about this entity,
@@ -1750,12 +1828,12 @@ Write:
 
 3. 3-5 quiz questions testing SPECIFIC facts. Short questions (6-15 words), short answers.
 
-4. 3 follow-up queries latching onto specific details from the card content
+4. 6 follow-up queries latching onto specific details from the card content
 
 5. Entities mentioned in the text
 
 Output JSON only:
-{{"title":"short title with dates","content":"the profile text","quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
+{{"title":"short title with dates","content":"the profile text","quizzes":[{{"question":"...","answer":"..."}}],"follow_up_queries":["q1","q2","q3","q4","q5","q6"],"entities":[{{"name":"Name","canonical":"canonical_id","type":"person|place|event|concept|period"}}]}}"""
 
 
 ENTITY_QUESTIONS_PROMPT = """Generate 3 research questions about this entity that would make a history reader
