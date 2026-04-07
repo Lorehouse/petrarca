@@ -1126,6 +1126,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'fact_id': cq.get('fact_id', ''),
                 'entities': cq.get('entities', []),
                 'related_facts': related_facts,
+                'quiz_suggestions': cq.get('quiz_suggestions', []),
             }
             items.append(card)
 

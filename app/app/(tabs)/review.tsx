@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Platform, Pressable, ScrollView,
+  ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -323,7 +323,12 @@ function ReviewCard({
     onResult(result);
   };
 
+  const shortAnswer = (item.answer || '').trim();
   const displayAnswer = item.rich_answer || item.answer || '';
+  // Show short answer separately only if it's meaningfully different from rich_answer
+  const showShortAnswer = shortAnswer && displayAnswer
+    && shortAnswer !== displayAnswer
+    && !displayAnswer.startsWith(shortAnswer);
   const anchors = item.anchors || [];
 
   return (
@@ -377,6 +382,13 @@ function ReviewCard({
         </View>
       ) : (
         <View>
+          {/* Short answer (succinct) */}
+          {showShortAnswer ? (
+            <View style={cs.shortAnswerBox}>
+              <Text style={cs.shortAnswerText}>{shortAnswer}</Text>
+            </View>
+          ) : null}
+
           {/* Rich answer */}
           <View style={cs.answerBox}>
             <AnnotatedText
@@ -552,14 +564,19 @@ function MicrolearningCard({
 
   return (
     <View style={cs.card}>
-      {/* Top dismiss */}
+      {/* Top actions */}
       <View style={ml.topRow}>
         <View style={ml.badge}>
           <Text style={ml.badgeText}>Research</Text>
         </View>
-        <Pressable onPress={onDismissCard} hitSlop={8}>
-          <Text style={ml.dismissText}>Not interested</Text>
-        </Pressable>
+        <View style={ml.topActions}>
+          <Pressable style={ml.topActionBtn} onPress={onComplete} hitSlop={8}>
+            <Text style={ml.topActionText}>Skip</Text>
+          </Pressable>
+          <Pressable style={ml.topActionBtn} onPress={onDismissCard} hitSlop={8}>
+            <Text style={ml.topActionText}>Suspend</Text>
+          </Pressable>
+        </View>
       </View>
       {item.title ? (
         <Text style={ml.cardTitle}>{item.title}</Text>
@@ -661,13 +678,10 @@ function MicrolearningCard({
         <ResearchInput onSubmit={onResearch} />
       </View>
 
-      {/* Bottom actions: Complete + Dismiss */}
+      {/* Bottom action */}
       <View style={ml.bottomActions}>
         <Pressable style={ml.completeBtn} onPress={onComplete}>
           <Text style={ml.completeBtnText}>Complete {'\u2192'}</Text>
-        </Pressable>
-        <Pressable onPress={onDismissCard} hitSlop={8}>
-          <Text style={ml.dismissText}>Dismiss card</Text>
         </Pressable>
       </View>
     </View>
@@ -1142,6 +1156,7 @@ export default function ReviewScreen() {
 
   return (
     <View style={s.container}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView ref={scrollRef} contentContainerStyle={s.content}>
         {/* ── Compact header: tabs + drawer button ── */}
         <View style={s.reviewHeader}>
@@ -1257,6 +1272,7 @@ export default function ReviewScreen() {
           />
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <PetrarcaDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <EntitySheet entityId={activeEntityId} onClose={() => setActiveEntityId(null)}
@@ -1295,6 +1311,8 @@ const cs = StyleSheet.create({
   revealText: { fontFamily: fonts.body, fontSize: 14, color: colors.rubric },
   skipButton: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   skipText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textMuted },
+  shortAnswerBox: { marginBottom: 12, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  shortAnswerText: { fontFamily: fonts.displaySemiBold, fontSize: 16, lineHeight: 22, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
   answerBox: { borderLeftWidth: 3, borderLeftColor: colors.claimNew, paddingLeft: 14, marginBottom: 14 },
   answerText: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody },
   hookBox: { backgroundColor: 'rgba(139,37,0,0.04)', borderLeftWidth: 2, borderLeftColor: colors.rubric, paddingLeft: 12, paddingVertical: 8, marginBottom: 12, borderRadius: 2 },
@@ -1337,6 +1355,9 @@ const ml = StyleSheet.create({
   revealedContent: { borderLeftWidth: 2, borderLeftColor: colors.rule, paddingLeft: 14, marginTop: 12, marginBottom: 14 },
   revealedLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3, marginBottom: 8, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  topActions: { flexDirection: 'row', gap: 8 },
+  topActionBtn: { paddingVertical: 4, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.rule, borderRadius: 3 },
+  topActionText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
   dismissBtn: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 10, marginTop: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.rule },
   dismissText: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
   quizSection: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule, paddingTop: 12, marginBottom: 8 },
