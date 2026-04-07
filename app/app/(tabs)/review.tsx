@@ -9,7 +9,7 @@ import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/ty
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
-  triggerFollowUp, suspendReviewItem,
+  triggerFollowUp, suspendReviewItem, createFactualQuiz,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { setFeedbackContext } from '../../lib/feedback-context';
@@ -158,6 +158,55 @@ function FollowUpLinks({
         );
       })}
     </>
+  );
+}
+
+function QuizSuggestions({
+  suggestions,
+  itemId,
+}: {
+  suggestions: Array<{ question: string; answer: string; fact_id?: string; type?: string }>;
+  itemId: string;
+}) {
+  const [created, setCreated] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState<string | null>(null);
+
+  if (!suggestions || suggestions.length === 0) return null;
+
+  const handleCreate = async (s: { question: string; answer: string }) => {
+    if (created.has(s.question) || creating) return;
+    setCreating(s.question);
+    try {
+      await createFactualQuiz(itemId, s.question, s.answer);
+      setCreated(prev => new Set(prev).add(s.question));
+      logEvent('factual_quiz_created', { item_id: itemId, question: s.question });
+    } catch (e) {
+      console.warn('[quiz-suggestion] create failed:', e);
+    } finally {
+      setCreating(null);
+    }
+  };
+
+  return (
+    <View style={{ marginTop: 10 }}>
+      <Text style={cs.followUpLabel}>Quick quiz</Text>
+      {suggestions.map((s, i) => {
+        const done = created.has(s.question);
+        return (
+          <Pressable
+            key={i}
+            style={[cs.quizSugBtn, done && cs.quizSugDone]}
+            onPress={() => handleCreate(s)}
+            disabled={done || creating === s.question}
+          >
+            <Text style={[cs.quizSugText, done && { color: colors.textMuted }]}>
+              {done ? '\u2713 ' : creating === s.question ? '\u2026 ' : '+ '}
+              {s.question}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -420,6 +469,14 @@ function ReviewCard({
               nodeDescription={item.node_description}
               onResearch={onResearch}
             />
+
+            {/* Factual quiz suggestions — one-tap to create quiz from key_facts */}
+            {item.question_id && (item as any).quiz_suggestions?.length > 0 && (
+              <QuizSuggestions
+                suggestions={(item as any).quiz_suggestions}
+                itemId={item.question_id}
+              />
+            )}
 
             {/* Related facts from the same topic — informational checklist */}
             {(item as any).related_facts?.length > 0 && (
@@ -1262,6 +1319,9 @@ const cs = StyleSheet.create({
   followUpBtn: { paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, borderLeftColor: 'rgba(139,37,0,0.2)', backgroundColor: 'rgba(139,37,0,0.02)', borderRadius: 2 },
   followUpBtnTapped: { borderLeftColor: colors.textMuted, backgroundColor: 'rgba(176,168,152,0.06)' },
   generateMoreBtn: { borderLeftColor: 'rgba(139,37,0,0.1)', borderStyle: 'dashed' as const, marginTop: 4 },
+  quizSugBtn: { paddingVertical: 6, paddingHorizontal: 12, marginBottom: 4, borderLeftWidth: 2, borderLeftColor: 'rgba(42,122,74,0.25)', backgroundColor: 'rgba(42,122,74,0.03)', borderRadius: 2 },
+  quizSugDone: { borderLeftColor: colors.textMuted, backgroundColor: 'transparent' },
+  quizSugText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.claimNew },
   followUpText: { fontFamily: fonts.reading, fontSize: 13, lineHeight: 18, color: colors.rubric },
   followUpTextTapped: { color: colors.textMuted, fontFamily: fonts.readingItalic, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });

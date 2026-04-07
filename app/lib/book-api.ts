@@ -458,6 +458,18 @@ export async function dismissMicrolearning(
   return resp.json();
 }
 
+// --- Factual Quiz API ---
+
+export async function createFactualQuiz(itemId: string, question: string, answer: string): Promise<{ quiz_id: string; status: string }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/create-factual-quiz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, question, answer }),
+  });
+  if (!resp.ok) throw new Error(`Create quiz failed (${resp.status})`);
+  return resp.json();
+}
+
 // --- Follow-up Query API ---
 
 export async function triggerFollowUp(itemId: string, query: string): Promise<{ triggered: string[] }> {
