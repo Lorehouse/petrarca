@@ -302,8 +302,8 @@ function AboutCardModal({ item, visible, onClose }: {
   visible: boolean;
   onClose: () => void;
 }) {
-  const p = item.provenance || {};
-  const origin = p.origin || 'unknown';
+  const p = item.provenance;
+  const origin = p?.origin || 'unknown';
   const shortId = (item.question_id || '').slice(-8);
 
   const originLabels: Record<string, string> = {
@@ -319,13 +319,13 @@ function AboutCardModal({ item, visible, onClose }: {
 
   const scheduleLabels: Record<string, string> = {
     never_reviewed: 'Never reviewed before',
-    overdue: `Overdue by ${p.overdue_days || 0} days`,
+    overdue: `Overdue by ${p?.overdue_days || 0} days`,
     due_soon: 'Due within 24 hours',
     not_due: 'Not yet due (filler)',
   };
 
   // Build source books list
-  const bookSources = (p.sources || []).filter(s => s.book_id);
+  const bookSources = (p?.sources || []).filter(s => s.book_id);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -349,7 +349,7 @@ function AboutCardModal({ item, visible, onClose }: {
             {/* Book sources */}
             {bookSources.length > 0 && <>
               <Text style={ab.sectionLabel}>SOURCE BOOKS</Text>
-              {bookSources.map((src, i) => (
+              {bookSources.map((src: { book_id?: string; chapter_number?: number; chapter_title?: string; confidence?: number; added_at?: string }, i: number) => (
                 <View key={i} style={ab.sourceRow}>
                   <Text style={ab.value}>
                     {src.chapter_title || `Chapter ${src.chapter_number}`}
@@ -365,7 +365,7 @@ function AboutCardModal({ item, visible, onClose }: {
             </>}
 
             {/* ML provenance */}
-            {p.source_item_id ? <>
+            {p?.source_item_id ? <>
               <Text style={ab.sectionLabel}>TRIGGERED BY</Text>
               <Text style={ab.detail}>Item: {p.source_item_id}</Text>
               {p.generation_depth != null && p.generation_depth > 0 && (
@@ -378,7 +378,7 @@ function AboutCardModal({ item, visible, onClose }: {
             <View style={ab.row}>
               <Text style={ab.label}>Status</Text>
               <Text style={ab.value}>
-                {scheduleLabels[p.schedule_reason || ''] || p.schedule_reason || '—'}
+                {scheduleLabels[p?.schedule_reason || ''] || p?.schedule_reason || '—'}
               </Text>
             </View>
             <View style={ab.row}>
@@ -391,7 +391,7 @@ function AboutCardModal({ item, visible, onClose }: {
             </View>
             <View style={ab.row}>
               <Text style={ab.label}>Last reviewed</Text>
-              <Text style={ab.value}>{formatTimeAgo(p.last_reviewed_at)}</Text>
+              <Text style={ab.value}>{formatTimeAgo(p?.last_reviewed_at)}</Text>
             </View>
             <View style={ab.row}>
               <Text style={ab.label}>Stability</Text>
@@ -400,13 +400,13 @@ function AboutCardModal({ item, visible, onClose }: {
             <View style={ab.row}>
               <Text style={ab.label}>Due</Text>
               <Text style={ab.value}>
-                {p.due_at ? (p.due_at <= Date.now() ? `Overdue (${formatTimeAgo(p.due_at)})` : new Date(p.due_at).toLocaleDateString()) : '—'}
+                {p?.due_at ? (p.due_at <= Date.now() ? `Overdue (${formatTimeAgo(p.due_at)})` : new Date(p.due_at).toLocaleDateString()) : '—'}
               </Text>
             </View>
             <View style={ab.row}>
               <Text style={ab.label}>Created</Text>
               <Text style={ab.value}>
-                {p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
+                {p?.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
               </Text>
             </View>
 
@@ -422,7 +422,7 @@ function AboutCardModal({ item, visible, onClose }: {
             </View>
 
             {/* Stream ranking */}
-            {p.stream_score != null && <>
+            {p?.stream_score != null && <>
               <Text style={ab.sectionLabel}>STREAM RANKING</Text>
               <View style={ab.row}>
                 <Text style={ab.label}>Score</Text>
