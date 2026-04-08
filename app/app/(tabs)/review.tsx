@@ -1562,7 +1562,7 @@ const cs = StyleSheet.create({
   skipText: { fontFamily: fonts.ui, fontSize: 13, color: colors.textMuted },
   shortAnswerBox: { marginBottom: 12, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   shortAnswerText: { fontFamily: fonts.displaySemiBold, fontSize: 16, lineHeight: 22, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
-  quickKnewButton: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.05)' },
+  quickKnewButton: { alignSelf: 'flex-end', marginTop: 8, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 4, borderWidth: 1, borderColor: colors.claimNew, backgroundColor: 'rgba(42,122,74,0.05)' },
   quickKnewText: { fontFamily: fonts.ui, fontSize: 12, color: colors.claimNew },
   answerBox: { borderLeftWidth: 3, borderLeftColor: colors.claimNew, paddingLeft: 14, marginBottom: 14 },
   answerText: { fontFamily: fonts.reading, fontSize: 15, lineHeight: 22, color: colors.textBody },
