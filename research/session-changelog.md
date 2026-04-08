@@ -1,6 +1,62 @@
 # Knowledge System Implementation Status
 
-**Date**: April 7, 2026 (last updated — session 58: Review system overhaul)
+**Date**: April 8, 2026 (last updated — session 60: Card provenance + FSRS scheduling fix)
+
+## Session 60: Card Provenance Display + FSRS Scheduling Fix (April 8, 2026)
+
+### What
+Added full provenance tracking to review cards (origin badge, "About this card" modal, "Bad question" flag). Found and fixed critical scheduling drift where voice paths bypassed FSRS, causing 229/256 cards to show up days or weeks too early.
+
+### Card Provenance
+- **Server**: `generate_review_stream()` now attaches `provenance` dict to every card — origin (book_chapter/book_whole/gap_fill/voice_wondering/follow_up/entity_research/user_request), stream_score, schedule_reason, knowledge_weight, fact_type_adj, sources array, created_at, due_at, last_reviewed_at
+- **Origin badge**: Subtle label in card header — "📖 ch.4", "🔗 Gap fill", "🎙 Voice", "🔍 Follow-up", etc.
+- **⋯ menu expanded**: "About this card" (full detail modal), "Bad question" (logs `review_flag_bad_question` event), "Suspend this topic"
+- **About modal**: Card ID, origin description, book sources with confidence/dates, scheduling status, review count/last score/last reviewed, stability, due date, knowledge state, stream ranking score breakdown with component weights
+- ML cards and ML quiz cards also get origin badge and about access
+
+### FSRS Scheduling Fix (Critical Bug)
+- **Root cause**: `run_voice_elicitation()` and voice capture in `review_engine.py` used old multiplicative formula (`stability_days *= multiplier`) instead of FSRS, overwriting `due_at` without updating `fsrs_card_json`
+- **Impact**: 229/256 knowledge_items and 670 microlearning_quizzes had `due_at` that didn't match FSRS — some off by 702 hours (29 days). Cards graded "knew" were showing up days later instead of weeks
+- **Data fix**: Aligned all `due_at` with FSRS JSON `due` field
+- **Code fix**: Created `_fsrs_reschedule()` helper that loads FSRS card, applies rating, writes both `due_at` and `fsrs_card_json` atomically. Replaced old SQL `stability_days * ?` in both voice paths
+- **Rule**: All scheduling MUST go through `record_answer()` or `_fsrs_reschedule()` — never raw SQL arithmetic on stability_days/due_at
+
+### Files Changed
+- `scripts/curriculum_db.py` — provenance data in `generate_review_stream()` for review + ML cards
+- `scripts/review_engine.py` — `_fsrs_reschedule()` helper, fixed voice elicitation + voice capture scheduling
+- `app/app/(tabs)/review.tsx` — `AboutCardModal`, `getOriginBadge()`, expanded ⋯ menu, origin badges on all card types
+- `app/data/types.ts` — `provenance` field on `ResurfacingItem`
+
+## Session 59: Review Card UX — Succinct Answers, ML Buttons, Entity Spans, Quiz Suggestions (April 7–8, 2026)
+
+### What
+Improved review card readability and microlearning card controls. Fixed entity markup on section-based ML cards. Made quiz suggestions actually work.
+
+### Succinct Answer Line
+- Review cards now show `answer_guidance` (1-2 sentence factual answer) as a **bold summary line** above the `rich_answer` (4-5 sentence explanation)
+- Data was already there — `answer_guidance` was stored in `cached_question` and sent as `answer` in stream, but the UI only displayed `rich_answer`
+- Only shown when short answer is meaningfully different (not identical, not a prefix of rich_answer)
+
+### Microlearning Card Skip/Suspend
+- Added **Skip** and **Suspend** buttons to top of microlearning cards (replacing "Not interested")
+- Skip = schedule for later (calls `handleSkip`, card stays in pool)
+- Suspend = remove from circulation (calls `dismissMicrolearning`)
+- Removed redundant "Dismiss card" link from bottom actions
+
+### Entity Markup on Section Cards
+- **Bug**: Section rendering path used plain `<Text>` instead of `<AnnotatedText>` — entity/date markup never appeared on ML cards with structured sections (SOURCES, STILL VISIBLE, etc.)
+- **Server fix**: `_annotate_item_entities()` now annotates each section text independently, stored as `entity_spans.section_0`, `section_1`, etc.
+- **Client fix**: Sections now render with `<AnnotatedText>` using per-section span keys
+
+### Quiz Suggestions Fix
+- `quiz_suggestions` was baked into `cached_question` at generation time — only 2/90 cards had it
+- **Moved to stream-build time**: now computed live in `generate_review_stream()` from key_facts minus existing knowledge_items
+- All review cards now get up to 3 factual quiz suggestions
+- Deduplicated: `related_facts` ("Same topic") excludes questions already in `quiz_suggestions` ("Quick quiz")
+
+### Files Changed
+- `app/app/(tabs)/review.tsx` — shortAnswerBox, ML top actions (Skip/Suspend), AnnotatedText in sections
+- `scripts/curriculum_db.py` — live quiz_suggestions, per-section entity annotation, dedup related_facts
 
 ## Session 58: Review System Overhaul — FSRS, Logging, Entities, Card Gen (April 7, 2026)
 

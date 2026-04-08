@@ -52,7 +52,7 @@ These principles are the intellectual foundation of the project. They override i
 
 ## Working on This Codebase
 
-This project is exploratory — 47+ sessions in many directions. That means:
+This project is exploratory — 60+ sessions in many directions. That means:
 
 1. **There is stale code.** Dead imports, unused tables, deprecated modules. Don't assume everything exists for a reason. Verify before building on it.
 2. **Trace data flows before changing them.** Where does it write → what store → who reads → what displays? Critical bugs came from write/read mismatches (JSON vs SQLite).
@@ -65,8 +65,8 @@ This project is exploratory — 47+ sessions in many directions. That means:
 ### Data Store Discipline
 - **SQLite is the ONLY data store** for knowledge states, review items, and all runtime data
 - **Review stream pipeline**: `generate_question()` → `cached_question` JSON on `knowledge_items` (includes rich_answer, memory_hook, 6 follow_up_queries via Gemini Flash, quiz_suggestions from key_facts) → `generate_review_stream()` in `curriculum_db.py` assembles cards (with nexus cards + related_facts checklist) → client `review.tsx`. Microlearning cards flow separately: `_run_microlearning_research()` → `microlearning_cards` table → mixed into stream.
-- **Review card features**: ⋯ suspend menu, instant fade transitions, session-tracked graded IDs (no re-showing within 60s), generic entity filtering (`_GENERIC_ENTITIES`), "Same topic" related_facts checklist, factual quiz suggestions (one-tap creation via QuizSuggestions component).
-- **Review scheduling**: FSRS-6 via py-fsrs (`desired_retention=0.80`, `learning_steps=()`). Grade mapping: knew→Easy (~28d), partly→Good (~8d), missed→Again (~1d). All scheduling tables have `fsrs_card_json` column. Old multiplicative system removed.
+- **Review card features**: ⋯ menu (About this card, Bad question, Suspend), origin badge (📖/🔗/🎙/🔍), instant fade transitions, session-tracked graded IDs (no re-showing within 60s), generic entity filtering (`_GENERIC_ENTITIES`), "Same topic" related_facts checklist, factual quiz suggestions (one-tap creation via QuizSuggestions component). Card provenance data (origin, scores, scheduling state) attached to every card from server.
+- **Review scheduling**: FSRS-6 via py-fsrs (`desired_retention=0.80`, `learning_steps=()`). Grade mapping: knew→Easy (~28d), partly→Good (~8d), missed→Again (~1d). All scheduling tables have `fsrs_card_json` column. **ALL scheduling MUST go through `record_answer()` or `_fsrs_reschedule()`** — never raw SQL arithmetic on `stability_days`/`due_at`.
 - **Review scheduling priority**: SR cards first (book-sourced highest, gap-fill penalized -5.0 and capped at 3/batch). ML cards interleaved by `source_type`: voice_wondering at 1:3, follow_up at 1:7. Never front-load ML cards.
 - **Interaction logging**: Dual-layer via `/log/events` endpoint — SQLite `interaction_log` table + JSONL files. Server-side logging on both grading endpoints. Client sends via `logger.ts` to `:8090/log/events`.
 - **Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40), not just one domain. Cross-curriculum context + temporal cross-refs injected into question generation.
