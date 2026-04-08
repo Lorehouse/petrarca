@@ -69,10 +69,33 @@ SCORE_TO_FSRS = {
     'missed': FsrsRating.Again,    # ~0.2d initial stability, ~1d first due
 }
 
-# Legacy constants — kept for voice elicitation and backward compat
-STABILITY_MULTIPLIERS = {'knew': 2.5, 'partly': 1.5}
 INITIAL_STABILITY_DAYS = 1.0
-MAX_STABILITY_DAYS = 365.0
+
+
+def _fsrs_reschedule(item_id: str, score: str, conn, table: str = 'knowledge_items'):
+    """Apply FSRS scheduling to an item. Used by voice elicitation and capture
+    paths to ensure scheduling stays consistent with record_answer()."""
+    row = conn.execute(f'SELECT fsrs_card_json FROM {table} WHERE id=?', (item_id,)).fetchone()
+    if not row:
+        return
+    card_json = row['fsrs_card_json'] if row else None
+    if card_json:
+        card_data = json.loads(card_json) if isinstance(card_json, str) else card_json
+        card = FsrsCard.from_dict(card_data)
+    else:
+        card = FsrsCard()
+
+    fsrs_rating = SCORE_TO_FSRS.get(score, FsrsRating.Again)
+    now_dt = datetime.now(timezone.utc)
+    new_card, _ = _fsrs_scheduler.review_card(card, fsrs_rating, now_dt)
+    new_stability = new_card.stability or 1.0
+    next_due = int(new_card.due.timestamp() * 1000)
+    now_ms = int(time.time() * 1000)
+    conn.execute(f"""
+        UPDATE {table} SET stability_days=?, due_at=?, last_reviewed_at=?,
+          last_score=?, review_count=review_count+1, cached_question=NULL, fsrs_card_json=?
+        WHERE id=?
+    """, (new_stability, next_due, now_ms, score, json.dumps(new_card.to_dict()), item_id))
 
 SCORE_TO_KNOWLEDGE = {
     'knew':   ('anchored', 0.85),
@@ -3663,36 +3686,24 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
                 update_knowledge(domain_id, node_id, knowledge=knowledge_level,
                                  confidence=confidence, source='voice_elicitation', conn=conn)
 
-            now_ms = int(time.time() * 1000)
-            # Voice elicitations are a stronger signal than individual review cards —
-            # they cover the entire node, so push scheduling further out
-            stability_mult = {'knew': 5.0, 'partly': 3.0, 'missed': 0.4}.get(score, 1.0)
+            # Reschedule matched knowledge_items via FSRS
             if is_chapter_recall or is_book_recall:
-                # Update all matched knowledge_items for book/chapter recall
                 if book_id and domain_id:
                     if is_chapter_recall and chapter_num:
                         source_filter = f'%"chapter_number": {chapter_num}%'
                     else:
                         source_filter = f'%{book_id}%'
-                    conn.execute("""
-                        UPDATE knowledge_items
-                        SET last_score = ?, last_reviewed_at = ?,
-                            stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
-                            due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
-                            review_count = review_count + 1,
-                            cached_question = NULL
-                        WHERE curriculum_domain = ? AND sources LIKE ?
-                    """, (score, now_ms, stability_mult, now_ms, stability_mult, domain_id, source_filter))
+                    ki_ids = [r['id'] for r in conn.execute(
+                        "SELECT id FROM knowledge_items WHERE curriculum_domain = ? AND sources LIKE ?",
+                        (domain_id, source_filter)).fetchall()]
+                    for kid in ki_ids:
+                        _fsrs_reschedule(kid, score, conn)
             else:
-                conn.execute("""
-                    UPDATE knowledge_items
-                    SET last_score = ?, last_reviewed_at = ?,
-                        stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
-                        due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
-                        review_count = review_count + 1,
-                        cached_question = NULL
-                    WHERE curriculum_node_id = ? AND curriculum_domain = ?
-                """, (score, now_ms, stability_mult, now_ms, stability_mult, node_id, domain_id))
+                ki_ids = [r['id'] for r in conn.execute(
+                    "SELECT id FROM knowledge_items WHERE curriculum_node_id = ? AND curriculum_domain = ?",
+                    (node_id, domain_id)).fetchall()]
+                for kid in ki_ids:
+                    _fsrs_reschedule(kid, score, conn)
 
             # Create transcript chunks for knowledge profile
             try:
@@ -4100,16 +4111,9 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                 update_knowledge(did, nid, knowledge=knowledge_level,
                                  confidence=confidence, source='voice_capture', conn=conn)
 
-                # Update scheduling on knowledge_items
-                stability_mult = {'anchored': 5.0, 'engaged': 3.0, 'mentioned': 1.0}.get(knowledge_level, 1.0)
-                conn.execute("""
-                    UPDATE knowledge_items
-                    SET last_reviewed_at = ?,
-                        stability_days = MIN(365.0, MAX(1.0, stability_days * ?)),
-                        due_at = ? + CAST(MIN(365.0, MAX(1.0, stability_days * ?)) * 86400000 AS INTEGER),
-                        review_count = review_count + 1
-                    WHERE id = ?
-                """, (now_ms, stability_mult, now_ms, stability_mult, item_id))
+                # Reschedule via FSRS (maps knowledge_level to score for FSRS rating)
+                fsrs_score = {'anchored': 'knew', 'engaged': 'partly', 'mentioned': 'missed'}.get(knowledge_level, 'partly')
+                _fsrs_reschedule(item_id, fsrs_score, conn)
 
                 questions_queued.append(item_id)
                 knowledge_updates.append({
