@@ -558,6 +558,31 @@ export interface ResurfacingItem {
   stability_days?: number;
   node_knowledge?: string;
   node_confidence?: number;
+  // Provenance — origin, scheduling, and scoring data for "About this card"
+  provenance?: {
+    origin: string;  // 'book_chapter' | 'book_whole' | 'gap_fill' | 'voice_wondering' | 'follow_up' | 'entity_research' | 'user_request' | 'unknown'
+    is_gap_fill?: boolean;
+    stream_score?: number;
+    schedule_reason?: string;  // 'never_reviewed' | 'overdue' | 'due_soon' | 'not_due'
+    overdue_days?: number;
+    knowledge_weight?: number;
+    fact_type_adj?: number;
+    sources?: Array<{
+      book_id?: string;
+      chapter_number?: number;
+      chapter_title?: string;
+      source_text?: string;
+      lens?: string;
+      added_at?: string;
+      confidence?: number;
+    }>;
+    source_item_id?: string;
+    source_node_id?: string;
+    generation_depth?: number;
+    created_at?: number;
+    due_at?: number;
+    last_reviewed_at?: number;
+  };
   // Entity annotation (from server entity matching)
   entity_spans?: Record<string, EntitySpan[]>;
   // Entity intro card fields

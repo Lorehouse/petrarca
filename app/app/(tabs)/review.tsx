@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView,
+  ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -264,6 +264,202 @@ const ri = StyleSheet.create({
   sentText: { fontFamily: fonts.readingItalic, fontSize: 13, color: colors.textMuted, ...(Platform.OS === 'web' ? { fontStyle: 'italic' as const } : {}) },
 });
 
+// ── Card Provenance Helpers ────────────────────────────────────────
+
+function getOriginBadge(item: ResurfacingItem): { label: string; icon: string } | null {
+  const p = item.provenance;
+  if (!p) return null;
+  const origin = p.origin;
+  if (origin === 'book_chapter') {
+    const src = (p.sources || []).find(s => s.book_id);
+    const ch = src?.chapter_number ? `ch.${src.chapter_number}` : '';
+    return { label: ch || 'Book', icon: '\uD83D\uDCD6' };
+  }
+  if (origin === 'book_whole') return { label: 'Whole book', icon: '\uD83D\uDCD6' };
+  if (origin === 'gap_fill') return { label: 'Gap fill', icon: '\uD83D\uDD17' };
+  if (origin === 'voice_wondering') return { label: 'Voice', icon: '\uD83C\uDF99' };
+  if (origin === 'follow_up') return { label: 'Follow-up', icon: '\uD83D\uDD0D' };
+  if (origin === 'entity_research') return { label: 'Entity', icon: '\uD83D\uDC64' };
+  if (origin === 'user_request') return { label: 'Requested', icon: '\u2726' };
+  return null;
+}
+
+function formatTimeAgo(ms: number | undefined): string {
+  if (!ms) return 'Never';
+  const ago = Date.now() - ms;
+  const days = Math.floor(ago / 86400000);
+  if (days < 1) {
+    const hours = Math.floor(ago / 3600000);
+    return hours < 1 ? 'Just now' : `${hours}h ago`;
+  }
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function AboutCardModal({ item, visible, onClose }: {
+  item: ResurfacingItem;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const p = item.provenance || {};
+  const origin = p.origin || 'unknown';
+  const shortId = (item.question_id || '').slice(-8);
+
+  const originLabels: Record<string, string> = {
+    book_chapter: 'Book chapter mapping',
+    book_whole: 'Whole book mapping',
+    gap_fill: 'Prerequisite gap fill (no book backing)',
+    voice_wondering: 'Voice elicitation wondering',
+    follow_up: 'Follow-up query research',
+    entity_research: 'Entity deep-dive research',
+    user_request: 'User-requested research',
+    unknown: 'Unknown origin',
+  };
+
+  const scheduleLabels: Record<string, string> = {
+    never_reviewed: 'Never reviewed before',
+    overdue: `Overdue by ${p.overdue_days || 0} days`,
+    due_soon: 'Due within 24 hours',
+    not_due: 'Not yet due (filler)',
+  };
+
+  // Build source books list
+  const bookSources = (p.sources || []).filter(s => s.book_id);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={ab.overlay} onPress={onClose}>
+        <Pressable style={ab.sheet} onPress={e => e.stopPropagation()}>
+          <View style={ab.headerRow}>
+            <Text style={ab.title}>About this card</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={ab.closeBtn}>{'\u2715'}</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView style={ab.scrollBody} showsVerticalScrollIndicator={false}>
+            {/* Card ID */}
+            <Text style={ab.idText}>ID: {item.question_id || '—'}</Text>
+
+            {/* Origin */}
+            <Text style={ab.sectionLabel}>ORIGIN</Text>
+            <Text style={ab.value}>{originLabels[origin] || origin}</Text>
+
+            {/* Book sources */}
+            {bookSources.length > 0 && <>
+              <Text style={ab.sectionLabel}>SOURCE BOOKS</Text>
+              {bookSources.map((src, i) => (
+                <View key={i} style={ab.sourceRow}>
+                  <Text style={ab.value}>
+                    {src.chapter_title || `Chapter ${src.chapter_number}`}
+                  </Text>
+                  {src.confidence != null && (
+                    <Text style={ab.detail}>Confidence: {(src.confidence * 100).toFixed(0)}%</Text>
+                  )}
+                  {src.added_at && (
+                    <Text style={ab.detail}>Added: {src.added_at.split('T')[0]}</Text>
+                  )}
+                </View>
+              ))}
+            </>}
+
+            {/* ML provenance */}
+            {p.source_item_id ? <>
+              <Text style={ab.sectionLabel}>TRIGGERED BY</Text>
+              <Text style={ab.detail}>Item: {p.source_item_id}</Text>
+              {p.generation_depth != null && p.generation_depth > 0 && (
+                <Text style={ab.detail}>Depth: {p.generation_depth} (child card)</Text>
+              )}
+            </> : null}
+
+            {/* Scheduling */}
+            <Text style={ab.sectionLabel}>SCHEDULING</Text>
+            <View style={ab.row}>
+              <Text style={ab.label}>Status</Text>
+              <Text style={ab.value}>
+                {scheduleLabels[p.schedule_reason || ''] || p.schedule_reason || '—'}
+              </Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Reviews</Text>
+              <Text style={ab.value}>{item.review_count ?? 0} times</Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Last score</Text>
+              <Text style={ab.value}>{item.last_score || 'Never graded'}</Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Last reviewed</Text>
+              <Text style={ab.value}>{formatTimeAgo(p.last_reviewed_at)}</Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Stability</Text>
+              <Text style={ab.value}>{(item.stability_days ?? 0).toFixed(1)} days</Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Due</Text>
+              <Text style={ab.value}>
+                {p.due_at ? (p.due_at <= Date.now() ? `Overdue (${formatTimeAgo(p.due_at)})` : new Date(p.due_at).toLocaleDateString()) : '—'}
+              </Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Created</Text>
+              <Text style={ab.value}>
+                {p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
+              </Text>
+            </View>
+
+            {/* Knowledge state */}
+            <Text style={ab.sectionLabel}>KNOWLEDGE STATE</Text>
+            <View style={ab.row}>
+              <Text style={ab.label}>Level</Text>
+              <Text style={ab.value}>{item.node_knowledge || 'unknown'}</Text>
+            </View>
+            <View style={ab.row}>
+              <Text style={ab.label}>Confidence</Text>
+              <Text style={ab.value}>{((item.node_confidence ?? 0) * 100).toFixed(0)}%</Text>
+            </View>
+
+            {/* Stream ranking */}
+            {p.stream_score != null && <>
+              <Text style={ab.sectionLabel}>STREAM RANKING</Text>
+              <View style={ab.row}>
+                <Text style={ab.label}>Score</Text>
+                <Text style={ab.value}>{p.stream_score}</Text>
+              </View>
+              {p.knowledge_weight != null && (
+                <View style={ab.row}>
+                  <Text style={ab.label}>Knowledge weight</Text>
+                  <Text style={ab.value}>{p.knowledge_weight}</Text>
+                </View>
+              )}
+              {p.fact_type_adj != null && p.fact_type_adj !== 0 && (
+                <View style={ab.row}>
+                  <Text style={ab.label}>Fact type adj.</Text>
+                  <Text style={ab.value}>{p.fact_type_adj > 0 ? '+' : ''}{p.fact_type_adj}</Text>
+                </View>
+              )}
+              {p.is_gap_fill && (
+                <View style={ab.row}>
+                  <Text style={ab.label}>Gap fill penalty</Text>
+                  <Text style={ab.value}>-5.0</Text>
+                </View>
+              )}
+            </>}
+
+            {/* Short ID for easy reporting */}
+            <View style={ab.idRow}>
+              <Text style={ab.idLabel}>Short ID: </Text>
+              <Text style={ab.idCode}>{shortId}</Text>
+            </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Review Card ─────────────────────────────────────────────────────
 
 function ReviewCard({
@@ -286,7 +482,9 @@ function ReviewCard({
   const { height: windowHeight } = useWindowDimensions();
   const [revealed, setRevealed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const revealedAtRef = useRef(0);
+  const originBadge = getOriginBadge(item);
 
   const handleReveal = () => {
     setRevealed(true);
@@ -334,11 +532,14 @@ function ReviewCard({
 
   return (
     <View style={[cs.card, !revealed && { minHeight: windowHeight - 200, justifyContent: 'center' }]}>
-      {/* Header: type badge + domain + menu */}
+      {/* Header: type badge + origin + domain + menu */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
           <Text style={cs.typeBadgeText}>{typeLabel}</Text>
         </View>
+        {originBadge && (
+          <Text style={cs.originBadge}>{originBadge.icon} {originBadge.label}</Text>
+        )}
         <Text style={[cs.domainLabel, { flex: 1 }]} numberOfLines={1}>{domainLabel}</Text>
         <Pressable onPress={() => setShowMenu(v => !v)} hitSlop={8} style={cs.menuDotsBtn}>
           <Text style={cs.menuDots}>{showMenu ? '\u2715' : '\u22EF'}</Text>
@@ -346,11 +547,28 @@ function ReviewCard({
       </View>
       {showMenu && (
         <View style={cs.menuDropdown}>
+          <Pressable style={cs.menuDropdownItem} onPress={() => { setShowMenu(false); setShowAbout(true); }}>
+            <Text style={cs.menuDropdownText}>About this card</Text>
+          </Pressable>
+          <Pressable style={cs.menuDropdownItem} onPress={() => {
+            setShowMenu(false);
+            logEvent('review_flag_bad_question', {
+              question_id: item.question_id,
+              question: item.question,
+              node_title: item.node_title,
+              domain: item.domain,
+              answer_type: item.answer_type,
+              origin: item.provenance?.origin,
+            });
+          }}>
+            <Text style={[cs.menuDropdownText, { color: colors.rubric }]}>Bad question</Text>
+          </Pressable>
           <Pressable style={cs.menuDropdownItem} onPress={() => { setShowMenu(false); onSuspend(); }}>
             <Text style={cs.menuDropdownText}>Suspend this topic</Text>
           </Pressable>
         </View>
       )}
+      <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
 
       {/* Node title (context) + timeline link */}
       {revealed && item.node_title ? (
@@ -547,6 +765,8 @@ function MicrolearningCard({
   const [revealedQuizzes, setRevealedQuizzes] = useState<Set<string>>(new Set());
   const [gradedQuizzes, setGradedQuizzes] = useState<Set<string>>(new Set());
   const [dismissedQuizzes, setDismissedQuizzes] = useState<Set<string>>(new Set());
+  const [showAbout, setShowAbout] = useState(false);
+  const originBadge = getOriginBadge(item);
 
   const handleReveal = (quizId: string) => {
     setRevealedQuizzes(prev => new Set(prev).add(quizId));
@@ -573,7 +793,14 @@ function MicrolearningCard({
         <View style={ml.badge}>
           <Text style={ml.badgeText}>Research</Text>
         </View>
+        {originBadge && (
+          <Text style={cs.originBadge}>{originBadge.icon} {originBadge.label}</Text>
+        )}
+        <View style={{ flex: 1 }} />
         <View style={ml.topActions}>
+          <Pressable style={ml.topActionBtn} onPress={() => setShowAbout(true)} hitSlop={8}>
+            <Text style={ml.topActionText}>About</Text>
+          </Pressable>
           <Pressable style={ml.topActionBtn} onPress={onComplete} hitSlop={8}>
             <Text style={ml.topActionText}>Skip</Text>
           </Pressable>
@@ -582,6 +809,7 @@ function MicrolearningCard({
           </Pressable>
         </View>
       </View>
+      <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
       {item.title ? (
         <Text style={ml.cardTitle}>{item.title}</Text>
       ) : null}
@@ -717,6 +945,7 @@ function MicrolearningQuizCard({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   if (graded) {
     return (
@@ -726,18 +955,27 @@ function MicrolearningQuizCard({
     );
   }
 
+  const originBadge = getOriginBadge(item);
+
   return (
     <View style={cs.card}>
       <View style={cs.headerRow}>
         <View style={ml.badge}>
           <Text style={ml.badgeText}>Review</Text>
         </View>
-        {item.title ? (
-          <Text style={ml.quizCardTitle} numberOfLines={1}>{item.title}</Text>
-        ) : (
-          <Text style={cs.domainLabel} numberOfLines={1}>{item.query}</Text>
+        {originBadge && (
+          <Text style={cs.originBadge}>{originBadge.icon} {originBadge.label}</Text>
         )}
+        {item.title ? (
+          <Text style={[ml.quizCardTitle, { flex: 1 }]} numberOfLines={1}>{item.title}</Text>
+        ) : (
+          <Text style={[cs.domainLabel, { flex: 1 }]} numberOfLines={1}>{item.query}</Text>
+        )}
+        <Pressable onPress={() => setShowAbout(true)} hitSlop={8} style={cs.menuDotsBtn}>
+          <Text style={cs.menuDots}>{'\u22EF'}</Text>
+        </Pressable>
       </View>
+      <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
 
       <Text style={cs.question}>{item.question}</Text>
 
@@ -1306,6 +1544,7 @@ const cs = StyleSheet.create({
   relatedFactTested: { backgroundColor: 'transparent', borderLeftColor: colors.rule },
   relatedFactType: { fontFamily: fonts.uiMedium, fontSize: 9, color: colors.claimNew, textTransform: 'uppercase', letterSpacing: 0.3, minWidth: 40, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
   relatedFactText: { fontFamily: fonts.reading, fontSize: 13, color: colors.textBody, flex: 1 },
+  originBadge: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 },
   menuDotsBtn: { minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
   menuDots: { fontFamily: fonts.ui, fontSize: 18, color: colors.textMuted },
   menuDropdown: { backgroundColor: colors.parchmentDark, borderWidth: 1, borderColor: colors.rule, borderRadius: 6, paddingVertical: 4, marginBottom: 12, ...(Platform.OS === 'web' ? { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }) },
@@ -1433,4 +1672,27 @@ const s = StyleSheet.create({
   reviewTabActive: { borderBottomWidth: 2, borderBottomColor: colors.rubric, marginBottom: -1 },
   reviewTabText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted },
   reviewTabTextActive: { color: colors.rubric },
+});
+
+const ab = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  sheet: {
+    backgroundColor: colors.parchment, borderRadius: 10, width: '90%', maxWidth: 400, maxHeight: '80%',
+    paddingTop: 16, paddingHorizontal: 20, paddingBottom: 20,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 8px 30px rgba(0,0,0,0.15)' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 }),
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  title: { fontFamily: fonts.displaySemiBold, fontSize: 16, color: colors.ink, ...(Platform.OS === 'web' ? { fontWeight: '600' as const } : {}) },
+  closeBtn: { fontFamily: fonts.ui, fontSize: 16, color: colors.textMuted, padding: 4 },
+  scrollBody: { flexShrink: 1 },
+  sectionLabel: { fontFamily: fonts.uiMedium, fontSize: 10, color: colors.rubric, letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 16, marginBottom: 6, ...(Platform.OS === 'web' ? { fontWeight: '500' as const } : {}) },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 3 },
+  label: { fontFamily: fonts.ui, fontSize: 12, color: colors.textMuted, flex: 1 },
+  value: { fontFamily: fonts.reading, fontSize: 13, color: colors.textBody, flex: 2, textAlign: 'right' },
+  detail: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  sourceRow: { marginBottom: 8, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: colors.rule },
+  idText: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, marginBottom: 4 },
+  idRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
+  idLabel: { fontFamily: fonts.ui, fontSize: 11, color: colors.textMuted },
+  idCode: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 11, color: colors.textSecondary },
 });

@@ -964,18 +964,25 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'anchored': 3.0, 'engaged': 8.0, 'mentioned': 4.0,
             }.get(node_knowledge, 2.0)
 
+            # Track score components for provenance display
+            schedule_reason = 'not_due'
+            overdue_days = 0.0
+
             if review_count == 0:
                 # Never reviewed — high priority
                 score = knowledge_weight + 2.0 + random.random()
+                schedule_reason = 'never_reviewed'
             elif due_at <= now_ms:
                 # Overdue — highest priority
                 overdue_days = (now_ms - due_at) / (24 * 3600 * 1000)
                 score = knowledge_weight + min(overdue_days * 0.3, 5.0) + 10.0
                 if item['last_score'] == 'missed':
                     score += 3.0
+                schedule_reason = 'overdue'
             elif due_at <= soon:
                 # Due soon (next 24h)
                 score = knowledge_weight + 1.0
+                schedule_reason = 'due_soon'
             else:
                 # Not due yet — include with low priority for infinite river
                 # Anchored items not yet due get extra deprioritization
@@ -990,10 +997,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             except (json.JSONDecodeError, TypeError):
                 cq_data = {}
             fact_type = cq_data.get('answer_type', '')
+            fact_type_adj = 0.0
             if fact_type in ('date', 'event', 'person'):
                 score += 2.0  # prefer factual scaffolding
+                fact_type_adj = 2.0
             elif fact_type in ('significance', 'connection'):
                 score -= 1.0  # defer until facts are solid
+                fact_type_adj = -1.0
 
             # Deprioritize gap-fill items (no book evidence — prerequisites/siblings)
             # Book-sourced items reinforce actual reading; gap-fills are speculative
@@ -1006,6 +1016,31 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             )
             if is_gap_fill:
                 score -= 5.0  # push below book-sourced items
+
+            # Determine origin from sources
+            if is_gap_fill:
+                origin = 'gap_fill'
+            elif sources and any(s.get('chapter_title', '').startswith('Whole book:') for s in sources):
+                origin = 'book_whole'
+            elif sources and any(s.get('book_id') for s in sources):
+                origin = 'book_chapter'
+            else:
+                origin = 'unknown'
+
+            # Attach provenance to item for later serialization
+            item['_provenance'] = {
+                'origin': origin,
+                'is_gap_fill': is_gap_fill,
+                'stream_score': round(score, 2),
+                'schedule_reason': schedule_reason,
+                'overdue_days': round(overdue_days, 1),
+                'knowledge_weight': knowledge_weight,
+                'fact_type_adj': fact_type_adj,
+                'sources': sources,
+                'created_at': item.get('created_at'),
+                'due_at': due_at,
+                'last_reviewed_at': item.get('last_reviewed_at'),
+            }
 
             candidates.append((score, item, is_gap_fill))
 
@@ -1177,6 +1212,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'entities': cq.get('entities', []),
                 'related_facts': related_facts,
                 'quiz_suggestions': quiz_suggestions,
+                'provenance': item.get('_provenance', {}),
             }
             items.append(card)
 
@@ -1277,6 +1313,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'triggered_follow_ups': _parse_json_safe(ml.get('triggered_follow_ups'), []),
                     'entities': entities_raw,
                     'entity_spans': {'content': ml_spans} if ml_spans else {},
+                    'provenance': {
+                        'origin': ml.get('source_type') or 'unknown',
+                        'source_item_id': ml.get('source_item_id') or '',
+                        'source_node_id': ml.get('source_node_id') or '',
+                        'generation_depth': ml.get('generation_depth') or 0,
+                        'created_at': ml.get('created_at'),
+                    },
                 }
                 new_ml.append(card)
 
@@ -1286,7 +1329,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                        mc.title as card_title, mc.sections as card_sections,
                        mc.entities, mc.follow_up_queries as card_follow_ups,
                        mc.triggered_follow_ups as card_triggered_follow_ups,
-                       mc.source_domain
+                       mc.source_domain, mc.source_type, mc.source_item_id,
+                       mc.source_node_id, mc.generation_depth,
+                       mc.created_at as card_created_at
                 FROM microlearning_quizzes mq
                 JOIN microlearning_cards mc ON mc.id = mq.card_id
                 WHERE mq.status = 'active' AND mq.review_count > 0
@@ -1325,6 +1370,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'triggered_follow_ups': _parse_json_safe(q.get('card_triggered_follow_ups'), []),
                     'entities': entities_raw,
                     'entity_spans': {'content': ml_spans} if ml_spans else {},
+                    'provenance': {
+                        'origin': q.get('source_type') or 'unknown',
+                        'source_item_id': q.get('source_item_id') or '',
+                        'source_node_id': q.get('source_node_id') or '',
+                        'generation_depth': q.get('generation_depth') or 0,
+                        'created_at': q.get('card_created_at'),
+                    },
                 })
 
             # ── Priority-based ML interleaving ──────────────────────
