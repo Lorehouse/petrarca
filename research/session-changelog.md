@@ -1,6 +1,39 @@
 # Knowledge System Implementation Status
 
-**Date**: April 8, 2026 (last updated — session 60: Card provenance + FSRS scheduling fix)
+**Date**: April 9, 2026 (last updated — session 61: Voice quiz coverage overhaul)
+
+## Session 61: Voice Quiz Coverage Overhaul (April 9, 2026)
+
+### What
+Analyzed all 39 voice captures and found that 424 extracted facts were not becoming quiz questions. Voice elicitations (29 sessions) never created knowledge_items. 135 ML cards were stuck pending/failed due to missing `sentence_transformers` and expired Claude auth on server.
+
+### Five Pipeline Fixes
+- **A. Sync guard removed**: `process_voice_capture()` had `if not sync:` before ML card creation — sync mode silently dropped wonderings. Removed the guard.
+- **B. Elicitation → knowledge_items**: `run_voice_elicitation()` now creates knowledge_items for nodes where none exist, with 14-day initial stability (long-term memory), proper `fsrs_card_json`, and background question pre-generation.
+- **C. Wrong facts → correction quizzes**: `confidence_tagged` field (already extracted by LLM, never used) now creates `source_type='correction'` ML cards for confidently-stated incorrect facts. Added `correction` to HIGH-priority ML interleaving (1:3).
+- **D. Missed facts no longer quizzed**: Removed missed-fact → ML card creation from elicitation. User prefers filling gaps through reading, not quizzing on unread content.
+- **E. 135 pending ML cards reprocessed**: Sequential reprocessing script, all completed successfully.
+
+### Server Dependency Fixes
+- **Embedding fallback**: `get_learner_context()` now catches `sentence_transformers` import errors and falls back to relational-only retrieval instead of crashing the entire ML card generation pipeline.
+- **`sentence_transformers` installed**: `pip3 install --break-system-packages sentence-transformers` on Hetzner.
+- **limbic synced**: rsync + `pip install -e /opt/limbic` — server was running stale copy.
+- **Claude auth synced**: `sync_claude_auth.sh` — 401 errors on `claude -p`.
+
+### Duplicate Voice Capture Cleanup
+- Cleaned up 8 duplicate voice_transcripts (39 → 31) — same podcast transcript processed 3-5x against different curriculum domains.
+- Added transcript dedup via SHA-256 hash in `process_voice_capture()` — checks for existing transcript before processing.
+
+### Design Decisions (Three Scenarios)
+- **Podcast/book voice notes** → always generate quiz questions (voice_capture pathway)
+- **Knowledge elicitation** → create lightweight SR items for demonstrated facts (high stability), correction quizzes for wrong facts, but don't quiz missed facts
+- **Gap identification** → OK to identify, prefer filling by reading. Gap-fill items already deprioritized (-5.0, 3/batch cap)
+
+### Files Changed
+- `scripts/review_engine.py` — knowledge_item creation from elicitation, confidence_tagged corrections, removed missed-fact ML, sync guard removal, embedding fallback, transcript dedup
+- `scripts/curriculum_db.py` — `correction` in HIGH-priority ML interleaving
+- `scripts/reprocess_pending_ml.py` — new utility for reprocessing stuck cards
+- `scripts/voice-capture-analysis.html` — one-time diagnostic page (static)
 
 ## Session 60: Card Provenance Display + FSRS Scheduling Fix (April 8, 2026)
 
