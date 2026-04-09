@@ -4958,3 +4958,336 @@ def generate_cross_book_hamarquizen(limit: int = 5, conn=None) -> list[dict]:
     finally:
         if own:
             conn.close()
+
+
+# ── Knowledge Sweeps ─────────────────────────────────────────────────────────
+
+SWEEP_SCORING_PROMPT = """Score a knowledge sweep — a learner's free recall across an entire curriculum domain.
+
+DOMAIN: {domain_title}
+
+The learner was asked to recall what they know about each era/topic in this domain.
+Below is their transcript (may cover multiple eras recorded sequentially).
+
+TRANSCRIPT:
+{transcript}
+
+CURRICULUM NODES (Level 1 and 2 — the expected coverage for a sweep):
+{nodes_with_facts}
+
+For EACH Level 1/2 node in the curriculum:
+1. Was it mentioned at all? (yes/no)
+2. What specific facts were stated about it? For each fact:
+   - The claim (brief)
+   - Correct or incorrect?
+   - Match to a key_fact ID if possible
+   - Excerpt from transcript
+3. What depth was demonstrated?
+   - "surface": just named or referenced in passing
+   - "textbase": recalled specific facts (dates, names, events)
+   - "situation_model": showed causal reasoning, connections to other nodes, perspective-taking
+
+For CONNECTIONS between nodes:
+- List every pair of nodes the learner explicitly connected
+- Type: causal ("X led to Y"), temporal ("at the same time as"), comparative ("unlike X, Y..."), cross_domain
+
+For ORGANIZATION:
+- Did the learner proceed chronologically? Thematically? Randomly?
+- Count causal language ("because", "led to", "as a result", "which caused")
+- Count perspective-taking and counterfactual statements
+
+IMPORTANT scoring rules:
+- Be generous with matching: paraphrases count, approximate dates count (±20 years for ancient, ±5 for modern)
+- A vague reference ("the Greeks colonized Sicily") counts as surface mention of the relevant node
+- Only mark "incorrect" for clear factual errors (wrong century, wrong attribution, events that didn't happen)
+- If the learner conflates two nodes, credit both as mentioned
+
+Output JSON:
+{{
+  "nodes": [
+    {{
+      "node_id": "exact_id",
+      "node_title": "...",
+      "mentioned": true,
+      "depth": "surface|textbase|situation_model",
+      "facts": [
+        {{"claim": "...", "correct": true, "key_fact_id": "id_or_null", "excerpt": "..."}}
+      ]
+    }}
+  ],
+  "connections": [
+    {{"from_node": "node_id", "to_node": "node_id", "type": "causal|temporal|comparative|cross_domain", "excerpt": "..."}}
+  ],
+  "organization": {{
+    "pattern": "chronological|thematic|random|mixed",
+    "causal_count": 5,
+    "perspective_count": 1,
+    "counterfactual_count": 0
+  }},
+  "errors": [
+    {{"claim": "incorrect statement", "correction": "what actually happened", "node_id": "relevant_node"}}
+  ],
+  "strongest_area": "The era/topic where the learner showed deepest knowledge",
+  "biggest_gap": "The most important era/topic the learner barely mentioned or missed entirely",
+  "summary": "2-3 sentence assessment of the learner's overall knowledge structure"
+}}"""
+
+
+def get_sweep_plan(domain_id: str) -> dict | None:
+    """Return the sweep plan for a domain: eras with prompts and metadata."""
+    from db import get_connection
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return None
+
+    conn = get_connection(readonly=True)
+    try:
+        states = load_knowledge_states(domain_id, conn)
+        l2_nodes = [n for n in curriculum['nodes'] if n.get('level', 1) <= 2]
+        known = sum(1 for n in l2_nodes if states.get(n['id'], {}).get('knowledge', 'unknown') != 'unknown')
+        system_coverage = known / len(l2_nodes) if l2_nodes else 0
+
+        eras = []
+        for node in curriculum['nodes']:
+            if node.get('level') != 1:
+                continue
+            children = [n for n in curriculum['nodes']
+                        if n.get('parent_id') == node['id'] and n.get('level') == 2]
+            eras.append({
+                'era_id': node['id'],
+                'title': node['title'],
+                'prompt': f"{node['title']}. What key events, people, and turning points do you remember from this period? Just the highlights.",
+                'children': [{'id': c['id'], 'title': c['title']} for c in children],
+                'child_count': len(children),
+            })
+
+        return {
+            'domain_id': domain_id,
+            'domain_title': curriculum['title'],
+            'system_coverage': round(system_coverage, 3),
+            'eras': eras,
+            'total_l2_nodes': len(l2_nodes),
+            'sweep_type': 'guided',
+        }
+    finally:
+        conn.close()
+
+
+def score_sweep(domain_id: str, phase1_eras: list[dict],
+                phase2_transcript: str | None = None) -> dict:
+    """Score a completed sweep against the curriculum.
+
+    phase1_eras: [{era_id, transcript, duration_s}]
+    phase2_transcript: optional gap-probing transcript
+
+    Returns full sweep result dict ready for DB insertion.
+    """
+    from db import get_connection
+
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return {'error': f'Curriculum {domain_id} not found'}
+
+    conn = get_connection(readonly=True)
+    try:
+        states = load_knowledge_states(domain_id, conn)
+
+        l2_nodes = [n for n in curriculum['nodes'] if n.get('level', 1) <= 2]
+        nodes_with_facts = []
+        for node in l2_nodes:
+            kf_row = conn.execute(
+                'SELECT key_facts FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+                (node['id'], domain_id)
+            ).fetchone()
+            key_facts = []
+            if kf_row and kf_row['key_facts']:
+                try:
+                    key_facts = json.loads(kf_row['key_facts'])
+                except Exception:
+                    pass
+
+            facts_str = ''
+            if key_facts:
+                facts_list = [f"    - [{f['type']}] {f['id']}: {f['question']} → {f['answer']}"
+                              for f in key_facts[:6]]
+                facts_str = '\n'.join(facts_list)
+
+            parent = next((n for n in curriculum['nodes'] if n['id'] == node.get('parent_id')), None)
+            era_label = f" (under {parent['title']})" if parent else ''
+            entry = f"- {node['id']}: {node['title']}{era_label} [L{node.get('level', 1)}]\n  {node.get('description', '')}"
+            if facts_str:
+                entry += f"\n  Key facts:\n{facts_str}"
+            nodes_with_facts.append(entry)
+
+        p1_combined = '\n\n'.join(
+            f"[Era: {era.get('era_id', 'unknown')}]\n{era['transcript']}"
+            for era in phase1_eras if era.get('transcript', '').strip()
+        )
+
+        full_transcript = p1_combined
+        if phase2_transcript and phase2_transcript.strip():
+            full_transcript += f"\n\n[Gap probing follow-up]\n{phase2_transcript}"
+
+        if not full_transcript.strip():
+            return {'error': 'No transcript content to score'}
+
+        known = sum(1 for n in l2_nodes if states.get(n['id'], {}).get('knowledge', 'unknown') != 'unknown')
+        system_coverage = known / len(l2_nodes) if l2_nodes else 0
+
+        l2_ids = {n['id'] for n in l2_nodes}
+        connections_possible = 0
+        for node in l2_nodes:
+            for prereq in node.get('prerequisites', []):
+                if prereq in l2_ids:
+                    connections_possible += 1
+
+        prev = conn.execute(
+            'SELECT id, total_coverage, composite_score FROM knowledge_sweeps '
+            'WHERE domain_id = ? ORDER BY created_at DESC LIMIT 1',
+            (domain_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    # ── LLM scoring (slow — no DB lock held) ──
+    prompt = SWEEP_SCORING_PROMPT.format(
+        domain_title=curriculum['title'],
+        transcript=full_transcript,
+        nodes_with_facts='\n'.join(nodes_with_facts),
+    )
+    print(f'[sweep] Scoring sweep for {domain_id} ({len(full_transcript)} chars transcript)...', flush=True)
+    raw = _call_claude(prompt, timeout=300)
+    if not raw:
+        return {'error': 'LLM scoring failed — no response'}
+
+    result = _parse_json(raw)
+    if not result:
+        return {'error': 'LLM scoring failed — could not parse JSON', 'raw': raw[:500]}
+
+    # ── Compute metrics ──
+    scored_nodes = result.get('nodes', [])
+    mentioned_nodes = [n for n in scored_nodes if n.get('mentioned')]
+    all_facts = []
+    for n in scored_nodes:
+        all_facts.extend(n.get('facts', []))
+    facts_correct = sum(1 for f in all_facts if f.get('correct'))
+    connections = result.get('connections', [])
+
+    total_nodes = len(l2_nodes)
+    org = result.get('organization', {})
+    org_score = min(1.0, (org.get('causal_count', 0) * 0.1 +
+                          org.get('perspective_count', 0) * 0.15 +
+                          (0.3 if org.get('pattern') == 'chronological' else 0.1)))
+
+    coverage = len(mentioned_nodes) / total_nodes if total_nodes else 0
+    accuracy = facts_correct / len(all_facts) if all_facts else 0
+    connectivity = len(connections) / connections_possible if connections_possible else 0
+    composite = (coverage * 0.4 + accuracy * 0.3 + connectivity * 0.2 + org_score * 0.1)
+
+    sweep_id = f'sweep_{domain_id}_{int(time.time())}'
+
+    sweep_result = {
+        'id': sweep_id,
+        'domain_id': domain_id,
+        'sweep_type': 'guided',
+        'phase1_transcript': p1_combined,
+        'phase2_transcript': phase2_transcript,
+        'phase1_eras': json.dumps(phase1_eras),
+        'p1_nodes_mentioned': len(mentioned_nodes),
+        'p1_facts_correct': facts_correct,
+        'p1_facts_stated': len(all_facts),
+        'p1_connections': len(connections),
+        'total_nodes_mentioned': len(mentioned_nodes),
+        'total_facts_correct': facts_correct,
+        'total_facts_stated': len(all_facts),
+        'total_connections': len(connections),
+        'nodes_total': total_nodes,
+        'connections_possible': connections_possible,
+        'p1_coverage': round(coverage, 3),
+        'p1_accuracy': round(accuracy, 3),
+        'total_coverage': round(coverage, 3),
+        'total_accuracy': round(accuracy, 3),
+        'connectivity_score': round(connectivity, 3),
+        'organization_score': round(org_score, 3),
+        'composite_score': round(composite, 3),
+        'scoring_result': json.dumps(result),
+        'previous_sweep_id': prev['id'] if prev else None,
+        'delta_coverage': round(coverage - prev['total_coverage'], 3) if prev else None,
+        'delta_composite': round(composite - prev['composite_score'], 3) if prev else None,
+        'system_coverage': round(system_coverage, 3),
+    }
+
+    # ── Write to DB ──
+    from db import get_connection as _gc
+    wconn = _gc()
+    try:
+        cols = ', '.join(sweep_result.keys())
+        placeholders = ', '.join('?' * len(sweep_result))
+        wconn.execute(
+            f'INSERT INTO knowledge_sweeps ({cols}) VALUES ({placeholders})',
+            list(sweep_result.values())
+        )
+        wconn.commit()
+        print(f'[sweep] Saved sweep {sweep_id}: coverage={coverage:.1%}, accuracy={accuracy:.1%}, '
+              f'composite={composite:.2f}', flush=True)
+    finally:
+        wconn.close()
+
+    sweep_result['scoring_detail'] = result
+    sweep_result['domain_title'] = curriculum['title']
+    return sweep_result
+
+
+def get_sweep_gaps(scoring_result: dict, domain_id: str) -> list[dict]:
+    """Given a scored sweep, identify gaps for Phase 2 probing."""
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return []
+
+    scored_nodes = scoring_result.get('nodes', [])
+    mentioned_ids = {n['node_id'] for n in scored_nodes if n.get('mentioned')}
+
+    l1_nodes = {n['id']: n for n in curriculum['nodes'] if n.get('level') == 1}
+    missed_by_era: dict[str, list] = {}
+    for node in curriculum['nodes']:
+        if node.get('level') != 2:
+            continue
+        if node['id'] not in mentioned_ids:
+            parent_id = node.get('parent_id', '')
+            missed_by_era.setdefault(parent_id, []).append(node)
+
+    gap_prompts = []
+    for era_id, missed_nodes in missed_by_era.items():
+        era = l1_nodes.get(era_id)
+        if not era or len(missed_nodes) < 1:
+            continue
+        node_names = ', '.join(n['title'] for n in missed_nodes[:3])
+        prompt = (f"You didn't mention much about: {node_names}. "
+                  f"What do you know about these aspects of {era['title']}?")
+        gap_prompts.append({
+            'era_id': era_id,
+            'era_title': era['title'],
+            'prompt': prompt,
+            'missed_nodes': [{'id': n['id'], 'title': n['title']} for n in missed_nodes],
+        })
+
+    return gap_prompts
+
+
+def get_sweep_history(domain_id: str, limit: int = 10) -> list[dict]:
+    """Get past sweeps for a domain, most recent first."""
+    from db import get_connection
+    conn = get_connection(readonly=True)
+    try:
+        rows = conn.execute(
+            'SELECT id, domain_id, sweep_type, p1_coverage, total_coverage, '
+            'total_accuracy, connectivity_score, organization_score, composite_score, '
+            'system_coverage, delta_coverage, delta_composite, '
+            'total_nodes_mentioned, nodes_total, created_at '
+            'FROM knowledge_sweeps WHERE domain_id = ? '
+            'ORDER BY created_at DESC LIMIT ?',
+            (domain_id, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()

@@ -5553,6 +5553,86 @@ JSON array only:"""
                 pass
         self._send_json_response(404, {'status': 'not_found'})
 
+    def _handle_sweep_submit(self):
+        """POST /knowledge/sweep/submit — submit and score a knowledge sweep.
+
+        Body JSON: {domain_id, phase1_eras: [{era_id, transcript, duration_s}], phase2_transcript?}
+        Transcripts come from client-side transcription (Soniox).
+        Scoring uses Claude (Opus) — takes 30-60s.
+        """
+        data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        domain_id = data.get('domain_id', '')
+        phase1_eras = data.get('phase1_eras', [])
+        phase2_transcript = data.get('phase2_transcript')
+        if not domain_id or not phase1_eras:
+            return self._send_json_response(400, {'error': 'Missing domain_id or phase1_eras'})
+
+        from review_engine import score_sweep
+        print(f'[sweep] Scoring sweep for {domain_id}, {len(phase1_eras)} eras...', flush=True)
+        result = score_sweep(domain_id, phase1_eras, phase2_transcript)
+        if result.get('error'):
+            print(f'[sweep] Error: {result["error"]}', flush=True)
+            return self._send_json_response(500, result)
+        print(f'[sweep] Done: coverage={result.get("total_coverage", 0):.1%}, '
+              f'composite={result.get("composite_score", 0):.2f}', flush=True)
+        return self._send_json_response(200, result)
+
+    def _handle_sweep_transcribe(self):
+        """POST /knowledge/sweep/transcribe — transcribe audio for a sweep era.
+
+        Accepts multipart with 'audio' field. Returns {transcript, duration_s}.
+        Lightweight wrapper around Soniox transcription.
+        """
+        import cgi, io
+        content_type = self.headers.get('Content-Type', '')
+        if 'multipart' not in content_type:
+            return self._send_json_response(400, {'error': 'Expected multipart'})
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            data = self.rfile.read(length)
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f'[sweep-transcribe] Client disconnected: {e}', flush=True)
+            return
+        environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
+        fs = cgi.FieldStorage(fp=io.BytesIO(data), environ=environ, keep_blank_values=True)
+        audio_field = fs['audio'] if 'audio' in fs else None
+        era_id = fs.getvalue('era_id', '')
+        if audio_field is None:
+            return self._send_json_response(400, {'error': 'Missing audio'})
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
+            tmp.write(audio_field.file.read())
+            audio_path = Path(tmp.name)
+        try:
+            print(f'[sweep-transcribe] Transcribing era={era_id}, size={audio_path.stat().st_size}', flush=True)
+            transcript = transcribe_on_server(audio_path)
+            if not transcript or len(transcript.strip()) < 10:
+                return self._send_json_response(200, {'transcript': '', 'era_id': era_id, 'too_short': True})
+            print(f'[sweep-transcribe] Done: {len(transcript)} chars', flush=True)
+            return self._send_json_response(200, {'transcript': transcript, 'era_id': era_id})
+        except Exception as e:
+            print(f'[sweep-transcribe] Error: {e}', flush=True)
+            return self._send_json_response(500, {'error': str(e)})
+        finally:
+            audio_path.unlink(missing_ok=True)
+
+    def _handle_sweep_gaps(self):
+        """POST /knowledge/sweep/gaps — get gap probing prompts from Phase 1 results.
+
+        Body JSON: {domain_id, scoring_result: {nodes: [...]}}
+        Returns gap prompts for Phase 2.
+        """
+        data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        domain_id = data.get('domain_id', '')
+        scoring_result = data.get('scoring_result', {})
+        if not domain_id:
+            return self._send_json_response(400, {'error': 'Missing domain_id'})
+
+        from review_engine import get_sweep_gaps
+        gaps = get_sweep_gaps(scoring_result, domain_id)
+        return self._send_json_response(200, {'gaps': gaps, 'gap_count': len(gaps)})
+
     def _handle_elicit_candidates(self):
         """GET /review/elicit-candidates?domain_id=X&limit=5 — nodes suitable for voice elicitation.
         If domain_id is omitted, returns candidates from all domains.
@@ -6010,6 +6090,12 @@ JSON array only:"""
             return self._handle_knowledge_import_assessment()
         if self.path.startswith('/knowledge/profile/regenerate/'):
             return self._handle_knowledge_profile_regenerate()
+        if self.path == '/knowledge/sweep/submit':
+            return self._handle_sweep_submit()
+        if self.path == '/knowledge/sweep/gaps':
+            return self._handle_sweep_gaps()
+        if self.path == '/knowledge/sweep/transcribe':
+            return self._handle_sweep_transcribe()
         if self.path == '/knowledge/snapshot-metrics':
             try:
                 from curriculum_db import snapshot_network_metrics
@@ -6658,6 +6744,41 @@ JSON array only:"""
             return self._serve_html_file('knowledge_elicitation_analysis.html')
         if self.path == '/knowledge/growth':
             return self._serve_html_file('knowledge_growth.html')
+        # Knowledge sweep endpoints
+        if self.path.startswith('/knowledge/sweep/plan/'):
+            domain_id = self.path.split('/knowledge/sweep/plan/')[1].split('?')[0]
+            from review_engine import get_sweep_plan
+            plan = get_sweep_plan(domain_id)
+            if not plan:
+                return self._send_json_response(404, {'error': f'Curriculum {domain_id} not found'})
+            return self._send_json_response(200, plan)
+        if self.path.startswith('/knowledge/sweep/history/'):
+            domain_id = self.path.split('/knowledge/sweep/history/')[1].split('?')[0]
+            from review_engine import get_sweep_history
+            history = get_sweep_history(domain_id)
+            return self._send_json_response(200, {'sweeps': history, 'domain_id': domain_id})
+        if self.path == '/knowledge/sweep/domains':
+            from curriculum_db import list_curricula
+            curricula = list_curricula()
+            # Add last sweep info for each domain
+            conn = get_connection(readonly=True)
+            try:
+                domains = []
+                for c in curricula:
+                    last = conn.execute(
+                        'SELECT id, total_coverage, composite_score, created_at '
+                        'FROM knowledge_sweeps WHERE domain_id = ? ORDER BY created_at DESC LIMIT 1',
+                        (c['id'],)
+                    ).fetchone()
+                    domains.append({
+                        'id': c['id'],
+                        'title': c['title'],
+                        'node_count': c.get('node_count', 0),
+                        'last_sweep': dict(last) if last else None,
+                    })
+            finally:
+                conn.close()
+            return self._send_json_response(200, {'domains': domains})
         if self.path == '/knowledge/growth-data':
             try:
                 from curriculum_db import get_knowledge_growth_data

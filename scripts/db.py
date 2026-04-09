@@ -605,6 +605,54 @@ CREATE TABLE IF NOT EXISTS network_metrics_log (
 );
 CREATE INDEX IF NOT EXISTS idx_nml_domain ON network_metrics_log(domain_id);
 CREATE INDEX IF NOT EXISTS idx_nml_computed ON network_metrics_log(computed_at);
+
+-- Knowledge sweeps: periodic domain-wide voice recall assessments
+CREATE TABLE IF NOT EXISTS knowledge_sweeps (
+    id TEXT PRIMARY KEY,
+    domain_id TEXT NOT NULL,
+    sweep_type TEXT NOT NULL DEFAULT 'guided',  -- guided | freeform | connection | feynman
+    phase1_transcript TEXT,          -- combined Phase 1 (era-by-era) transcript
+    phase2_transcript TEXT,          -- Phase 2 (gap probing) transcript
+    phase1_eras TEXT DEFAULT '[]',   -- JSON: [{era, transcript, duration_s}]
+
+    -- Raw metrics (Phase 1 only — spontaneous recall)
+    p1_nodes_mentioned INTEGER NOT NULL DEFAULT 0,
+    p1_facts_correct INTEGER NOT NULL DEFAULT 0,
+    p1_facts_stated INTEGER NOT NULL DEFAULT 0,
+    p1_connections INTEGER NOT NULL DEFAULT 0,
+
+    -- Raw metrics (Phase 1 + Phase 2 combined)
+    total_nodes_mentioned INTEGER NOT NULL DEFAULT 0,
+    total_facts_correct INTEGER NOT NULL DEFAULT 0,
+    total_facts_stated INTEGER NOT NULL DEFAULT 0,
+    total_connections INTEGER NOT NULL DEFAULT 0,
+    nodes_total INTEGER NOT NULL DEFAULT 0,
+    connections_possible INTEGER NOT NULL DEFAULT 0,
+
+    -- Derived scores (0.0-1.0)
+    p1_coverage REAL NOT NULL DEFAULT 0.0,
+    p1_accuracy REAL NOT NULL DEFAULT 0.0,
+    total_coverage REAL NOT NULL DEFAULT 0.0,
+    total_accuracy REAL NOT NULL DEFAULT 0.0,
+    connectivity_score REAL NOT NULL DEFAULT 0.0,
+    organization_score REAL NOT NULL DEFAULT 0.0,
+    composite_score REAL NOT NULL DEFAULT 0.0,
+
+    -- Detailed LLM results (JSON)
+    scoring_result TEXT DEFAULT '{}',  -- full LLM scoring output
+
+    -- Delta tracking (vs previous sweep of same domain)
+    previous_sweep_id TEXT,
+    delta_coverage REAL,
+    delta_composite REAL,
+
+    -- System vs self comparison
+    system_coverage REAL,  -- what system thought coverage was before sweep
+
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_ks_domain ON knowledge_sweeps(domain_id);
+CREATE INDEX IF NOT EXISTS idx_ks_created ON knowledge_sweeps(created_at);
 """
 
 MIGRATIONS = [
@@ -674,6 +722,40 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS idx_il_event ON interaction_log(event)",
     "CREATE INDEX IF NOT EXISTS idx_il_item ON interaction_log(item_id)",
     "CREATE INDEX IF NOT EXISTS idx_il_created ON interaction_log(created_at)",
+    # Knowledge sweeps: periodic domain-wide voice recall assessments
+    """CREATE TABLE IF NOT EXISTS knowledge_sweeps (
+        id TEXT PRIMARY KEY,
+        domain_id TEXT NOT NULL,
+        sweep_type TEXT NOT NULL DEFAULT 'guided',
+        phase1_transcript TEXT,
+        phase2_transcript TEXT,
+        phase1_eras TEXT DEFAULT '[]',
+        p1_nodes_mentioned INTEGER NOT NULL DEFAULT 0,
+        p1_facts_correct INTEGER NOT NULL DEFAULT 0,
+        p1_facts_stated INTEGER NOT NULL DEFAULT 0,
+        p1_connections INTEGER NOT NULL DEFAULT 0,
+        total_nodes_mentioned INTEGER NOT NULL DEFAULT 0,
+        total_facts_correct INTEGER NOT NULL DEFAULT 0,
+        total_facts_stated INTEGER NOT NULL DEFAULT 0,
+        total_connections INTEGER NOT NULL DEFAULT 0,
+        nodes_total INTEGER NOT NULL DEFAULT 0,
+        connections_possible INTEGER NOT NULL DEFAULT 0,
+        p1_coverage REAL NOT NULL DEFAULT 0.0,
+        p1_accuracy REAL NOT NULL DEFAULT 0.0,
+        total_coverage REAL NOT NULL DEFAULT 0.0,
+        total_accuracy REAL NOT NULL DEFAULT 0.0,
+        connectivity_score REAL NOT NULL DEFAULT 0.0,
+        organization_score REAL NOT NULL DEFAULT 0.0,
+        composite_score REAL NOT NULL DEFAULT 0.0,
+        scoring_result TEXT DEFAULT '{}',
+        previous_sweep_id TEXT,
+        delta_coverage REAL,
+        delta_composite REAL,
+        system_coverage REAL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_ks_domain ON knowledge_sweeps(domain_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ks_created ON knowledge_sweeps(created_at)",
 ]
 
 

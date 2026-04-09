@@ -249,3 +249,115 @@ export async function sendVoiceElicitation(
   }
   return res.json();
 }
+
+// ── Knowledge Sweep API ──────────────────────────────────────────────
+
+export interface SweepPlan {
+  domain_id: string;
+  domain_title: string;
+  system_coverage: number;
+  eras: SweepEra[];
+  total_l2_nodes: number;
+  sweep_type: string;
+}
+
+export interface SweepEra {
+  era_id: string;
+  title: string;
+  prompt: string;
+  children: { id: string; title: string }[];
+  child_count: number;
+}
+
+export interface SweepResult {
+  id: string;
+  domain_id: string;
+  domain_title: string;
+  total_coverage: number;
+  total_accuracy: number;
+  connectivity_score: number;
+  organization_score: number;
+  composite_score: number;
+  total_nodes_mentioned: number;
+  nodes_total: number;
+  system_coverage: number;
+  delta_coverage: number | null;
+  delta_composite: number | null;
+  scoring_detail: {
+    nodes: { node_id: string; node_title: string; mentioned: boolean; depth: string; facts: any[] }[];
+    connections: any[];
+    organization: { pattern: string; causal_count: number };
+    errors: any[];
+    strongest_area: string;
+    biggest_gap: string;
+    summary: string;
+  };
+}
+
+export interface SweepGap {
+  era_id: string;
+  era_title: string;
+  prompt: string;
+  missed_nodes: { id: string; title: string }[];
+}
+
+export async function getSweepPlan(domainId: string): Promise<SweepPlan> {
+  return get(`/knowledge/sweep/plan/${domainId}`);
+}
+
+export async function getSweepDomains(): Promise<{
+  domains: { id: string; title: string; node_count: number; last_sweep: any }[];
+}> {
+  return get('/knowledge/sweep/domains');
+}
+
+export async function transcribeSweepEra(
+  audioUri: string,
+  eraId: string,
+): Promise<{ transcript: string; era_id: string; too_short?: boolean }> {
+  const form = new FormData();
+  form.append('era_id', eraId);
+  form.append('audio', { uri: audioUri, type: 'audio/m4a', name: 'sweep.m4a' } as any);
+  const res = await fetchWithTimeout(`${RESEARCH_BASE}/knowledge/sweep/transcribe`, {
+    method: 'POST',
+    body: form,
+    timeout: 60000,
+  });
+  if (!res.ok) throw new Error(`transcribe failed: ${res.status}`);
+  return res.json();
+}
+
+export async function submitSweep(
+  domainId: string,
+  phase1Eras: { era_id: string; transcript: string; duration_s: number }[],
+  phase2Transcript?: string,
+): Promise<SweepResult> {
+  const res = await fetchWithTimeout(`${RESEARCH_BASE}/knowledge/sweep/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      domain_id: domainId,
+      phase1_eras: phase1Eras,
+      phase2_transcript: phase2Transcript,
+    }),
+    timeout: 300000, // 5 min — LLM scoring is slow
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `submit failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getSweepGaps(
+  domainId: string,
+  scoringResult: any,
+): Promise<{ gaps: SweepGap[]; gap_count: number }> {
+  return post('/knowledge/sweep/gaps', { domain_id: domainId, scoring_result: scoringResult });
+}
+
+export async function getSweepHistory(
+  domainId: string,
+): Promise<{ sweeps: any[]; domain_id: string }> {
+  return get(`/knowledge/sweep/history/${domainId}`);
+}
