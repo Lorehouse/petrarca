@@ -2468,7 +2468,7 @@ def create_microlearning_request(query: str, source_item_id: str | None = None,
                                   generation_depth: int = 0) -> str:
     """Create a pending microlearning card and return its ID.
 
-    source_type: 'voice_wondering', 'follow_up', 'entity_research', 'user_request'
+    source_type: 'voice_wondering', 'follow_up', 'entity_research', 'user_request', 'correction'
     generation_depth: 0 = root, 1+ = child of another ML card
 
     The actual research runs in a background thread.
@@ -3742,7 +3742,102 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
 
     result['research_triggers'] = research_triggers
 
-    # Trigger microlearning for wonderings, research triggers, and top missed fact
+    # --- Create knowledge_items for elicitation-discovered facts ---
+    # When the learner demonstrates knowledge about a node during elicitation,
+    # create a knowledge_item so quiz questions can be generated for retention.
+    if not (is_chapter_recall or is_book_recall):
+        captured = result.get('captured', [])
+        if captured and node_id and domain_id:
+            item_id = f'{domain_id}:{node_id}'
+            eli_conn = None
+            try:
+                eli_conn = get_connection()
+                existing = eli_conn.execute(
+                    'SELECT id, sources FROM knowledge_items WHERE id = ?', (item_id,)
+                ).fetchone()
+                if not existing:
+                    captured_texts = []
+                    for c in captured:
+                        if isinstance(c, dict):
+                            captured_texts.append(c.get('fact', c.get('text', str(c))))
+                        else:
+                            captured_texts.append(str(c))
+                    source_text = '; '.join(captured_texts[:8])
+
+                    # Use higher initial stability for elicitation — this is long-term memory
+                    elicitation_initial_stability = 14.0  # 2 weeks (vs 1 day for new items)
+                    now_ms = int(time.time() * 1000)
+                    due_at = now_ms + int(elicitation_initial_stability * 86400 * 1000)
+
+                    new_source = {
+                        'source': 'voice_elicitation',
+                        'source_text': source_text[:400],
+                        'fact_count': len(captured),
+                        'added_at': now_ms,
+                    }
+                    _new_card = FsrsCard()
+                    _card_json = json.dumps(_new_card.to_dict())
+                    eli_conn.execute('''
+                        INSERT INTO knowledge_items
+                        (id, curriculum_node_id, curriculum_domain, stability_days, due_at,
+                         sources, question_history, created_at, fsrs_card_json)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    ''', (
+                        item_id, node_id, domain_id,
+                        elicitation_initial_stability, due_at,
+                        json.dumps([new_source]), '[]', now_ms,
+                        _card_json,
+                    ))
+                    eli_conn.commit()
+                    print(f'[voice-elicit] Created knowledge_item {item_id} with {len(captured)} facts, '
+                          f'stability={elicitation_initial_stability}d', flush=True)
+
+                    # Pre-generate a quiz question in background
+                    def _pregen_elicitation_question(iid):
+                        c = None
+                        try:
+                            from db import get_connection as _gc
+                            c = _gc()
+                            q = generate_question(iid, c)
+                            c.execute('UPDATE knowledge_items SET cached_question = ? WHERE id = ?',
+                                      (json.dumps(q), iid))
+                            c.commit()
+                            print(f'[voice-elicit] Pre-generated question for {iid}', flush=True)
+                        except Exception as e:
+                            print(f'[voice-elicit] Question pre-gen failed for {iid}: {e}', flush=True)
+                        finally:
+                            if c:
+                                c.close()
+                    threading.Thread(target=_pregen_elicitation_question,
+                                     args=(item_id,), daemon=True).start()
+            except Exception as e:
+                print(f'[voice-elicit] knowledge_item creation failed: {e}', flush=True)
+            finally:
+                if eli_conn:
+                    eli_conn.close()
+
+    # --- Create correction quizzes for confidently-stated wrong facts ---
+    confidence_tagged = result.get('confidence_tagged', [])
+    wrong_facts = [ct for ct in confidence_tagged
+                   if isinstance(ct, dict) and ct.get('confidence') == 'wrong']
+    corrections_triggered = []
+    for wf in wrong_facts[:3]:
+        fact_text = wf.get('fact', '')
+        if not fact_text:
+            continue
+        q = f'Correction needed: The learner believes "{fact_text}" — what is actually true?'
+        try:
+            card_id = create_microlearning_request(
+                query=q, source_node_id=node_id, source_domain=domain_id,
+                source_type='correction',
+            )
+            corrections_triggered.append({'id': card_id, 'wrong_fact': fact_text})
+            print(f'[voice→ml] correction → {card_id}: {fact_text[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice→ml] correction trigger failed: {e}', flush=True)
+    result['corrections_triggered'] = corrections_triggered
+
+    # Trigger microlearning for wonderings only (not missed facts)
     ml_triggered = []
     # Wonderings → microlearning (purest signal — user literally said "I wonder...")
     for w in wonderings[:3]:
@@ -3756,7 +3851,7 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
         except Exception as e:
             print(f'[voice→ml] wondering trigger failed: {e}', flush=True)
 
-    # Research questions from LLM extraction (derived from wonderings + gaps)
+    # Research questions from LLM extraction (derived from wonderings)
     for q in result.get('research_questions', [])[:3]:
         if isinstance(q, dict):
             q = q.get('question', '') or q.get('query', '')
@@ -3772,20 +3867,9 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
             except Exception as e:
                 print(f'[voice→ml] research question failed: {e}', flush=True)
 
-    # Top missed critical fact → targeted microlearning
-    missed = result.get('missed', [])
-    if missed and len(ml_triggered) < 3:
-        most_important = missed[0] if isinstance(missed[0], str) else str(missed[0])
-        q = f'Why is this important to know: {most_important}'
-        try:
-            card_id = create_microlearning_request(
-                query=q, source_node_id=node_id, source_domain=domain_id,
-                source_type='voice_wondering',
-            )
-            ml_triggered.append({'id': card_id, 'query': q})
-            print(f'[voice→ml] missed fact → {card_id}: {q[:60]}', flush=True)
-        except Exception as e:
-            print(f'[voice→ml] missed trigger failed: {e}', flush=True)
+    # NOTE: Missed facts are NOT turned into ML cards — the user prefers
+    # to fill knowledge gaps through reading, not quizzing on unread content.
+    # Missed facts remain visible in the elicitation results UI.
 
     result['microlearning_triggered'] = ml_triggered
 
@@ -4181,18 +4265,17 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     primary_domain = next(iter(candidate_domains)) if candidate_domains else None
     primary_node = node_assessments[0]['node_id'] if node_assessments else None
 
-    if not sync:
-        for w in wonderings[:5]:
-            try:
-                card_id = create_microlearning_request(
-                    query=w,
-                    source_node_id=primary_node,
-                    source_domain=primary_domain,
-                )
-                ml_triggered.append({'id': card_id, 'query': w})
-                print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
-            except Exception as e:
-                print(f'[voice-capture→ml] failed: {e}', flush=True)
+    for w in wonderings[:5]:
+        try:
+            card_id = create_microlearning_request(
+                query=w,
+                source_node_id=primary_node,
+                source_domain=primary_domain,
+            )
+            ml_triggered.append({'id': card_id, 'query': w})
+            print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice-capture→ml] failed: {e}', flush=True)
 
     # --- Log transcript ---
     _log_voice_transcript(

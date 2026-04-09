@@ -1381,9 +1381,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
             # ── Priority-based ML interleaving ──────────────────────
             # Split new ML cards by source_type for different interleave ratios:
-            # - voice_wondering / user_request: HIGH priority (1 per 3 SR cards)
+            # - voice_wondering / user_request / correction: HIGH priority (1 per 3 SR cards)
             # - follow_up / entity_research / legacy: LOW priority (1 per 7 SR cards)
-            high_ml = []  # voice + user_request
+            high_ml = []  # voice + user_request + correction
             low_ml = []   # follow_up + entity + legacy
             for card in new_ml:
                 # Check source_type on the underlying ML card row
@@ -1395,7 +1395,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     st = st_row[0] if st_row else None
                 except Exception:
                     st = None
-                if st in ('voice_wondering', 'user_request'):
+                if st in ('voice_wondering', 'user_request', 'correction'):
                     high_ml.append(card)
                 else:
                     low_ml.append(card)

@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Capture Analysis — Petrarca</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Crimson+Pro:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --ink-light: #1a1a18;
+  --rubric: #8b2500;
+  --text-primary: #1a1a18;
+  --text-body: #333333;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --rule-dark: #2a2420;
+  --success: #2a7a4a;
+  --warning: #92600e;
+  --info: #2a4a6a;
+  --danger: #8b2500;
+  --border-claim-new: #2a7a4a;
+  --border-claim-known: #d0ccc0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--parchment);
+  color: var(--text-body);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+/* ── TYPOGRAPHY ── */
+h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 32px;
+  color: var(--ink);
+  line-height: 1.15;
+  margin-bottom: 4px;
+}
+h1 .subtitle {
+  display: block;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+h2 {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--rubric);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 48px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+h3 {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin: 24px 0 8px;
+}
+h4 {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 16px 0 6px;
+}
+
+p { margin-bottom: 12px; }
+
+.meta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── HEADER ── */
+.header-rule {
+  border: none;
+  border-top: 3px double var(--rule-dark);
+  margin: 16px 0 40px;
+}
+
+.date-line {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── DASHBOARD ── */
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 16px;
+  margin: 20px 0 32px;
+}
+.stat-card {
+  text-align: center;
+  padding: 16px 8px;
+  border: 1px solid var(--rule);
+  background: var(--parchment-dark);
+}
+.stat-card .number {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 28px;
+  color: var(--ink);
+  line-height: 1;
+}
+.stat-card .number.alert { color: var(--rubric); }
+.stat-card .number.good { color: var(--success); }
+.stat-card .label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 6px;
+}
+
+/* ── COVERAGE BAR ── */
+.coverage-bar-container {
+  margin: 16px 0 32px;
+}
+.coverage-bar-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.coverage-bar {
+  height: 20px;
+  background: var(--parchment-dark);
+  border: 1px solid var(--rule);
+  position: relative;
+  overflow: hidden;
+}
+.coverage-bar .fill {
+  height: 100%;
+  transition: width 1s ease;
+}
+.coverage-bar .fill.facts { background: var(--rubric); opacity: 0.7; }
+.coverage-bar .fill.wonderings { background: var(--success); opacity: 0.7; }
+.coverage-bar .fill.uncovered { background: var(--rule); }
+.coverage-bar-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* ── PIPELINE DIAGRAM ── */
+.pipeline {
+  margin: 24px 0;
+  overflow-x: auto;
+}
+.pipeline svg {
+  max-width: 100%;
+  height: auto;
+}
+.pipeline-box {
+  fill: var(--parchment-dark);
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+.pipeline-box.active { stroke: var(--rubric); stroke-width: 1.5; }
+.pipeline-box.broken { stroke: var(--rubric); stroke-width: 1.5; stroke-dasharray: 4,3; }
+.pipeline-text {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 11px;
+  fill: var(--text-primary);
+}
+.pipeline-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  fill: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pipeline-arrow {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  marker-end: url(#arrowhead);
+}
+.pipeline-arrow.broken {
+  stroke: var(--rubric);
+  stroke-dasharray: 4,3;
+}
+.pipeline-note {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  fill: var(--rubric);
+  font-style: italic;
+}
+
+/* ── SCENARIOS ── */
+.scenario {
+  border-left: 3px solid var(--rule);
+  padding: 16px 20px;
+  margin: 16px 0;
+  background: var(--parchment-dark);
+}
+.scenario.recommended { border-left-color: var(--success); }
+.scenario.warning { border-left-color: var(--warning); }
+.scenario.danger { border-left-color: var(--rubric); }
+.scenario-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.scenario-subtitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+/* ── ISSUES ── */
+.issue {
+  border: 1px solid var(--rule);
+  padding: 16px 20px;
+  margin: 12px 0;
+  position: relative;
+}
+.issue::before {
+  content: attr(data-severity);
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+.issue.critical::before { background: var(--rubric); color: #fff; }
+.issue.high::before { background: var(--warning); color: #fff; }
+.issue.medium::before { background: var(--info); color: #fff; }
+.issue .issue-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  padding-right: 80px;
+}
+.issue .fix {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--success);
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(42, 122, 74, 0.06);
+  border-left: 2px solid var(--success);
+}
+.issue .fix strong { font-weight: 600; }
+
+/* ── CAPTURE LIST ── */
+.capture-group {
+  margin: 16px 0 8px;
+}
+.capture-group-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--rubric);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+details {
+  border: 1px solid var(--rule);
+  margin: 6px 0;
+}
+details[open] {
+  border-color: var(--text-muted);
+}
+summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: var(--parchment);
+  user-select: none;
+}
+summary:hover { background: var(--parchment-dark); }
+summary::marker { color: var(--text-muted); }
+
+.capture-meta {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.badge.has-quiz { background: rgba(42, 122, 74, 0.12); color: var(--success); }
+.badge.no-quiz { background: rgba(139, 37, 0, 0.1); color: var(--rubric); }
+.badge.partial { background: rgba(146, 96, 14, 0.12); color: var(--warning); }
+.badge.pending { background: rgba(42, 74, 106, 0.1); color: var(--info); }
+
+.capture-detail {
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--rule);
+  background: var(--parchment-dark);
+}
+.capture-detail .transcript-preview {
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--rule);
+}
+.fact-list {
+  list-style: none;
+  padding: 0;
+}
+.fact-list li {
+  padding: 3px 0 3px 16px;
+  font-size: 13px;
+  position: relative;
+  color: var(--text-body);
+}
+.fact-list li::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: var(--text-muted);
+}
+.fact-list li.missed {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.fact-list li.missed::before {
+  content: '✗';
+  color: var(--rubric);
+  font-size: 10px;
+  left: 2px;
+}
+.fact-list li.wondering::before {
+  content: '?';
+  color: var(--info);
+  font-weight: 600;
+  left: 3px;
+}
+.quiz-display {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(42, 122, 74, 0.05);
+  border-left: 2px solid var(--success);
+  font-size: 13px;
+}
+.quiz-display .q-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── COVERAGE GRID ── */
+.coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+  margin: 16px 0;
+}
+.node-cell {
+  padding: 6px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  border: 1px solid var(--rule);
+  background: var(--parchment-dark);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-cell.covered {
+  border-left: 3px solid var(--success);
+  color: var(--text-body);
+}
+.node-cell.uncovered {
+  border-left: 3px solid var(--rubric);
+  opacity: 0.7;
+}
+.node-cell.ml-only {
+  border-left: 3px solid var(--warning);
+}
+.node-cell .domain-tag {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+/* ── CONFIDENCE TAGGED SECTION ── */
+.discovery-box {
+  margin: 20px 0;
+  border: 2px solid var(--rubric);
+  padding: 20px 24px;
+  position: relative;
+}
+.discovery-box::before {
+  content: '✦ DISCOVERY';
+  position: absolute;
+  top: -9px;
+  left: 16px;
+  background: var(--parchment);
+  padding: 0 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  color: var(--rubric);
+  letter-spacing: 0.12em;
+}
+.code-block {
+  font-family: 'DM Mono', 'SF Mono', monospace;
+  font-size: 11px;
+  background: #2a2420;
+  color: #e8e0d4;
+  padding: 12px 16px;
+  margin: 10px 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  border-radius: 2px;
+}
+.code-block .comment { color: #8a7e70; }
+.code-block .string { color: #c9a66b; }
+.code-block .keyword { color: #c17d5f; }
+
+/* ── RECOMMENDATION TABLE ── */
+table.reco {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+}
+table.reco th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--rule-dark);
+}
+table.reco td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+table.reco td:first-child {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── FLOW COMPARISON ── */
+.flow-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+.flow-box {
+  border: 1px solid var(--rule);
+  padding: 14px 16px;
+}
+.flow-box h4 {
+  margin-top: 0;
+}
+.flow-box .step {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 3px 0 3px 12px;
+  border-left: 1px solid var(--rule);
+  margin: 4px 0;
+}
+.flow-box .step.missing {
+  border-left-color: var(--rubric);
+  color: var(--rubric);
+}
+.flow-box .step.ok {
+  border-left-color: var(--success);
+}
+
+/* ── SECTION MARKER ── */
+.section-marker {
+  text-align: center;
+  margin: 48px 0 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 640px) {
+  .dashboard { grid-template-columns: repeat(3, 1fr); }
+  .flow-comparison { grid-template-columns: 1fr; }
+  .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  h1 { font-size: 26px; }
+}
+</style>
+</head>
+<body>
+
+<p class="date-line">Analysis generated 9 April 2026</p>
+<h1>Voice Capture Analysis
+  <span class="subtitle">Tracing the path from spoken memory to reviewable quiz questions</span>
+</h1>
+<hr class="header-rule">
+
+<!-- ════════════════════════════════════════════ -->
+<h2>I. Dashboard</h2>
+
+<div class="dashboard">
+  <div class="stat-card">
+    <div class="number">39</div>
+    <div class="label">Voice Transcripts</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">424</div>
+    <div class="label">Facts Extracted</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">201</div>
+    <div class="label">Wonderings</div>
+  </div>
+  <div class="stat-card">
+    <div class="number good">206</div>
+    <div class="label">ML Quizzes Created</div>
+  </div>
+  <div class="stat-card">
+    <div class="number alert">77</div>
+    <div class="label">Uncovered Nodes</div>
+  </div>
+  <div class="stat-card">
+    <div class="number alert">22%</div>
+    <div class="label">Direct Coverage</div>
+  </div>
+</div>
+
+<div class="coverage-bar-container">
+  <div class="coverage-bar-label">Where do the 424 extracted facts end up?</div>
+  <div class="coverage-bar" style="display:flex">
+    <div class="fill facts" style="width: 4.5%" title="18 knowledge_items with quiz questions"></div>
+    <div class="fill wonderings" style="width: 48.5%" title="206 ML quizzes from wonderings"></div>
+    <div class="fill uncovered" style="width: 47%" title="~200 facts with no quiz coverage"></div>
+  </div>
+  <div class="coverage-bar-legend">
+    <span><span class="legend-dot" style="background:var(--rubric);opacity:0.7"></span> 18 nodes with SR quiz (4%)</span>
+    <span><span class="legend-dot" style="background:var(--success);opacity:0.7"></span> 206 ML quizzes from wonderings (49%)</span>
+    <span><span class="legend-dot" style="background:var(--rule)"></span> ~200 facts unquizzed (47%)</span>
+  </div>
+</div>
+
+<p>The system extracts facts reliably but doesn't systematically convert them into reviewable quiz questions. <strong>Wonderings are well-served</strong> (206 quizzes from 81 microlearning cards). <strong>Captured facts are largely dropped</strong> — they exist in JSON blobs but never enter the review stream.</p>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>II. Pipeline Architecture</h2>
+
+<p>Five distinct pathways generate quiz questions. Each tests different knowledge:</p>
+
+<div class="pipeline">
+<svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="#b0a898"/>
+    </marker>
+    <marker id="arrowhead-red" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="#8b2500"/>
+    </marker>
+  </defs>
+
+  <!-- Sources column -->
+  <text x="80" y="20" class="pipeline-label" text-anchor="middle">Sources</text>
+
+  <rect x="10" y="35" width="140" height="36" rx="2" class="pipeline-box active"/>
+  <text x="80" y="58" class="pipeline-text" text-anchor="middle">Book Chapter</text>
+
+  <rect x="10" y="85" width="140" height="36" rx="2" class="pipeline-box"/>
+  <text x="80" y="108" class="pipeline-text" text-anchor="middle">Voice Capture</text>
+  <text x="80" y="118" class="pipeline-label" text-anchor="middle" style="font-size:8px">(podcast / book notes)</text>
+
+  <rect x="10" y="135" width="140" height="36" rx="2" class="pipeline-box broken"/>
+  <text x="80" y="158" class="pipeline-text" text-anchor="middle">Voice Elicitation</text>
+  <text x="80" y="168" class="pipeline-label" text-anchor="middle" style="font-size:8px">(free recall test)</text>
+
+  <!-- Processing column -->
+  <text x="310" y="20" class="pipeline-label" text-anchor="middle">Processing</text>
+
+  <rect x="220" y="35" width="180" height="36" rx="2" class="pipeline-box"/>
+  <text x="310" y="58" class="pipeline-text" text-anchor="middle">create_review_items_for_chapter()</text>
+
+  <rect x="220" y="85" width="180" height="36" rx="2" class="pipeline-box"/>
+  <text x="310" y="108" class="pipeline-text" text-anchor="middle">process_voice_capture()</text>
+
+  <rect x="220" y="135" width="180" height="36" rx="2" class="pipeline-box broken"/>
+  <text x="310" y="153" class="pipeline-text" text-anchor="middle">run_voice_elicitation()</text>
+  <text x="310" y="166" class="pipeline-note" text-anchor="middle">facts extracted but dropped</text>
+
+  <!-- Arrows: sources → processing -->
+  <line x1="150" y1="53" x2="218" y2="53" class="pipeline-arrow"/>
+  <line x1="150" y1="103" x2="218" y2="103" class="pipeline-arrow"/>
+  <line x1="150" y1="153" x2="218" y2="153" class="pipeline-arrow broken"/>
+
+  <!-- Data stores column -->
+  <text x="560" y="20" class="pipeline-label" text-anchor="middle">Data Store</text>
+
+  <rect x="470" y="35" width="180" height="36" rx="2" class="pipeline-box active"/>
+  <text x="560" y="53" class="pipeline-text" text-anchor="middle">knowledge_items</text>
+  <text x="560" y="65" class="pipeline-label" text-anchor="middle">+ cached_question</text>
+
+  <rect x="470" y="85" width="180" height="36" rx="2" class="pipeline-box"/>
+  <text x="560" y="103" class="pipeline-text" text-anchor="middle">microlearning_cards</text>
+  <text x="560" y="115" class="pipeline-label" text-anchor="middle">+ microlearning_quizzes</text>
+
+  <rect x="470" y="135" width="180" height="36" rx="2" class="pipeline-box"/>
+  <text x="560" y="153" class="pipeline-text" text-anchor="middle">knowledge_states</text>
+  <text x="560" y="165" class="pipeline-label" text-anchor="middle">level only, no quiz</text>
+
+  <rect x="470" y="185" width="180" height="36" rx="2" class="pipeline-box"/>
+  <text x="560" y="203" class="pipeline-text" text-anchor="middle">voice_transcripts</text>
+  <text x="560" y="215" class="pipeline-label" text-anchor="middle">llm_result JSON (raw)</text>
+
+  <!-- Arrows: processing → data -->
+  <!-- Book chapter → knowledge_items -->
+  <line x1="400" y1="53" x2="468" y2="53" class="pipeline-arrow"/>
+  <!-- Voice capture → knowledge_items -->
+  <line x1="400" y1="96" x2="440" y2="53" class="pipeline-arrow"/>
+  <!-- Voice capture → ML cards -->
+  <line x1="400" y1="110" x2="468" y2="103" class="pipeline-arrow"/>
+  <!-- Voice elicitation → knowledge_states (NOT knowledge_items) -->
+  <line x1="400" y1="147" x2="468" y2="147" class="pipeline-arrow broken"/>
+  <!-- Voice elicitation → ML cards (wonderings) -->
+  <line x1="400" y1="140" x2="440" y2="110" class="pipeline-arrow"/>
+  <!-- Voice elicitation → voice_transcripts -->
+  <line x1="400" y1="160" x2="468" y2="195" class="pipeline-arrow"/>
+
+  <!-- Output column -->
+  <text x="790" y="20" class="pipeline-label" text-anchor="middle">Quiz Output</text>
+
+  <rect x="720" y="35" width="140" height="36" rx="2" class="pipeline-box active"/>
+  <text x="790" y="53" class="pipeline-text" text-anchor="middle">SR Quiz Questions</text>
+  <text x="790" y="65" class="pipeline-label" text-anchor="middle">18 from voice, 1/node</text>
+
+  <rect x="720" y="85" width="140" height="36" rx="2" class="pipeline-box"/>
+  <text x="790" y="103" class="pipeline-text" text-anchor="middle">ML Quiz Questions</text>
+  <text x="790" y="115" class="pipeline-label" text-anchor="middle">206 from wonderings</text>
+
+  <rect x="720" y="135" width="140" height="36" rx="2" class="pipeline-box broken"/>
+  <text x="790" y="155" class="pipeline-text" text-anchor="middle" style="fill:#8b2500">∅ Nothing</text>
+
+  <rect x="720" y="185" width="140" height="36" rx="2" class="pipeline-box"/>
+  <text x="790" y="203" class="pipeline-text" text-anchor="middle">424 facts archived</text>
+  <text x="790" y="215" class="pipeline-label" text-anchor="middle">never reviewed</text>
+
+  <!-- Arrows: data → output -->
+  <line x1="650" y1="53" x2="718" y2="53" class="pipeline-arrow"/>
+  <line x1="650" y1="103" x2="718" y2="103" class="pipeline-arrow"/>
+  <line x1="650" y1="153" x2="718" y2="153" class="pipeline-arrow broken"/>
+  <line x1="650" y1="203" x2="718" y2="203" class="pipeline-arrow" style="stroke-dasharray:4,3;stroke:var(--text-muted);opacity:0.4"/>
+
+  <!-- ANNOTATIONS -->
+  <!-- Big annotation: the gap -->
+  <rect x="190" y="250" width="520" height="80" rx="3" fill="none" stroke="#8b2500" stroke-width="1.5"/>
+  <text x="220" y="275" class="pipeline-text" style="fill:#8b2500;font-size:12px;font-weight:500">The Gap: Voice Elicitation extracts facts but doesn't create quiz questions</text>
+  <text x="220" y="295" style="font-family:'Crimson Pro',serif;font-size:11px;fill:#6a6458">run_voice_elicitation() updates knowledge_states and triggers ML from wonderings,</text>
+  <text x="220" y="310" style="font-family:'Crimson Pro',serif;font-size:11px;fill:#6a6458">but does NOT call generate_question() or create knowledge_items for captured facts.</text>
+
+  <!-- Pathway labels -->
+  <text x="10" y="365" class="pipeline-label">Pathway breakdown</text>
+
+  <!-- Pathway 1 -->
+  <rect x="10" y="378" width="14" height="14" rx="1" fill="#2a7a4a" opacity="0.8"/>
+  <text x="30" y="390" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P1 Book → knowledge_items → cached_question</text>
+  <text x="30" y="402" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--text-muted)">Primary pathway. Tests what you read. Working well.</text>
+
+  <!-- Pathway 2 -->
+  <rect x="10" y="415" width="14" height="14" rx="1" fill="#92600e" opacity="0.8"/>
+  <text x="30" y="427" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P2 Gap-fill → knowledge_items (book_id=None)</text>
+  <text x="30" y="439" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--text-muted)">Prerequisite nodes. Penalized -5.0, capped 3/batch. Already deprioritized.</text>
+
+  <!-- Pathway 3 -->
+  <rect x="10" y="452" width="14" height="14" rx="1" fill="#2a7a4a" opacity="0.8"/>
+  <text x="30" y="464" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P3 Voice capture → knowledge_items + ML cards</text>
+  <text x="30" y="476" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--text-muted)">Tests just-learned content. Mostly working (sync bug for reprocessed captures).</text>
+
+  <!-- Pathway 4 -->
+  <rect x="450" y="378" width="14" height="14" rx="1" fill="#8b2500" opacity="0.8"/>
+  <text x="470" y="390" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P4 Voice elicitation → ML cards ONLY (no SR quiz)</text>
+  <text x="470" y="402" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--rubric)">BROKEN: 232 captured facts → 0 quiz questions. Wonderings → ML works.</text>
+
+  <!-- Pathway 5 -->
+  <rect x="450" y="415" width="14" height="14" rx="1" fill="#2a4a6a" opacity="0.8"/>
+  <text x="470" y="427" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P5 Follow-up → ML cards (after grading)</text>
+  <text x="470" y="439" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--text-muted)">Low priority (1:7). Deepens existing knowledge.</text>
+
+  <!-- Pathway missed -->
+  <rect x="450" y="452" width="14" height="14" rx="1" fill="#8b2500" opacity="0.6"/>
+  <text x="470" y="464" style="font-family:'DM Sans',sans-serif;font-size:10px;fill:var(--text-body)">P4b Missed facts → "Why important?" ML cards (HIGH)</text>
+  <text x="470" y="476" style="font-family:'DM Sans',sans-serif;font-size:9px;fill:var(--rubric)">CONCERN: Quizzes on things not yet read. User prefers reading to fill gaps.</text>
+</svg>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<h2>III. Three Scenarios — Design Recommendations</h2>
+
+<div class="scenario recommended">
+  <div class="scenario-title">A. Voice Notes About Podcasts & Books</div>
+  <div class="scenario-subtitle">Source: global menu or book page &nbsp;·&nbsp; Pathway: process_voice_capture()</div>
+  <p><strong>Intent:</strong> "I just heard/read this, found it interesting, want to retain it for years."</p>
+  <p>This pathway already creates knowledge_items and generates quiz questions per node. It's the closest to working correctly. However:</p>
+  <ul style="margin-left:20px;margin-bottom:8px">
+    <li>The Frederick II podcast (49 facts across 7 nodes) got <strong>0 microlearning cards</strong> because <code>sync=True</code> mode skips ML creation</li>
+    <li>One quiz per node means 49 facts → 7 questions. The key_facts system varies across reviews, which is adequate</li>
+    <li>Consider generating questions that reference the learner's specific stated facts, not just curriculum descriptions</li>
+  </ul>
+  <p><strong>Recommendation:</strong> Fix the sync bug. Otherwise this pathway works. Every meaningful fact you voice-note about a podcast should generate at least one node-level quiz question.</p>
+</div>
+
+<div class="scenario warning">
+  <div class="scenario-title">B. Knowledge Elicitation (Free Recall)</div>
+  <div class="scenario-subtitle">Source: review screen, node-level &nbsp;·&nbsp; Pathway: run_voice_elicitation()</div>
+  <p><strong>Intent:</strong> "Test what I already know long-term about Plato / Stoicism / etc."</p>
+  <p>This is the pathway with the biggest gap. You stated 232 facts across 29 sessions, and <strong>none became quiz questions</strong>. The system updates your knowledge level and reschedules existing FSRS items, but never creates new ones.</p>
+  <p>The nuance you identified:</p>
+  <ul style="margin-left:20px;margin-bottom:8px">
+    <li><strong>Correct facts you stated as long-term knowledge:</strong> Less urgent to quiz, but if FSRS works well, Easy answers push to ~28 days — no burden. Worth generating, especially for nodes that don't yet have knowledge_items.</li>
+    <li><strong>Wrong facts stated confidently:</strong> Highest priority to quiz. The LLM already tags these as <code>confidence: "wrong"</code> but the code never reads the tag. Examples: you said 409 BC destruction was Akragas (it was Selinunte), and the Vespers was "planned" (it was spontaneous).</li>
+    <li><strong>Missed facts:</strong> Currently become HIGH-priority ML cards. You prefer encountering these through reading, not quizzing.</li>
+  </ul>
+  <p><strong>Recommendation:</strong> Create knowledge_items with high initial stability for demonstrated facts. Use <code>confidence_tagged</code> to create correction quizzes for wrong facts. Stop or deprioritize ML cards from missed facts.</p>
+</div>
+
+<div class="scenario danger">
+  <div class="scenario-title">C. Gap Identification</div>
+  <div class="scenario-subtitle">Source: prerequisite expansion &nbsp;·&nbsp; Pathway: fill_prerequisite_gaps()</div>
+  <p><strong>Intent:</strong> "It's OK to know what I don't know, but I want to fill gaps by reading, not by being quizzed on things I haven't encountered."</p>
+  <p>Currently, gap-fill items are already well-deprioritized:</p>
+  <ul style="margin-left:20px;margin-bottom:8px">
+    <li>-5.0 score penalty (below all book-sourced items)</li>
+    <li>Capped at 3 per review batch</li>
+    <li>Only appear when <code>node_knowledge != 'unknown'</code></li>
+  </ul>
+  <p>The more concerning path is missed facts from elicitation becoming HIGH-priority ML cards (1:3 ratio), which effectively quizzes you on things you never read about.</p>
+  <p><strong>Recommendation:</strong> Gap-fill items are fine as-is. The main fix is stopping or reframing missed-fact → ML cards from elicitation (see Scenario B).</p>
+</div>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>IV. The confidence_tagged Discovery</h2>
+
+<div class="discovery-box">
+  <h3>Extracted Data That's Never Used</h3>
+  <p>Both voice prompts (<code>VOICE_ELICITATION_PROMPT</code> and <code>VOICE_CAPTURE_ANALYSIS_PROMPT</code>) ask the LLM to tag every factual claim with a confidence level:</p>
+  <div class="code-block">
+<span class="comment">// From VOICE_ELICITATION_PROMPT, field #7:</span>
+<span class="string">"CONFIDENCE_TAGGED"</span>: For each key claim the learner makes,
+tag their apparent confidence:
+  <span class="string">"certain"</span> — stated as fact
+  <span class="string">"uncertain"</span> — hedged, "I think...", "maybe..."
+  <span class="string">"wrong"</span> — <span class="keyword">stated confidently but incorrect</span>
+  </div>
+  <p>This data exists in every <code>voice_transcripts.llm_result</code> JSON blob. But <strong>no code ever reads <code>confidence_tagged</code></strong>. A grep across the entire codebase shows zero references outside the prompt definitions.</p>
+
+  <h4>Examples of "wrong" tags in your captures:</h4>
+  <ul style="margin-left:20px">
+    <li><strong>Akragas capture:</strong> You said "the city was destroyed by Carthage in 409 BC" — the LLM noted this was actually Selinunte's destruction date, not Akragas</li>
+    <li><strong>Sicilian Vespers:</strong> You said it was "planned" — the LLM noted this is a common misconception; it was spontaneous (though possibly orchestrated by Aragonese agents)</li>
+    <li><strong>Stoicism:</strong> You placed Stoicism's origin "around the time of Plato" — it started with Zeno of Citium c. 300 BC, a generation after Plato</li>
+  </ul>
+
+  <p><strong>Impact:</strong> These are exactly the misconceptions that should be corrected through targeted quiz questions. The extraction infrastructure is already built — it just needs to be wired up to quiz generation.</p>
+</div>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>V. Five Issues &amp; Recommended Fixes</h2>
+
+<div class="issue critical" data-severity="Critical">
+  <div class="issue-title">1. Elicitations don't create quiz questions for captured facts</div>
+  <p><code>run_voice_elicitation()</code> extracts facts and updates knowledge_states but never creates knowledge_items or calls <code>generate_question()</code>. Result: 29 sessions × ~8 facts = 232 facts sitting in JSON, never reviewed.</p>
+  <p><strong>Impact:</strong> 47% of all voice-extracted knowledge has no quiz path.</p>
+  <div class="fix"><strong>Fix:</strong> After extracting captured facts, create knowledge_items for nodes where none exist yet (engaged/anchored level). Set initial FSRS stability to 14–28 days. For nodes that already have items, the existing FSRS reschedule handles it.</div>
+</div>
+
+<div class="issue critical" data-severity="Critical">
+  <div class="issue-title">2. confidence_tagged "wrong" facts are extracted but never used</div>
+  <p>The LLM tags confidently-stated incorrect facts, but the code never reads this field. Wrong facts are the highest-value targets for correction quizzes.</p>
+  <div class="fix"><strong>Fix:</strong> Parse <code>confidence_tagged</code> from <code>llm_result</code>. For each <code>"wrong"</code> item, create a targeted ML card: "Correction: [wrong claim]. What's actually true?" with a new source_type <code>'correction'</code> at HIGH priority.</div>
+</div>
+
+<div class="issue high" data-severity="High">
+  <div class="issue-title">3. Missed facts from elicitation become HIGH-priority quiz questions</div>
+  <p>After elicitation, the top missed fact triggers an ML card with query "Why is this important: [fact]" at 1:3 interleaving ratio. This quizzes you on things you haven't read about.</p>
+  <div class="fix"><strong>Fix:</strong> Remove the missed-fact → ML card creation from <code>run_voice_elicitation()</code> (lines 3775–3788). Missed facts stay as metadata in the elicitation results UI. Alternatively, lower priority from <code>'voice_wondering'</code> (HIGH) to <code>'follow_up'</code> (LOW, 1:7).</div>
+</div>
+
+<div class="issue medium" data-severity="Medium">
+  <div class="issue-title">4. sync=True mode silently drops microlearning card creation</div>
+  <p><code>process_voice_capture()</code> has <code>if not sync:</code> before ML card creation. The Frederick II podcast (49 facts, 18 wonderings) got 0 ML cards because it was reprocessed with <code>sync=True</code>.</p>
+  <div class="fix"><strong>Fix:</strong> Add a <code>trigger_ml=True</code> parameter that enables ML creation regardless of sync mode. Or trigger ML cards in a separate post-processing step.</div>
+</div>
+
+<div class="issue medium" data-severity="Medium">
+  <div class="issue-title">5. 31 ML cards stuck in "pending" status</div>
+  <p>The April 6 batch (patron-client, Vespers, Greek sculpture, classical learning, etc.) never completed processing. These are mostly from the latest elicitation session.</p>
+  <div class="fix"><strong>Fix:</strong> Run a reprocessing script to trigger <code>_run_microlearning_research()</code> on all pending cards. Then investigate why they stalled (likely <code>claude -p</code> auth or rate limiting).</div>
+</div>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>VI. Side-by-Side: What Each Pathway Creates</h2>
+
+<div class="flow-comparison">
+  <div class="flow-box">
+    <h4>Voice Capture <span class="meta">(podcast / book notes)</span></h4>
+    <div class="step ok">LLM extracts facts + node_assessments</div>
+    <div class="step ok">Creates/updates knowledge_items per node</div>
+    <div class="step ok">Calls generate_question() → cached_question</div>
+    <div class="step ok">Wonderings → ML cards (up to 5)</div>
+    <div class="step ok">Stores voice_transcript + chunks</div>
+    <div class="step" style="border-left-color:var(--warning)">sync=True skips ML creation ⚠</div>
+    <p style="margin-top:10px"><strong>Quiz output:</strong> 1 SR quiz/node + 3–5 ML quizzes/wondering</p>
+  </div>
+  <div class="flow-box">
+    <h4>Voice Elicitation <span class="meta">(free recall)</span></h4>
+    <div class="step ok">LLM extracts captured + missed + wonderings</div>
+    <div class="step ok">LLM tags confidence (certain/uncertain/wrong)</div>
+    <div class="step ok">Updates knowledge_states level</div>
+    <div class="step ok">Reschedules existing FSRS items</div>
+    <div class="step ok">Wonderings → ML cards (up to 3)</div>
+    <div class="step missing">Does NOT create knowledge_items ✗</div>
+    <div class="step missing">Does NOT call generate_question() ✗</div>
+    <div class="step missing">Does NOT use confidence_tagged ✗</div>
+    <div class="step" style="border-left-color:var(--warning)">Missed facts → HIGH-priority ML ⚠</div>
+    <p style="margin-top:10px"><strong>Quiz output:</strong> 0 SR quizzes + 3 ML quizzes from wonderings + 1 ML from missed fact</p>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>VII. Per-Capture Analysis</h2>
+
+<p class="meta">39 voice captures across 5 domains. Click to expand details.</p>
+
+<!-- April 6 Elicitations -->
+<div class="capture-group">
+  <div class="capture-group-title">April 6, 2026 — Elicitation Session (14 captures)</div>
+
+  <details>
+    <summary>
+      Akragas, Selinunte, and the Western Colonies
+      <div class="capture-meta">
+        <span>5 facts · 2 wonderings · 40%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">5 ML cards</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="transcript-preview">"Aquagas was very wealthy. I think it was started around 580. It's called Agrigento now..."</div>
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>Akragas was very wealthy</li>
+        <li>Akragas was founded around 580 BC</li>
+        <li>Akragas is modern Agrigento</li>
+        <li>Akragas sat at the border between Greek and Carthaginian territory</li>
+        <li>The city was destroyed by Carthage in 409 BC</li>
+      </ul>
+      <h4>Missed Facts</h4>
+      <ul class="fact-list">
+        <li class="missed">Selinunte — the westernmost Greek city and the one actually destroyed in 409 BC (learner conflated Selinunte's destruction with Akragas)</li>
+        <li class="missed">The other western colonies: Gela, Himera, and Segesta</li>
+        <li class="missed">Empedocles' famous quote about Akragas</li>
+      </ul>
+      <h4>Wonderings → ML Cards</h4>
+      <ul class="fact-list">
+        <li class="wondering">Could the Carthaginian destruction in 409 BC have been connected to the Athenian expedition of 415–413 BC?</li>
+        <li class="wondering">Did the abandonment of Akragas contribute to the preservation of its Greek temples?</li>
+      </ul>
+      <p class="meta" style="margin-top:12px">Note: The 409 BC date conflation (Akragas vs. Selinunte) was tagged as "wrong" by the LLM but never acted on.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Patron-Client System
+      <div class="capture-meta">
+        <span>7 facts · 7 wonderings · 35%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge pending">6 ML pending</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="transcript-preview">"This is quite confusing to me, but I did read a lot about it in Robert Harris' Cicero Trilogy..."</div>
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>Wealthy/powerful people had clients (patron-client relationship)</li>
+        <li>Clients would show up at patrons' houses regularly (morning salutatio)</li>
+        <li>Clients might support patrons politically</li>
+        <li>It was a big network of mutual obligations</li>
+        <li>Knowledge sourced from Robert Harris' Cicero Trilogy</li>
+        <li>Patrons may have given clients money (sportula)</li>
+        <li>The system involved mutual exchange</li>
+      </ul>
+      <h4>Wonderings (all 6 ML cards still pending)</h4>
+      <ul class="fact-list">
+        <li class="wondering">Did patrons actually pay their clients money?</li>
+        <li class="wondering">Was the patron-client system primarily political?</li>
+        <li class="wondering">Was the absence of a formal credit/banking system a reason it developed?</li>
+        <li class="wondering">How did it develop historically?</li>
+        <li class="wondering">What was unique about the Roman version?</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Sicilian Vespers, 1282
+      <div class="capture-meta">
+        <span>5 facts · 4 wonderings · 45%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge pending">6 ML pending</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="transcript-preview">"So after Frederick II, who I guess had been quite a popular ruler..."</div>
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>The Pope installed a French ruler (Charles of Anjou) as king of Sicily</li>
+        <li>There were grievances against French rule that led to a revolt</li>
+        <li>Many thousand people were killed in the uprising</li>
+        <li>The Sicilians invited the king of Aragon from Spain to take over</li>
+        <li>This led to many hundred years of Spanish/Aragonese dominion</li>
+      </ul>
+      <h4>Missed (LLM noted a factual error)</h4>
+      <ul class="fact-list">
+        <li class="missed">The Sicilian Vespers was spontaneous, not "planned" as the learner stated — a key historiographical debate</li>
+        <li class="missed">Specific date: Easter Monday 1282, sparked by a French soldier's insult to a Sicilian woman</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Translation Movement and the House of Wisdom
+      <div class="capture-meta">
+        <span>7 facts · 4 wonderings · 52%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">6 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>The Abbasid caliphate moved the capital to Baghdad</li>
+        <li>The House of Wisdom (Bayt al-Hikma) existed in Baghdad</li>
+        <li>Translations of Greek classics and other works</li>
+        <li>Focus on learning and science under the Abbasids</li>
+        <li>Strengths in medicine, astronomy, and optics</li>
+        <li>They wrote commentaries on translated works</li>
+        <li>Al-Ma'mun-era sponsorship implied</li>
+      </ul>
+      <div class="quiz-display">
+        <div class="q-label">ML quizzes generated (22 total from 6 cards)</div>
+        <p>What two operations define al-Khwārizmī's algebraic method? · Where does the word 'algorithm' come from? · What did the Banū Mūsā brothers' Book of Ingenious Devices contain? · What destroyed the physical remains of the Bayt al-Hikma? · What political theology did al-Ma'mun use Greek rationalism to support?</p>
+      </div>
+      <p class="meta" style="margin-top:8px">Good ML coverage of wonderings, but the 7 captured facts (Abbasid capital, Bayt al-Hikma, translations) have no SR quiz.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Preservation of Classical Greek Learning
+      <div class="capture-meta">
+        <span>18 facts · 11 wonderings · 72%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge pending">6 ML pending</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="transcript-preview">"So I believe that Homer and Aristotle and Plato and so on have never come out of—they've always been studied..."</div>
+      <p><strong>Your most detailed elicitation</strong> — 18 captured facts covering Library of Alexandria, Byzantine preservation, Koine Greek, Atticizing movement, Christians studying pagan classics. <strong>Zero quiz questions generated.</strong></p>
+      <h4>Captured Facts (18)</h4>
+      <ul class="fact-list">
+        <li>Homer, Aristotle, Plato continuously studied and never fully lost</li>
+        <li>Library of Alexandria: adding accent marks, chapter divisions, critical editions</li>
+        <li>Byzantine scholars preserved both pagan Greek heritage and Christian texts</li>
+        <li>Pagan texts continued to be studied despite Christian dominance</li>
+        <li>New Testament written in Koine Greek</li>
+        <li>Church Fathers wrote in more complex Atticizing Greek</li>
+        <li>Classical texts survived as educational models</li>
+        <li>Christians justified studying pagan classics for defending the faith</li>
+        <li>... and 10 more</li>
+      </ul>
+      <h4>Wonderings (6 ML cards all pending)</h4>
+      <ul class="fact-list">
+        <li class="wondering">Was there a specific person who unified pagan Greek classics with Christian educational practice?</li>
+        <li class="wondering">Did the Neoplatonists play an important bridging role?</li>
+        <li class="wondering">Were Neoplatonists active in Alexandria around 200–300 AD?</li>
+        <li class="wondering">Did the Fourth Crusade in 1204 lead to Western intellectuals in Byzantium?</li>
+        <li class="wondering">Was there significant interchange between Venice and Constantinople?</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Stoicism: The Philosophy of Roman Public Life
+      <div class="capture-meta">
+        <span>6 facts · 6 wonderings · 25%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">6 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>Marcus Aurelius wrote a famous personal diary (Meditations)</li>
+        <li>Marcus Aurelius was a Stoic</li>
+        <li>Stoicism has a modern revival</li>
+        <li>Stoicism originated in Greece (placed "around Plato" — actually ~300 BC, a generation after)</li>
+        <li>Included meditative practices (meditatio mortis)</li>
+        <li>Offered practical guidance for living</li>
+      </ul>
+      <div class="quiz-display">
+        <div class="q-label">ML quizzes generated (27 total from 6 cards)</div>
+        <p>What is the original Greek title of the Meditations? · What did the Stoics call the divine rational force? · Where did Zeno of Citium teach? · What text records a dialogue between King Menander I and a Buddhist monk? · What Epicurean library survives as carbonized scrolls?</p>
+      </div>
+      <p class="meta" style="margin-top:8px">ML cards are excellent — they researched Stoicism vs. Epicureanism, Stoicism–Buddhism connections, Stoic theology. But the 6 basic facts you demonstrated (Marcus Aurelius, Meditations, practical philosophy) have no SR quiz path.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Sicilian Language and Identity
+      <div class="capture-meta">
+        <span>13 facts · 4 wonderings · 55%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">5 ML + 1 failed</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Key Facts (13 total)</h4>
+      <ul class="fact-list">
+        <li>Sicilian recognized as separate language from Italian</li>
+        <li>First vernacular with its own literature</li>
+        <li>Prominent at Frederick II's court; the sonnet was invented there</li>
+        <li>Dante and Petrarch praised Sicilian literary achievement</li>
+        <li>Influenced by Greek, Arabic, Spanish, Latin vocabulary</li>
+        <li>Spanish rule pushed Sicilian into background</li>
+        <li>Italian unification brought standardization pressures</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Greek Sculpture: Kouroi to Classical Idealism
+      <div class="capture-meta">
+        <span>10 facts · 4 wonderings · 35%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge pending">6 ML pending</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Key Facts</h4>
+      <ul class="fact-list">
+        <li>Earliest Greek sculptures inspired by Egyptian sculptures</li>
+        <li>Evolution from stiff/idealized to naturalistic</li>
+        <li>Gods identified by iconographic attributes</li>
+        <li>Many Greek statues survive only as Roman copies</li>
+        <li>Greek sculptures were originally painted in bright colors</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Hadith and Sunna
+      <div class="capture-meta">
+        <span>5 facts · 4 wonderings · 55%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">6 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Captured Facts</h4>
+      <ul class="fact-list">
+        <li>Hadith are the sayings of Muhammad not in the Quran</li>
+        <li>Sunnah refers to how the Prophet behaved</li>
+        <li>Chains of transmission (isnad) authenticate hadith</li>
+        <li>People disagree about which hadith are valid</li>
+        <li>Hadith/Sunnah function alongside the Quran</li>
+      </ul>
+      <div class="quiz-display">
+        <div class="q-label">ML quizzes (26 total from 6 cards)</div>
+        <p>How many hadith did al-Bukhari examine? · What Arabic word divides Sunni and Shia at Ghadir Khumm? · Who did Abu Bakr commission to collect the Quran? · What does the Sanaa palimpsest reveal?</p>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Arab-Norman Synthesis
+      <div class="capture-meta">
+        <span>13 facts · 4 wonderings · 62%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">6 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Key Facts (13 total)</h4>
+      <ul class="fact-list">
+        <li>Roger was supportive of Muslims, maintained religious tolerance</li>
+        <li>Al-Idrisi was a famous geographer employed by Roger</li>
+        <li>Roger spoke Arabic</li>
+        <li>Buildings combined Arabic, Byzantine, and Roman architectural elements</li>
+        <li>Frederick II went on a peaceful crusade to Jerusalem</li>
+      </ul>
+      <div class="quiz-display">
+        <div class="q-label">ML quizzes (27 total from 6 cards) — excellent coverage</div>
+        <p>Why were Lucera's Muslim soldiers useful to Frederick? · What Arabic literary form praised Roger II? · What did Ibn Jubayr observe at the Norman court in 1184? · Where is Roger II's Arabic-inscribed coronation mantle?</p>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The 1693 Earthquake and Baroque Rebirth
+      <div class="capture-meta">
+        <span>10 facts · 5 wonderings · 62%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">5 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Key Facts</h4>
+      <ul class="fact-list">
+        <li>Earthquake 1693, one of largest in Italian history</li>
+        <li>Multiple cities razed in southeastern Sicily</li>
+        <li>Rebuilding produced Baroque architecture</li>
+        <li>Noto completely designed and rebuilt from scratch</li>
+        <li>Larger cities couldn't be fully replanned</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Aristotle and the Lyceum
+      <div class="capture-meta">
+        <span>9 facts · 11 wonderings · 45%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">6 ML complete</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <h4>Key Facts</h4>
+      <ul class="fact-list">
+        <li>Aristotle was a student of Plato</li>
+        <li>Connected to Macedonia; tutor to Alexander</li>
+        <li>Interested in natural sciences, transformation</li>
+        <li>Wrote about poetry and Greek drama (Poetics)</li>
+        <li>Alexander sent animal specimens back to Aristotle</li>
+        <li>The Lyceum was in Athens under Macedonian influence</li>
+      </ul>
+      <div class="quiz-display">
+        <div class="q-label">ML quizzes (26 total from 6 cards) — rich detail</div>
+        <p>Which Macedonian king did Nicomachus serve? · What did Philip II offer Aristotle as payment? · What was the 'Iliad of the casket'? · On which peninsula was Stagira located?</p>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- April 5 Voice Captures -->
+<div class="capture-group">
+  <div class="capture-group-title">April 5, 2026 — Voice Captures (podcasts) + 1 elicitation</div>
+
+  <details>
+    <summary>
+      Constantinople as a World City <span class="meta">(elicitation)</span>
+      <div class="capture-meta">
+        <span>9 facts · 4 wonderings · 80%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge partial">3 ML + 2 failed</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p>High coverage (80%) but no quiz. Excellent recall of strategic location, walls, harbor chains, 1204 sack, Ottoman conquest, Renaissance impact.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Frederick II Podcast (Barbero) <span class="meta">(voice capture)</span>
+      <div class="capture-meta">
+        <span>49 facts · 18 wonderings · 7 nodes</span>
+        <span class="badge partial">KI created, 0 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p><strong>Your richest single capture.</strong> 49 facts across 7 curriculum nodes: Frederick as Stupor Mundi, Islamic transmission, Palermo, Sicilian origins, Mafia origins. Knowledge_items were created and questions generated per node.</p>
+      <p style="color:var(--rubric)"><strong>Bug:</strong> 0 microlearning cards created because <code>sync=True</code> mode skips ML creation. 18 wonderings lost.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Arab Conquest of Sicily Podcast <span class="meta">(voice capture × 3 duplicates)</span>
+      <div class="capture-meta">
+        <span>30–34 facts each · 8–12 wonderings</span>
+        <span class="badge partial">KI created, 5 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p>Same transcript processed 3 times against different curriculum domains (sicily, byzantine, roman_republic). Created knowledge_items and some ML cards. Rich detail on the Arab invasion, Palermo's growth, Norman conquest.</p>
+      <p style="color:var(--warning)">Some facts mapped to wrong nodes (e.g., Sicily facts → rm_punic_wars, rm_tacitus).</p>
+    </div>
+  </details>
+</div>
+
+<!-- April 3–4 Elicitations -->
+<div class="capture-group">
+  <div class="capture-group-title">April 3–4, 2026 — Earlier Elicitations (13 captures)</div>
+
+  <details>
+    <summary>
+      480 BC: Salamis and Himera — Two Fronts
+      <div class="capture-meta">
+        <span>17 facts · 8 wonderings · 62%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">3 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p>Rich recall: Gelon, Carthaginians at Himera, Salamis against Persia, simultaneous battles, Greek naval victory. LLM noted you attributed Themistocles' strategy to Pericles (wrong tag).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Constantine and the Founding of Constantinople
+      <div class="capture-meta">
+        <span>8 facts · 8 wonderings · 62%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">3 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p>Good recall of Tetrarchy, strategic location, grain dole, defensibility. Missed specific dates (330 AD) and "New Rome" concept.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Al-Andalus: Islamic Iberia
+      <div class="capture-meta">
+        <span>8 facts · 5 wonderings · 55%</span>
+        <span class="badge no-quiz">No SR Quiz</span>
+        <span class="badge has-quiz">3 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <p>Date imprecise (said ~770, actual 711). Knew Granada, Córdoba, Reconquista 1492. LLM noted Córdoba as preeminent center (not just Granada).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Frederick II Stupor Mundi
+      <div class="capture-meta">
+        <span>7 facts · 4 wonderings · 35%</span>
+        <span class="badge has-quiz">Has SR Quiz</span>
+        <span class="badge has-quiz">3 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="quiz-display">
+        <div class="q-label">SR Quiz</div>
+        <p>How did Frederick II win Jerusalem during his Crusade?</p>
+      </div>
+      <p class="meta">One of the few elicitation nodes that HAS a quiz — because a knowledge_item already existed from book reading.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      Aragonese and Spanish Rule
+      <div class="capture-meta">
+        <span>15 facts · 7 wonderings · 62%</span>
+        <span class="badge partial">SR Quiz (covers 2/15)</span>
+        <span class="badge has-quiz">3 ML</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <div class="quiz-display">
+        <div class="q-label">SR Quiz</div>
+        <p>When were Sicily's Jews expelled, and why?</p>
+      </div>
+      <p>15 facts stated (Vespers, Aragon, Spanish Inquisition, feudal aristocracy, etc.) but the quiz only asks about Jewish expulsion — 13 facts uncovered.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>
+      The Roman Senate · Arabian Peninsula · Polyglot Kingdom · Western Greeks · Anti-Christ of Palermo · Etruscans · Siege of Syracuse · Archimedes
+      <div class="capture-meta">
+        <span>8 more captures</span>
+      </div>
+    </summary>
+    <div class="capture-detail">
+      <table class="reco">
+        <tr><th>Capture</th><th>Facts</th><th>Coverage</th><th>SR Quiz?</th></tr>
+        <tr><td>Roman Senate</td><td>7</td><td>35%</td><td>Yes (covers 2/7)</td></tr>
+        <tr><td>Arabian Peninsula</td><td>6</td><td>25%</td><td>Yes (covers 4/6)</td></tr>
+        <tr><td>Polyglot Kingdom</td><td>5</td><td>45%</td><td>No</td></tr>
+        <tr><td>Western Greeks</td><td>4</td><td>40%</td><td>Yes (covers 1/4)</td></tr>
+        <tr><td>Anti-Christ of Palermo</td><td>8</td><td>60%</td><td>No</td></tr>
+        <tr><td>Etruscans</td><td>2</td><td>20%</td><td>Yes (covers 1/2)</td></tr>
+        <tr><td>Siege of Syracuse</td><td>6</td><td>55%</td><td>Yes (covers 0/6!)</td></tr>
+        <tr><td>Archimedes</td><td>7</td><td>55%</td><td>Yes (covers 1/7)</td></tr>
+      </table>
+      <p class="meta">Even when SR quizzes exist, they typically cover only 1–2 of the stated facts because there's one question per node.</p>
+    </div>
+  </details>
+</div>
+
+
+<!-- ════════════════════════════════════════════ -->
+<h2>VIII. Recommendation Summary</h2>
+
+<table class="reco">
+  <tr><th>Change</th><th>What</th><th>Impact</th><th>Effort</th></tr>
+  <tr>
+    <td style="color:var(--rubric)">A</td>
+    <td>Fix <code>sync=True</code> dropping ML cards in voice capture</td>
+    <td>Recovers 18 wonderings from Frederick II podcast + future reprocessed captures</td>
+    <td>Small</td>
+  </tr>
+  <tr>
+    <td style="color:var(--rubric)">B</td>
+    <td>Create knowledge_items from elicitation captured facts (for nodes without existing items)</td>
+    <td>~232 facts gain quiz path. FSRS Easy → 28d means no review burden for known facts</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td style="color:var(--rubric)">C</td>
+    <td>Wire up <code>confidence_tagged</code> "wrong" facts to correction quizzes</td>
+    <td>Targets misconceptions (409 BC conflation, "planned" Vespers, Stoicism dating)</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td style="color:var(--warning)">D</td>
+    <td>Stop or deprioritize ML cards from missed facts in elicitation</td>
+    <td>Removes "quiz on things you haven't read about" from HIGH-priority review</td>
+    <td>Small</td>
+  </tr>
+  <tr>
+    <td style="color:var(--info)">E</td>
+    <td>Reprocess 31 stuck pending ML cards</td>
+    <td>Recovers quizzes for patron-client, Vespers, sculpture, classical learning</td>
+    <td>Small</td>
+  </tr>
+</table>
+
+<div class="section-marker">✦</div>
+
+<p style="text-align:center;color:var(--text-muted);font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:14px;margin-top:8px">
+  Analysis complete. The system captures knowledge faithfully — it just needs<br>to close the loop between extraction and review.
+</p>
+
+</body>
+</html>
