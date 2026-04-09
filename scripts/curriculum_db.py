@@ -210,12 +210,13 @@ def update_knowledge(domain_id: str, node_id: str,
         if existing:
             # Knowledge level only upgrades, never downgrades
             KNOWLEDGE_ORDER = {'unknown': 0, 'mentioned': 1, 'engaged': 2, 'anchored': 3}
+            old_knowledge = existing['knowledge']
             if knowledge:
                 new_level = KNOWLEDGE_ORDER.get(knowledge, 0)
-                old_level = KNOWLEDGE_ORDER.get(existing['knowledge'], 0)
-                cur_knowledge = knowledge if new_level >= old_level else existing['knowledge']
+                old_level = KNOWLEDGE_ORDER.get(old_knowledge, 0)
+                cur_knowledge = knowledge if new_level >= old_level else old_knowledge
             else:
-                cur_knowledge = existing['knowledge']
+                cur_knowledge = old_knowledge
             cur_interest = interest or existing['interest']
             # Confidence: take the higher value
             cur_confidence = max(confidence or 0.0, existing['confidence'] or 0.0)
@@ -237,6 +238,18 @@ def update_knowledge(domain_id: str, node_id: str,
                 (cur_knowledge, cur_interest, cur_confidence, cur_layer,
                  json.dumps(sources), now, now, domain_id, node_id)
             )
+            # Log transition if knowledge level actually changed
+            if cur_knowledge != old_knowledge:
+                try:
+                    conn.execute(
+                        '''INSERT INTO knowledge_transitions
+                           (node_id, domain_id, from_level, to_level, source, source_id)
+                           VALUES (?, ?, ?, ?, ?, ?)''',
+                        (node_id, domain_id, old_knowledge, cur_knowledge,
+                         source or 'unknown', None)
+                    )
+                except Exception:
+                    pass  # table may not exist yet on older DBs
             state = {'knowledge': cur_knowledge, 'interest': cur_interest,
                      'confidence': cur_confidence, 'highest_layer': cur_layer,
                      'sources': sources, 'last_assessed': now}
@@ -253,6 +266,17 @@ def update_knowledge(domain_id: str, node_id: str,
                    VALUES (?,?,?,?,?,?,?,?,?)''',
                 (domain_id, node_id, k, i, c, layer, json.dumps(sources), now, now)
             )
+            # Log initial transition from unknown
+            if k != 'unknown':
+                try:
+                    conn.execute(
+                        '''INSERT INTO knowledge_transitions
+                           (node_id, domain_id, from_level, to_level, source, source_id)
+                           VALUES (?, ?, ?, ?, ?, ?)''',
+                        (node_id, domain_id, 'unknown', k, source or 'unknown', None)
+                    )
+                except Exception:
+                    pass
             state = {'knowledge': k, 'interest': i, 'confidence': c,
                      'highest_layer': layer, 'sources': sources, 'last_assessed': now}
 
@@ -2311,6 +2335,336 @@ def get_book_prescan(book_id: str, conn=None) -> dict:
                 'new_count': len(will_learn),
                 'missing_prereqs_count': len(missing_prerequisites),
             },
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# KNOWLEDGE GROWTH TRACKING (Tier 1 — Passive)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def backfill_knowledge_transitions(conn=None) -> int:
+    """Seed knowledge_transitions from existing knowledge_states.
+
+    Only runs if the table is empty (first time). Uses last_assessed timestamps
+    so the growth chart reflects when knowledge was actually acquired.
+    Returns number of transitions inserted.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        existing = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_transitions'
+        ).fetchone()[0]
+        if existing > 0:
+            return 0
+
+        rows = conn.execute(
+            "SELECT domain_id, node_id, knowledge, last_assessed, source_summary "
+            "FROM knowledge_states WHERE knowledge != 'unknown'"
+        ).fetchall()
+
+        count = 0
+        KNOWLEDGE_ORDER = {'unknown': 0, 'mentioned': 1, 'engaged': 2, 'anchored': 3}
+        for row in rows:
+            ts = row['last_assessed']
+            # Convert ISO timestamp to unix epoch
+            try:
+                if ts:
+                    dt = datetime.fromisoformat(ts)
+                    epoch = int(dt.timestamp())
+                else:
+                    epoch = int(time.time())
+            except (ValueError, TypeError):
+                epoch = int(time.time())
+
+            sources = row['source_summary']
+            if isinstance(sources, str):
+                try:
+                    sources = json.loads(sources)
+                except (json.JSONDecodeError, TypeError):
+                    sources = []
+            source_name = sources[0] if sources else 'backfill'
+
+            level = row['knowledge']
+            level_idx = KNOWLEDGE_ORDER.get(level, 0)
+
+            # Create transitions for each step: unknown→mentioned→engaged→anchored
+            levels = ['unknown', 'mentioned', 'engaged', 'anchored']
+            for i in range(1, level_idx + 1):
+                conn.execute(
+                    '''INSERT INTO knowledge_transitions
+                       (node_id, domain_id, from_level, to_level, source, source_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                    (row['node_id'], row['domain_id'], levels[i - 1], levels[i],
+                     source_name, None, epoch)
+                )
+                count += 1
+
+        if own:
+            conn.commit()
+        return count
+    finally:
+        if own:
+            conn.close()
+
+
+def compute_network_metrics(domain_id: str, conn=None) -> dict:
+    """Compute learner vs expert network similarity for a domain.
+
+    Returns node_coverage, edge_overlap (Goldsmith C metric), density,
+    and raw counts. Uses curriculum prerequisite edges as the expert graph.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        curriculum = load_curriculum(domain_id, conn=conn)
+        if not curriculum:
+            return {}
+
+        states = {}
+        for r in conn.execute(
+            "SELECT node_id, knowledge FROM knowledge_states WHERE domain_id = ?",
+            (domain_id,)
+        ).fetchall():
+            states[r['node_id']] = r['knowledge']
+
+        nodes = curriculum.get('nodes', [])
+        nodes_total = len(nodes)
+        nodes_known = 0
+        expert_edges = set()
+        learner_edges = set()
+
+        for node in nodes:
+            nid = node['id']
+            known = states.get(nid, 'unknown') != 'unknown'
+            if known:
+                nodes_known += 1
+            for prereq in node.get('prerequisites', []):
+                expert_edges.add((prereq, nid))
+                if known and states.get(prereq, 'unknown') != 'unknown':
+                    learner_edges.add((prereq, nid))
+
+        edges_total = len(expert_edges)
+        edges_known = len(learner_edges)
+        edge_overlap = edges_known / edges_total if edges_total > 0 else 0.0
+        node_coverage = nodes_known / nodes_total if nodes_total > 0 else 0.0
+
+        # Density: actual edges between known nodes / possible edges
+        if nodes_known > 1:
+            possible = nodes_known * (nodes_known - 1)
+            density = edges_known / possible if possible > 0 else 0.0
+        else:
+            density = 0.0
+
+        return {
+            'domain_id': domain_id,
+            'node_coverage': round(node_coverage, 4),
+            'edge_overlap': round(edge_overlap, 4),
+            'density': round(density, 4),
+            'nodes_known': nodes_known,
+            'nodes_total': nodes_total,
+            'edges_known': edges_known,
+            'edges_total': edges_total,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def snapshot_network_metrics(conn=None) -> list[dict]:
+    """Compute and store network metrics for all domains. Returns the metrics."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        results = []
+        for meta in list_curricula(conn=conn):
+            domain_id = meta['id']
+            metrics = compute_network_metrics(domain_id, conn=conn)
+            if not metrics:
+                continue
+            conn.execute(
+                '''INSERT INTO network_metrics_log
+                   (domain_id, node_coverage, edge_overlap, density,
+                    nodes_known, nodes_total, edges_known, edges_total)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (domain_id, metrics['node_coverage'], metrics['edge_overlap'],
+                 metrics['density'], metrics['nodes_known'], metrics['nodes_total'],
+                 metrics['edges_known'], metrics['edges_total'])
+            )
+            results.append(metrics)
+        if own:
+            conn.commit()
+        return results
+    finally:
+        if own:
+            conn.close()
+
+
+def get_knowledge_growth_data(conn=None) -> dict:
+    """Build all data for the knowledge growth visualization page.
+
+    Returns:
+        - transitions: cumulative node counts at each level over time per domain
+        - network_metrics: time series of edge_overlap, node_coverage, density per domain
+        - review_performance: weekly score distributions
+        - stability_trends: average stability per domain over time
+        - current: live-computed current metrics per domain
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        # ── Backfill transitions if needed (first call after deploy) ──
+        try:
+            count = conn.execute('SELECT COUNT(*) FROM knowledge_transitions').fetchone()[0]
+            if count == 0:
+                # Need write access for backfill
+                wconn = get_connection()
+                try:
+                    backfill_knowledge_transitions(conn=wconn)
+                finally:
+                    wconn.close()
+                # Re-read
+                conn = get_connection(readonly=True)
+        except Exception:
+            pass
+
+        # ── 1. Knowledge transitions timeline ──
+        transitions = []
+        try:
+            rows = conn.execute(
+                '''SELECT domain_id, to_level, created_at
+                   FROM knowledge_transitions
+                   ORDER BY created_at ASC'''
+            ).fetchall()
+            transitions = [
+                {'domain_id': r['domain_id'], 'to_level': r['to_level'],
+                 'created_at': r['created_at']}
+                for r in rows
+            ]
+        except Exception:
+            pass
+
+        # ── 2. Network metrics history ──
+        network_history = []
+        try:
+            rows = conn.execute(
+                '''SELECT domain_id, node_coverage, edge_overlap, density,
+                          nodes_known, nodes_total, edges_known, edges_total, computed_at
+                   FROM network_metrics_log
+                   ORDER BY computed_at ASC'''
+            ).fetchall()
+            network_history = [dict(r) for r in rows]
+        except Exception:
+            pass
+
+        # ── 3. Review performance (weekly score distributions) ──
+        review_performance = []
+        try:
+            # Use interaction_log for grading events (post-session-60 data)
+            rows = conn.execute(
+                """SELECT
+                    CAST(strftime('%s', created_at) AS INTEGER) / 604800 * 604800 as week_start,
+                    score,
+                    COUNT(*) as cnt
+                FROM interaction_log
+                WHERE event IN ('grade_review', 'grade_ml', 'grade_quiz')
+                    AND score IS NOT NULL
+                GROUP BY week_start, score
+                ORDER BY week_start ASC"""
+            ).fetchall()
+            review_performance = [
+                {'week_start': r[0], 'score': r[1], 'count': r[2]}
+                for r in rows
+            ]
+        except Exception:
+            pass
+
+        # Fallback: use knowledge_items last_score if no interaction_log data
+        if not review_performance:
+            try:
+                rows = conn.execute(
+                    """SELECT
+                        last_reviewed_at / 604800000 * 604800 as week_start,
+                        last_score,
+                        COUNT(*) as cnt
+                    FROM knowledge_items
+                    WHERE last_score IS NOT NULL AND last_reviewed_at IS NOT NULL
+                    GROUP BY week_start, last_score
+                    ORDER BY week_start ASC"""
+                ).fetchall()
+                review_performance = [
+                    {'week_start': r[0], 'score': r[1], 'count': r[2]}
+                    for r in rows
+                ]
+            except Exception:
+                pass
+
+        # ── 4. Stability trends per domain ──
+        stability_trends = []
+        try:
+            rows = conn.execute(
+                """SELECT ki.curriculum_domain,
+                    ki.last_reviewed_at / 604800000 * 604800 as week_start,
+                    AVG(ki.stability_days) as avg_stability,
+                    COUNT(*) as item_count
+                FROM knowledge_items ki
+                WHERE ki.last_reviewed_at IS NOT NULL AND ki.stability_days > 0
+                GROUP BY ki.curriculum_domain, week_start
+                ORDER BY week_start ASC"""
+            ).fetchall()
+            stability_trends = [
+                {'domain_id': r[0], 'week_start': r[1],
+                 'avg_stability': round(r[2], 2), 'item_count': r[3]}
+                for r in rows
+            ]
+        except Exception:
+            pass
+
+        # ── 5. Current metrics (live-computed) ──
+        current = []
+        for meta in list_curricula(conn=conn):
+            domain_id = meta['id']
+            metrics = compute_network_metrics(domain_id, conn=conn)
+            if metrics:
+                metrics['title'] = meta['title']
+                # Add knowledge distribution
+                dist = {'unknown': 0, 'mentioned': 0, 'engaged': 0, 'anchored': 0}
+                try:
+                    nodes = conn.execute(
+                        '''SELECT cn.id, COALESCE(ks.knowledge, 'unknown') as knowledge
+                           FROM curriculum_nodes cn
+                           LEFT JOIN knowledge_states ks
+                               ON cn.id = ks.node_id AND cn.domain_id = ks.domain_id
+                           WHERE cn.domain_id = ?''',
+                        (domain_id,)
+                    ).fetchall()
+                    for n in nodes:
+                        dist[n['knowledge']] = dist.get(n['knowledge'], 0) + 1
+                except Exception:
+                    pass
+                metrics['distribution'] = dist
+                current.append(metrics)
+
+        # ── 6. Domain metadata for labels ──
+        domains = {}
+        for meta in list_curricula(conn=conn):
+            domains[meta['id']] = meta['title']
+
+        return {
+            'transitions': transitions,
+            'network_history': network_history,
+            'review_performance': review_performance,
+            'stability_trends': stability_trends,
+            'current': current,
+            'domains': domains,
         }
     finally:
         if own:

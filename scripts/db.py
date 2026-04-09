@@ -573,6 +573,38 @@ CREATE TABLE IF NOT EXISTS chunk_entity_links (
     PRIMARY KEY (chunk_id, entity_name)
 );
 CREATE INDEX IF NOT EXISTS idx_cel_entity ON chunk_entity_links(entity_name);
+
+-- ===== Knowledge Growth Tracking =====
+
+-- Knowledge transitions: event log of every level change
+CREATE TABLE IF NOT EXISTS knowledge_transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id TEXT NOT NULL,
+    domain_id TEXT NOT NULL,
+    from_level TEXT NOT NULL,
+    to_level TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'unknown',
+    source_id TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_kt_domain ON knowledge_transitions(domain_id);
+CREATE INDEX IF NOT EXISTS idx_kt_created ON knowledge_transitions(created_at);
+
+-- Network metrics log: periodic snapshots of graph-level metrics per domain
+CREATE TABLE IF NOT EXISTS network_metrics_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id TEXT NOT NULL,
+    node_coverage REAL NOT NULL,
+    edge_overlap REAL NOT NULL,
+    density REAL NOT NULL,
+    nodes_known INTEGER NOT NULL,
+    nodes_total INTEGER NOT NULL,
+    edges_known INTEGER NOT NULL DEFAULT 0,
+    edges_total INTEGER NOT NULL DEFAULT 0,
+    computed_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_nml_domain ON network_metrics_log(domain_id);
+CREATE INDEX IF NOT EXISTS idx_nml_computed ON network_metrics_log(computed_at);
 """
 
 MIGRATIONS = [

@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Growth — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --ink-light: #1a1a18;
+  --rubric: #8b2500;
+  --text-body: #333;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --gold: #c9a84c;
+  --success: #2a7a4a;
+  --info: #2a4a6a;
+
+  --k-unknown: #d5d0c6;
+  --k-mentioned: #d4b96a;
+  --k-engaged: #c9a84c;
+  --k-anchored: #8b2500;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 24px 80px;
+}
+
+header {
+  margin-bottom: 28px;
+}
+h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+h1 .star { color: var(--rubric); }
+.subtitle {
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.double-rule {
+  margin-top: 12px;
+  border: none;
+  border-top: 2px solid var(--ink);
+  position: relative;
+}
+.double-rule::after {
+  content: '';
+  display: block;
+  border-top: 1px solid var(--ink);
+  margin-top: 4px;
+}
+
+/* ═══ Summary cards ═══ */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.summary-card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 14px 16px;
+}
+.summary-card .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.summary-card .value {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.summary-card .detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* ═══ Chart panels ═══ */
+.chart-panel {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.chart-panel h2 {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.chart-panel .chart-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+.chart-panel svg {
+  width: 100%;
+  display: block;
+}
+
+/* ═══ Domain bars ═══ */
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+.domain-row .name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 160px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.domain-row .bar-bg {
+  flex: 1;
+  height: 18px;
+  background: var(--parchment-dark);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+}
+.domain-row .bar-seg {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.domain-row .pct {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 44px;
+  text-align: right;
+}
+
+/* ═══ Legend ═══ */
+.legend {
+  display: flex;
+  gap: 16px;
+  margin: 8px 0 4px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.legend-item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+}
+
+/* ═══ D3 chart styles ═══ */
+.axis text {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  fill: var(--text-muted);
+}
+.axis line, .axis path {
+  stroke: var(--rule);
+}
+.grid line {
+  stroke: var(--rule);
+  stroke-opacity: 0.5;
+}
+.grid path { stroke: none; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-body);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  z-index: 10;
+  max-width: 240px;
+}
+
+.section-head {
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--rubric);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 32px 0 14px;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <h1><span class="star">&#10022;</span> Knowledge Growth</h1>
+    <div class="subtitle">Longitudinal tracking of your learning journey</div>
+    <div class="double-rule"></div>
+  </header>
+
+  <div id="content"><div class="loading">Loading growth data...</div></div>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+const LEVEL_COLORS = {
+  unknown:   '#d5d0c6',
+  mentioned: '#d4b96a',
+  engaged:   '#c9a84c',
+  anchored:  '#8b2500',
+};
+
+const SCORE_COLORS = {
+  knew:   '#2a7a4a',
+  partly: '#c9a84c',
+  missed: '#8b2500',
+};
+
+// Short readable domain names
+function shortDomain(title) {
+  if (!title) return '?';
+  return title.replace(/:.*/,'').trim();
+}
+
+const tooltip = d3.select('#tooltip');
+
+function showTip(evt, html) {
+  tooltip.style('display', 'block')
+    .html(html)
+    .style('left', (evt.pageX + 12) + 'px')
+    .style('top', (evt.pageY - 10) + 'px');
+}
+function hideTip() { tooltip.style('display', 'none'); }
+
+// ─── Main ───────────────────────────────────────────────────────────
+
+async function load() {
+  const resp = await fetch('/knowledge/growth-data');
+  if (!resp.ok) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty-state">Failed to load growth data.</div>';
+    return;
+  }
+  const data = await resp.json();
+  render(data);
+}
+
+function render(data) {
+  const el = document.getElementById('content');
+  el.innerHTML = '';
+
+  // ── Summary cards ──
+  renderSummary(el, data);
+
+  // ── Current state: domain bars ──
+  renderDomainBars(el, data);
+
+  // ── Coverage timeline ──
+  if (data.transitions.length > 0) {
+    renderCoverageTimeline(el, data);
+  }
+
+  // ── Network metrics history ──
+  if (data.network_history.length > 0) {
+    renderNetworkHistory(el, data);
+  }
+
+  // ── Review performance ──
+  if (data.review_performance.length > 0) {
+    renderReviewPerformance(el, data);
+  }
+
+  // ── Stability trends ──
+  if (data.stability_trends.length > 0) {
+    renderStabilityTrends(el, data);
+  }
+
+  // Snapshot metrics on first load
+  if (data.network_history.length === 0) {
+    fetch('/knowledge/snapshot-metrics', { method: 'POST' });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Summary Cards
+// ═══════════════════════════════════════════════════════════
+
+function renderSummary(el, data) {
+  const grid = document.createElement('div');
+  grid.className = 'summary-grid';
+
+  let totalKnown = 0, totalNodes = 0;
+  let totalEdgesKnown = 0, totalEdgesTotal = 0;
+  for (const c of data.current) {
+    totalKnown += c.nodes_known;
+    totalNodes += c.nodes_total;
+    totalEdgesKnown += c.edges_known;
+    totalEdgesTotal += c.edges_total;
+  }
+
+  const cards = [
+    {
+      label: 'Nodes Known',
+      value: totalKnown,
+      detail: `of ${totalNodes} across ${data.current.length} curricula`
+    },
+    {
+      label: 'Overall Coverage',
+      value: totalNodes > 0 ? Math.round(totalKnown / totalNodes * 100) + '%' : '0%',
+      detail: 'curriculum nodes at mentioned or above'
+    },
+    {
+      label: 'Edge Overlap',
+      value: totalEdgesTotal > 0
+        ? Math.round(totalEdgesKnown / totalEdgesTotal * 100) + '%'
+        : '0%',
+      detail: `${totalEdgesKnown} of ${totalEdgesTotal} prerequisite edges`
+    },
+    {
+      label: 'Transitions Logged',
+      value: data.transitions.length,
+      detail: 'knowledge level changes tracked'
+    },
+  ];
+
+  for (const c of cards) {
+    const card = document.createElement('div');
+    card.className = 'summary-card';
+    card.innerHTML = `
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="detail">${c.detail}</div>`;
+    grid.appendChild(card);
+  }
+  el.appendChild(grid);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Domain Bars (current state)
+// ═══════════════════════════════════════════════════════════
+
+function renderDomainBars(el, data) {
+  const section = document.createElement('div');
+  section.className = 'section-head';
+  section.textContent = '\u2726 Current Knowledge State';
+  el.appendChild(section);
+
+  const panel = document.createElement('div');
+  panel.className = 'chart-panel';
+
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'legend';
+  for (const [level, color] of Object.entries(LEVEL_COLORS)) {
+    if (level === 'unknown') continue;
+    legend.innerHTML += `<div class="legend-item"><div class="swatch" style="background:${color}"></div>${level}</div>`;
+  }
+  panel.appendChild(legend);
+
+  // Sort by coverage descending
+  const sorted = [...data.current].sort((a, b) => b.node_coverage - a.node_coverage);
+
+  for (const c of sorted) {
+    const dist = c.distribution || {};
+    const total = c.nodes_total || 1;
+    const row = document.createElement('div');
+    row.className = 'domain-row';
+
+    const pctKnown = Math.round((1 - (dist.unknown || 0) / total) * 100);
+
+    row.innerHTML = `
+      <div class="name" title="${c.title || c.domain_id}">${shortDomain(c.title || c.domain_id)}</div>
+      <div class="bar-bg">
+        <div class="bar-seg" style="width:${(dist.mentioned||0)/total*100}%;background:${LEVEL_COLORS.mentioned}"></div>
+        <div class="bar-seg" style="width:${(dist.engaged||0)/total*100}%;background:${LEVEL_COLORS.engaged}"></div>
+        <div class="bar-seg" style="width:${(dist.anchored||0)/total*100}%;background:${LEVEL_COLORS.anchored}"></div>
+      </div>
+      <div class="pct">${pctKnown}%</div>`;
+    panel.appendChild(row);
+  }
+  el.appendChild(panel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Coverage Timeline (from transitions)
+// ═══════════════════════════════════════════════════════════
+
+function renderCoverageTimeline(el, data) {
+  const section = document.createElement('div');
+  section.className = 'section-head';
+  section.textContent = '\u2726 Growth Over Time';
+  el.appendChild(section);
+
+  const panel = document.createElement('div');
+  panel.className = 'chart-panel';
+  panel.innerHTML = `
+    <h2>Knowledge Coverage Timeline</h2>
+    <div class="chart-desc">Cumulative nodes known per domain, growing over time. Your empire of knowledge expands.</div>`;
+
+  const width = 840, height = 300;
+  const margin = { top: 10, right: 140, bottom: 30, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const svg = d3.select(panel).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Build cumulative counts per domain over time
+  const domainTotals = {};
+  for (const c of data.current) {
+    domainTotals[c.domain_id] = c.nodes_total;
+  }
+
+  // Group transitions by domain, compute running count
+  const byDomain = {};
+  for (const t of data.transitions) {
+    if (!byDomain[t.domain_id]) byDomain[t.domain_id] = [];
+    byDomain[t.domain_id].push(t);
+  }
+
+  const series = [];
+  const allDates = [];
+
+  for (const [domainId, transitions] of Object.entries(byDomain)) {
+    const total = domainTotals[domainId] || 1;
+    // Count unique nodes that reached at least mentioned
+    const knownNodes = new Set();
+    const points = [];
+
+    for (const t of transitions) {
+      if (t.to_level !== 'unknown') {
+        knownNodes.add(t.node_id || '');
+      }
+      const date = new Date(t.created_at * 1000);
+      allDates.push(date);
+      points.push({
+        date,
+        count: knownNodes.size,
+        pct: knownNodes.size / total,
+      });
+    }
+
+    // Deduplicate to one point per day (keep last)
+    const byDay = new Map();
+    for (const p of points) {
+      const dayKey = p.date.toISOString().slice(0, 10);
+      byDay.set(dayKey, p);
+    }
+
+    series.push({
+      domain_id: domainId,
+      title: data.domains[domainId] || domainId,
+      points: [...byDay.values()].sort((a, b) => a.date - b.date),
+    });
+  }
+
+  if (allDates.length === 0) {
+    panel.innerHTML += '<div class="empty-state">No transition data yet.</div>';
+    el.appendChild(panel);
+    return;
+  }
+
+  // Add "now" point to each series
+  const now = new Date();
+  for (const s of series) {
+    if (s.points.length > 0) {
+      const last = s.points[s.points.length - 1];
+      s.points.push({ date: now, count: last.count, pct: last.pct });
+    }
+  }
+
+  const xExtent = d3.extent(allDates.concat([now]));
+  const x = d3.scaleTime().domain(xExtent).range([0, w]);
+  const y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+  // Grid
+  g.append('g').attr('class', 'grid')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(6).tickSize(-h).tickFormat(''));
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+
+  // Axes
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%b %d')));
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => Math.round(d * 100) + '%'));
+
+  // Color scale
+  const domainIds = series.map(s => s.domain_id);
+  const colors = d3.scaleOrdinal()
+    .domain(domainIds)
+    .range(['#8b2500', '#2a4a6a', '#c9a84c', '#2a7a4a', '#7a4a8a', '#4a7a6a', '#aa6a2a']);
+
+  const line = d3.line()
+    .x(d => x(d.date))
+    .y(d => y(d.pct))
+    .curve(d3.curveStepAfter);
+
+  // Area fills
+  const area = d3.area()
+    .x(d => x(d.date))
+    .y0(h)
+    .y1(d => y(d.pct))
+    .curve(d3.curveStepAfter);
+
+  for (const s of series) {
+    g.append('path')
+      .datum(s.points)
+      .attr('d', area)
+      .attr('fill', colors(s.domain_id))
+      .attr('fill-opacity', 0.08);
+
+    g.append('path')
+      .datum(s.points)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', colors(s.domain_id))
+      .attr('stroke-width', 2);
+  }
+
+  // Labels at right edge
+  for (const s of series) {
+    if (s.points.length === 0) continue;
+    const last = s.points[s.points.length - 1];
+    g.append('text')
+      .attr('x', w + 8)
+      .attr('y', y(last.pct))
+      .attr('dy', '0.35em')
+      .attr('fill', colors(s.domain_id))
+      .attr('font-size', '10px')
+      .attr('font-family', 'DM Sans, sans-serif')
+      .text(`${shortDomain(s.title)} ${Math.round(last.pct * 100)}%`);
+  }
+
+  el.appendChild(panel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Network Metrics History
+// ═══════════════════════════════════════════════════════════
+
+function renderNetworkHistory(el, data) {
+  const panel = document.createElement('div');
+  panel.className = 'chart-panel';
+  panel.innerHTML = `
+    <h2>Edge Overlap Trajectory</h2>
+    <div class="chart-desc">The Goldsmith C metric — prerequisite edges where you know both endpoints. The primary structural growth signal.</div>`;
+
+  const width = 840, height = 260;
+  const margin = { top: 10, right: 140, bottom: 30, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const svg = d3.select(panel).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Group by domain
+  const byDomain = d3.group(data.network_history, d => d.domain_id);
+  const domainIds = [...byDomain.keys()];
+  const colors = d3.scaleOrdinal()
+    .domain(domainIds)
+    .range(['#8b2500', '#2a4a6a', '#c9a84c', '#2a7a4a', '#7a4a8a', '#4a7a6a', '#aa6a2a']);
+
+  const allDates = data.network_history.map(d => new Date(d.computed_at * 1000));
+  const x = d3.scaleTime().domain(d3.extent(allDates)).range([0, w]);
+  const y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%b %d')));
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => Math.round(d * 100) + '%'));
+
+  const line = d3.line()
+    .x(d => x(new Date(d.computed_at * 1000)))
+    .y(d => y(d.edge_overlap));
+
+  for (const [domainId, points] of byDomain) {
+    g.append('path')
+      .datum(points)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', colors(domainId))
+      .attr('stroke-width', 2);
+
+    // Dots
+    g.selectAll(null).data(points).enter().append('circle')
+      .attr('cx', d => x(new Date(d.computed_at * 1000)))
+      .attr('cy', d => y(d.edge_overlap))
+      .attr('r', 3)
+      .attr('fill', colors(domainId))
+      .on('mouseenter', (evt, d) => {
+        showTip(evt, `<strong>${shortDomain(data.domains[d.domain_id])}</strong><br>
+          Edge overlap: ${Math.round(d.edge_overlap * 100)}%<br>
+          Coverage: ${Math.round(d.node_coverage * 100)}%<br>
+          ${d.nodes_known}/${d.nodes_total} nodes`);
+      })
+      .on('mouseleave', hideTip);
+
+    // Label
+    if (points.length > 0) {
+      const last = points[points.length - 1];
+      g.append('text')
+        .attr('x', w + 8)
+        .attr('y', y(last.edge_overlap))
+        .attr('dy', '0.35em')
+        .attr('fill', colors(domainId))
+        .attr('font-size', '10px')
+        .attr('font-family', 'DM Sans, sans-serif')
+        .text(shortDomain(data.domains[domainId] || domainId));
+    }
+  }
+
+  el.appendChild(panel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Review Performance (weekly score distribution)
+// ═══════════════════════════════════════════════════════════
+
+function renderReviewPerformance(el, data) {
+  const section = document.createElement('div');
+  section.className = 'section-head';
+  section.textContent = '\u2726 Review Performance';
+  el.appendChild(section);
+
+  const panel = document.createElement('div');
+  panel.className = 'chart-panel';
+  panel.innerHTML = `
+    <h2>Weekly Score Distribution</h2>
+    <div class="chart-desc">How well you're doing on reviews — the ratio of knew/partly/missed each week.</div>`;
+
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'legend';
+  for (const [score, color] of Object.entries(SCORE_COLORS)) {
+    legend.innerHTML += `<div class="legend-item"><div class="swatch" style="background:${color}"></div>${score}</div>`;
+  }
+  panel.appendChild(legend);
+
+  const width = 840, height = 220;
+  const margin = { top: 10, right: 20, bottom: 30, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const svg = d3.select(panel).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Group by week, compute percentages
+  const byWeek = d3.group(data.review_performance, d => d.week_start);
+  const weeks = [...byWeek.keys()].sort((a, b) => a - b);
+
+  const stackData = weeks.map(weekStart => {
+    const entries = byWeek.get(weekStart);
+    const total = d3.sum(entries, e => e.count);
+    const counts = { knew: 0, partly: 0, missed: 0 };
+    for (const e of entries) {
+      if (counts.hasOwnProperty(e.score)) counts[e.score] = e.count;
+    }
+    return {
+      date: new Date(weekStart * 1000),
+      total,
+      knew: counts.knew / total,
+      partly: counts.partly / total,
+      missed: counts.missed / total,
+    };
+  });
+
+  if (stackData.length === 0) {
+    panel.innerHTML += '<div class="empty-state">No review data yet.</div>';
+    el.appendChild(panel);
+    return;
+  }
+
+  const x = d3.scaleBand()
+    .domain(stackData.map(d => d.date.toISOString()))
+    .range([0, w])
+    .padding(0.2);
+
+  const y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x)
+      .tickFormat(d => d3.timeFormat('%b %d')(new Date(d)))
+      .tickValues(x.domain().filter((_, i) => i % Math.max(1, Math.floor(stackData.length / 8)) === 0)));
+
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => Math.round(d * 100) + '%'));
+
+  // Stacked bars
+  const scores = ['knew', 'partly', 'missed'];
+  for (const d of stackData) {
+    let y0 = 0;
+    for (const score of scores) {
+      const val = d[score];
+      g.append('rect')
+        .attr('x', x(d.date.toISOString()))
+        .attr('y', y(y0 + val))
+        .attr('width', x.bandwidth())
+        .attr('height', y(y0) - y(y0 + val))
+        .attr('fill', SCORE_COLORS[score])
+        .attr('fill-opacity', 0.85)
+        .on('mouseenter', (evt) => {
+          showTip(evt, `<strong>${d3.timeFormat('%b %d')(d.date)}</strong><br>
+            ${d.total} reviews<br>
+            Knew: ${Math.round(d.knew * 100)}%<br>
+            Partly: ${Math.round(d.partly * 100)}%<br>
+            Missed: ${Math.round(d.missed * 100)}%`);
+        })
+        .on('mouseleave', hideTip);
+      y0 += val;
+    }
+  }
+
+  el.appendChild(panel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Stability Trends
+// ═══════════════════════════════════════════════════════════
+
+function renderStabilityTrends(el, data) {
+  const panel = document.createElement('div');
+  panel.className = 'chart-panel';
+  panel.innerHTML = `
+    <h2>Average Stability Growth</h2>
+    <div class="chart-desc">Rising stability means items are getting easier to retain — concrete evidence the system is working.</div>`;
+
+  const width = 840, height = 240;
+  const margin = { top: 10, right: 140, bottom: 30, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const svg = d3.select(panel).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const byDomain = d3.group(data.stability_trends, d => d.domain_id);
+  const domainIds = [...byDomain.keys()];
+  const colors = d3.scaleOrdinal()
+    .domain(domainIds)
+    .range(['#8b2500', '#2a4a6a', '#c9a84c', '#2a7a4a', '#7a4a8a', '#4a7a6a', '#aa6a2a']);
+
+  const allDates = data.stability_trends.map(d => new Date(d.week_start * 1000));
+  const maxStab = d3.max(data.stability_trends, d => d.avg_stability) || 30;
+
+  const x = d3.scaleTime().domain(d3.extent(allDates)).range([0, w]);
+  const y = d3.scaleLinear().domain([0, Math.min(maxStab * 1.2, 90)]).range([h, 0]);
+
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%b %d')));
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => d + 'd'));
+
+  const line = d3.line()
+    .x(d => x(new Date(d.week_start * 1000)))
+    .y(d => y(d.avg_stability))
+    .curve(d3.curveMonotoneX);
+
+  for (const [domainId, points] of byDomain) {
+    g.append('path')
+      .datum(points)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', colors(domainId))
+      .attr('stroke-width', 2);
+
+    g.selectAll(null).data(points).enter().append('circle')
+      .attr('cx', d => x(new Date(d.week_start * 1000)))
+      .attr('cy', d => y(d.avg_stability))
+      .attr('r', 3)
+      .attr('fill', colors(domainId))
+      .on('mouseenter', (evt, d) => {
+        showTip(evt, `<strong>${shortDomain(data.domains[d.domain_id])}</strong><br>
+          Avg stability: ${d.avg_stability} days<br>
+          ${d.item_count} items reviewed`);
+      })
+      .on('mouseleave', hideTip);
+
+    if (points.length > 0) {
+      const last = points[points.length - 1];
+      g.append('text')
+        .attr('x', w + 8)
+        .attr('y', y(last.avg_stability))
+        .attr('dy', '0.35em')
+        .attr('fill', colors(domainId))
+        .attr('font-size', '10px')
+        .attr('font-family', 'DM Sans, sans-serif')
+        .text(`${shortDomain(data.domains[domainId])} ${last.avg_stability}d`);
+    }
+  }
+
+  el.appendChild(panel);
+}
+
+// ─── Boot ───
+
+load();
+</script>
+</body>
+</html>

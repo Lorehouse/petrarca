@@ -6010,6 +6010,17 @@ JSON array only:"""
             return self._handle_knowledge_import_assessment()
         if self.path.startswith('/knowledge/profile/regenerate/'):
             return self._handle_knowledge_profile_regenerate()
+        if self.path == '/knowledge/snapshot-metrics':
+            try:
+                from curriculum_db import snapshot_network_metrics
+            except ImportError:
+                return self._send_json_response(501, {'error': 'not implemented'})
+            conn = get_connection()
+            try:
+                results = snapshot_network_metrics(conn=conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, {'snapshots': results, 'count': len(results)})
 
         # Client interaction logging (replaces broken log_server.py:8091)
         if self.path == '/log/events':
@@ -6644,6 +6655,19 @@ JSON array only:"""
             return self._handle_dashboard_stats()
         if self.path == '/research/elicitation-analysis':
             return self._serve_html_file('knowledge_elicitation_analysis.html')
+        if self.path == '/knowledge/growth':
+            return self._serve_html_file('knowledge_growth.html')
+        if self.path == '/knowledge/growth-data':
+            try:
+                from curriculum_db import get_knowledge_growth_data
+            except ImportError:
+                return self._send_json_response(501, {'error': 'not implemented'})
+            conn = get_connection(readonly=True)
+            try:
+                data = get_knowledge_growth_data(conn=conn)
+            finally:
+                conn.close()
+            return self._send_json_response(200, data)
         if self.path == '/knowledge/atlas':
             return self._serve_html_file('knowledge_atlas.html')
         if self.path == '/knowledge/atlas-data':
