@@ -2525,14 +2525,12 @@ def get_knowledge_growth_data(conn=None) -> dict:
         try:
             count = conn.execute('SELECT COUNT(*) FROM knowledge_transitions').fetchone()[0]
             if count == 0:
-                # Need write access for backfill
+                # Need write access for backfill — use separate connection
                 wconn = get_connection()
                 try:
                     backfill_knowledge_transitions(conn=wconn)
                 finally:
                     wconn.close()
-                # Re-read
-                conn = get_connection(readonly=True)
         except Exception:
             pass
 
