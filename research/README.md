@@ -21,6 +21,7 @@ Master index of all research documents. **Always update this file when adding ne
 - **Synthesis**: [synthesis-pipeline-design.md](synthesis-pipeline-design.md), [synthesis-knowledge-tracking.md](synthesis-knowledge-tracking.md)
 - **Books**: [book-companion-handoff.md](book-companion-handoff.md), [book-companion-experiments.md](book-companion-experiments.md)
 - **Knowledge mapping**: [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md), [curriculum-system-audit.md](curriculum-system-audit.md), [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md)
+- **Growth measurement**: [knowledge-growth-measurement-proposal.html](knowledge-growth-measurement-proposal.html)
 - **Calibration/thresholds**: [experiment-results-report.md](experiment-results-report.md), `scripts/ground-truth/`
 - **UX**: [ux-redesign-spec.md](ux-redesign-spec.md), [web-app-audit.md](web-app-audit.md), [mobile-app-audit.md](mobile-app-audit.md)
 - **Agent architecture**: [autonomous-agent-frameworks-2025-2026.md](autonomous-agent-frameworks-2025-2026.md), [always-on-agent-cost-comparison.md](always-on-agent-cost-comparison.md)
@@ -31,7 +32,7 @@ Master index of all research documents. **Always update this file when adding ne
 | Document | Description | Status |
 |----------|-------------|--------|
 | [implementation-status.md](implementation-status.md) | **CURRENT STATE** — System snapshot: architecture, screens, scripts, endpoints, algorithms, deployment | Active |
-| [session-changelog.md](session-changelog.md) | **HISTORY** — Session-by-session implementation log (sessions 20-44) | Active |
+| [session-changelog.md](session-changelog.md) | **HISTORY** — Session-by-session implementation log (sessions 20-62) | Active |
 | [system-state-of-the-art.md](system-state-of-the-art.md) | **COMPREHENSIVE** — Single file covering all research, validated algorithms, data structures, UI mockups, pipeline architecture | Active |
 
 ## Foundational
@@ -95,6 +96,7 @@ Master index of all research documents. **Always update this file when adding ne
 ## Knowledge Retention
 | Document | Description | Status |
 |----------|-------------|--------|
+| [knowledge-growth-measurement-proposal.html](knowledge-growth-measurement-proposal.html) | **GROWTH MEASUREMENT**: Three-tier proposal synthesized from 7 research docs. Tier 1 (passive tracking — implemented session 62): knowledge_transitions table, Goldsmith edge overlap metric, D3 growth viz at `/knowledge/growth`. Tier 2 (voice sweeps): monthly free recall scored against curriculum. Tier 3 (type-differentiated scheduling): FTT verbatim/gist decay rates. Literature: Pathfinder networks (r=.74), Fuzzy-Trace Theory, SNAFU, Karpicke testing effect. | Active |
 | [review-system-architecture.md](review-system-architecture.md) | **CRITICAL DESIGN DOC**: Deep analysis of the KRI review system — fundamental flaw (node×chapter vs node-centric), data model redesign, multi-book/multi-curriculum workflow, coverage measurement, 4-phase implementation roadmap. Written after first end-to-end test. | Active |
 | [review-system-hypotheses.md](review-system-hypotheses.md) | **MEASUREMENT PLAN**: 9 testable hypotheses for the KRI review system — TEMPORAL lens advantage, time-to-reveal as confidence proxy, voice memo encoding benefit, dependency cascade impact, explore-as-curiosity vs avoidance, depth ordering, stability plateau, session fatigue, temporal hook recall. Full log event schema, baseline metrics, Python analysis patterns. | Active |
 | [beyond-flashcards-knowledge-retention.md](beyond-flashcards-knowledge-retention.md) | **Deep research**: Why SRS fails for conceptual knowledge, gist vs verbatim memory decay, elaborative retrieval, connection-based resurfacing, spreading activation, analogical reminding. 7 experimental designs for Petrarca: concept encounters, evolving summaries, argument challenges, reading echoes, knowledge half-life dashboard, prompted self-explanation, concept constellation. Prioritized implementation plan. | Done |

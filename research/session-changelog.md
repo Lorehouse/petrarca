@@ -1,6 +1,40 @@
 # Knowledge System Implementation Status
 
-**Date**: April 9, 2026 (last updated — session 61: Voice quiz coverage overhaul)
+**Date**: April 9, 2026 (last updated — session 62: Passive knowledge growth tracking)
+
+## Session 62: Passive Knowledge Growth Tracking (April 9, 2026)
+
+### What
+Implemented Tier 1 (passive tracking) from `research/knowledge-growth-measurement-proposal.html` — the system now tracks knowledge growth over time without any new user interaction. All data comes from existing knowledge state changes, review scores, and curriculum prerequisite edges.
+
+### Database
+- **`knowledge_transitions`** — Event log of every knowledge level change (unknown→mentioned→engaged→anchored) with domain, node, source, timestamp. `update_knowledge()` instrumented to log transitions on every actual level change. Backfilled 313 historical transitions from existing `knowledge_states`.
+- **`network_metrics_log`** — Periodic snapshots of per-domain metrics: node_coverage, edge_overlap (Goldsmith C metric), density, raw edge/node counts. Populated via `POST /knowledge/snapshot-metrics`.
+
+### Network Metrics (Goldsmith Edge Overlap)
+- `compute_network_metrics(domain_id)` computes learner vs expert graph similarity using curriculum prerequisite edges. If a user knows both endpoints of a prerequisite edge, it counts as "active."
+- Edge overlap is the primary structural growth signal — distinguishes scattered facts (novice) from connected understanding (expert).
+- Initial metrics: Sicily 98.0% edge overlap, Rome 64.9%, Byzantium 14.6%, Greece 3.6%.
+
+### Growth Visualization (`/knowledge/growth`)
+D3.js standalone page with 4 chart panels:
+1. **Summary cards** — total known, coverage %, edge overlap %, transitions logged
+2. **Current state** — stacked domain bars (mentioned/engaged/anchored)
+3. **Coverage timeline** — cumulative nodes per domain over time (step chart)
+4. **Edge overlap trajectory** — Goldsmith C metric over snapshots with domain lines
+5. **Review performance** — weekly stacked bars (knew/partly/missed)
+6. **Stability growth** — avg FSRS stability per domain over weeks
+
+### Endpoints
+- `GET /knowledge/growth` — HTML page
+- `GET /knowledge/growth-data` — JSON: transitions, network_history, review_performance, stability_trends, current metrics
+- `POST /knowledge/snapshot-metrics` — compute + store network metrics for all domains (cron-ready)
+
+### Files Changed
+- `scripts/db.py` — `knowledge_transitions` + `network_metrics_log` tables
+- `scripts/curriculum_db.py` — instrumented `update_knowledge()`, added `backfill_knowledge_transitions()`, `compute_network_metrics()`, `snapshot_network_metrics()`, `get_knowledge_growth_data()`
+- `scripts/research-server.py` — 3 new endpoints
+- `scripts/knowledge_growth.html` — new D3.js visualization page
 
 ## Session 61: Voice Quiz Coverage Overhaul (April 9, 2026)
 

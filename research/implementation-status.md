@@ -177,6 +177,7 @@
 |------|-----|------|
 | `statistics_dashboard.html` | `/stats/dashboard` | Comprehensive statistics: today's summary, knowledge state bars per curriculum, review/quiz stats (7d/30d/all), books in progress, voice elicitation recall distribution, activity timeline. All items linked to atlas/coverage/book pages. |
 | `knowledge_atlas.html` | `/knowledge/atlas` | D3.js knowledge state visualization across curricula |
+| `knowledge_growth.html` | `/knowledge/growth` | Longitudinal growth tracking: coverage timeline per domain, edge overlap trajectory (Goldsmith C metric), weekly review performance, stability trends. D3.js charts from `knowledge_transitions` + `network_metrics_log`. |
 | `curriculum_graph.html` | `/curriculum/graph` | D3.js curriculum concept graph |
 | `curriculum_timeline.html` | `/curriculum/timeline` | D3.js historical timeline per curriculum |
 
@@ -284,11 +285,13 @@
 | GET | `/stats/dashboard-data` | Dashboard stats JSON (today summary, knowledge per curriculum, review/quiz, books, voice, timeline, knowledge_profile) |
 | GET | `/knowledge/profile/{domain_id}` | Domain knowledge portrait (cached, auto-regenerates if >24h stale) |
 | POST | `/knowledge/profile/regenerate/{domain_id}` | Force-regenerate domain portrait |
+| GET | `/knowledge/growth-data` | Growth tracking JSON: transitions, network metrics history, review performance, stability trends, current per-domain metrics |
+| POST | `/knowledge/snapshot-metrics` | Compute and store network metrics for all domains (cron-ready) |
 | GET | `/health` | Health check |
 
 ## SQLite Schema (petrarca.db)
 
-32 tables organized into 6 areas:
+34 tables organized into 7 areas:
 
 **Content pipeline**: `articles`, `article_sections`, `atomic_claims`, `claim_similarities`, `nli_verdicts`, `article_similarities`, `article_novelty_matrix`, `paragraph_claim_map`, `article_curriculum_nodes`, `delta_reports`, `concept_clusters`, `near_duplicates`, `syntheses`, `pipeline_meta`, `cluster_meta`
 
@@ -299,6 +302,8 @@
 **Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes`
 
 **Knowledge Profile**: `transcript_chunks` (embedded voice pieces), `chunk_node_links` (chunks↔nodes), `chunk_entity_links` (chunks↔entities), `domain_knowledge_summaries` (per-domain portraits)
+
+**Knowledge Growth Tracking**: `knowledge_transitions` (event log of level changes with timestamps), `network_metrics_log` (periodic snapshots of node coverage, edge overlap, density per domain)
 
 **Interaction Logging**: `interaction_log` (dual-layer with JSONL — event, item_id, score, session_id, response_ms, card_type, domain, node_title, extra)
 

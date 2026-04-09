@@ -45,6 +45,7 @@ These principles are the intellectual foundation of the project. They override i
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
 | **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
 | **Knowledge atlas** | `scripts/knowledge_atlas.html` (standalone D3 web viz), `curriculum_db.py` `get_knowledge_atlas_data()`, served at `/knowledge/atlas` |
+| **Knowledge growth** | `scripts/knowledge_growth.html` (D3 viz), `curriculum_db.py` (`compute_network_metrics`, `get_knowledge_growth_data`), `research/knowledge-growth-measurement-proposal.html` |
 | **Feed/ranking** | `research/novelty-system-architecture.md` |
 | **Deep "why"** | `research/design-vision.md` (master synthesis of all interviews + research) |
 | **Research index** | `research/README.md` (50+ docs, tiered reading guide) |
