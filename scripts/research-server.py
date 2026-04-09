@@ -6018,6 +6018,7 @@ JSON array only:"""
             conn = get_connection()
             try:
                 results = snapshot_network_metrics(conn=conn)
+                conn.commit()
             finally:
                 conn.close()
             return self._send_json_response(200, {'snapshots': results, 'count': len(results)})
