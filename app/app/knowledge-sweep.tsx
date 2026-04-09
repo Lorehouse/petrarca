@@ -17,7 +17,6 @@ type Phase =
   | 'domain_select'  // pick which domain to sweep
   | 'ready'          // show plan, ready to start
   | 'recording'      // recording an era
-  | 'transcribing'   // transcribing current era
   | 'era_done'       // era finished, show next
   | 'scoring'        // all eras done, LLM scoring
   | 'results'        // show results
@@ -42,7 +41,9 @@ export default function KnowledgeSweep() {
   const [duration, setDuration] = useState(0);
   const [result, setResult] = useState<SweepResult | null>(null);
   const [error, setError] = useState('');
+  const [transcribingCount, setTranscribingCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eraRecordingsRef = useRef<EraRecording[]>([]);
 
   useEffect(() => {
     setFeedbackContext({ screen: 'knowledge-sweep' });
@@ -68,9 +69,11 @@ export default function KnowledgeSweep() {
     try {
       const p = await getSweepPlan(domainId);
       setPlan(p);
-      setEraRecordings(p.eras.map(e => ({
-        era_id: e.era_id, transcript: '', duration_s: 0, status: 'pending',
-      })));
+      const initial = p.eras.map(e => ({
+        era_id: e.era_id, transcript: '', duration_s: 0, status: 'pending' as const,
+      }));
+      setEraRecordings(initial);
+      eraRecordingsRef.current = initial;
       setPhase('ready');
     } catch (e) {
       setError(String(e));
@@ -100,73 +103,81 @@ export default function KnowledgeSweep() {
     if (!recording) return;
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     const finalDuration = duration;
+    const eraIdx = currentEra;
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecording(null);
       if (!uri) { skipEra(); return; }
 
-      updateEraStatus(currentEra, 'transcribing');
-      setPhase('transcribing');
-
-      const era = plan!.eras[currentEra];
+      const era = plan!.eras[eraIdx];
       logEvent('sweep_era_stop', { era_id: era.era_id, duration_s: finalDuration });
 
-      const { transcript } = await transcribeSweepEra(uri, era.era_id);
-      setEraRecordings(prev => {
-        const next = [...prev];
-        next[currentEra] = {
-          ...next[currentEra],
-          transcript: transcript || '',
-          duration_s: finalDuration,
-          status: transcript ? 'done' : 'skipped',
-        };
-        return next;
+      // Fire off transcription in background — don't wait
+      updateEraStatus(eraIdx, 'transcribing');
+      setTranscribingCount(c => c + 1);
+      transcribeSweepEra(uri, era.era_id).then(({ transcript }) => {
+        setEraRecordings(prev => {
+          const next = [...prev];
+          next[eraIdx] = {
+            ...next[eraIdx],
+            transcript: transcript || '',
+            duration_s: finalDuration,
+            status: transcript ? 'done' : 'skipped',
+          };
+          eraRecordingsRef.current = next;
+          return next;
+        });
+        setTranscribingCount(c => Math.max(0, c - 1));
+      }).catch((e) => {
+        console.error(`Transcription failed for era ${eraIdx}:`, e);
+        updateEraStatus(eraIdx, 'skipped');
+        setTranscribingCount(c => Math.max(0, c - 1));
       });
 
-      if (currentEra + 1 < plan!.eras.length) {
-        setCurrentEra(currentEra + 1);
+      // Immediately advance to next era
+      if (eraIdx + 1 < plan!.eras.length) {
+        setCurrentEra(eraIdx + 1);
         setDuration(0);
         setPhase('era_done');
       } else {
-        // All eras done — submit for scoring
-        scoreAllEras(currentEra, transcript || '', finalDuration);
+        // Last era — wait for all transcriptions then score
+        setPhase('scoring');
       }
     } catch (e) {
       console.error('Era stop failed:', e);
-      // Still advance — don't block the sweep on one failed transcription
-      updateEraStatus(currentEra, 'skipped');
-      if (currentEra + 1 < plan!.eras.length) {
-        setCurrentEra(currentEra + 1);
+      updateEraStatus(eraIdx, 'skipped');
+      if (eraIdx + 1 < plan!.eras.length) {
+        setCurrentEra(eraIdx + 1);
         setDuration(0);
         setPhase('era_done');
       } else {
-        scoreAllEras(currentEra, '', finalDuration);
+        setPhase('scoring');
       }
     }
   }
 
   function skipEra() {
-    updateEraStatus(currentEra, 'skipped');
-    logEvent('sweep_era_skip', { era_id: plan?.eras[currentEra]?.era_id });
-    if (currentEra + 1 < plan!.eras.length) {
-      setCurrentEra(currentEra + 1);
+    const eraIdx = currentEra;
+    updateEraStatus(eraIdx, 'skipped');
+    logEvent('sweep_era_skip', { era_id: plan?.eras[eraIdx]?.era_id });
+    if (eraIdx + 1 < plan!.eras.length) {
+      setCurrentEra(eraIdx + 1);
       setDuration(0);
       setPhase('era_done');
     } else {
-      scoreAllEras(currentEra, '', 0);
+      setPhase('scoring');
     }
   }
 
-  async function scoreAllEras(lastIdx: number, lastTranscript: string, lastDuration: number) {
-    setPhase('scoring');
-    // Build final era list from state + the last era we just recorded
-    const finalEras = eraRecordings.map((er, i) => {
-      if (i === lastIdx && lastTranscript) {
-        return { era_id: er.era_id, transcript: lastTranscript, duration_s: lastDuration };
-      }
-      return { era_id: er.era_id, transcript: er.transcript, duration_s: er.duration_s };
-    }).filter(e => e.transcript);
+  // When phase becomes 'scoring', wait for all transcriptions to finish then submit
+  useEffect(() => {
+    if (phase !== 'scoring') return;
+    if (transcribingCount > 0) return; // still transcribing — will re-trigger when count drops
+
+    const finalEras = eraRecordingsRef.current
+      .filter(e => e.transcript)
+      .map(e => ({ era_id: e.era_id, transcript: e.transcript, duration_s: e.duration_s }));
 
     if (finalEras.length === 0) {
       setError('No transcripts to score — all eras were skipped or too short.');
@@ -174,9 +185,8 @@ export default function KnowledgeSweep() {
       return;
     }
 
-    try {
-      logEvent('sweep_scoring_start', { domain_id: plan!.domain_id, era_count: finalEras.length });
-      const res = await submitSweep(plan!.domain_id, finalEras);
+    logEvent('sweep_scoring_start', { domain_id: plan!.domain_id, era_count: finalEras.length });
+    submitSweep(plan!.domain_id, finalEras).then(res => {
       setResult(res);
       setPhase('results');
       logEvent('sweep_complete', {
@@ -184,16 +194,17 @@ export default function KnowledgeSweep() {
         coverage: res.total_coverage,
         composite: res.composite_score,
       });
-    } catch (e) {
+    }).catch(e => {
       setError(String(e));
       setPhase('error');
-    }
-  }
+    });
+  }, [phase, transcribingCount]);
 
   function updateEraStatus(idx: number, status: EraRecording['status']) {
     setEraRecordings(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], status };
+      eraRecordingsRef.current = next;
       return next;
     });
   }
@@ -309,18 +320,6 @@ export default function KnowledgeSweep() {
     );
   }
 
-  // ── Transcribing ──
-  if (phase === 'transcribing' && plan) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.eraLabel}>Era {currentEra + 1} of {plan.eras.length}</Text>
-        <Text style={styles.eraTitle}>{plan.eras[currentEra].title}</Text>
-        <ActivityIndicator color={colors.rubric} size="large" style={{ marginTop: 30 }} />
-        <Text style={styles.processingText}>Transcribing...</Text>
-      </View>
-    );
-  }
-
   // ── Era Done — advance to next ──
   if (phase === 'era_done' && plan) {
     const nextEra = plan.eras[currentEra];
@@ -356,13 +355,19 @@ export default function KnowledgeSweep() {
   // ── Scoring ──
   if (phase === 'scoring') {
     const doneCount = eraRecordings.filter(e => e.status === 'done').length;
+    const stillTranscribing = transcribingCount > 0;
     return (
       <View style={styles.container}>
         <ActivityIndicator color={colors.rubric} size="large" />
-        <Text style={styles.processingText}>Scoring your sweep...</Text>
+        <Text style={styles.processingText}>
+          {stillTranscribing
+            ? `Finishing transcription (${transcribingCount} remaining)...`
+            : 'Scoring your sweep...'}
+        </Text>
         <Text style={styles.bodyMuted}>
-          Analyzing {doneCount} era transcripts against the curriculum.{'\n'}
-          This takes 30-60 seconds.
+          {stillTranscribing
+            ? `${doneCount} era${doneCount !== 1 ? 's' : ''} transcribed so far.`
+            : `Analyzing ${doneCount} era transcripts against the curriculum.\nThis takes 30-60 seconds.`}
         </Text>
       </View>
     );
