@@ -3160,32 +3160,39 @@ def get_learner_context(node_id: str, domain_id: str, conn) -> str:
 
     if node_row:
         node_text = f"{node_row['title']}. {node_row['description'] or ''}"
-        model = EmbeddingModel()
-        query_vec = model.embed(node_text)
+        try:
+            model = EmbeddingModel()
+            query_vec = model.embed(node_text)
+        except Exception as _embed_err:
+            # Embedding model unavailable (e.g. sentence_transformers not installed) —
+            # fall back to relational results only
+            print(f'[learner-context] Semantic retrieval skipped (embedding unavailable): {_embed_err}', flush=True)
+            query_vec = None
 
-        # Load all chunks with embeddings (exclude raw_speech for semantic search
-        # to prioritize structured knowledge)
-        all_chunks = conn.execute(
-            '''SELECT id, chunk_type, chunk_text, embedding
-               FROM transcript_chunks
-               WHERE embedding IS NOT NULL AND chunk_type != 'raw_speech'
-               LIMIT 2000'''
-        ).fetchall()
+        if query_vec is not None:
+            # Load all chunks with embeddings (exclude raw_speech for semantic search
+            # to prioritize structured knowledge)
+            all_chunks = conn.execute(
+                '''SELECT id, chunk_type, chunk_text, embedding
+                   FROM transcript_chunks
+                   WHERE embedding IS NOT NULL AND chunk_type != 'raw_speech'
+                   LIMIT 2000'''
+            ).fetchall()
 
-        scored = []
-        for chunk in all_chunks:
-            if chunk['id'] in seen_ids:
-                continue
-            chunk_vec = np.frombuffer(chunk['embedding'], dtype=np.float32)
-            similarity = float(np.dot(query_vec, chunk_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec) + 1e-9))
-            if similarity >= 0.35:
-                scored.append((chunk['id'], chunk['chunk_type'], chunk['chunk_text'], similarity))
+            scored = []
+            for chunk in all_chunks:
+                if chunk['id'] in seen_ids:
+                    continue
+                chunk_vec = np.frombuffer(chunk['embedding'], dtype=np.float32)
+                similarity = float(np.dot(query_vec, chunk_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec) + 1e-9))
+                if similarity >= 0.35:
+                    scored.append((chunk['id'], chunk['chunk_type'], chunk['chunk_text'], similarity))
 
-        scored.sort(key=lambda x: -x[3])
-        for item in scored[:5]:
-            if item[0] not in seen_ids:
-                seen_ids.add(item[0])
-                results.append(item)
+            scored.sort(key=lambda x: -x[3])
+            for item in scored[:5]:
+                if item[0] not in seen_ids:
+                    seen_ids.add(item[0])
+                    results.append(item)
 
     if not results:
         return ''
