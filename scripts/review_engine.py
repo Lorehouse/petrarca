@@ -3911,6 +3911,25 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     if not transcript or len(transcript.split()) < 5:
         return {'error': 'Transcript too short for analysis', 'transcript': transcript}
 
+    # Dedup: skip if this exact transcript was already processed
+    import hashlib
+    transcript_hash = hashlib.sha256(transcript.encode()).hexdigest()[:16]
+    dedup_conn = get_connection(readonly=True)
+    existing_vt = dedup_conn.execute(
+        "SELECT id FROM voice_transcripts WHERE id LIKE '%' || ? || '%' OR transcript = ?",
+        (transcript_hash, transcript)
+    ).fetchone()
+    if not existing_vt:
+        # Also check by exact text match (covers older entries without hash in id)
+        existing_vt = dedup_conn.execute(
+            "SELECT id FROM voice_transcripts WHERE transcript = ? LIMIT 1",
+            (transcript,)
+        ).fetchone()
+    dedup_conn.close()
+    if existing_vt:
+        print(f'[voice-capture] Skipping duplicate transcript (matches {existing_vt["id"]})', flush=True)
+        return {'error': 'Duplicate transcript already processed', 'existing_id': existing_vt['id']}
+
     conn = get_connection(readonly=True)
 
     # --- Find candidate curriculum nodes ---
