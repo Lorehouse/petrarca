@@ -12,6 +12,7 @@ import {
   triggerFollowUp, suspendReviewItem, createFactualQuiz,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
+import { safeDate } from '../../lib/display-utils';
 import { setFeedbackContext } from '../../lib/feedback-context';
 import PetrarcaDrawer from '../../components/PetrarcaDrawer';
 import EntitySheet from '../../components/EntitySheet';
@@ -349,7 +350,7 @@ function AboutCardModal({ item, visible, onClose }: {
             {/* Book sources */}
             {bookSources.length > 0 && <>
               <Text style={ab.sectionLabel}>SOURCE BOOKS</Text>
-              {bookSources.map((src: { book_id?: string; chapter_number?: number; chapter_title?: string; confidence?: number; added_at?: string }, i: number) => (
+              {bookSources.map((src: { book_id?: string; chapter_number?: number; chapter_title?: string; confidence?: number; added_at?: number | string | null }, i: number) => (
                 <View key={i} style={ab.sourceRow}>
                   <Text style={ab.value}>
                     {src.chapter_title || `Chapter ${src.chapter_number}`}
@@ -358,7 +359,7 @@ function AboutCardModal({ item, visible, onClose }: {
                     <Text style={ab.detail}>Confidence: {(src.confidence * 100).toFixed(0)}%</Text>
                   )}
                   {src.added_at && (
-                    <Text style={ab.detail}>Added: {src.added_at.split('T')[0]}</Text>
+                    <Text style={ab.detail}>Added: {safeDate(src.added_at)}</Text>
                   )}
                 </View>
               ))}
@@ -400,13 +401,13 @@ function AboutCardModal({ item, visible, onClose }: {
             <View style={ab.row}>
               <Text style={ab.label}>Due</Text>
               <Text style={ab.value}>
-                {p?.due_at ? (p.due_at <= Date.now() ? `Overdue (${formatTimeAgo(p.due_at)})` : new Date(p.due_at).toLocaleDateString()) : '—'}
+                {p?.due_at ? (p.due_at <= Date.now() ? `Overdue (${formatTimeAgo(p.due_at)})` : safeDate(p.due_at)) : '—'}
               </Text>
             </View>
             <View style={ab.row}>
               <Text style={ab.label}>Created</Text>
               <Text style={ab.value}>
-                {p?.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
+                {safeDate(p?.created_at)}
               </Text>
             </View>
 
