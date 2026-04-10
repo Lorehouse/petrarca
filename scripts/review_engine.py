@@ -3462,6 +3462,38 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
     from db import get_connection
     if conn is None:
         conn = get_connection()
+    # Handle era sweep pseudo-nodes (sweep:{era_id})
+    is_era_sweep = node_id.startswith('sweep:')
+    if is_era_sweep:
+        era_id = node_id.split(':', 1)[1]
+        # Transcribe first, then delegate to run_era_sweep
+        print(f'[voice-elicit] Era sweep detected: {era_id}, domain={domain_id}', flush=True)
+        print(f'[voice-elicit] Transcribing {audio_path} ({audio_path.stat().st_size} bytes)...', flush=True)
+        transcript = transcribe_fn(audio_path)
+        if not transcript or len(transcript.split()) < 5:
+            return {'error': 'too_short', 'feedback_summary': 'Recording was too short for a sweep. Try speaking for at least 30 seconds.'}
+        result = run_era_sweep(era_id, domain_id, transcript, conn)
+        result['transcript'] = transcript
+        # Log to voice_transcripts
+        from db import get_connection as _gc2
+        vconn = _gc2()
+        try:
+            vt_id = f'vt_sweep_{int(time.time())}_{hash(transcript) % 10000:04d}'
+            _log_voice_transcript(
+                source='era_sweep', node_id=era_id, domain_id=domain_id,
+                node_title=result.get('era_title', era_id),
+                transcript=transcript, audio_bytes=audio_path.stat().st_size,
+                llm_result=result, conn=vconn,
+            )
+            vconn.commit()
+        except Exception as e:
+            print(f'[voice-elicit] Failed to log era sweep transcript: {e}', flush=True)
+        finally:
+            vconn.close()
+        if conn:
+            conn.close()
+        return result
+
     # Handle chapter recall pseudo-nodes (chapter:{book_id}:{chapter_number})
     is_chapter_recall = node_id.startswith('chapter:')
     is_book_recall = node_id.startswith('book:')
@@ -4477,6 +4509,81 @@ def _elicitation_candidates_for_domain(domain_id: str, conn) -> list[dict]:
     return candidates
 
 
+def _era_sweep_candidates(conn, limit: int = 1) -> list[dict]:
+    """Find eras due for a sweep — periodic broader recall tests.
+
+    Picks eras that haven't been swept recently (>14 days) or never swept,
+    from domains where the user has knowledge.
+    """
+    # Get domains with known nodes
+    domain_rows = conn.execute("""
+        SELECT DISTINCT domain_id FROM knowledge_states
+        WHERE knowledge IN ('engaged', 'anchored')
+    """).fetchall()
+
+    candidates = []
+    now = int(time.time())
+    fourteen_days = 14 * 86400
+
+    for dr in domain_rows:
+        did = dr[0]
+        curriculum = load_curriculum(did)
+        if not curriculum:
+            continue
+        row = conn.execute('SELECT title FROM curriculum_domains WHERE id = ?', (did,)).fetchone()
+        domain_title = row['title'] if row else did
+
+        for node in curriculum['nodes']:
+            if node.get('level') != 1:
+                continue
+            children = [n for n in curriculum['nodes']
+                        if n.get('parent_id') == node['id'] and n.get('level') == 2]
+            if not children:
+                continue
+
+            # Check if any children have knowledge (don't sweep unknown eras)
+            has_knowledge = False
+            for ch in children:
+                ks = conn.execute(
+                    'SELECT knowledge FROM knowledge_states WHERE domain_id = ? AND node_id = ?',
+                    (did, ch['id'])
+                ).fetchone()
+                if ks and ks['knowledge'] in ('engaged', 'anchored', 'mentioned'):
+                    has_knowledge = True
+                    break
+            if not has_knowledge:
+                continue
+
+            # Check last sweep for this era
+            last_sweep = conn.execute(
+                "SELECT created_at FROM knowledge_sweeps WHERE domain_id = ? AND "
+                "(scoring_result LIKE ? OR id LIKE ?) ORDER BY created_at DESC LIMIT 1",
+                (did, f'%{node["id"]}%', f'%{node["id"]}%')
+            ).fetchone()
+
+            if last_sweep and (now - last_sweep['created_at']) < fourteen_days:
+                continue  # swept recently
+
+            age_days = (now - last_sweep['created_at']) / 86400 if last_sweep else 999
+            candidates.append({
+                'type': 'era_sweep',
+                'node_id': f'sweep:{node["id"]}',
+                'node_title': f'Sweep: {node["title"]}',
+                'node_description': f'What do you remember about {node["title"]}? Key events, people, and turning points.',
+                'domain_id': did,
+                'domain_title': domain_title,
+                'knowledge': 'engaged',
+                'confidence': 0.5,
+                'elicitation_score': min(2.0, age_days / 14),  # higher = more overdue
+                'era_id': node['id'],
+                'child_count': len(children),
+            })
+
+    # Sort by most overdue first
+    candidates.sort(key=lambda c: c['elicitation_score'], reverse=True)
+    return candidates[:limit]
+
+
 def get_elicitation_candidates(domain_id: str | None = None, limit: int = 8, conn=None) -> list[dict]:
     """Get curriculum nodes suitable for voice elicitation.
 
@@ -4505,6 +4612,9 @@ def get_elicitation_candidates(domain_id: str | None = None, limit: int = 8, con
             for row in domain_rows:
                 candidates.extend(_elicitation_candidates_for_domain(row[0], conn))
 
+        # Add era sweep candidates — periodic broader recall tests
+        era_sweeps = _era_sweep_candidates(conn, limit=1)
+
         # Add chapter recall candidates — "What do you remember from Chapter X?"
         chapter_recalls = _chapter_recall_candidates(conn, limit=2)
 
@@ -4530,15 +4640,17 @@ def get_elicitation_candidates(domain_id: str | None = None, limit: int = 8, con
                 break
             idx += 1
 
-        # Mix in chapter recalls (max 2, interspersed)
+        # Mix in chapter recalls (max 2, interspersed) and era sweeps
         result = []
+        # Put era sweep early (position 2) so it appears but not first
+        if era_sweeps:
+            result.append(era_sweeps[0])
         ch_idx = 0
         for i, c in enumerate(interleaved):
             if i > 0 and i % 3 == 0 and ch_idx < len(chapter_recalls):
                 result.append(chapter_recalls[ch_idx])
                 ch_idx += 1
             result.append(c)
-        # Append remaining chapter recalls
         while ch_idx < len(chapter_recalls):
             result.append(chapter_recalls[ch_idx])
             ch_idx += 1
@@ -5031,6 +5143,215 @@ Output JSON:
   "biggest_gap": "The most important era/topic the learner barely mentioned or missed entirely",
   "summary": "2-3 sentence assessment of the learner's overall knowledge structure"
 }}"""
+
+
+ERA_SWEEP_SCORING_PROMPT = """Score a learner's free recall about one era/topic of a curriculum.
+
+ERA: {era_title}
+DOMAIN: {domain_title}
+
+The learner was asked to recall everything they know about this era.
+
+TRANSCRIPT:
+{transcript}
+
+NODES UNDER THIS ERA (the expected coverage):
+{nodes_with_facts}
+
+For EACH node:
+1. Was it mentioned? (yes/no)
+2. Facts stated — for each: brief claim, correct or not, key_fact_id if matchable
+3. Depth: surface | textbase | situation_model
+
+CONNECTIONS between nodes:
+- List node pairs the learner explicitly connected
+- Type: causal | temporal | comparative | cross_domain
+
+ERRORS: List factual mistakes with corrections.
+
+Scoring rules: be generous — paraphrases count, approximate dates count. Only mark "incorrect" for clear errors.
+
+Output JSON:
+{{
+  "nodes": [
+    {{"node_id": "...", "node_title": "...", "mentioned": true, "depth": "surface|textbase|situation_model",
+      "facts": [{{"claim": "...", "correct": true, "key_fact_id": null, "excerpt": "..."}}]}}
+  ],
+  "connections": [{{"from_node": "...", "to_node": "...", "type": "causal|temporal|comparative|cross_domain", "excerpt": "..."}}],
+  "errors": [{{"claim": "...", "correction": "...", "node_id": "..."}}],
+  "coverage_pct": 65,
+  "suggested_score": "knew|partly|missed",
+  "summary": "2-3 sentence assessment",
+  "strongest_node": "node_id of the best-recalled topic",
+  "biggest_gap": "most important thing the learner missed"
+}}"""
+
+
+def run_era_sweep(era_id: str, domain_id: str, transcript: str, conn=None) -> dict:
+    """Score an era-level sweep and feed results back into the knowledge system.
+
+    Returns a dict compatible with voice elicitation results (feedback_summary, etc.)
+    so it slots into the existing UI flow.
+    """
+    from db import get_connection
+    if conn is None:
+        conn = get_connection(readonly=True)
+
+    curriculum = load_curriculum(domain_id)
+    if not curriculum:
+        return {'error': f'Curriculum {domain_id} not found'}
+
+    # Find the era node and its L2 children
+    era_node = None
+    children = []
+    for n in curriculum['nodes']:
+        if n['id'] == era_id:
+            era_node = n
+        elif n.get('parent_id') == era_id and n.get('level') == 2:
+            children.append(n)
+    if not era_node:
+        return {'error': f'Era {era_id} not found in curriculum'}
+
+    # Build nodes+facts reference
+    nodes_with_facts = []
+    for node in children:
+        kf_row = conn.execute(
+            'SELECT key_facts FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+            (node['id'], domain_id)
+        ).fetchone()
+        key_facts = []
+        if kf_row and kf_row['key_facts']:
+            try:
+                key_facts = json.loads(kf_row['key_facts'])
+            except Exception:
+                pass
+        facts_str = ''
+        if key_facts:
+            facts_list = [f"    - [{f['type']}] {f['id']}: {f['question']} → {f['answer']}"
+                          for f in key_facts[:6]]
+            facts_str = '\n'.join(facts_list)
+        entry = f"- {node['id']}: {node['title']} [L{node.get('level', 2)}]\n  {node.get('description', '')}"
+        if facts_str:
+            entry += f"\n  Key facts:\n{facts_str}"
+        nodes_with_facts.append(entry)
+
+    conn.close()
+
+    # ── LLM scoring (slow — no DB lock) ──
+    prompt = ERA_SWEEP_SCORING_PROMPT.format(
+        era_title=era_node['title'],
+        domain_title=curriculum['title'],
+        transcript=transcript,
+        nodes_with_facts='\n'.join(nodes_with_facts),
+    )
+    print(f'[era-sweep] Scoring {era_id} ({len(transcript)} chars, {len(children)} nodes)...', flush=True)
+    raw = _call_claude(prompt, timeout=180)
+    if not raw:
+        return {'error': 'LLM scoring failed'}
+    result = _parse_json(raw)
+    if not result:
+        return {'error': 'LLM scoring failed — bad JSON', 'raw': raw[:300]}
+
+    # ── Map results back to elicitation format for UI compatibility ──
+    scored_nodes = result.get('nodes', [])
+    mentioned = [n for n in scored_nodes if n.get('mentioned')]
+    missed = [n for n in scored_nodes if not n.get('mentioned')]
+    all_facts = []
+    for n in scored_nodes:
+        all_facts.extend(n.get('facts', []))
+
+    coverage_pct = result.get('coverage_pct', int(100 * len(mentioned) / len(children)) if children else 0)
+    score = result.get('suggested_score', 'partly')
+
+    # Build captured/missed lists for UI compatibility
+    captured = []
+    for n in mentioned:
+        for f in n.get('facts', []):
+            if f.get('correct'):
+                captured.append(f.get('claim', ''))
+    missed_facts = []
+    for n in missed:
+        missed_facts.append(n.get('node_title', ''))
+
+    elicit_result = {
+        'coverage_pct': coverage_pct,
+        'suggested_score': score,
+        'captured': captured,
+        'missed': missed_facts,
+        'interesting': [],
+        'wonderings': [],
+        'research_questions': [],
+        'entities_mentioned': [],
+        'confidence_tagged': [
+            {'fact': e.get('claim', ''), 'confidence': 'wrong'}
+            for e in result.get('errors', [])
+        ],
+        'organizing_framework': result.get('connections', [{}])[0].get('type', 'chronological') if result.get('connections') else 'chronological',
+        'adjacent_nodes_covered': [n['node_id'] for n in mentioned],
+        'feedback_summary': result.get('summary', ''),
+        'era_sweep_detail': result,  # full scoring detail for longitudinal tracking
+        'is_era_sweep': True,
+        'era_id': era_id,
+        'era_title': era_node['title'],
+        'nodes_mentioned': len(mentioned),
+        'nodes_total': len(children),
+    }
+
+    # ── Feed back into knowledge system (write phase) ──
+    wconn = get_connection()
+    try:
+        # Update knowledge states for mentioned nodes
+        for n in mentioned:
+            depth = n.get('depth', 'surface')
+            level = 'anchored' if depth == 'situation_model' else 'engaged' if depth == 'textbase' else 'mentioned'
+            fact_count = len([f for f in n.get('facts', []) if f.get('correct')])
+            confidence = min(1.0, fact_count * 0.25) if fact_count else 0.3
+            update_knowledge(domain_id, n['node_id'], knowledge=level,
+                             confidence=confidence, source='era_sweep', conn=wconn)
+
+        # Create correction ML cards for errors
+        for err in result.get('errors', [])[:3]:
+            claim = err.get('claim', '')
+            correction = err.get('correction', '')
+            node_id_for_err = err.get('node_id', era_id)
+            if claim and correction:
+                q = f'Correction: You said "{claim}" — what is actually true about this?'
+                try:
+                    create_microlearning_request(
+                        query=q, source_node_id=node_id_for_err, source_domain=domain_id,
+                        source_type='correction',
+                    )
+                    print(f'[era-sweep] Created correction ML for: {claim[:50]}', flush=True)
+                except Exception as e:
+                    print(f'[era-sweep] Correction ML failed: {e}', flush=True)
+
+        # Store era sweep score for longitudinal tracking
+        sweep_row_id = f'era_sweep_{era_id}_{int(time.time())}'
+        wconn.execute(
+            'INSERT INTO knowledge_sweeps (id, domain_id, sweep_type, phase1_transcript, '
+            'total_nodes_mentioned, nodes_total, total_coverage, total_accuracy, composite_score, '
+            'scoring_result, system_coverage, created_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (
+                sweep_row_id, domain_id, 'era',
+                transcript,
+                len(mentioned), len(children),
+                round(len(mentioned) / len(children), 3) if children else 0,
+                round(sum(1 for f in all_facts if f.get('correct')) / len(all_facts), 3) if all_facts else 0,
+                coverage_pct / 100.0,
+                json.dumps(result),
+                0,  # system_coverage computed later if needed
+                int(time.time()),
+            )
+        )
+        wconn.commit()
+        print(f'[era-sweep] Saved {sweep_row_id}: {len(mentioned)}/{len(children)} nodes', flush=True)
+    except Exception as e:
+        print(f'[era-sweep] Write phase error: {e}', flush=True)
+    finally:
+        wconn.close()
+
+    return elicit_result
 
 
 def get_sweep_plan(domain_id: str) -> dict | None:

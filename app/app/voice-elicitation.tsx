@@ -715,16 +715,23 @@ export default function VoiceElicitation() {
                 : cand.domain_title || 'Review'}
             </Text>
 
+            {cand.type === 'era_sweep' && (
+              <View style={styles.sweepBadge}>
+                <Text style={styles.sweepBadgeText}>SWEEP</Text>
+              </View>
+            )}
             <Text style={styles.promptLabel}>
               {cand.type === 'book_recall'
                 ? 'What do you remember from this book?'
                 : cand.type === 'chapter_recall'
                 ? 'What do you remember from…'
+                : cand.type === 'era_sweep'
+                ? 'Recall everything you know about…'
                 : 'Tell me what you remember about…'}
             </Text>
             <Text style={styles.nodeTitle}>{cand.node_title}</Text>
 
-            {phase === 'prompt' && (cand.type === 'chapter_recall' || cand.type === 'book_recall') && (
+            {phase === 'prompt' && (cand.type === 'chapter_recall' || cand.type === 'book_recall' || cand.type === 'era_sweep') && (
               <Text style={styles.nodeDesc}>{cand.node_description}</Text>
             )}
 
@@ -898,6 +905,15 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans' }),
     fontSize: 11, color: colors.rubric, textTransform: 'uppercase',
     letterSpacing: 0.8, fontWeight: '500', marginBottom: 16,
+  },
+  sweepBadge: {
+    backgroundColor: colors.info,
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4,
+    alignSelf: 'center', marginBottom: 8,
+  },
+  sweepBadgeText: {
+    fontFamily: Platform.select({ web: "'DM Sans', sans-serif", default: 'DMSans-Medium' }),
+    fontSize: 9, color: colors.parchment, letterSpacing: 1.5, textTransform: 'uppercase',
   },
   promptLabel: {
     fontFamily: Platform.select({ web: "'Crimson Pro', Georgia, serif", default: 'CrimsonPro' }),
