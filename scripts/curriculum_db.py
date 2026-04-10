@@ -1210,6 +1210,30 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             related_facts = [f for f in related_facts
                              if f['question'].lower().strip() not in qs_questions]
 
+            # Existing quizzes for this node (multi-cue + manually created)
+            existing_quizzes = []
+            if node_id and domain_id:
+                try:
+                    eq_rows = conn.execute('''
+                        SELECT mq.id, mq.question, mq.answer, mq.fact_id,
+                               mq.status, mq.last_score, mq.review_count
+                        FROM microlearning_quizzes mq
+                        JOIN microlearning_cards mc ON mc.id = mq.card_id
+                        WHERE mc.source_node_id = ? AND mc.source_domain = ?
+                        ORDER BY mq.fact_id, mq.created_at
+                    ''', (node_id, domain_id)).fetchall()
+                    for eq in eq_rows:
+                        existing_quizzes.append({
+                            'id': eq['id'],
+                            'question': eq['question'],
+                            'fact_id': eq['fact_id'] or '',
+                            'status': eq['status'],
+                            'last_score': eq['last_score'],
+                            'review_count': eq['review_count'] or 0,
+                        })
+                except Exception:
+                    pass
+
             card = {
                 'type': 'review',
                 'question_id': item['id'],  # knowledge_item id for scoring
@@ -1236,6 +1260,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'entities': cq.get('entities', []),
                 'related_facts': related_facts,
                 'quiz_suggestions': quiz_suggestions,
+                'existing_quizzes': existing_quizzes,
                 'provenance': item.get('_provenance', {}),
             }
             items.append(card)

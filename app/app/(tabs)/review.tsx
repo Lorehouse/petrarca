@@ -726,6 +726,29 @@ function ReviewCard({
               </View>
             )}
 
+            {/* Existing quizzes for this node */}
+            {(item as any).existing_quizzes?.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={cs.followUpLabel}>Quizzes for this topic</Text>
+                {(item as any).existing_quizzes.map((q: { id: string; question: string; fact_id: string; status: string; last_score: string | null; review_count: number }, i: number) => {
+                  const dismissed = q.status === 'dismissed';
+                  const score = q.last_score;
+                  const icon = dismissed ? '\u2015' : score === 'knew' ? '\u2713' : score === 'partly' ? '\u25CB' : score === 'missed' ? '\u2717' : '\u2022';
+                  const muted = dismissed || score === 'knew';
+                  return (
+                    <View key={q.id} style={[cs.relatedFactBtn, muted && cs.relatedFactTested]}>
+                      <Text style={[cs.relatedFactType, muted && { color: colors.textMuted }]}>
+                        {icon}
+                      </Text>
+                      <Text style={[cs.relatedFactText, muted && { color: colors.textMuted, opacity: 0.7 }]} numberOfLines={2}>
+                        {q.question}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
             <ResearchInput onSubmit={onResearch} />
           </View>
         </View>
