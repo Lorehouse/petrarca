@@ -5325,6 +5325,44 @@ def run_era_sweep(era_id: str, domain_id: str, transcript: str, conn=None) -> di
                 except Exception as e:
                     print(f'[era-sweep] Correction ML failed: {e}', flush=True)
 
+        # Generate timeline card if the sweep showed chronological gaps
+        # Collect date-type key_facts from all children to build a sequencing card
+        org_pattern = result.get('connections', [])
+        has_date_errors = any(
+            e.get('node_id', '') in [n['id'] for n in children]
+            for e in result.get('errors', [])
+        )
+        # Generate if: mixed up dates, low coverage, or mentioned but at surface level
+        surface_nodes = [n for n in mentioned if n.get('depth') == 'surface']
+        if has_date_errors or len(surface_nodes) >= 2 or coverage_pct < 60:
+            date_facts = []
+            for ch in children:
+                kf_row = wconn.execute(
+                    'SELECT key_facts FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+                    (ch['id'], domain_id)
+                ).fetchone()
+                if kf_row and kf_row['key_facts']:
+                    try:
+                        for f in json.loads(kf_row['key_facts']):
+                            if f.get('type') == 'date' or f.get('type') == 'event':
+                                date_facts.append(f"{f['question']} → {f['answer']}")
+                    except Exception:
+                        pass
+            if date_facts:
+                timeline_q = (
+                    f"Timeline review for {era_node['title']}: Build the chronological scaffold. "
+                    f"Key dates and events to sequence:\n" +
+                    '\n'.join(f'- {df}' for df in date_facts[:8])
+                )
+                try:
+                    create_microlearning_request(
+                        query=timeline_q, source_node_id=era_id, source_domain=domain_id,
+                        source_type='sweep_timeline',
+                    )
+                    print(f'[era-sweep] Created timeline ML for {era_node["title"]}', flush=True)
+                except Exception as e:
+                    print(f'[era-sweep] Timeline ML failed: {e}', flush=True)
+
         # Store era sweep score for longitudinal tracking
         sweep_row_id = f'era_sweep_{era_id}_{int(time.time())}'
         wconn.execute(
