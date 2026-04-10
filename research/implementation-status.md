@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 7, 2026 (session 58: Review system overhaul — FSRS, logging, entities, card gen)
+**Last updated**: April 9, 2026 (session 63: Knowledge sweeps — Tier 2)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -73,7 +73,8 @@
 | Knowledge Map | `knowledge-map.tsx` | Tree view of curricula with knowledge dots |
 | Curriculum Scan | `curriculum-scan.tsx` | v2 card-based self-assessment (3-level) |
 | Hamarquizen | `hamarquizen.tsx` | Book-specific PRIME→READ→TEST review |
-| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes + chapter/book recall. "Know nothing" vs "Skip" buttons. Auto-loads more prompts when batch exhausted. Fire-and-forget uploads with `request_id` caching. |
+| Voice Elicitation | `voice-elicitation.tsx` | Free recall voice prompts for curriculum nodes + chapter/book recall + era sweeps (SWEEP badge). "Know nothing" vs "Skip" buttons. Auto-loads more prompts when batch exhausted. Fire-and-forget uploads with `request_id` caching. |
+| Knowledge Sweep | `knowledge-sweep.tsx` | Full-domain voice recall assessment. Domain select → 7-era recording → parallel transcription → LLM scoring (Opus) → results with coverage/accuracy/connectivity/organization. System-vs-self comparison. |
 | Voice Notes | `voice-notes.tsx` | Voice note list + playback |
 | Kindle Browse | `kindle-browse.tsx` | Full Kindle library browser — search, filter (status/category/tracked), sort, pagination, include books, EPUB badge |
 | Kindle Curation | `kindle-curation.tsx` | Triage screen for Kindle library |
@@ -95,7 +96,7 @@
 | `FeedFilterPills` | Mobile: topic + source filter pills |
 | `ArticlePopover` | Web: hover popover for article links |
 | `MarkdownLink` | Cross-platform link handling (web `<a>`, native `onPress`) |
-| `PetrarcaDrawer` | ✦ navigation drawer (must be added per tab screen) |
+| `PetrarcaDrawer` | ✦ navigation drawer (must be added per tab screen). Includes Knowledge Sweep in Explore section. |
 | `FeedbackCapture` | Global ✦ feedback button (voice + text + screenshot) |
 | `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `BookCurriculumContext` | Book-detail curriculum coverage section |
@@ -131,7 +132,7 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
 | `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
-| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
+| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
 | `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
@@ -222,6 +223,12 @@
 | POST | `/review/voice-memo` | Voice memo for review item |
 | GET | `/review/elicit-candidates` | Voice elicitation candidates (curriculum nodes + chapter recalls) |
 | POST | `/review/elicit-know-nothing` | Record that user knows nothing about a topic (sets knowledge=unknown, confidence=0.8). Auto-detects domain for book/chapter node_ids. |
+| GET | `/knowledge/sweep/domains` | Available domains for sweeping |
+| GET | `/knowledge/sweep/plan/{id}` | Sweep plan for a domain (eras, node counts) |
+| POST | `/knowledge/sweep/submit` | Submit full-domain sweep for scoring |
+| GET | `/knowledge/sweep/gaps` | Gap analysis from sweep results |
+| POST | `/knowledge/sweep/transcribe` | Transcribe sweep audio |
+| GET | `/knowledge/sweep/history/{id}` | Sweep history for a domain |
 
 ### Entity
 | POST | `/entity/tap` | Log entity tap, generate entity intro |
@@ -291,7 +298,7 @@
 
 ## SQLite Schema (petrarca.db)
 
-34 tables organized into 7 areas:
+35 tables organized into 7 areas:
 
 **Content pipeline**: `articles`, `article_sections`, `atomic_claims`, `claim_similarities`, `nli_verdicts`, `article_similarities`, `article_novelty_matrix`, `paragraph_claim_map`, `article_curriculum_nodes`, `delta_reports`, `concept_clusters`, `near_duplicates`, `syntheses`, `pipeline_meta`, `cluster_meta`
 
@@ -303,7 +310,7 @@
 
 **Knowledge Profile**: `transcript_chunks` (embedded voice pieces), `chunk_node_links` (chunks↔nodes), `chunk_entity_links` (chunks↔entities), `domain_knowledge_summaries` (per-domain portraits)
 
-**Knowledge Growth Tracking**: `knowledge_transitions` (event log of level changes with timestamps), `network_metrics_log` (periodic snapshots of node coverage, edge overlap, density per domain)
+**Knowledge Growth Tracking**: `knowledge_transitions` (event log of level changes with timestamps), `network_metrics_log` (periodic snapshots of node coverage, edge overlap, density per domain), `knowledge_sweeps` (domain-wide voice recall assessments with per-era scores, node-level results, correction/timeline feedback)
 
 **Interaction Logging**: `interaction_log` (dual-layer with JSONL — event, item_id, score, session_id, response_ms, card_type, domain, node_title, extra)
 

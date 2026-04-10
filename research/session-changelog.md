@@ -1,6 +1,68 @@
 # Knowledge System Implementation Status
 
-**Date**: April 9, 2026 (last updated — session 62: Passive knowledge growth tracking)
+**Date**: April 9, 2026 (last updated — session 63: Knowledge sweeps)
+
+## Session 63: Knowledge Sweeps — Tier 2 (April 9, 2026)
+
+### What
+Built knowledge sweep system — periodic domain-wide voice recall assessments scored against the full curriculum. Sweeps measure spontaneous retrieval organization (what you can produce unprompted), fundamentally different from quiz-prompted recall. First sweep on Sicily revealed 32.5% spontaneous recall vs 100% system coverage — reading ≠ retrieval.
+
+### Full-Domain Sweep Screen (`knowledge-sweep.tsx`)
+- Standalone screen accessible from ✦ drawer ("Knowledge Sweep" in Explore section)
+- Flow: domain select → 7-era recording sequence → parallel transcription → LLM scoring → results display
+- Each era gets its own voice recording, transcribed in parallel via `/knowledge/sweep/transcribe`
+- Scoring via Opus produces: coverage, accuracy, connectivity, organization metrics
+- System-vs-self comparison: system knowledge (from reading) vs spontaneous recall
+
+### Era-Level Sweeps in Voice Elicitation
+- Full-domain sweeps proved too exhausting (5+ min per era). Pivoted to era-level sweeps mixed into regular voice elicitation queue.
+- `_era_sweep_candidates()` surfaces eras not swept in 14+ days as candidates with `type: 'era_sweep'`
+- Voice elicitation UI shows SWEEP badge for era sweep candidates
+- `run_voice_elicitation()` handles era_sweep type — routes to `run_era_sweep()` instead of standard node elicitation
+
+### Sweep Scoring
+- `SWEEP_SCORING_PROMPT` / `ERA_SWEEP_SCORING_PROMPT` — LLM scores transcript against curriculum nodes and key_facts
+- Produces structured metrics: coverage (nodes mentioned/total), accuracy (% facts correct), connectivity (causal/temporal connections detected), organization (narrative structure)
+- Per-node depth assessment: mentioned, explained, or connected
+
+### Feedback Loop
+- **Correction ML cards**: Wrong facts detected in sweep → `source_type='sweep_correction'` microlearning cards
+- **Knowledge state updates**: Per-node depth assessment feeds back into knowledge levels
+- **Timeline ML cards**: New card type (`source_type='sweep_timeline'`) generated when sweeps detect fuzzy chronology — presents date/event key_facts to build sequencing ability
+
+### Database
+- **`knowledge_sweeps`** — Stores sweep results: domain_id, era (nullable for full-domain), transcript, scores JSON, node-level results, created_at
+
+### Endpoints
+- `GET /knowledge/sweep/domains` — Available domains for sweeping
+- `GET /knowledge/sweep/plan/{id}` — Sweep plan for a domain (eras, node counts)
+- `POST /knowledge/sweep/submit` — Submit full-domain sweep for scoring
+- `GET /knowledge/sweep/gaps` — Gap analysis from sweep results
+- `POST /knowledge/sweep/transcribe` — Transcribe sweep audio
+- `GET /knowledge/sweep/history/{id}` — Sweep history for a domain
+
+### Key Findings (Sicily, 2 of 7 eras)
+- System coverage: 100% (all nodes engaged/anchored from reading)
+- Spontaneous recall: 32.5% (13/40 nodes) — massive gap between reading and retrieval
+- Accuracy: 95.3% — facts are usually correct when stated
+- 8 causal/temporal connections detected
+- 4 factual errors corrected (Pericles→Alcibiades, Hiero allied with Rome not Athens, etc.)
+- Greek Sicily: situation-model depth (causal chronological narrative)
+- Arab-Norman Sicily: scattered facts without causal linking
+
+### Design Decisions
+- Full-domain sweeps too exhausting → era-level sweeps mixed into voice elicitation flow
+- Sweeps measure something fundamentally different from quizzes: spontaneous retrieval organization vs prompted recall. The gap between them is the key diagnostic.
+- Timeline ML cards address the specific gap revealed: knowing facts but not their chronological sequence
+
+### Files Changed
+- `scripts/db.py` — `knowledge_sweeps` table
+- `scripts/review_engine.py` — `SWEEP_SCORING_PROMPT`, `ERA_SWEEP_SCORING_PROMPT`, `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, era sweep handling in `run_voice_elicitation()`
+- `scripts/research-server.py` — 6 new endpoints
+- `app/app/knowledge-sweep.tsx` — full standalone sweep screen
+- `app/app/voice-elicitation.tsx` — SWEEP badge, era_sweep type handling
+- `app/lib/review-api.ts` — sweep API types and functions, `era_sweep` type
+- `app/components/PetrarcaDrawer.tsx` — "Knowledge Sweep" entry in Explore section
 
 ## Session 62: Passive Knowledge Growth Tracking (April 9, 2026)
 
