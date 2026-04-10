@@ -1,6 +1,27 @@
 # Knowledge System Implementation Status
 
-**Date**: April 9, 2026 (last updated — session 63: Knowledge sweeps)
+**Date**: April 10, 2026 (last updated — session 64: Multi-domain expansion)
+
+## Session 64: Multi-Domain Expansion (April 10, 2026)
+
+### What
+Expanded Petrarca from history-only to multi-domain learning. Generated 4 new curricula (music, literature, architecture, philosophy), fixed two pipeline bugs that prevented new curricula from working, and added Craig Wright's Yale music history course.
+
+### New Curricula
+- **Western Music History** (102 nodes, 406 key_facts, 61 entities) — Antiquity → 20th century: Gregorian chant, polyphony, Baroque, Classical, Romantic, Modernism
+- **Western Literature** (110 nodes, 450 key_facts, 69 entities) — Homer → Modernism: epic, drama, novel, poetry across all major movements
+- **European Architecture** (82 nodes, 354 key_facts, 63 entities) — Classical → Modern: Greek orders, Gothic, Renaissance, Baroque, Bauhaus, contemporary
+- **Western Philosophy** (106 nodes, 462 key_facts, 63 entities) — Presocratics → 20th century: epistemology, ethics, metaphysics, political philosophy
+
+### Bug Fixes
+- **`generate_curriculum()` → SQLite gap**: Function saved JSON but `load_curriculum()` reads SQLite. New curricula were invisible to the entire pipeline. Added SQLite insertion to generation.
+- **Entity pipeline disconnected**: `tag_curriculum_entities()` wrote to JSON entity index, but voice capture reads `shared_entities` + `entity_curriculum_links` in SQLite. Added `bootstrap_entities.py` call to server's post-generation flow.
+
+### Infrastructure
+- `_call_opus()` timeout 300s → 1200s, switched from JSON to text output format
+- Server endpoint POST `/curriculum/generate` now runs full pipeline: generate → SQLite → entity tag (JSON) → entity bootstrap (SQLite) → index rebuild
+- Installed `google-genai` on server for entity tagging
+- Yale MUSI 112 course added as book with 23 lectures mapped to music history curriculum
 
 ## Session 63: Knowledge Sweeps — Tier 2 (April 9, 2026)
 

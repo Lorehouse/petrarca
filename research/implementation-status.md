@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 9, 2026 (session 63: Knowledge sweeps — Tier 2)
+**Last updated**: April 10, 2026 (session 64: Multi-domain expansion)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -49,7 +49,7 @@
 
 ## Content Numbers (as of Apr 4, 2026)
 
-~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 9 curricula (719 nodes), 299 key_facts (Sicily Greek), 346 shared_entities.
+~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 13 curricula (1,119 nodes), 1,672 key_facts (across all domains), 591 shared_entities. New domains: Western Music History (102), European Architecture (82), Western Literature (110), Western Philosophy (106).
 
 ## App Screens
 
@@ -135,7 +135,8 @@
 | `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
 | `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
-| `curriculum.py` | Curriculum generation + graph utilities only (NOT for runtime data) |
+| `curriculum.py` | Curriculum generation (Opus) + graph utilities. Generates JSON + inserts into SQLite. Entity tagging (Gemini Flash) + JSON entity index. NOT for runtime data |
+| `bootstrap_entities.py` | Extracts rich entities (descriptions, Wikipedia, coordinates) from curricula via Gemini Flash → `shared_entities` + `entity_curriculum_links` SQLite tables. Run after curriculum generation for voice capture entity matching |
 | `log_server.py` | Legacy interaction log collection (:8091) — replaced by `/log/events` in research-server.py |
 | `server_log.py` | Dual-layer logging: `log_interaction()` (SQLite + JSONL), `log_client_events()` (batch JSONL parser) |
 | `enrich_entities.py` | Entity enrichment batch: Gemini Flash extraction from card content → shared_entities dedup + insert |
