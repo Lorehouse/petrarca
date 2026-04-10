@@ -78,6 +78,11 @@ from curriculum import (
     get_curriculum_graph_data, get_entity_index, build_entity_index,
     tag_curriculum_entities,
 )
+from bootstrap_entities import (
+    build_extraction_prompt as _entity_extraction_prompt,
+    parse_json_response as _entity_parse_json,
+    insert_entities as _entity_insert,
+)
 from review_engine import (
     create_review_items_for_chapter, get_review_queue, generate_question,
     record_answer, get_review_stats, create_exploration_items, process_voice_memo,
@@ -4967,6 +4972,26 @@ JSON array only:"""
                     print(f"[curriculum] Generated '{domain}': {result['node_count']} nodes — tagging entities", flush=True)
                     tagged = tag_curriculum_entities(domain_id)
                     build_entity_index()
+
+                    # Bootstrap SQLite entities (shared_entities + entity_curriculum_links)
+                    _curriculum_jobs[job_id]['status'] = 'bootstrapping_entities'
+                    try:
+                        from gemini_llm import call_llm as _llm_call
+                        curriculum = load_curriculum(domain_id)
+                        if curriculum:
+                            prompt = _entity_extraction_prompt(curriculum)
+                            raw = _llm_call(prompt, model='gemini-2.0-flash', max_tokens=16384)
+                            entities = _entity_parse_json(raw) if raw else None
+                            if entities:
+                                from db import get_connection as _get_conn
+                                conn = _get_conn()
+                                created, links = _entity_insert(entities, domain_id, conn)
+                                conn.commit()
+                                conn.close()
+                                print(f"[curriculum] Bootstrapped SQLite entities for '{domain}': {created} entities, {links} links", flush=True)
+                    except Exception as ent_err:
+                        print(f"[curriculum] Entity bootstrap failed (non-fatal): {ent_err}", flush=True)
+
                     _curriculum_jobs[job_id] = {
                         'status': 'done', 'domain': domain,
                         'domain_id': domain_id, 'node_count': result['node_count'],
