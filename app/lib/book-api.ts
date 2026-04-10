@@ -460,13 +460,23 @@ export async function dismissMicrolearning(
 
 // --- Factual Quiz API ---
 
-export async function createFactualQuiz(itemId: string, question: string, answer: string): Promise<{ quiz_id: string; status: string }> {
+export async function createFactualQuiz(itemId: string, question: string, answer: string, factId?: string): Promise<{ quiz_id: string; status: string }> {
   const resp = await fetch(`${RESEARCH_BASE}/review/create-factual-quiz`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ item_id: itemId, question, answer }),
+    body: JSON.stringify({ item_id: itemId, question, answer, fact_id: factId }),
   });
   if (!resp.ok) throw new Error(`Create quiz failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function suspendFact(factId: string): Promise<{ count: number }> {
+  const resp = await fetch(`${RESEARCH_BASE}/review/suspend-fact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fact_id: factId }),
+  });
+  if (!resp.ok) throw new Error(`Suspend fact failed (${resp.status})`);
   return resp.json();
 }
 

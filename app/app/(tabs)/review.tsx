@@ -9,7 +9,7 @@ import { EntitySpan, ResurfacingItem, ReviewStreamResponse } from '../../data/ty
 import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
-  triggerFollowUp, suspendReviewItem, createFactualQuiz,
+  triggerFollowUp, suspendReviewItem, createFactualQuiz, suspendFact,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { safeDate } from '../../lib/display-utils';
@@ -170,22 +170,15 @@ function QuizSuggestions({
   itemId: string;
 }) {
   const [created, setCreated] = useState<Set<string>>(new Set());
-  const [creating, setCreating] = useState<string | null>(null);
 
   if (!suggestions || suggestions.length === 0) return null;
 
-  const handleCreate = async (s: { question: string; answer: string }) => {
-    if (created.has(s.question) || creating) return;
-    setCreating(s.question);
-    try {
-      await createFactualQuiz(itemId, s.question, s.answer);
-      setCreated(prev => new Set(prev).add(s.question));
-      logEvent('factual_quiz_created', { item_id: itemId, question: s.question });
-    } catch (e) {
-      console.warn('[quiz-suggestion] create failed:', e);
-    } finally {
-      setCreating(null);
-    }
+  const handleCreate = (s: { question: string; answer: string; fact_id?: string }) => {
+    if (created.has(s.question)) return;
+    setCreated(prev => new Set(prev).add(s.question));
+    logEvent('factual_quiz_created', { item_id: itemId, question: s.question });
+    createFactualQuiz(itemId, s.question, s.answer, s.fact_id).catch(e =>
+      console.warn('[quiz-suggestion] create failed:', e));
   };
 
   return (
@@ -198,10 +191,10 @@ function QuizSuggestions({
             key={i}
             style={[cs.quizSugBtn, done && cs.quizSugDone]}
             onPress={() => handleCreate(s)}
-            disabled={done || creating === s.question}
+            disabled={done}
           >
             <Text style={[cs.quizSugText, done && { color: colors.textMuted }]}>
-              {done ? '\u2713 ' : creating === s.question ? '\u2026 ' : '+ '}
+              {done ? '\u2713 ' : '+ '}
               {s.question}
             </Text>
           </Pressable>
@@ -933,6 +926,7 @@ function MicrolearningQuizCard({
   item,
   onResult,
   onSkip,
+  onSuspendFact,
   onResearch,
   onEntityTap,
   onDateTap,
@@ -940,6 +934,7 @@ function MicrolearningQuizCard({
   item: ResurfacingItem;
   onResult: (result: string) => void;
   onSkip: () => void;
+  onSuspendFact?: (factId: string) => void;
   onResearch: (query: string) => void;
   onEntityTap: (entityId: string) => void;
   onDateTap: (year: number) => void;
@@ -947,6 +942,7 @@ function MicrolearningQuizCard({
   const [revealed, setRevealed] = useState(false);
   const [graded, setGraded] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   if (graded) {
     return (
@@ -972,10 +968,22 @@ function MicrolearningQuizCard({
         ) : (
           <Text style={[cs.domainLabel, { flex: 1 }]} numberOfLines={1}>{item.query}</Text>
         )}
-        <Pressable onPress={() => setShowAbout(true)} hitSlop={8} style={cs.menuDotsBtn}>
-          <Text style={cs.menuDots}>{'\u22EF'}</Text>
+        <Pressable onPress={() => setShowMenu(m => !m)} hitSlop={8} style={cs.menuDotsBtn}>
+          <Text style={cs.menuDots}>{showMenu ? '\u2715' : '\u22EF'}</Text>
         </Pressable>
       </View>
+      {showMenu && (
+        <View style={cs.menuDropdown}>
+          <Pressable style={cs.menuDropdownItem} onPress={() => { setShowMenu(false); setShowAbout(true); }}>
+            <Text style={cs.menuDropdownText}>About this card</Text>
+          </Pressable>
+          {(item as any).fact_id && onSuspendFact && (
+            <Pressable style={cs.menuDropdownItem} onPress={() => { setShowMenu(false); onSuspendFact((item as any).fact_id); }}>
+              <Text style={cs.menuDropdownText}>Not interested in this fact</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
       <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
 
       <Text style={cs.question}>{item.question}</Text>
@@ -995,17 +1003,19 @@ function MicrolearningQuizCard({
             <Text style={cs.answerText}>{item.answer}</Text>
           </View>
 
-          {/* Full content */}
-          <View style={ml.revealedContent}>
-            <Text style={ml.revealedLabel}>{'\u2726'} Full context</Text>
-            <AnnotatedText
-              text={item.content || ''}
-              spans={item.entity_spans?.content}
-              style={ml.content}
-              onEntityTap={onEntityTap}
-              onDateTap={onDateTap}
-            />
-          </View>
+          {/* Full content — use rich_answer as detail card if no ML content */}
+          {(item.content || (item.rich_answer && item.rich_answer !== item.answer)) ? (
+            <View style={ml.revealedContent}>
+              <Text style={ml.revealedLabel}>{'\u2726'} Full context</Text>
+              <AnnotatedText
+                text={item.content || item.rich_answer || ''}
+                spans={item.entity_spans?.content}
+                style={ml.content}
+                onEntityTap={onEntityTap}
+                onDateTap={onDateTap}
+              />
+            </View>
+          ) : null}
 
           <View style={cs.gradeRow}>
             {[
@@ -1311,6 +1321,16 @@ export default function ReviewScreen() {
     });
   };
 
+  const handleSuspendFact = (factId: string) => {
+    logEvent('review_suspend_fact', { fact_id: factId });
+    suspendFact(factId).catch(e =>
+      console.warn('[review] suspend fact failed:', e));
+    animateTransition(() => {
+      setCurrentIndex(i => i + 1);
+      maybeLoadMore();
+    });
+  };
+
   const handleDismissCard = (item: ResurfacingItem) => {
     if (item.question_id) {
       gradedIdsRef.current.add(item.question_id);
@@ -1474,6 +1494,7 @@ export default function ReviewScreen() {
                     item={currentItem}
                     onResult={(result) => handleResult(currentItem, result)}
                     onSkip={() => handleSkip(currentItem)}
+                    onSuspendFact={handleSuspendFact}
                     onResearch={(q) => handleResearch(q, currentItem)}
                     onEntityTap={setActiveEntityId}
                     onDateTap={handleDateTap}
