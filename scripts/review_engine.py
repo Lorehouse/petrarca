@@ -1636,6 +1636,168 @@ def _build_quiz_suggestions(node_id: str, domain_id: str, conn) -> list[dict]:
         return []
 
 
+# ── Multi-cue quiz generation ────────────────────────────────────────────────
+
+MULTICUE_PROMPT = """Generate 2-4 retrieval cue questions for each historical fact. These are alternate quiz angles for the SAME fact — like flashcard reversals for dates, battles, people, conquests.
+
+Rules:
+- Short pub-quiz style questions (under 15 words)
+- Short answers (1 sentence)
+- Each cue approaches from a different angle: "Who did X?", "When did X happen?", "What did [person] conquer/do?", "What battle decided X?", "What happened in [year]?"
+- Only generate angles where the answer is clear and unambiguous
+- Do NOT include the original question — only new angles
+
+Facts:
+{facts_json}
+
+Return JSON: {{"0": [{{"question": "...", "answer": "..."}}], ...}}
+"""
+
+
+def generate_multicue_quizzes(node_id: str, domain_id: str):
+    """Generate multi-angle retrieval cue quizzes for a node's key_facts.
+
+    Called as a background thread after grading. Uses Gemini Flash for
+    natural question generation, then deduplicates via embeddings.
+    Only processes date/event/person type facts.
+    """
+    from db import get_connection
+    conn = get_connection()
+    try:
+        node = conn.execute(
+            'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+            (node_id, domain_id)).fetchone()
+        if not node or not node['key_facts']:
+            return
+        all_facts = json.loads(node['key_facts'])
+
+        # Filter to factual types only — skip significance/connection for now
+        FACTUAL_TYPES = {'date', 'event', 'person', 'fact', 'place'}
+        facts = [f for f in all_facts if f.get('type', 'fact') in FACTUAL_TYPES
+                 and f.get('question') and f.get('answer')]
+        if not facts:
+            return
+
+        # Check which fact_ids already have multi-cue quizzes
+        existing_fact_ids = set()
+        for row in conn.execute(
+            "SELECT DISTINCT fact_id FROM microlearning_quizzes WHERE fact_id IS NOT NULL"
+        ).fetchall():
+            existing_fact_ids.add(row['fact_id'])
+
+        facts_to_process = [f for f in facts if f.get('id') and f['id'] not in existing_fact_ids]
+        if not facts_to_process:
+            print(f'[multicue] {node_id}: all facts already have cues, skipping', flush=True)
+            return
+
+        # Release DB before LLM call
+        conn.close()
+        conn = None
+
+        # Build prompt with indexed facts
+        facts_for_prompt = {str(i): {'question': f['question'], 'answer': f['answer'],
+                                      'entities': f.get('entities', []), 'type': f.get('type', '')}
+                            for i, f in enumerate(facts_to_process)}
+        prompt = MULTICUE_PROMPT.format(facts_json=json.dumps(facts_for_prompt, indent=2))
+
+        from gemini_llm import call_llm
+        result = call_llm(prompt, max_tokens=2000, response_mime_type='application/json')
+        if not result:
+            print(f'[multicue] {node_id}: Gemini returned no result', flush=True)
+            return
+
+        try:
+            cues_by_idx = json.loads(result)
+        except json.JSONDecodeError as e:
+            print(f'[multicue] {node_id}: JSON parse error: {e}', flush=True)
+            return
+
+        # Reopen DB for writes
+        conn = get_connection()
+
+        # Find or create a ML card container for this node
+        mc = conn.execute(
+            'SELECT id FROM microlearning_cards WHERE source_node_id=? AND source_domain=? LIMIT 1',
+            (node_id, domain_id)).fetchone()
+        if mc:
+            card_id = mc['id']
+        else:
+            import hashlib
+            card_id = hashlib.md5(f"{node_id}:{domain_id}:multicue".encode()).hexdigest()[:12]
+            now_ms = int(time.time() * 1000)
+            conn.execute('''
+                INSERT OR IGNORE INTO microlearning_cards
+                (id, query, source_node_id, source_domain, content, status, created_at, source_type)
+                VALUES (?,?,?,?,?,?,?,?)
+            ''', (card_id, f"Multi-cue quizzes for {node_id}", node_id,
+                  domain_id, '', 'completed', now_ms, 'multicue'))
+
+        # Load embedding model for dedup
+        model = None
+        existing_embedded = []
+        try:
+            from limbic.amygdala import EmbeddingModel
+            model = EmbeddingModel()
+            existing_texts = [r['question'] for r in conn.execute(
+                "SELECT question FROM microlearning_quizzes WHERE status='active'"
+            ).fetchall()]
+            if existing_texts:
+                vecs = model.embed_batch(existing_texts)
+                existing_embedded = list(zip(existing_texts, vecs))
+        except Exception as e:
+            print(f'[multicue] dedup init failed, proceeding without: {e}', flush=True)
+
+        stored, skipped = 0, 0
+        now_ms = int(time.time() * 1000)
+
+        for idx_str, cues in cues_by_idx.items():
+            try:
+                fact = facts_to_process[int(idx_str)]
+            except (ValueError, IndexError):
+                continue
+
+            fact_id = fact.get('id', '')
+            rich_answer = fact.get('rich_answer') or fact.get('answer', '')
+
+            for ci, cue in enumerate(cues):
+                question = cue.get('question', '').strip()
+                answer = cue.get('answer', '').strip()
+                if not question or not answer:
+                    continue
+
+                # Dedup check
+                if model and existing_embedded:
+                    dup = _find_duplicate_quiz(question, existing_embedded, model)
+                    if dup:
+                        skipped += 1
+                        continue
+
+                import hashlib
+                quiz_id = hashlib.md5(f"{card_id}:{fact_id}:{ci}".encode()).hexdigest()[:12]
+                conn.execute('''
+                    INSERT OR IGNORE INTO microlearning_quizzes
+                    (id, card_id, question, answer, fact_id, rich_answer,
+                     status, stability_days, due_at, review_count, created_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                ''', (quiz_id, card_id, question, answer, fact_id, rich_answer,
+                      'active', 1.0, now_ms + 86400000, 0, now_ms))
+
+                if model:
+                    existing_embedded.append((question, model.embed(question)))
+                stored += 1
+
+        conn.commit()
+        print(f'[multicue] {node_id}: {stored} cues stored, {skipped} deduped '
+              f'from {len(facts_to_process)} facts', flush=True)
+
+    except Exception as e:
+        print(f'[multicue] {node_id}: error: {e}', flush=True)
+        import traceback; traceback.print_exc()
+    finally:
+        if conn:
+            conn.close()
+
+
 # ── Record answer ─────────────────────────────────────────────────────────────
 
 def record_answer(item_id: str, score: str, conn) -> dict:
@@ -1773,6 +1935,13 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             except Exception as e:
                 print(f'[review] re-gen failed for {table} item {item_id}: {e}', flush=True)
         threading.Thread(target=_regen, daemon=True).start()
+
+    # Background multi-cue quiz generation for knowledge_items with key_facts
+    if table == 'knowledge_items' and item.get('curriculum_node_id') and item.get('curriculum_domain'):
+        _node_id = item['curriculum_node_id']
+        _domain_id = item['curriculum_domain']
+        threading.Thread(target=generate_multicue_quizzes,
+                         args=(_node_id, _domain_id), daemon=True).start()
 
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
 

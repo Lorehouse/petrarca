@@ -4047,6 +4047,32 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_suspend_fact(self):
+        """POST /review/suspend-fact — suspend all quizzes sharing a fact_id."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        fact_id = body.get('fact_id', '').strip()
+        if not fact_id:
+            self._send_json_response(400, {'error': 'fact_id required'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            cursor = conn.execute(
+                "UPDATE microlearning_quizzes SET status='dismissed' WHERE fact_id=? AND status='active'",
+                (fact_id,))
+            count = cursor.rowcount
+            conn.commit()
+            print(f'[suspend-fact] suspended {count} quizzes for fact_id={fact_id}', flush=True)
+            from server_log import log_interaction
+            log_interaction('suspend_fact', item_id=fact_id, extra=json.dumps({'count': count}))
+            self._send_json_response(200, {'status': 'suspended', 'fact_id': fact_id, 'count': count})
+        except Exception as e:
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_review_batch_generate(self):
         """POST /review/batch-generate — batch-generate cached_questions for knowledge_items."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -4252,6 +4278,7 @@ JSON array only:"""
         item_id = body.get('item_id', '').strip()
         question = body.get('question', '').strip()
         answer = body.get('answer', '').strip()
+        fact_id = body.get('fact_id', '').strip()
         if not item_id or not question or not answer:
             self._send_json_response(400, {'error': 'item_id, question, and answer required'})
             return
@@ -4280,14 +4307,27 @@ JSON array only:"""
                     VALUES (?,?,?,?,?,?,?,?)
                 ''', (card_id, f"Factual quiz: {question[:60]}", ki['curriculum_node_id'],
                       ki['curriculum_domain'], '', 'completed', now_ms, 'follow_up'))
+            # Look up rich_answer from key_facts if fact_id provided
+            rich_answer = None
+            if fact_id:
+                node = conn.execute(
+                    'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+                    (ki['curriculum_node_id'], ki['curriculum_domain'])).fetchone()
+                if node and node['key_facts']:
+                    for f in json.loads(node['key_facts']):
+                        if f.get('id') == fact_id:
+                            rich_answer = f.get('rich_answer') or f.get('answer', '')
+                            break
             # Create the quiz
             quiz_id = hashlib.md5(f"{card_id}:{question}".encode()).hexdigest()[:12]
             now_ms = int(time.time() * 1000)
             conn.execute('''
                 INSERT OR IGNORE INTO microlearning_quizzes
-                (id, card_id, question, answer, status, stability_days, due_at, review_count, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?)
-            ''', (quiz_id, card_id, question, answer, 'active', 1.0, now_ms + 86400000, 0, now_ms))
+                (id, card_id, question, answer, fact_id, rich_answer,
+                 status, stability_days, due_at, review_count, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ''', (quiz_id, card_id, question, answer, fact_id or None, rich_answer,
+                  'active', 1.0, now_ms + 86400000, 0, now_ms))
             conn.commit()
             from server_log import log_interaction
             log_interaction('factual_quiz_created', item_id=quiz_id, node_title=question[:60],
@@ -6065,6 +6105,8 @@ JSON array only:"""
             return self._handle_targeted_quiz()
         if self.path == '/review/create-factual-quiz':
             return self._handle_create_factual_quiz()
+        if self.path == '/review/suspend-fact':
+            return self._handle_suspend_fact()
         if self.path == '/review/batch-generate':
             return self._handle_review_batch_generate()
         if self.path == '/entity/tap':

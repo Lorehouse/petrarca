@@ -517,17 +517,21 @@ CREATE TABLE IF NOT EXISTS microlearning_quizzes (
     card_id TEXT NOT NULL REFERENCES microlearning_cards(id),
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
-    status TEXT DEFAULT 'active',        -- active, dismissed
+    fact_id TEXT,                         -- links all cue-questions for the same key_fact
+    rich_answer TEXT,                     -- shared detail card content for all cues of a fact
+    status TEXT DEFAULT 'active',         -- active, dismissed
     stability_days REAL DEFAULT 1.0,
     due_at INTEGER DEFAULT 0,
     last_reviewed_at INTEGER,
     review_count INTEGER DEFAULT 0,
     last_score TEXT,
+    fsrs_card_json TEXT,
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mlq_card ON microlearning_quizzes(card_id);
 CREATE INDEX IF NOT EXISTS idx_mlq_due ON microlearning_quizzes(due_at);
 CREATE INDEX IF NOT EXISTS idx_mlq_status ON microlearning_quizzes(status);
+CREATE INDEX IF NOT EXISTS idx_mlq_fact ON microlearning_quizzes(fact_id);
 
 -- Voice transcript log: every voice interaction persisted for analysis
 CREATE TABLE IF NOT EXISTS voice_transcripts (
@@ -756,6 +760,10 @@ MIGRATIONS = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_ks_domain ON knowledge_sweeps(domain_id)",
     "CREATE INDEX IF NOT EXISTS idx_ks_created ON knowledge_sweeps(created_at)",
+    # Multi-cue quiz support: fact_id + rich_answer for shared detail cards
+    "ALTER TABLE microlearning_quizzes ADD COLUMN fact_id TEXT",
+    "ALTER TABLE microlearning_quizzes ADD COLUMN rich_answer TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_mlq_fact ON microlearning_quizzes(fact_id)",
 ]
 
 
