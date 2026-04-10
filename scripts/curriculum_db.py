@@ -1301,11 +1301,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
                 # Load quizzes for this card
                 quiz_rows = conn.execute(
-                    "SELECT id, question, answer, status FROM microlearning_quizzes "
+                    "SELECT id, question, answer, fact_id, rich_answer, status "
+                    "FROM microlearning_quizzes "
                     "WHERE card_id=? AND status='active' ORDER BY rowid",
                     (ml['id'],)).fetchall()
                 quizzes = [{'id': q['id'], 'question': q['question'],
-                            'answer': q['answer']} for q in quiz_rows]
+                            'answer': q['answer'], 'fact_id': q['fact_id'] or '',
+                            'rich_answer': q['rich_answer'] or ''} for q in quiz_rows]
 
                 # Fallback: legacy cards with single question but no quiz rows
                 if not quizzes and ml.get('question'):
@@ -1349,7 +1351,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
             # 2. Due individual quizzes from previously-seen cards
             due_quiz_rows = conn.execute('''
-                SELECT mq.*, mc.content, mc.query as card_query,
+                SELECT mq.*, mq.fact_id, mq.rich_answer as quiz_rich_answer,
+                       mc.content, mc.query as card_query,
                        mc.title as card_title, mc.sections as card_sections,
                        mc.entities, mc.follow_up_queries as card_follow_ups,
                        mc.triggered_follow_ups as card_triggered_follow_ups,
@@ -1376,7 +1379,8 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     'card_id': q['card_id'],
                     'question': q['question'],
                     'answer': q['answer'],
-                    'rich_answer': q['answer'],
+                    'rich_answer': q.get('quiz_rich_answer') or q['answer'],
+                    'fact_id': q.get('fact_id') or '',
                     'answer_type': 'concept',
                     'title': q.get('card_title') or '',
                     'content': content_text,
