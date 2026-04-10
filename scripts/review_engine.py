@@ -4363,6 +4363,61 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         'overall_summary': analysis.get('overall_summary', ''),
     }
 
+    # Check if multiple nodes from same era were touched with uncertain dates → timeline card
+    if len(node_assessments) >= 2 and primary_domain:
+        try:
+            _curriculum = load_curriculum(primary_domain)
+            if _curriculum:
+                # Group assessed nodes by their L1 parent
+                node_parents = {}
+                for n in _curriculum['nodes']:
+                    if n.get('level') == 2:
+                        node_parents[n['id']] = n.get('parent_id', '')
+                era_groups: dict[str, list] = {}
+                for na in node_assessments:
+                    parent = node_parents.get(na.get('node_id', ''), '')
+                    if parent:
+                        era_groups.setdefault(parent, []).append(na)
+                # If 2+ nodes in same era, and any uncertain facts → timeline card
+                uncertain = [ct for ct in analysis.get('confidence_tagged', [])
+                             if isinstance(ct, dict) and ct.get('confidence') == 'uncertain']
+                for era_id, era_nodes in era_groups.items():
+                    if len(era_nodes) >= 2 and uncertain:
+                        era_node = next((n for n in _curriculum['nodes'] if n['id'] == era_id), None)
+                        if not era_node:
+                            continue
+                        children = [n for n in _curriculum['nodes']
+                                    if n.get('parent_id') == era_id and n.get('level') == 2]
+                        date_facts = []
+                        _tconn = get_connection(readonly=True)
+                        for ch in children:
+                            kf_row = _tconn.execute(
+                                'SELECT key_facts FROM curriculum_nodes WHERE id = ? AND domain_id = ?',
+                                (ch['id'], primary_domain)
+                            ).fetchone()
+                            if kf_row and kf_row['key_facts']:
+                                for f in json.loads(kf_row['key_facts']):
+                                    if f.get('type') in ('date', 'event'):
+                                        date_facts.append(f"{f['question']} -> {f['answer']}")
+                        _tconn.close()
+                        if date_facts:
+                            tq = (
+                                f"Timeline review for {era_node['title']}: Build the chronological scaffold. "
+                                f"Key dates and events to sequence:\n" +
+                                '\n'.join(f'- {df}' for df in date_facts[:8])
+                            )
+                            try:
+                                create_microlearning_request(
+                                    query=tq, source_node_id=era_id, source_domain=primary_domain,
+                                    source_type='sweep_timeline',
+                                )
+                                print(f'[voice-capture] Created timeline ML for {era_node["title"]}', flush=True)
+                            except Exception:
+                                pass
+                        break  # one timeline card per capture is enough
+        except Exception as e:
+            print(f'[voice-capture] Timeline card check failed: {e}', flush=True)
+
     print(f'[voice-capture] Done: {len(facts)} facts → {len(knowledge_updates)} nodes, '
           f'{len(ml_triggered)} ML cards', flush=True)
     return result
