@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 10, 2026 (session 64: Multi-domain expansion)
+**Last updated**: April 10, 2026 (session 65: Multi-cue retrieval quizzes)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -58,7 +58,7 @@
 |--------|------|------|
 | Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
 | Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. FSRS-6 scheduled review cards with rich narrative answers, memory hooks, 6 sideways follow-ups, factual quiz suggestions (one-tap creation), "Same topic" checklist. Suspend via ⋯ menu. Instant fade transitions, session persistence. Generic entities filtered. Multi-quiz ML cards. Nexus cards. Knowledge Explorer. |
+| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. FSRS-6 scheduled review cards with rich narrative answers, memory hooks, 6 sideways follow-ups, factual quiz suggestions (one-tap fire-and-forget creation), "Same topic" checklist, "Quizzes for this topic" existing quiz listing. Multi-cue quizzes auto-generated on grading via Gemini Flash. Suspend via ⋯ menu. "Not interested in this fact" suspends all cues for a fact_id. Instant fade transitions, session persistence. Generic entities filtered. Multi-quiz ML cards. Nexus cards. Knowledge Explorer. |
 | Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
 | Queue | `(tabs)/queue.tsx` | Reading queue |
 | Log | `(tabs)/log.tsx` | Activity timeline |
@@ -216,7 +216,8 @@
 | POST | `/review/batch-generate` | Batch generate questions for knowledge items |
 | POST | `/review/follow-up/trigger` | Trigger microlearning from follow-up query |
 | POST | `/review/follow-up/generate` | Generate sideways follow-up queries via Gemini Flash |
-| POST | `/review/create-factual-quiz` | One-click create microlearning_quiz from key_fact suggestion |
+| POST | `/review/create-factual-quiz` | One-click create microlearning_quiz from key_fact suggestion (passes fact_id for linking) |
+| POST | `/review/suspend-fact` | Suspend all quizzes sharing a fact_id ("Not interested in this fact") |
 | POST | `/log/events` | Client interaction event ingestion (replaces log_server.py:8091). JSONL body. Dual-layer: SQLite + JSONL. |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |
@@ -307,7 +308,7 @@
 
 **Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities`, `entity_curriculum_links`
 
-**Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes`
+**Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes` (fact_id + rich_answer columns for multi-cue linking)
 
 **Knowledge Profile**: `transcript_chunks` (embedded voice pieces), `chunk_node_links` (chunks↔nodes), `chunk_entity_links` (chunks↔entities), `domain_knowledge_summaries` (per-domain portraits)
 

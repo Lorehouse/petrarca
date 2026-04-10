@@ -2,6 +2,26 @@
 
 **Date**: April 10, 2026 (last updated — session 64: Multi-domain expansion)
 
+## Session 65: Multi-Cue Retrieval Quizzes (April 10, 2026)
+
+### What
+Added automatic multi-angle retrieval cue generation for key_facts. When grading a review card, a background Gemini Flash call generates 2-4 alternate quiz questions per fact (e.g., "Who conquered Dacia?" / "What did Trajan conquer?" / "When was Dacia conquered?" — all testing the same fact from different angles). All cues share a `fact_id` and `rich_answer` (shared detail card), with semantic dedup at 0.82 cosine.
+
+### Features
+- **Multi-cue generation**: `generate_multicue_quizzes()` in `review_engine.py` — triggered as background thread after `record_answer()` for knowledge_items. Only processes date/event/person/place/fact type key_facts. Uses Gemini Flash with pub-quiz style prompt.
+- **Shared detail cards**: `fact_id` and `rich_answer` columns on `microlearning_quizzes`. All cue-questions for one fact point to the same rich_answer content when revealed.
+- **"Not interested in this fact"**: `POST /review/suspend-fact` — suspends all quizzes sharing a fact_id. Accessible from ⋯ menu on quiz cards.
+- **"Quizzes for this topic"**: Review cards now show a checklist of all existing quizzes for the node at the bottom, with score status icons (✓/○/✗/•).
+- **Fire-and-forget quiz creation**: QuizSuggestions component no longer awaits server response — instant checkmark on tap, DB write in background.
+
+### Files Changed
+- `scripts/review_engine.py` — `generate_multicue_quizzes()`, `MULTICUE_PROMPT`, hook in `record_answer()`
+- `scripts/curriculum_db.py` — `existing_quizzes` query in stream builder, `fact_id`/`rich_answer` in quiz card data
+- `scripts/research-server.py` — `POST /review/suspend-fact` endpoint, `fact_id` param on create-factual-quiz
+- `scripts/db.py` — Schema: `fact_id TEXT`, `rich_answer TEXT` columns + migration + index
+- `app/app/(tabs)/review.tsx` — `QuizSuggestions` fire-and-forget, `MicrolearningQuizCard` menu with "Not interested", existing quizzes listing
+- `app/lib/book-api.ts` — `suspendFact()`, `fact_id` param on `createFactualQuiz()`
+
 ## Session 64: Multi-Domain Expansion (April 10, 2026)
 
 ### What
