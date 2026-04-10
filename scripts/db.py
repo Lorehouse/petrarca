@@ -531,7 +531,6 @@ CREATE TABLE IF NOT EXISTS microlearning_quizzes (
 CREATE INDEX IF NOT EXISTS idx_mlq_card ON microlearning_quizzes(card_id);
 CREATE INDEX IF NOT EXISTS idx_mlq_due ON microlearning_quizzes(due_at);
 CREATE INDEX IF NOT EXISTS idx_mlq_status ON microlearning_quizzes(status);
-CREATE INDEX IF NOT EXISTS idx_mlq_fact ON microlearning_quizzes(fact_id);
 
 -- Voice transcript log: every voice interaction persisted for analysis
 CREATE TABLE IF NOT EXISTS voice_transcripts (
