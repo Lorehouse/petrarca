@@ -19,6 +19,7 @@ from pathlib import Path
 
 from gemini_llm import call_llm
 from curriculum_db import load_curriculum, list_curricula, load_knowledge_states, update_knowledge
+from db import get_connection
 
 
 def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str | None:
@@ -215,10 +216,43 @@ def generate_curriculum(domain: str, depth: str = "introductory", model: str = "
         "nodes": nodes,
     }
 
-    # Save
+    # Save JSON
     path = DATA_DIR / f"{domain_id}.json"
     with open(path, 'w') as f:
         json.dump(curriculum, f, indent=2)
+
+    # Insert into SQLite
+    try:
+        conn = get_connection()
+        existing = conn.execute('SELECT id FROM curriculum_domains WHERE id = ?', (domain_id,)).fetchone()
+        if not existing:
+            conn.execute(
+                'INSERT INTO curriculum_domains (id, title, description, depth, generated_at, node_count) '
+                'VALUES (?,?,?,?,?,?)',
+                (domain_id, domain, f"Introductory curriculum for {domain}",
+                 depth, curriculum['generated_at'], len(nodes))
+            )
+        for node in nodes:
+            conn.execute(
+                'INSERT OR IGNORE INTO curriculum_nodes '
+                '(id, domain_id, title, description, parent_id, level, obscurity, bloom_floor, date_start, date_end) '
+                'VALUES (?,?,?,?,?,?,?,?,?,?)',
+                (node['id'], domain_id, node['title'], node.get('description', ''),
+                 node.get('parent_id'), node.get('level', 1),
+                 node.get('obscurity', 3), node.get('bloom_floor', 'recognize'),
+                 node.get('date_start'), node.get('date_end'))
+            )
+            for prereq_id in node.get('prerequisites', []):
+                conn.execute(
+                    'INSERT OR IGNORE INTO curriculum_prerequisites (domain_id, node_id, prerequisite_id, strength) '
+                    'VALUES (?,?,?,?)',
+                    (domain_id, node['id'], prereq_id, 1.0)
+                )
+        conn.commit()
+        conn.close()
+        print(f"[curriculum] Inserted into SQLite: {domain_id} ({len(nodes)} nodes)", flush=True)
+    except Exception as e:
+        print(f"[curriculum] SQLite insert failed (JSON saved): {e}", flush=True)
 
     print(f"Generated curriculum '{domain}': {len(nodes)} nodes, saved to {path}", flush=True)
     return curriculum
