@@ -22,7 +22,7 @@ from curriculum_db import load_curriculum, list_curricula, load_knowledge_states
 from db import get_connection
 
 
-def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 600) -> str | None:
+def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 1200) -> str | None:
     """Call Claude Opus for high-quality generation.
 
     Tries Anthropic SDK first (if ANTHROPIC_KEY set — works on server),
@@ -46,13 +46,11 @@ def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 600) -> str 
 
     # Fallback: claude -p CLI (free with Max plan, local only)
     try:
-        cmd = ['claude', '-p', '--tools', '', '--output-format', 'json',
+        cmd = ['claude', '-p', '--tools', '', '--output-format', 'text',
                '--model', 'opus', '--no-session-persistence']
         proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
         if proc.returncode == 0 and proc.stdout.strip():
-            resp = json.loads(proc.stdout)
-            if not resp.get('is_error'):
-                return resp.get('result', '')
+            return proc.stdout.strip()
     except Exception as e:
         print(f'[curriculum] claude CLI failed: {e}', flush=True)
 
