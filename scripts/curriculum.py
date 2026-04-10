@@ -22,7 +22,7 @@ from curriculum_db import load_curriculum, list_curricula, load_knowledge_states
 from db import get_connection
 
 
-def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 300) -> str | None:
+def _call_opus(prompt: str, max_tokens: int = 32768, timeout: int = 600) -> str | None:
     """Call Claude Opus for high-quality generation.
 
     Tries Anthropic SDK first (if ANTHROPIC_KEY set — works on server),
