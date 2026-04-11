@@ -44,8 +44,8 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
       onClose();
       if (item === 'triage') {
         router.push('/' as any);
-      } else if (item === 'voice_note') {
-        router.push('/voice-notes' as any);
+      } else if (item === 'voice_capture') {
+        router.push('/voice-capture' as any);
       }
     },
     [onClose, router],
@@ -69,9 +69,9 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
 
             {/* Quick actions */}
             <View style={styles.quickActions}>
-              <Pressable style={styles.quickBox} onPress={() => quickAction('voice_note')}>
-                <Text style={styles.quickTitle}>Voice Note</Text>
-                <Text style={styles.quickSubtitle}>Record a thought</Text>
+              <Pressable style={styles.quickBox} onPress={() => quickAction('voice_capture')}>
+                <Text style={styles.quickTitle}>Capture Voice</Text>
+                <Text style={styles.quickSubtitle}>Record what you learned</Text>
               </Pressable>
               <Pressable style={styles.quickBox} onPress={() => navigate('queue', '/queue')}>
                 <Text style={styles.quickTitle}>Queue</Text>
