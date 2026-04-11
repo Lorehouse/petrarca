@@ -1169,49 +1169,9 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                     if len(related_facts) >= 5:
                         break
 
-            # Build quiz_suggestions live: key_facts not yet covered by
-            # knowledge_items (which means they don't have review cards yet)
-            quiz_suggestions = []
-            if kfs and node_id and domain_id:
-                # Find which fact questions already have knowledge_items
-                existing_ki_questions = set()
-                try:
-                    ki_rows = conn.execute(
-                        'SELECT cached_question FROM knowledge_items '
-                        'WHERE curriculum_node_id=? AND curriculum_domain=?',
-                        (node_id, domain_id)).fetchall()
-                    for ki_row in ki_rows:
-                        ki_cq = _parse_json_safe(ki_row['cached_question'], {})
-                        if ki_cq and ki_cq.get('question'):
-                            existing_ki_questions.add(ki_cq['question'].lower().strip())
-                except Exception:
-                    pass
-
-                for f in kfs:
-                    if len(quiz_suggestions) >= 3:
-                        break
-                    fq = (f.get('question') or '').strip()
-                    fa = (f.get('answer') or '').strip()
-                    if not fq or not fa:
-                        continue
-                    if f.get('id') == current_fact_id:
-                        continue
-                    if fq.lower().strip() in existing_ki_questions:
-                        continue
-                    quiz_suggestions.append({
-                        'question': fq,
-                        'answer': fa,
-                        'fact_id': f.get('id', ''),
-                        'type': f.get('type', 'fact'),
-                    })
-
-            # Remove related_facts that already appear in quiz_suggestions
-            qs_questions = {s['question'].lower().strip() for s in quiz_suggestions}
-            related_facts = [f for f in related_facts
-                             if f['question'].lower().strip() not in qs_questions]
-
             # Existing quizzes for this node (multi-cue + manually created)
             existing_quizzes = []
+            existing_quiz_questions = set()
             if node_id and domain_id:
                 try:
                     eq_rows = conn.execute('''
@@ -1231,8 +1191,54 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                             'last_score': eq['last_score'],
                             'review_count': eq['review_count'] or 0,
                         })
+                        if eq['question']:
+                            existing_quiz_questions.add(eq['question'].lower().strip())
                 except Exception:
                     pass
+
+            # Build quiz_suggestions live: key_facts not yet covered by
+            # knowledge_items or existing quizzes
+            quiz_suggestions = []
+            if kfs and node_id and domain_id:
+                # Find which fact questions already have knowledge_items
+                existing_ki_questions = set()
+                try:
+                    ki_rows = conn.execute(
+                        'SELECT cached_question FROM knowledge_items '
+                        'WHERE curriculum_node_id=? AND curriculum_domain=?',
+                        (node_id, domain_id)).fetchall()
+                    for ki_row in ki_rows:
+                        ki_cq = _parse_json_safe(ki_row['cached_question'], {})
+                        if ki_cq and ki_cq.get('question'):
+                            existing_ki_questions.add(ki_cq['question'].lower().strip())
+                except Exception:
+                    pass
+
+                # Merge both exclusion sets
+                excluded_questions = existing_ki_questions | existing_quiz_questions
+
+                for f in kfs:
+                    if len(quiz_suggestions) >= 3:
+                        break
+                    fq = (f.get('question') or '').strip()
+                    fa = (f.get('answer') or '').strip()
+                    if not fq or not fa:
+                        continue
+                    if f.get('id') == current_fact_id:
+                        continue
+                    if fq.lower().strip() in excluded_questions:
+                        continue
+                    quiz_suggestions.append({
+                        'question': fq,
+                        'answer': fa,
+                        'fact_id': f.get('id', ''),
+                        'type': f.get('type', 'fact'),
+                    })
+
+            # Remove related_facts that already appear in quiz_suggestions
+            qs_questions = {s['question'].lower().strip() for s in quiz_suggestions}
+            related_facts = [f for f in related_facts
+                             if f['question'].lower().strip() not in qs_questions]
 
             card = {
                 'type': 'review',
