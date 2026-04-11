@@ -306,8 +306,20 @@ If LEARNER CONTEXT is provided, use it to:
 - Build on what they found interesting, not just what they missed
 - Avoid asking about things they've already demonstrated mastery of
 
+The rich_answer is shown when the learner gets it wrong — it should be a vivid, memorable mini-narrative,
+not an encyclopedia summary. Name specific people (including minor figures), give physical details,
+include one anecdote-grade detail that sticks.
+
+BAD rich_answer: "Constantinople fell in 1453 after an Ottoman siege led by Mehmed II. This was a
+significant event because it ended the Byzantine Empire and marked the end of the medieval period."
+GOOD rich_answer: "Mehmed II was just 21 when he breached the Theodosian Walls on May 29, 1453.
+The decisive weapon was a massive cannon cast by the Hungarian engineer Urbán — who had first offered
+his services to the Byzantines, but they couldn't afford him. The last emperor, Constantine XI,
+died fighting on the walls; his body was never identified. Within hours Mehmed rode to Hagia Sophia
+and claimed it as a mosque, while Gutenberg was setting type in Mainz 1,500 miles away."
+
 Output JSON only:
-{{"question":"short factual question (6-15 words)","answer_guidance":"the specific factual answer (1-2 sentences max)","rich_answer":"4-5 sentences placing this fact in vivid context — who, what, when, why it matters. Include a temporal anchor to another known period. This is shown when the learner gets it wrong.","temporal_hook":"connection to another era the learner knows","curriculum_context":"brief placement in the larger history"}}"""
+{{"question":"short factual question (6-15 words)","answer_guidance":"the specific factual answer (1-2 sentences max)","rich_answer":"4-5 sentences — vivid narrative with specific names, ages, ironic details, physical description. Include a temporal anchor.","temporal_hook":"connection to another era the learner knows","curriculum_context":"brief placement in the larger history"}}"""
 
 
 QUESTION_GEN_PROMPT = """Generate an analytical review question.
@@ -342,8 +354,20 @@ If LEARNER CONTEXT is provided, use it to:
 
 Keep question under 20 words.
 
+The rich_answer should read like a well-told anecdote, not a textbook paragraph. Name minor figures,
+give ages and physical details, include one surprising or ironic detail that makes the answer stick.
+
+BAD rich_answer: "The Norman conquest of Sicily was significant because it brought together
+multiple cultural traditions and created a unique multicultural society."
+GOOD rich_answer: "When Roger II was crowned in Palermo's cathedral on Christmas Day 1130, his
+coronation mantle was sewn by Arab craftsmen in the royal tiraz workshop — its Arabic inscription
+dates it precisely. His chief minister George of Antioch was a Greek-speaking Syrian Orthodox
+Christian who had previously served the Fatimid rulers of North Africa. The kingdom's three
+official languages (Latin, Greek, Arabic) weren't tolerance as ideology — they were the minimum
+viable bureaucracy for governing three populations who wouldn't learn each other's language."
+
 Output JSON only:
-{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences expanding on the answer with vivid detail, a concrete example, and a temporal anchor to another period. This is shown when the learner gets it wrong — make it a learning moment, not a punishment.","temporal_hook":"...","curriculum_context":"..."}}"""
+{{"question":"...","answer_guidance":"2-3 sentences on what a good answer covers","rich_answer":"4-5 sentences — vivid narrative with specific names, ironic details, one anecdote-grade fact. Temporal anchor to another period the learner knows.","temporal_hook":"...","curriculum_context":"..."}}"""
 
 
 FOLLOW_UP_PROMPT = """A history reader just reviewed a topic. Generate 6 follow-up research questions
@@ -1973,12 +1997,16 @@ Write:
    has a "heading" (short label, null for the opening narrative) and "text" (the paragraph).
    REQUIRED sections:
    - Opening narrative (heading: null): who, what, when, why it matters. 2-3 sentences.
+     Write like a storyteller, not an encyclopedia. Name people with ages or epithets, give
+     one concrete physical detail, make the reader feel the moment.
    - "Sources": Name specific authors and works. If the person wrote anything, mention it.
      If no sources survive, say so — absence is historically significant. Use proper titles
      without markdown formatting.
    - "Still Visible": What can you visit or see today? Buildings, inscriptions, coins,
      manuscripts in specific museums. Be concrete about locations.
    - Optionally one more: "Surprising Detail" or "Cultural Legacy" (art, opera, literature).
+     The surprising detail should be genuinely unexpected — an ironic reversal, a personal
+     quirk, a telling anecdote. Not just "this was influential."
 
 3. 3-5 quiz questions testing SPECIFIC facts from the content. Short questions (6-15 words)
    with short specific answers (1-2 sentences). Each targets a different detail.

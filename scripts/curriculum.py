@@ -99,9 +99,18 @@ STRUCTURE RULES:
 - Topics can have 0-5 concepts (not every topic needs sub-concepts)
 - Balance breadth across the domain — don't over-represent any single area
 
+TITLE RULES:
+- Level 1 (Area) titles can be thematic — they are organizational containers
+- Level 2-3 titles MUST name specific people, works, events, places, or dates — not generic themes
+  BAD: "Pioneering Painters", "Merchant Wealth and Banking Families", "Cultural Exchange"
+  GOOD: "Masaccio and the Brancacci Chapel", "The Medici Bank and Florentine Politics", "Poggio Bracciolini at the Council of Constance (1414-1418)"
+- Each title should be concrete enough that a student can say "I know about this specific thing" or "I don't"
+
 FOR EACH NODE, provide:
-- "title": Clear, specific name
-- "description": 2-3 sentences describing what "knowing this" means at an introductory level. Be specific enough that someone could self-assess: "I know this" or "I don't know this."
+- "title": Specific name following the title rules above
+- "description": 2-3 sentences describing what "knowing this" means. Include specific names, dates, and works — not just thematic summaries.
+  BAD: "You understand the role of banking in Renaissance culture and how wealth influenced artistic production."
+  GOOD: "You know that Cosimo de' Medici founded the Platonic Academy by giving Marsilio Ficino a villa at Careggi in 1462, and that Ficino's Latin translations of Plato (completed 1484) became the standard European text for two centuries."
 - "parent": Title of parent node (null for top-level areas)
 - "level": 1 for Area, 2 for Topic, 3 for Concept, 4 for Detail
 - "prerequisites": List of titles of nodes that should be known before this one (can be empty). Only include direct prerequisites, not transitive ones.
@@ -114,7 +123,7 @@ GUIDELINES:
 - Cover the major areas a well-designed introductory course would include
 - Include political, social, cultural, intellectual, and economic dimensions
 - Don't just list events chronologically — organize by theme and significance
-- Prerequisites should reflect genuine dependencies: you can't understand the Peloponnesian War without knowing about Athens and Sparta
+- Prerequisites should reflect genuine intellectual dependencies: you can't understand Botticelli's mythological paintings without knowing about Ficino's Platonic Academy
 - Obscurity ratings should reflect what an educated non-specialist would know vs. what requires specific study
 
 Output as a JSON array of node objects. No markdown, just the JSON array."""
