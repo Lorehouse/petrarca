@@ -20,9 +20,11 @@ export default function VoiceCaptureScreen() {
 
   const handleComplete = useCallback((result: CaptureResult) => {
     logEvent('voice_capture_complete', {
+      capture_type: result.capture_type ?? 'analyze',
       notes_saved: result.notes_saved,
       entities: result.entities_detected?.length ?? 0,
       research: result.research_triggered?.length ?? 0,
+      nodes_linked: result.nodes_linked?.length ?? 0,
     });
   }, []);
 
@@ -50,8 +52,8 @@ export default function VoiceCaptureScreen() {
 
       <View style={styles.hint}>
         <Text style={styles.hintText}>
-          Your recording will be transcribed and matched against your curriculum.
-          Facts, entities, and wonderings are extracted automatically.
+          <Text style={{ fontWeight: '600' }}>Analyze</Text> extracts facts, entities, and wonderings.{'\n'}
+          <Text style={{ fontWeight: '600' }}>Insight</Text> saves a theory or hypothesis — linked to your curriculum, but no processing.
         </Text>
       </View>
 

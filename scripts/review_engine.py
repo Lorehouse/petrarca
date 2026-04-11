@@ -4123,13 +4123,18 @@ def run_voice_elicitation(node_id: str, domain_id: str, audio_path: Path, conn, 
 
 def process_voice_capture(transcript: str, entity_id: str = None,
                           entity_name: str = None, mode: str = 'general',
-                          sync: bool = False) -> dict:
+                          sync: bool = False, capture_type: str = 'analyze') -> dict:
     """Process a voice capture for knowledge graph ingestion.
 
     Unlike run_voice_elicitation (which tests recall of a specific node),
     this ingests new knowledge: extracting facts, mapping to curriculum nodes,
     updating knowledge states, adding sources to knowledge_items, and
     triggering question generation + microlearning from wonderings.
+
+    capture_type='insight' short-circuits after node detection: saves the
+    transcript linked to curriculum nodes but skips LLM analysis, knowledge
+    updates, and microlearning generation. For unverified theories/hypotheses
+    the user wants to revisit later.
 
     Returns dict with: transcript, facts, node_assessments, wonderings,
     knowledge_updates, microlearning_triggered, questions_queued.
@@ -4340,6 +4345,42 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         by_priority[p] = by_priority.get(p, 0) + 1
     print(f'[voice-capture] Found {len(candidate_nodes)} candidate nodes across {len(candidate_domains)} domains '
           f'(breakdown: {by_priority})', flush=True)
+
+    # --- Insight mode: save transcript + node links, skip all LLM/processing ---
+    if capture_type == 'insight':
+        nodes_linked = [
+            {'node_id': n['node_id'], 'domain_id': n['domain_id'],
+             'title': n['title'], 'priority': n.get('priority', 'keyword')}
+            for n in candidate_nodes[:20]
+        ]
+        primary_domain = next(iter(candidate_domains)) if candidate_domains else None
+        primary_node = candidate_nodes[0]['node_id'] if candidate_nodes else None
+        entity_names = list({n['title'] for n in candidate_nodes[:5]
+                             if n.get('priority') == 'direct'})
+
+        _log_voice_transcript(
+            source='insight',
+            node_id=primary_node or entity_id or 'general',
+            domain_id=primary_domain or '',
+            node_title=entity_name or (candidate_nodes[0]['title'] if candidate_nodes else 'general'),
+            transcript=transcript,
+            audio_bytes=0,
+            llm_result={'nodes_linked': nodes_linked, 'capture_type': 'insight'},
+            ml_triggered=[],
+        )
+
+        print(f'[voice-capture] Insight saved: {len(nodes_linked)} nodes linked, '
+              f'domains={list(candidate_domains)}', flush=True)
+        return {
+            'status': 'completed',
+            'capture_type': 'insight',
+            'transcript': transcript,
+            'nodes_linked': nodes_linked,
+            'entities_mentioned': entity_names or list(set(e for e in detected_entity_ids[:5])),
+            'notes_saved': 1,
+            'research_triggered': [],
+            'microlearning_triggered': [],
+        }
 
     # --- Build context section for prompt ---
     if entity_id and entity_name:

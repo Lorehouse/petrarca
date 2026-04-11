@@ -4602,6 +4602,7 @@ JSON array only:"""
         entity_id = None
         entity_name = None
         mode = 'general'
+        capture_type = 'analyze'
         input_text = None
         audio_path = None
         request_id = ''
@@ -4615,6 +4616,7 @@ JSON array only:"""
             entity_id = form.getvalue('entity_id', None)
             entity_name = form.getvalue('entity_name', None)
             mode = form.getvalue('mode', 'general')
+            capture_type = form.getvalue('capture_type', 'analyze')
             request_id = form.getvalue('request_id', '')
 
             if 'audio' in form:
@@ -4627,6 +4629,7 @@ JSON array only:"""
             entity_id = body.get('entity_id')
             entity_name = body.get('entity_name')
             mode = body.get('mode', 'general')
+            capture_type = body.get('capture_type', 'analyze')
             input_text = body.get('text', '').strip()
         else:
             self._send_json_response(400, {'error': 'Expected multipart or JSON'})
@@ -4695,14 +4698,15 @@ JSON array only:"""
                 entity_name = row['name']
             conn.close()
 
-        print(f'[explore/capture] Running rich pipeline: entity={entity_id}, name={entity_name}, '
-              f'mode={mode}, transcript={len(transcript)} chars', flush=True)
+        print(f'[explore/capture] Running {"insight save" if capture_type == "insight" else "rich pipeline"}: '
+              f'entity={entity_id}, name={entity_name}, mode={mode}, transcript={len(transcript)} chars', flush=True)
 
         result = process_voice_capture(
             transcript=transcript,
             entity_id=entity_id,
             entity_name=entity_name,
             mode=mode,
+            capture_type=capture_type,
         )
 
         # Ensure backward-compatible fields for client
@@ -5442,6 +5446,19 @@ JSON array only:"""
         or in the multipart form data. Header is preferred for retries since it allows
         the server to short-circuit without reading the full audio upload.
         """
+        # Disk space pre-check — audio temp files + cache need ~10MB headroom
+        try:
+            st = os.statvfs('/opt/petrarca/data')
+            free_mb = (st.f_bavail * st.f_frsize) / (1024 * 1024)
+            if free_mb < 50:
+                log_server_event('voice_elicit_disk_full', free_mb=round(free_mb, 1))
+                print(f'[voice-elicit] DISK LOW: {free_mb:.0f}MB free — uploads may fail', flush=True)
+                if free_mb < 10:
+                    self._send_json_response(507, {'error': 'Server disk full'})
+                    return
+        except OSError:
+            pass
+
         # Phase 2: Check header-based request_id BEFORE reading body
         header_request_id = self.headers.get('X-Request-ID', '')
         if header_request_id:
@@ -5475,6 +5492,8 @@ JSON array only:"""
         try:
             data = self.rfile.read(length)
         except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            log_server_event('voice_elicit_upload_drop', error=str(e), content_length=length,
+                             request_id=header_request_id or 'unknown')
             print(f'[voice-elicit] Client disconnected during upload ({e})', flush=True)
             return
         environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
@@ -5532,18 +5551,32 @@ JSON array only:"""
                         pass  # corrupted cache, re-process
 
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
-            tmp.write(audio_field.file.read())
-            audio_path = Path(tmp.name)
-        result = None
         try:
-            print(f'[voice-elicit] Processing: node={node_id}, domain={domain_id[:30]}, audio={audio_path.stat().st_size} bytes', flush=True)
+            with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
+                tmp.write(audio_field.file.read())
+                audio_path = Path(tmp.name)
+        except OSError as e:
+            log_server_event('voice_elicit_tmpfile_fail', error=str(e), node_id=node_id, request_id=request_id)
+            print(f'[voice-elicit] Failed to write temp file: {e}', flush=True)
+            self._send_json_response(507, {'error': 'Server disk full — cannot write audio'})
+            return
+        audio_size = audio_path.stat().st_size
+        result = None
+        log_server_event('voice_elicit_start', node_id=node_id, domain_id=domain_id[:30],
+                         audio_bytes=audio_size, request_id=request_id)
+        try:
+            print(f'[voice-elicit] Processing: node={node_id}, domain={domain_id[:30]}, audio={audio_size} bytes', flush=True)
             result = run_voice_elicitation(node_id, domain_id, audio_path, None, transcribe_on_server)
             print(f'[voice-elicit] Result: coverage={result.get("coverage_pct", "?")}%, captured={len(result.get("captured", []))}, ml_triggered={len(result.get("microlearning_triggered", []))}', flush=True)
+            log_server_event('voice_elicit_done', node_id=node_id, request_id=request_id,
+                             coverage_pct=result.get('coverage_pct'),
+                             captured=len(result.get('captured', [])),
+                             error=result.get('error'))
             if result.get('error'):
                 print(f'[voice-elicit] Error in result: {result["error"]}', flush=True)
         except Exception as e:
             print(f'[voice-elicit] Exception: {e}', flush=True)
+            log_server_event('voice_elicit_exception', node_id=node_id, request_id=request_id, error=str(e))
             import traceback; traceback.print_exc()
             result = {'error': str(e)}
         finally:
@@ -5633,11 +5666,15 @@ JSON array only:"""
             return self._send_json_response(400, {'error': 'Missing domain_id or phase1_eras'})
 
         from review_engine import score_sweep
+        log_server_event('sweep_submit_start', domain_id=domain_id, era_count=len(phase1_eras))
         print(f'[sweep] Scoring sweep for {domain_id}, {len(phase1_eras)} eras...', flush=True)
         result = score_sweep(domain_id, phase1_eras, phase2_transcript)
         if result.get('error'):
+            log_server_event('sweep_submit_error', domain_id=domain_id, error=result['error'])
             print(f'[sweep] Error: {result["error"]}', flush=True)
             return self._send_json_response(500, result)
+        log_server_event('sweep_submit_done', domain_id=domain_id,
+                         coverage=result.get('total_coverage'), composite=result.get('composite_score'))
         print(f'[sweep] Done: coverage={result.get("total_coverage", 0):.1%}, '
               f'composite={result.get("composite_score", 0):.2f}', flush=True)
         return self._send_json_response(200, result)
@@ -5656,6 +5693,7 @@ JSON array only:"""
         try:
             data = self.rfile.read(length)
         except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            log_server_event('sweep_transcribe_upload_drop', error=str(e), content_length=length)
             print(f'[sweep-transcribe] Client disconnected: {e}', flush=True)
             return
         environ = {'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(length)}
@@ -5666,17 +5704,26 @@ JSON array only:"""
             return self._send_json_response(400, {'error': 'Missing audio'})
 
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
-            tmp.write(audio_field.file.read())
-            audio_path = Path(tmp.name)
         try:
-            print(f'[sweep-transcribe] Transcribing era={era_id}, size={audio_path.stat().st_size}', flush=True)
+            with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as tmp:
+                tmp.write(audio_field.file.read())
+                audio_path = Path(tmp.name)
+        except OSError as e:
+            log_server_event('sweep_transcribe_tmpfile_fail', error=str(e), era_id=era_id)
+            return self._send_json_response(507, {'error': 'Server disk full'})
+        audio_size = audio_path.stat().st_size
+        log_server_event('sweep_transcribe_start', era_id=era_id, audio_bytes=audio_size)
+        try:
+            print(f'[sweep-transcribe] Transcribing era={era_id}, size={audio_size}', flush=True)
             transcript = transcribe_on_server(audio_path)
             if not transcript or len(transcript.strip()) < 10:
+                log_server_event('sweep_transcribe_too_short', era_id=era_id)
                 return self._send_json_response(200, {'transcript': '', 'era_id': era_id, 'too_short': True})
+            log_server_event('sweep_transcribe_done', era_id=era_id, chars=len(transcript))
             print(f'[sweep-transcribe] Done: {len(transcript)} chars', flush=True)
             return self._send_json_response(200, {'transcript': transcript, 'era_id': era_id})
         except Exception as e:
+            log_server_event('sweep_transcribe_error', era_id=era_id, error=str(e))
             print(f'[sweep-transcribe] Error: {e}', flush=True)
             return self._send_json_response(500, {'error': str(e)})
         finally:

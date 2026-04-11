@@ -19,10 +19,12 @@ export const exploreCaptureQueue = createAudioQueue('explore-captures');
 
 export interface CaptureResult {
   status: 'completed' | 'error';
+  capture_type?: 'analyze' | 'insight';
   transcript?: string;
   notes_saved: number;
   research_triggered: { card_id: string; query: string }[];
   entities_detected: string[];
+  nodes_linked?: { node_id: string; domain_id: string; title: string; priority: string }[];
   error?: string;
 }
 
@@ -84,7 +86,7 @@ export default function ExplorerCapture({
     }
   }, [entityId, mode]);
 
-  const stopAndSend = useCallback(async () => {
+  const stopAndSend = useCallback(async (captureType: 'analyze' | 'insight' = 'analyze') => {
     if (!recRef.current) return;
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     try {
@@ -95,17 +97,17 @@ export default function ExplorerCapture({
       if (!tempUri) { setState('idle'); setError('No audio file'); return; }
       if (Haptics) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      logEvent('explorer_capture_record_stop', { entity_id: entityId, duration, mode });
+      logEvent('explorer_capture_record_stop', { entity_id: entityId, duration, mode, capture_type: captureType });
 
       // Enqueue: copies audio to persistent dir, saves to pending.json
-      const metadata: Record<string, string> = { mode };
+      const metadata: Record<string, string> = { mode, capture_type: captureType };
       if (entityId) metadata.entity_id = entityId;
       if (entityName) metadata.entity_name = entityName;
       const requestId = await exploreCaptureQueue.enqueue(tempUri, '/explore/capture', metadata);
 
       // Attempt upload (blocking — user sees "Transcribing…")
       setState('processing');
-      setProcessingLabel('Transcribing…');
+      setProcessingLabel(captureType === 'insight' ? 'Saving insight…' : 'Transcribing…');
 
       try {
         const data = await exploreCaptureQueue.upload(requestId);
@@ -125,19 +127,19 @@ export default function ExplorerCapture({
     }
   }, [entityId, entityName, duration, mode]);
 
-  const sendText = useCallback(async () => {
+  const sendText = useCallback(async (captureType: 'analyze' | 'insight' = 'analyze') => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setState('processing');
-    setProcessingLabel('Analyzing…');
+    setProcessingLabel(captureType === 'insight' ? 'Saving insight…' : 'Analyzing…');
     setError('');
-    logEvent('explorer_capture_text', { entity_id: entityId, mode, length: trimmed.length });
+    logEvent('explorer_capture_text', { entity_id: entityId, mode, length: trimmed.length, capture_type: captureType });
 
     try {
       const resp = await fetchWithTimeout(`${RESEARCH_BASE}/explore/capture`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: trimmed, entity_id: entityId, entity_name: entityName, mode }),
+        body: JSON.stringify({ text: trimmed, entity_id: entityId, entity_name: entityName, mode, capture_type: captureType }),
         timeout: 30000,
       });
       if (!resp.ok) throw new Error(`Request failed: ${resp.status}`);
@@ -187,11 +189,20 @@ export default function ExplorerCapture({
 
   // --- Done state ---
   if (state === 'done' && result) {
+    const isInsight = result.capture_type === 'insight';
     const parts: string[] = [];
-    if (result.notes_saved > 0) parts.push(`${result.notes_saved} note${result.notes_saved > 1 ? 's' : ''} saved`);
-    if (result.research_triggered.length > 0) parts.push(`${result.research_triggered.length} research queued`);
-    if (result.entities_detected.length > 0 && mode === 'general') {
-      parts.push(`→ ${result.entities_detected.join(', ')}`);
+    if (isInsight) {
+      parts.push('Insight saved');
+      const nodes = result.nodes_linked;
+      if (nodes && nodes.length > 0) {
+        parts.push(`→ ${nodes.slice(0, 3).map((n: { title: string }) => n.title).join(', ')}`);
+      }
+    } else {
+      if (result.notes_saved > 0) parts.push(`${result.notes_saved} note${result.notes_saved > 1 ? 's' : ''} saved`);
+      if (result.research_triggered.length > 0) parts.push(`${result.research_triggered.length} research queued`);
+      if (result.entities_detected.length > 0 && mode === 'general') {
+        parts.push(`→ ${result.entities_detected.join(', ')}`);
+      }
     }
     return (
       <View style={cs.doneRow}>
@@ -217,8 +228,11 @@ export default function ExplorerCapture({
         <View style={cs.pulseDot} />
         <Text style={cs.timer}>{fmt(duration)}</Text>
         <View style={{ flex: 1 }} />
-        <Pressable onPress={stopAndSend} style={cs.sendBtn}>
-          <Text style={cs.sendBtnText}>Send</Text>
+        <Pressable onPress={() => stopAndSend('analyze')} style={cs.sendBtn}>
+          <Text style={cs.sendBtnText}>Analyze</Text>
+        </Pressable>
+        <Pressable onPress={() => stopAndSend('insight')} style={cs.insightBtn}>
+          <Text style={cs.insightBtnText}>Insight</Text>
         </Pressable>
         <Pressable onPress={cancelRecording} style={cs.cancelBtn}>
           <Text style={cs.cancelText}>✕</Text>
@@ -238,12 +252,17 @@ export default function ExplorerCapture({
         onChangeText={setText}
         multiline
         maxLength={1000}
-        onSubmitEditing={sendText}
+        onSubmitEditing={() => sendText('analyze')}
       />
       {text.trim().length > 0 ? (
-        <Pressable onPress={sendText} style={cs.sendBtn}>
-          <Text style={cs.sendBtnText}>Send</Text>
-        </Pressable>
+        <>
+          <Pressable onPress={() => sendText('analyze')} style={cs.sendBtn}>
+            <Text style={cs.sendBtnText}>Analyze</Text>
+          </Pressable>
+          <Pressable onPress={() => sendText('insight')} style={cs.insightBtn}>
+            <Text style={cs.insightBtnText}>Insight</Text>
+          </Pressable>
+        </>
       ) : Audio ? (
         <Pressable onPress={startRecording} style={cs.micBtn}>
           <View style={cs.micDot} />
@@ -314,6 +333,19 @@ const cs = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 12,
     color: colors.parchment,
+  },
+  insightBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: colors.ink,
+  },
+  insightBtnText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.ink,
   },
   cancelBtn: {
     padding: 6,
