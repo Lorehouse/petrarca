@@ -4191,15 +4191,27 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                 if not _re.search(r'\b' + _re.escape(name_lower) + r'\b', transcript_lower):
                     return False
             return True
-        # Word overlap: require >60% of significant words to match,
-        # and at least 2 matching words for multi-word entities
+        # Word overlap with prefix matching (handles plurals: "Umayyad" ↔ "Umayyads")
         name_words = set(w.lower() for w in re.split(r'\W+', name) if len(w) > 3)
         if not name_words:
             return False
+        # Exact matches first
         matching = name_words & transcript_words
+        # Prefix matching for words >= 5 chars (avoids "Rome"/"Romeo" false positives)
+        for nw in name_words - matching:
+            if len(nw) >= 5:
+                for tw in transcript_words:
+                    if len(tw) >= 5 and (nw.startswith(tw) or tw.startswith(nw)):
+                        matching.add(nw)
+                        break
         overlap = len(matching) / len(name_words)
         if len(name_words) == 1:
             return overlap >= 1.0  # single-word entities must match exactly
+        # For 2-word entities (e.g. "Rashidun Caliphate"), accept 1/2 match
+        # if the matching word is distinctive (>= 6 chars)
+        if len(name_words) == 2 and len(matching) == 1:
+            matched_word = next(iter(matching))
+            return len(matched_word) >= 6
         return overlap >= 0.6 and len(matching) >= 2
 
     if entity_id:
