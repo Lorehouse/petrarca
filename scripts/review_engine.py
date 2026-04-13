@@ -4412,26 +4412,37 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         else:
             link_rows = []
 
-        # Score 1: TF-IDF specificity — node linked by a specific entity (Frederick II → 2 nodes)
-        # outranks one linked by a generic entity (Latin → 50 nodes)
+        # Score 1: TF-IDF specificity, scaled by entity name length.
+        # - 1/N down-weights generic entities (Latin → 50 nodes vs Frederick II → 2 nodes)
+        # - Length-scaling distinguishes "Latin" (5 chars, often mentioned in passing)
+        #   from proper-noun entities like "Frederick II" (12 chars, usually a topic word).
+        # Both factors needed: Latin (5 chars, 1 link) shouldn't outrank Frederick II
+        # (12 chars, 2 links) just because Latin happens to link to only 1 node.
         entity_total_links: dict[str, int] = {}
         for r in link_rows:
             entity_total_links[r['entity_id']] = entity_total_links.get(r['entity_id'], 0) + 1
-        node_specificity: dict[str, float] = {}
-        for r in link_rows:
-            weight = 1.0 / max(1, entity_total_links.get(r['entity_id'], 1))
-            node_specificity[r['node_id']] = node_specificity.get(r['node_id'], 0.0) + weight
 
-        # Score 2: title-entity match — if a node's title contains a matched entity name,
-        # that's a near-guaranteed topic match. "Frederick II Stupor Mundi" contains
-        # "Frederick II" → strong signal. Adds a large boost to the specificity score.
+        def _entity_weight(eid: str) -> float:
+            ename = matched_entity_names.get(eid, '')
+            length_factor = max(0.5, min(2.0, len(ename) / 10.0))  # 5-char → 0.5, 20-char → 2.0
+            return (1.0 / max(1, entity_total_links.get(eid, 1))) * length_factor
+
+        node_specificity: dict[str, float] = {}
+        node_linked_entities: dict[str, list[str]] = {}
+        for r in link_rows:
+            node_specificity[r['node_id']] = node_specificity.get(r['node_id'], 0.0) + _entity_weight(r['entity_id'])
+            node_linked_entities.setdefault(r['node_id'], []).append(r['entity_id'])
+
+        # Score 2: title-entity match — node title contains a matched entity name.
+        # Boost scales with entity specificity: "Frederick II Stupor Mundi" containing
+        # "Frederick II" (rare entity) > "Latin and the Romance Languages" containing
+        # "Latin" (common short word).
         def _title_entity_boost(title: str) -> float:
             title_lower = title.lower()
             boost = 0.0
-            for ename in matched_entity_names.values():
+            for eid, ename in matched_entity_names.items():
                 if len(ename) >= 5 and ename.lower() in title_lower:
-                    # Longer entity names = more specific match
-                    boost += 2.0 + len(ename) * 0.05
+                    boost += (2.0 + len(ename) * 0.05) * _entity_weight(eid)
             return boost
 
         def _composite_score(node) -> float:
