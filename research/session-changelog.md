@@ -1,6 +1,81 @@
 # Knowledge System Implementation Status
 
-**Date**: April 10, 2026 (last updated — session 64: Multi-domain expansion)
+**Date**: April 13, 2026 (last updated — session 68: Entity matching fix for plurals/2-word entities)
+
+## Session 68: Entity Matching Fix (April 13, 2026)
+
+### What
+Fixed two bugs in `_entity_matches_transcript()` in `review_engine.py` that caused voice captures (including insights) to miss obvious entity matches when transcripts contained plurals or short variant spellings.
+
+### Discovery
+Verified the first insight from session 67 ("difference between the Rashidun Khalif and... was it the Umayyads") was saved correctly but linked to wrong nodes (`ag_reception_hellenism` "The Persians" as primary, mostly Sicily/Rome `[keyword]` matches, no Islamic Civilization direct entity matches). The relevant entities (Umayyad Caliphate, Rashidun Caliphate, Abbasid Caliphate) all exist in `shared_entities` with correct curriculum links, but the matcher rejected them.
+
+### Bugs
+1. **No prefix matching**: Entity word "umayyad" failed to match transcript word "umayyads". Word-set intersection requires identical strings.
+2. **Strict 60% + 2-word threshold for 2-word entities**: "Rashidun Caliphate" matched "rashidun" (1/2 words = 50%) but threshold required 60% AND ≥2 matching words. Multi-word entities with one distinctive proper noun were systematically rejected.
+
+### Fix
+- Added prefix matching for words ≥ 5 chars (avoids "Rome"/"Romeo" false positives while catching "umayyad"/"umayyads" plurals)
+- Relaxed 2-word entity threshold: accept 1/2 match if the matched word is ≥ 6 chars (distinctive proper noun)
+- Single-word and 3+ word entity rules unchanged
+
+### Verification
+Reprocessed the existing insight: now matches Umayyad/Rashidun/Abbasid Caliphates and 16 Islamic Civilization curriculum nodes including "The Mawali Question and Social Hierarchies" — exactly the topic of the insight. Updated primary node from byzantine alphabetical-first to islamic_ci_the_rashidun_caliphate_632661 (best-match domain has 16 direct links vs 4 byzantine).
+
+### Impact
+This affects ALL voice captures (analyze + insight modes), not just historiographic insights. Past captures may have been under-matched; could optionally backfill by reprocessing `voice_transcripts` with the new logic.
+
+### Files Changed
+- `scripts/review_engine.py` — `_entity_matches_transcript()` in `process_voice_capture()`
+
+## Session 67: Insight Capture Mode (April 11, 2026)
+
+### What
+Added a "Save Insight" mode to voice capture for recording unverified theories, hypotheses, and historiographic observations without triggering the full analysis pipeline. Motivated by the need to capture interpretive/historiographic knowledge (e.g. "early caliphates prioritized Arab identity, later ones moved toward universal Islam") that doesn't fit the existing factual knowledge model.
+
+### Design Decision
+The current knowledge system is optimized for factual knowledge with clear right/wrong answers. But as reading moves into historiographic territory, there's a class of input — theories, attributed claims, debates, personal hypotheses — that shouldn't be treated as facts or trigger quiz generation. The insight mode is a minimal first step: save the transcript linked to curriculum nodes, but don't process further. This preserves the input for a future historiographic knowledge layer.
+
+### Changes
+- **`review_engine.py`**: `process_voice_capture()` accepts `capture_type='analyze'|'insight'`. Insight mode reuses all 4 phases of curriculum node detection (entity links, sibling overlap, domain expansion, keyword fallback), then saves to `voice_transcripts` with `source='insight'` and returns — no LLM call, no knowledge_items, no microlearning.
+- **`research-server.py`**: `/explore/capture` parses `capture_type` from both multipart form and JSON body.
+- **`ExplorerCapture.tsx`**: Recording and text-input states show two buttons: "Analyze" (solid, full pipeline) and "Insight" (outlined, transcribe + link only). Done state shows "Insight saved → Node1, Node2 ✓".
+- **`voice-capture.tsx`**: Updated hint text explaining both modes.
+
+### Design Document
+Wrote `research/historiographic-knowledge-design.md` — comprehensive design doc covering:
+- Taxonomy of non-factual knowledge (seeds → attributed claims → debates → frameworks → historiographic evolution)
+- Five concrete risks of muddying the factual scaffold (diluting review time, ambiguous knowledge states, premature exposure, false attribution, scope creep)
+- 6-layer proposal from minimal (insight capture, done) through speculative (debate-structured review)
+- Data model: no new tables for Layers 0-1, optional `insight_metadata` table for Layer 2+
+- Interaction with all 11 design principles
+- Research grounding (Matuschak, Fuzzy-Trace Theory, elaborative interrogation, interleaving)
+- Next step: Layer 1 (insight surfacing during elicitation/reading/review) — zero new data model, pure read-only surfacing
+
+## Session 66: Quiz Dedup, Prompt Quality, LLM Comparison (April 11, 2026)
+
+### What
+Fixed quiz suggestion duplicates, improved prompt quality across all LLM-generated content using BAD/GOOD examples, and ran a systematic comparison of Codex (gpt-5.4 xhigh) vs Claude Opus for curriculum generation, microlearning cards, and question generation.
+
+### Bug Fix
+- **Quiz suggestion duplicates**: `generate_review_stream()` in `curriculum_db.py` only checked `knowledge_items` when filtering quiz suggestions — missed quizzes already created in `microlearning_quizzes`. Fixed by moving the `existing_quizzes` query before the suggestion builder and merging into a unified exclusion set. Exact text match is correct here (suggestions come from key_facts verbatim; semantic dedup already happens at multi-cue generation time).
+
+### Prompt Improvements
+- **rich_answer BAD/GOOD examples**: Both `QUESTION_GEN_PROMPT_FACTUAL` and `QUESTION_GEN_PROMPT` now include concrete examples showing vivid narrative style (specific names, ages, ironic details, physical description) vs. encyclopedia summaries. Teaches the model what "vivid" means.
+- **Curriculum TITLE RULES**: `CURRICULUM_GENERATION_PROMPT` now has BAD/GOOD examples for node titles ("Merchant Wealth and Banking Families" → "The Medici Bank and Florentine Politics") and descriptions (thematic summary → specific names/dates/works). Tested via Codex comparison — dramatically improved title specificity.
+- **Microlearning opening narrative**: Added "write like a storyteller" guidance and surprising detail quality bar. Quiz questions left unchanged — factual scaffold priority preserved.
+
+### LLM Comparison: Codex vs Opus
+Tested curriculum generation, microlearning cards, and question generation with both models. Results:
+- **Curricula**: Both produced ~90 nodes. Opus names specific people/works in titles naturally; Codex needed explicit BAD/GOOD examples but then matched quality. Codex had denser prerequisite graphs (91% vs 71%).
+- **Microlearning**: Opus tells better stories (eternal lamp before Plato's bust, Plato birthday banquet). Codex more historiographically aware (notes absence of institutional records as evidence, gives street addresses). Both valid, Opus better for "hooks not facts."
+- **Question gen**: Opus rich_answers clearly richer — names minor figures (Urbán the cannon engineer), gives specific dates (May 29), makes causal links. Codex correct but reads like textbook.
+- **Decision**: Staying with Opus for all interactive content. Codex viable as backup.
+
+### Files Changed
+- `scripts/curriculum_db.py` — Quiz suggestion dedup against `microlearning_quizzes`
+- `scripts/review_engine.py` — BAD/GOOD examples in both question gen prompts and microlearning prompt
+- `scripts/curriculum.py` — TITLE RULES with BAD/GOOD examples in generation prompt
 
 ## Session 65: Multi-Cue Retrieval Quizzes (April 10, 2026)
 

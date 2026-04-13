@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 10, 2026 (session 65: Multi-cue retrieval quizzes)
+**Last updated**: April 13, 2026 (session 68: Entity matching fix for plurals/2-word entities)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -237,7 +237,7 @@
 | POST | `/entity/questions` | Generate entity questions |
 | POST | `/entity/research` | Entity research via Gemini+Search |
 | POST | `/entity/notes` | Save user note about an entity |
-| POST | `/explore/capture` | Voice/text capture → entity detection → curriculum node mapping → knowledge state updates, quiz generation, microlearning from wonderings. Full knowledge graph ingestion via `process_voice_capture()`. |
+| POST | `/explore/capture` | Voice/text capture → entity detection → curriculum node mapping → knowledge state updates, quiz generation, microlearning from wonderings. Full knowledge graph ingestion via `process_voice_capture()`. Supports `capture_type='insight'` for saving unverified theories/hypotheses — transcribes + links to curriculum nodes but skips all LLM analysis and processing. |
 | GET | `/entities` | List all entities |
 | GET | `/entity/:id` | Entity detail (includes user notes) |
 

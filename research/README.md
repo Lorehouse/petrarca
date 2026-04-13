@@ -21,6 +21,7 @@ Master index of all research documents. **Always update this file when adding ne
 - **Synthesis**: [synthesis-pipeline-design.md](synthesis-pipeline-design.md), [synthesis-knowledge-tracking.md](synthesis-knowledge-tracking.md)
 - **Books**: [book-companion-handoff.md](book-companion-handoff.md), [book-companion-experiments.md](book-companion-experiments.md)
 - **Knowledge mapping**: [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md), [curriculum-system-audit.md](curriculum-system-audit.md), [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md)
+- **Historiographic/interpretive knowledge**: [historiographic-knowledge-design.md](historiographic-knowledge-design.md)
 - **Growth measurement**: [knowledge-growth-measurement-proposal.html](knowledge-growth-measurement-proposal.html)
 - **Calibration/thresholds**: [experiment-results-report.md](experiment-results-report.md), `scripts/ground-truth/`
 - **UX**: [ux-redesign-spec.md](ux-redesign-spec.md), [web-app-audit.md](web-app-audit.md), [mobile-app-audit.md](mobile-app-audit.md)
@@ -46,6 +47,11 @@ Master index of all research documents. **Always update this file when adding ne
 | [user-requirements-4.md](user-requirements-4.md) | User interview round 4 — hooks philosophy, note-taking paradox | Done |
 | [reference-projects.md](reference-projects.md) | Analysis of ../otak, ../bookifier, ../alif — reusable code & patterns | Done |
 | [incremental-reading.md](incremental-reading.md) | Deep dive on incremental reading: SuperMemo, theory, implementations | Done |
+
+## External Research & Prior Art
+| Document | Description | Status |
+|----------|-------------|--------|
+| [kolja-sam-learning-tools-analysis.md](kolja-sam-learning-tools-analysis.md) | **Analysis of Kolja Sam's learning tool portfolio** (koljasam.com): 20+ projects, digital garden on learning science. Key insights for Petrarca: learning bugs vs fatigue lapses, SR prediction≠learning, overlearn→refresh, confidence trajectories, serendipitous self-knowledge resurfacing, interdependent cards. Actionable summary with priorities. | Done |
 
 ## Domain Research
 | Document | Description | Status |

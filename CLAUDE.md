@@ -44,6 +44,7 @@ These principles are the intellectual foundation of the project. They override i
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
 | **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
+| **Historiographic/insights** | `research/historiographic-knowledge-design.md` (theories, debates, attributed claims — layered proposal). Voice capture `source='insight'` in `review_engine.py`. |
 | **Knowledge atlas** | `scripts/knowledge_atlas.html` (standalone D3 web viz), `curriculum_db.py` `get_knowledge_atlas_data()`, served at `/knowledge/atlas` |
 | **Knowledge growth** | `scripts/knowledge_growth.html` (D3 viz), `curriculum_db.py` (`compute_network_metrics`, `get_knowledge_growth_data`), `research/knowledge-growth-measurement-proposal.html` |
 | **Feed/ranking** | `research/novelty-system-architecture.md` |
