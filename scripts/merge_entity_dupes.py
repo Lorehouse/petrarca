@@ -137,6 +137,10 @@ def is_high_confidence_dupe(pair: dict) -> tuple[bool, str]:
         frozenset(["naples", "neapolis"]),
         frozenset(["cappella_palatina", "palatine_chapel"]),
         frozenset(["sasanian_empire", "sasanian_persia"]),
+        # Curriculum-context dupes: `greece` in Petrarca is specifically
+        # described as "Ancient civilization conquered by Rome", not modern
+        # Greece, so it and `ancient_greece` are both Q11772 (Ancient Greece).
+        frozenset(["ancient_greece", "greece"]),
     }
     if frozenset([can_id, dup_id]) in ALIASES:
         return True, "known-alias"

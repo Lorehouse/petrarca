@@ -142,10 +142,23 @@ def test_is_safe_regnal_suffix():
     assert "regnal" in reason
 
 
-def test_is_unsafe_different_concepts():
+def test_is_safe_ancient_greece_curriculum_alias():
+    """Petrarca's `greece` entity is actually 'Ancient civilization conquered
+    by Rome' — the curriculum uses it as a dupe of ancient_greece. The
+    classifier treats this as a known-alias after session 70 analysis."""
     from merge_entity_dupes import is_high_confidence_dupe
     pair = {"canonical": "ancient_greece", "duplicate": "greece",
             "canonical_name": "Ancient Greece", "duplicate_name": "Greece"}
+    ok, reason = is_high_confidence_dupe(pair)
+    assert ok is True
+    assert reason == "known-alias"
+
+
+def test_is_unsafe_different_concepts():
+    """Generic vs specific should remain REVIEW-only."""
+    from merge_entity_dupes import is_high_confidence_dupe
+    pair = {"canonical": "abbasid_caliphate", "duplicate": "arab_caliphates",
+            "canonical_name": "Abbasid Caliphate", "duplicate_name": "Arab Caliphates"}
     ok, reason = is_high_confidence_dupe(pair)
     assert ok is False
     assert reason == "needs-review"
