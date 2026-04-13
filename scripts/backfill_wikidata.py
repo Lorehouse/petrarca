@@ -589,6 +589,27 @@ Return JSON: {{"queries": ["...", "..."]}}
 """
 
 
+def _is_disambiguation_only(candidate_qids_json: str | None) -> bool:
+    """True iff every candidate is a Wikimedia disambiguation page.
+
+    Pattern: `wbsearchentities` for "Council of Nicaea" returns only
+    the disambiguation page Q232572 because the real entity's title is
+    longer ("First Council of Nicaea"). These cases look like `ambiguous`
+    at write-time but are functionally `no_match` — the disambig page
+    has no useful P31/P569/description signal to disambiguate against.
+    """
+    try:
+        candidates = json.loads(candidate_qids_json or "[]")
+    except json.JSONDecodeError:
+        return False
+    if not candidates:
+        return False
+    return all(
+        "disambiguation page" in (c.get("description") or "").lower()
+        for c in candidates
+    )
+
+
 def run_no_match_rescue(
     conn: sqlite3.Connection,
     *,
@@ -597,13 +618,21 @@ def run_no_match_rescue(
     top_k: int = 5,
     min_confidence: float = 0.5,
 ) -> dict[str, int]:
-    """Retry no_match resolutions with LLM-suggested alternate queries."""
+    """Retry no_match resolutions with LLM-suggested alternate queries.
+
+    Also retries `ambiguous` cases where every candidate is a Wikimedia
+    disambiguation page — the resolver has no way to score those and the
+    LLM can only hallucinate. Alternate-query rescue gets to a real entity.
+    """
     sys.path.insert(0, str(Path(__file__).parent))
     from gemini_llm import call_llm
 
+    # Fetch latest-per-entity resolutions that are no_match OR ambiguous.
+    # Then filter in Python to keep: no_match | ambiguous-with-only-disambig-candidates.
     q = """
-        SELECT er.id, er.entity_id, er.mention_text, er.type_hint,
+        SELECT er.id, er.entity_id, er.mention_text, er.type_hint, er.status,
                er.context_excerpt, er.date_hint_start, er.date_hint_end,
+               er.candidate_qids,
                se.description AS entity_description, se.aliases
         FROM entity_resolutions er
         JOIN shared_entities se ON se.entity_id = er.entity_id
@@ -612,14 +641,24 @@ def run_no_match_rescue(
             WHERE superseded_by IS NULL AND entity_id IS NOT NULL
             GROUP BY entity_id
         ) l ON l.entity_id = er.entity_id AND l.latest = er.created_at
-        WHERE er.status = 'no_match'
+        WHERE er.status IN ('no_match', 'ambiguous')
           AND se.wikidata_qid IS NULL
           AND er.superseded_by IS NULL
     """
     if limit:
         q += f" LIMIT {int(limit)}"
-    rows = conn.execute(q).fetchall()
-    log.info("no-match rescue: %d items to retry", len(rows))
+    all_rows = conn.execute(q).fetchall()
+    rows = [
+        r for r in all_rows
+        if r["status"] == "no_match"
+        or _is_disambiguation_only(r["candidate_qids"])
+    ]
+    no_match_n = sum(1 for r in rows if r["status"] == "no_match")
+    disambig_n = len(rows) - no_match_n
+    log.info(
+        "no-match rescue: %d items to retry (%d no_match + %d disambig-only)",
+        len(rows), no_match_n, disambig_n,
+    )
 
     client = WikidataClient(user_agent=USER_AGENT)
     resolver = WikidataResolver(client=client, embedder=None)
