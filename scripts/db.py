@@ -460,13 +460,29 @@ CREATE INDEX IF NOT EXISTS idx_tl_domain ON timeline_entries(domain_id);
 CREATE INDEX IF NOT EXISTS idx_tl_year ON timeline_entries(year);
 
 -- Cross-curriculum shared entities
+-- Columns added over time via ALTER TABLE on the live DB (description,
+-- entity_type, modern_name, wikipedia_url, latitude, longitude, aliases,
+-- date_start, date_end, wikidata_qid). New installs get them all here.
 CREATE TABLE IF NOT EXISTS shared_entities (
     entity_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     dates TEXT,
     location TEXT,
-    nexus_score INTEGER DEFAULT 1
+    nexus_score INTEGER DEFAULT 1,
+    description TEXT,
+    entity_type TEXT,
+    modern_name TEXT,
+    wikipedia_url TEXT,
+    latitude REAL,
+    longitude REAL,
+    aliases TEXT DEFAULT '[]',
+    date_start INTEGER,
+    date_end INTEGER,
+    wikidata_qid TEXT
 );
+-- Unique where non-null: multiple NULLs allowed, but each QID at most once.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_entities_qid
+    ON shared_entities(wikidata_qid) WHERE wikidata_qid IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS entity_curriculum_links (
     entity_id TEXT NOT NULL REFERENCES shared_entities(entity_id),
@@ -476,6 +492,48 @@ CREATE TABLE IF NOT EXISTS entity_curriculum_links (
     lens_emphasis TEXT,
     PRIMARY KEY (entity_id, domain_id, node_id)
 );
+
+-- Append-only audit log of Wikidata resolution attempts. Every resolver
+-- decision writes a row here with full candidate set + reasoning, even when
+-- ambiguous. Re-resolving the same mention writes a new row; the old row's
+-- superseded_by is updated to point at it. History is preserved.
+CREATE TABLE IF NOT EXISTS entity_resolutions (
+    id TEXT PRIMARY KEY,
+    entity_id TEXT,                 -- shared_entities row this resolution is for (NULL if ad-hoc mention)
+    capture_id TEXT,                -- voice_transcripts.id, or 'backfill:<batch_id>'
+    mention_text TEXT NOT NULL,     -- raw string looked up
+    context_excerpt TEXT,           -- description / surrounding text passed to resolver
+    type_hint TEXT,                 -- person | place | event | work | other
+    date_hint_start INTEGER,        -- year, nullable
+    date_hint_end INTEGER,          -- year, nullable
+    candidate_qids TEXT,            -- JSON array of {qid, label, description, total, scores, dates, external_ids}
+    chosen_qid TEXT,                -- set iff status=resolved | kb_hit
+    confidence REAL NOT NULL,
+    status TEXT NOT NULL,           -- resolved | ambiguous | no_match | kb_hit | needs_review
+    resolver_model TEXT,            -- 'deterministic-0.1' | 'sonnet-4-6' | 'opus-4-6'
+    reasoning TEXT,
+    cost_usd REAL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    superseded_by TEXT              -- id of newer resolution, if any
+);
+CREATE INDEX IF NOT EXISTS idx_entity_resolutions_entity ON entity_resolutions(entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_resolutions_capture ON entity_resolutions(capture_id);
+CREATE INDEX IF NOT EXISTS idx_entity_resolutions_status ON entity_resolutions(status);
+CREATE INDEX IF NOT EXISTS idx_entity_resolutions_chosen ON entity_resolutions(chosen_qid);
+
+-- External ID fan-out at resolution time: when we resolve an entity to a
+-- QID, Wikidata exposes VIAF (P214), GND (P227), GeoNames (P1566), Pleiades
+-- (P1584), Getty TGN (P1667), MusicBrainz (P434), Getty ULAN (P245), BnF
+-- (P268), LCCN (P244). Storing them lets downstream enrichment hit specialist
+-- sources as a cache lookup rather than another API roundtrip.
+CREATE TABLE IF NOT EXISTS entity_external_ids (
+    entity_id TEXT NOT NULL REFERENCES shared_entities(entity_id),
+    property_id TEXT NOT NULL,      -- e.g. 'P214' (VIAF)
+    value TEXT NOT NULL,            -- the external ID itself
+    source TEXT DEFAULT 'wikidata', -- where we got it (usually 'wikidata')
+    PRIMARY KEY (entity_id, property_id, value)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_ext_ids_prop ON entity_external_ids(property_id, value);
 
 -- User notes about entities: free-text "what I know" per entity
 CREATE TABLE IF NOT EXISTS entity_notes (

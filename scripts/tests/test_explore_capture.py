@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS shared_entities (
     dates TEXT,
     date_start INTEGER,
     date_end INTEGER,
-    nexus_score INTEGER DEFAULT 1
+    nexus_score INTEGER DEFAULT 1,
+    wikidata_qid TEXT
 );
 
 CREATE TABLE IF NOT EXISTS entity_curriculum_links (
