@@ -4178,6 +4178,20 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     transcript_lower = transcript.lower()
     transcript_words = set(w.lower() for w in re.split(r'\W+', transcript) if len(w) > 3)
 
+    # Generic words that appear in many entity names — too common to be informative
+    # as the sole evidence of a match. "Ancient Skepticism" matching only on
+    # "ancient" is a false positive when the transcript is about Frederick II.
+    _STOP_WORDS_FOR_MATCHING = {
+        'ancient', 'modern', 'medieval', 'classical', 'late', 'early', 'middle', 'old',
+        'great', 'high', 'first', 'second', 'third', 'fourth',
+        'eastern', 'western', 'northern', 'southern',
+        'history', 'historical', 'period', 'era', 'ages',
+        'church', 'churches', 'christian', 'christianity', 'religious',
+        'empire', 'kingdom', 'state', 'civilization', 'culture', 'cultural',
+        'literature', 'philosophy', 'theology', 'language', 'languages',
+        'tradition', 'movement', 'movements', 'school', 'schools', 'theory',
+    }
+
     def _entity_matches_transcript(name: str) -> bool:
         """Match multi-word entity names by checking word overlap with transcript."""
         if len(name) < 4:
@@ -4205,14 +4219,19 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                         matching.add(nw)
                         break
         overlap = len(matching) / len(name_words)
+        # Distinctive matches = matched words that aren't generic period/type descriptors
+        distinctive = matching - _STOP_WORDS_FOR_MATCHING
         if len(name_words) == 1:
             return overlap >= 1.0  # single-word entities must match exactly
         # For 2-word entities (e.g. "Rashidun Caliphate"), accept 1/2 match
-        # if the matching word is distinctive (>= 6 chars)
+        # if the matching word is distinctive (>= 6 chars and not a stop word)
         if len(name_words) == 2 and len(matching) == 1:
             matched_word = next(iter(matching))
-            return len(matched_word) >= 6
-        return overlap >= 0.6 and len(matching) >= 2
+            return len(matched_word) >= 6 and matched_word not in _STOP_WORDS_FOR_MATCHING
+        # For 3+ word entities, require 60%+ match AND at least one distinctive
+        # (non-generic) word — prevents "Early Christian Basilicas" matching just
+        # because transcript has "early Normans" and "heretic Christians"
+        return overlap >= 0.6 and len(matching) >= 2 and len(distinctive) >= 1
 
     if entity_id:
         # Entity mode: get all curriculum links for this entity
@@ -4360,29 +4379,70 @@ def process_voice_capture(transcript: str, entity_id: str = None,
 
     # --- Insight mode: save transcript + node links, skip all LLM/processing ---
     if capture_type == 'insight':
+        # Score nodes by entity specificity (TF-IDF style): a node linked by a
+        # specific entity (e.g. "Frederick II" → ~3 nodes) carries more topical
+        # signal than a node linked by a generic entity (e.g. "Latin" → 50+ nodes).
+        # Weight = sum of (1 / entity_link_count) for each entity that links to the node.
+        # This avoids "Frederick II podcast" being primary-linked to Greek Dark Ages
+        # because Western Philosophy had 16 nodes from generic entity matches.
+        node_specificity: dict[str, float] = {}
+        if detected_entity_ids:
+            scoring_conn = get_connection(readonly=True)
+            unique_eids = list(set(detected_entity_ids))
+            placeholders = ','.join('?' * len(unique_eids))
+            # Get all links for matched entities + total link count per entity
+            link_rows = scoring_conn.execute(
+                f'SELECT entity_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({placeholders})',
+                unique_eids
+            ).fetchall()
+            entity_total_links: dict[str, int] = {}
+            for r in link_rows:
+                entity_total_links[r['entity_id']] = entity_total_links.get(r['entity_id'], 0) + 1
+            # Score each node by sum of 1/link_count for entities linking to it
+            for r in link_rows:
+                weight = 1.0 / max(1, entity_total_links.get(r['entity_id'], 1))
+                node_specificity[r['node_id']] = node_specificity.get(r['node_id'], 0.0) + weight
+            scoring_conn.close()
+
+        # Sort direct-priority nodes by specificity (descending), preserve original
+        # tie-breakers (priority, overlap) for non-direct nodes
+        def _specificity(node_id: str) -> float:
+            return node_specificity.get(node_id, 0.0)
+
+        direct_candidates = [n for n in candidate_nodes if n.get('priority') == 'direct']
+        direct_candidates.sort(key=lambda n: -_specificity(n['node_id']))
+        non_direct = [n for n in candidate_nodes if n.get('priority') != 'direct']
+        ordered_candidates = direct_candidates + non_direct
+
         nodes_linked = [
             {'node_id': n['node_id'], 'domain_id': n['domain_id'],
-             'title': n['title'], 'priority': n.get('priority', 'keyword')}
-            for n in candidate_nodes[:20]
+             'title': n['title'], 'priority': n.get('priority', 'keyword'),
+             'specificity': round(_specificity(n['node_id']), 3)}
+            for n in ordered_candidates[:20]
         ]
-        primary_domain = next(iter(candidate_domains)) if candidate_domains else None
-        primary_node = candidate_nodes[0]['node_id'] if candidate_nodes else None
-        entity_names = list({n['title'] for n in candidate_nodes[:5]
+
+        primary_node_obj = ordered_candidates[0] if ordered_candidates else None
+        primary_node = primary_node_obj['node_id'] if primary_node_obj else None
+        primary_domain = primary_node_obj['domain_id'] if primary_node_obj else None
+        primary_title = primary_node_obj['title'] if primary_node_obj else (entity_name or 'general')
+
+        entity_names = list({n['title'] for n in ordered_candidates[:5]
                              if n.get('priority') == 'direct'})
 
         _log_voice_transcript(
             source='insight',
             node_id=primary_node or entity_id or 'general',
             domain_id=primary_domain or '',
-            node_title=entity_name or (candidate_nodes[0]['title'] if candidate_nodes else 'general'),
+            node_title=primary_title,
             transcript=transcript,
             audio_bytes=0,
             llm_result={'nodes_linked': nodes_linked, 'capture_type': 'insight'},
             ml_triggered=[],
         )
 
-        print(f'[voice-capture] Insight saved: {len(nodes_linked)} nodes linked, '
-              f'domains={list(candidate_domains)}', flush=True)
+        top_specs = [(n['node_id'], _specificity(n['node_id'])) for n in direct_candidates[:5]]
+        print(f'[voice-capture] Insight saved: primary={primary_node} ({primary_title}), '
+              f'{len(nodes_linked)} nodes linked, top_specificity={top_specs}', flush=True)
         return {
             'status': 'completed',
             'capture_type': 'insight',
