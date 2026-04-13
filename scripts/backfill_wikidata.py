@@ -570,17 +570,32 @@ def run_llm_disambiguation(
 # candidate set. QIDs still come from the search API → no hallucination risk.
 
 RESCUE_PROMPT = """\
-You are helping rescue a Wikidata search that returned no results.
+You are helping rescue a Wikidata search that returned no results or only
+disambiguation pages.
 
 MENTION: {mention}
 TYPE: {type_hint}
 CONTEXT: {context}
 
-Wikidata's search is prefix-based and may have missed this mention. Suggest
-2-3 alternate search queries likely to find the same entity. Examples:
+Wikidata's search is prefix-based, biased toward modern names with high
+sitelink counts, and sometimes misses historical figures whose canonical
+Wikidata entry is labeled in a non-English script. Suggest 3-5 alternate
+search queries. Examples:
+
 - "Seljuk Turks" → ["Seljuk Empire", "Seljuk dynasty", "Seljuk"]
 - "The First Fitna" → ["First Fitna", "First Muslim Civil War"]
+- "Abu Bakr" (1st Rashidun caliph) → ["Abu Bakr al-Siddiq", "أبو بكر",
+                                       "Hazrat Abu Bakr", "Abu Bakr caliph"]
 - "Augustan Satire" → []  (this is a curriculum category, not a Wikidata entity)
+- "British Palladianism" → ["Palladian architecture", "Palladianism"]
+
+Strategies to include:
+- Strip articles ("The Reconquista" → "Reconquista")
+- Add disambiguating epithets for common names (kings, caliphs, etc.)
+- Try the original-language form for historical figures with non-English
+  canonical labels (Arabic for early Islamic figures, Greek for classical,
+  etc.) — Wikidata is multilingual but search is label-sensitive
+- For compound events, try the proper noun core
 
 If the mention is a curriculum-internal label with no corresponding entity,
 return an empty list.
