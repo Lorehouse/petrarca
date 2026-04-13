@@ -5111,6 +5111,91 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_admin_entity_merge(self):
+        """POST /admin/entity/merge — merge a duplicate entity into a canonical one.
+
+        Body: {canonical, duplicate, qid}.
+
+        Re-parents entity_curriculum_links + entity_external_ids + entity_notes
+        + entity_resolutions from `duplicate` to `canonical`, handling
+        composite-PK collisions via INSERT OR IGNORE. Deletes the duplicate
+        shared_entities row. Writes a merge audit row on the canonical side
+        and appends a line to the JSONL audit log.
+
+        Safety: pre-check that `canonical` already owns `qid` and `duplicate`
+        has `wikidata_qid IS NULL`. Returns 409 on safety failure, 200 with
+        a summary on success.
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+        canonical = body.get('canonical')
+        duplicate = body.get('duplicate')
+        qid = body.get('qid')
+        if not canonical or not duplicate or not qid:
+            self._send_json_response(400, {'error': 'canonical, duplicate, qid required'})
+            return
+        if canonical == duplicate:
+            self._send_json_response(400, {'error': 'canonical and duplicate must differ'})
+            return
+        if not qid.startswith('Q'):
+            self._send_json_response(400, {'error': 'qid must look like Q12345'})
+            return
+
+        # Import the merge helper lazily to avoid adding limbic deps to the
+        # server's import path unless someone actually hits this endpoint.
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent))
+        from merge_entity_dupes import merge_pair, find_dedup_pairs  # noqa: E402
+
+        from db import get_connection
+        conn = get_connection()
+        try:
+            # Sanity: the pair must be in the active dedup set.
+            pairs = find_dedup_pairs(conn)
+            match = next(
+                (p for p in pairs
+                 if p['canonical'] == canonical
+                 and p['duplicate'] == duplicate
+                 and p['qid'] == qid),
+                None,
+            )
+            if match is None:
+                self._send_json_response(409, {
+                    'error': 'pair not in active dedup queue',
+                    'hint': 'canonical must own the qid AND duplicate must have wikidata_qid=NULL',
+                })
+                return
+
+            # Append the merge to the standard audit log path.
+            db_dir = Path(os.environ.get('PETRARCA_DB_PATH',
+                                         '/opt/petrarca/data/petrarca.db')).parent
+            audit_path = db_dir / 'merge_audit.jsonl'
+            with audit_path.open('a') as audit_log:
+                summary = merge_pair(
+                    conn,
+                    canonical=canonical,
+                    duplicate=duplicate,
+                    qid=qid,
+                    resolution_id=match['resolution_id'],
+                    dry_run=False,
+                    audit_log=audit_log,
+                )
+            self._send_json_response(200, {
+                'ok': True,
+                'canonical': canonical,
+                'duplicate': duplicate,
+                'qid': qid,
+                'moves': summary['moves'],
+                'dropped_dupes': summary['dropped_dupes'],
+                'merge_resolution_id': summary.get('merge_resolution_id'),
+            })
+        except Exception as e:
+            print(f'[admin/entity/merge] error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_process_kindle(self):
         """POST /book/process-kindle — trigger Kindle book processing."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -6313,6 +6398,8 @@ JSON array only:"""
     def do_POST(self):
         if self.path == '/admin/entity/resolve':
             return self._handle_admin_entity_resolve()
+        if self.path == '/admin/entity/merge':
+            return self._handle_admin_entity_merge()
         if self.path == '/chat':
             return self._handle_chat()
         if self.path == '/note':
