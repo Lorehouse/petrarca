@@ -1,58 +1,53 @@
-"""Claude LLM wrapper using `claude -p` CLI (Max plan — free).
+"""Claude LLM wrapper — delegates to `limbic.cerebellum.claude_cli` for
+subprocess + cost logging. Preserves the legacy Petrarca API (call_claude,
+call_claude_json, call_claude_search, call_claude_or_gemini) so existing
+callers (review_engine.py, curriculum_db.py, etc.) don't need edits.
 
-Primary LLM for all text generation. Falls back to Gemini only for
-search-grounded and vision tasks.
+Returns None on failure, never raises. Gemini fallback stays in this module.
 
 Usage:
     from claude_llm import call_claude, call_claude_json
 
-    # Free-form text
     answer = call_claude("Explain the Battle of Himera")
-
-    # Structured JSON response
     data = call_claude_json("Extract key facts...", timeout=300)
 """
 
+from __future__ import annotations
+
 import json
-import os
 import re
-import subprocess
 import time
 
-# Strip CLAUDECODE env var to allow nested invocation from Claude Code sessions
-_CLEAN_ENV = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+from limbic.cerebellum.claude_cli import (
+    ClaudeCLIError,
+    generate as _limbic_generate,
+)
+
+PROJECT = "petrarca"
 
 
 def call_claude(prompt: str, *, timeout: int = 180, retries: int = 1,
                 model: str | None = None) -> str | None:
     """Call Claude via `claude -p`. Returns text or None on failure.
 
-    Uses the Max plan subscription (free). Opus quality by default.
-    Runs on both local dev and server (claude installed at /usr/bin/claude).
-
-    Args:
-        prompt: The prompt text
-        timeout: Seconds before giving up (default 180 — Opus can be slow)
-        retries: Number of retries on failure (default 1)
-        model: Optional model override (e.g. 'sonnet' for faster responses)
+    Uses Max plan OAuth. Logs cost/usage to the shared limbic cost_log on
+    every call (success or failure).
     """
-    cmd = ['claude', '-p', '--output-format', 'text']
-    if model:
-        cmd.extend(['--model', model])
-
+    last_err: Exception | None = None
     for attempt in range(1 + retries):
         try:
-            result = subprocess.run(
-                cmd, input=prompt, capture_output=True, text=True,
-                timeout=timeout, env=_CLEAN_ENV,
+            result, _ = _limbic_generate(
+                prompt=prompt,
+                project=PROJECT,
+                purpose="call_claude",
+                model=model or "sonnet",
+                timeout=timeout,
             )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-            if result.stderr:
-                print(f'[claude] stderr (attempt {attempt+1}): {result.stderr[:200]}',
-                      flush=True)
-        except subprocess.TimeoutExpired:
-            print(f'[claude] timeout after {timeout}s (attempt {attempt+1})', flush=True)
+            if isinstance(result, str) and result.strip():
+                return result.strip()
+        except ClaudeCLIError as e:
+            last_err = e
+            print(f'[claude] {e} (attempt {attempt+1})', flush=True)
         except FileNotFoundError:
             print('[claude] CLI not found — is claude installed?', flush=True)
             return None
@@ -60,6 +55,8 @@ def call_claude(prompt: str, *, timeout: int = 180, retries: int = 1,
         if attempt < retries:
             time.sleep(2)
 
+    if last_err:
+        print(f'[claude] giving up: {last_err}', flush=True)
     return None
 
 
@@ -67,13 +64,11 @@ def call_claude_json(prompt: str, *, timeout: int = 180, retries: int = 1,
                      model: str | None = None) -> dict | list | None:
     """Call Claude and parse JSON from the response. Falls back to Gemini on failure.
 
-    Claude doesn't have a JSON-only output mode, so this:
-    1. Appends "Output JSON only." if not already in the prompt
-    2. Extracts JSON from the response (handles markdown fences, preamble text)
-    3. Falls back to Gemini if Claude fails (auth expiry, timeout, etc.)
-    4. Returns parsed dict/list or None on failure
+    Uses a text-mode call and a tolerant JSON extractor (not --json-schema),
+    since the existing prompts rely on soft "Output JSON only" hints rather
+    than strict schemas. The Gemini fallback stays in petrarca — limbic
+    doesn't know about cross-provider fallback.
     """
-    # Nudge toward JSON if the prompt doesn't already ask for it
     if 'json' not in prompt.lower()[-100:]:
         prompt = prompt.rstrip() + '\n\nOutput JSON only.'
 
@@ -83,7 +78,6 @@ def call_claude_json(prompt: str, *, timeout: int = 180, retries: int = 1,
         if result is not None:
             return result
 
-    # Fallback to Gemini
     print('[call_claude_json] Claude failed, falling back to Gemini', flush=True)
     try:
         from gemini_llm import call_llm
@@ -100,27 +94,22 @@ def extract_json(text: str) -> dict | list | None:
     """Extract JSON from text that may contain markdown fences or preamble."""
     cleaned = text.strip()
 
-    # Strip markdown code fences
     if '```' in cleaned:
-        # Find content between first ``` and last ```
         match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?\s*```', cleaned)
         if match:
             cleaned = match.group(1).strip()
 
-    # Try parsing directly first
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
 
-    # Find the largest JSON structure (array or object)
     for pattern in [r'\[[\s\S]*\]', r'\{[\s\S]*\}']:
         match = re.search(pattern, cleaned)
         if match:
             try:
                 return json.loads(match.group())
             except json.JSONDecodeError:
-                # Try fixing trailing commas
                 fixed = re.sub(r',\s*([}\]])', r'\1', match.group())
                 try:
                     return json.loads(fixed)
@@ -135,22 +124,19 @@ def extract_json(text: str) -> dict | list | None:
 def call_claude_search(prompt: str, *, timeout: int = 180,
                        model: str | None = None) -> str | None:
     """Call Claude with web search enabled. Replaces Gemini's call_with_search."""
-    cmd = ['claude', '-p', '--output-format', 'text',
-           '--tools', 'WebSearch,WebFetch']
-    if model:
-        cmd.extend(['--model', model])
-
     try:
-        result = subprocess.run(
-            cmd, input=prompt, capture_output=True, text=True,
-            timeout=timeout, env=_CLEAN_ENV,
+        result, _ = _limbic_generate(
+            prompt=prompt,
+            project=PROJECT,
+            purpose="call_claude_search",
+            model=model or "sonnet",
+            tools="WebSearch,WebFetch",
+            timeout=timeout,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-        if result.stderr:
-            print(f'[claude-search] stderr: {result.stderr[:200]}', flush=True)
-    except subprocess.TimeoutExpired:
-        print(f'[claude-search] timeout after {timeout}s', flush=True)
+        if isinstance(result, str) and result.strip():
+            return result.strip()
+    except ClaudeCLIError as e:
+        print(f'[claude-search] {e}', flush=True)
     except FileNotFoundError:
         print('[claude-search] CLI not found', flush=True)
     return None
@@ -173,7 +159,6 @@ def call_claude_or_gemini(prompt: str, *, timeout: int = 180,
         if result is not None:
             return result
 
-    # Fallback to Gemini
     print('[claude] falling back to Gemini', flush=True)
     try:
         from gemini_llm import call_llm

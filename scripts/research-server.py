@@ -31,6 +31,53 @@ from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import urlparse, urlencode, parse_qs, unquote
 
+try:
+    from limbic.cerebellum.claude_cli import log_cli_usage as _log_cli_usage
+except ImportError:
+    _log_cli_usage = None
+
+
+def _run_claude_p(prompt: str, timeout: int, purpose: str) -> tuple[str | None, str | None]:
+    """Run `claude -p` with --output-format json and log cost/usage to limbic.
+
+    Returns (result_text, error_message). On success: (text, None). On failure:
+    (None, "<human-readable error>"). Always logs usage when we get a parseable
+    response, even on error.
+    """
+    clean_env = {k: v for k, v in os.environ.items() if k != 'CLAUDECODE'}
+    try:
+        proc = subprocess.run(
+            ['claude', '-p', '--output-format', 'json', prompt],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=clean_env,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f'claude timed out after {timeout}s'
+    except FileNotFoundError:
+        return None, 'claude CLI not found'
+
+    try:
+        response = json.loads(proc.stdout) if proc.stdout else None
+    except json.JSONDecodeError:
+        response = None
+
+    if response is not None and _log_cli_usage is not None:
+        try:
+            _log_cli_usage(response, project='petrarca', purpose=purpose)
+        except Exception:
+            pass
+
+    if proc.returncode != 0:
+        return None, f'claude exited with code {proc.returncode}: {(proc.stderr or "")[:500]}'
+    if response is None:
+        return None, 'claude returned unparseable output'
+    if response.get('is_error'):
+        return None, f'claude error: {(response.get("result") or "unknown")[:300]}'
+    return (response.get('result') or '').strip(), None
+
+
 RESULTS_DIR = Path(os.environ.get('RESEARCH_RESULTS_DIR', '/opt/petrarca/research-results'))
 INGEST_DIR = Path(os.environ.get('INGEST_DIR', '/opt/petrarca/ingest'))
 PORT = int(os.environ.get('RESEARCH_PORT', '8090'))
@@ -832,18 +879,11 @@ def run_explore(request_id: str, subtopic: str, exploration_tag: str, triage_sig
 
     try:
         prompt = build_explore_prompt(subtopic, exploration_tag, triage_signals, existing_concepts)
-        proc = subprocess.run(
-            ['claude', '-p', prompt],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if proc.returncode != 0:
+        output, err = _run_claude_p(prompt, timeout=300, purpose='explore')
+        if err:
             result['status'] = 'failed'
-            result['error'] = f'claude exited with code {proc.returncode}: {proc.stderr[:500]}'
+            result['error'] = err
         else:
-            output = proc.stdout.strip()
             json_start = output.find('{')
             json_end = output.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
@@ -856,9 +896,6 @@ def run_explore(request_id: str, subtopic: str, exploration_tag: str, triage_sig
                 result['status'] = 'failed'
                 result['error'] = 'Could not parse JSON from claude output'
 
-    except subprocess.TimeoutExpired:
-        result['status'] = 'failed'
-        result['error'] = 'Explore research timed out after 5 minutes'
     except json.JSONDecodeError as e:
         result['status'] = 'failed'
         result['error'] = f'JSON parse error: {e}'
@@ -881,18 +918,11 @@ def run_research(request_id: str, query: str, article_title: str, article_summar
 
     try:
         prompt = build_research_prompt(query, article_title, article_summary, concepts)
-        proc = subprocess.run(
-            ['claude', '-p', prompt],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if proc.returncode != 0:
+        output, err = _run_claude_p(prompt, timeout=300, purpose='research')
+        if err:
             result['status'] = 'failed'
-            result['error'] = f'claude exited with code {proc.returncode}: {proc.stderr[:500]}'
+            result['error'] = err
         else:
-            output = proc.stdout.strip()
             # Extract JSON from the response (claude might wrap it in markdown)
             json_start = output.find('{')
             json_end = output.rfind('}') + 1
@@ -907,9 +937,6 @@ def run_research(request_id: str, query: str, article_title: str, article_summar
                 result['status'] = 'failed'
                 result['error'] = 'Could not parse JSON from claude output'
 
-    except subprocess.TimeoutExpired:
-        result['status'] = 'failed'
-        result['error'] = 'Research timed out after 5 minutes'
     except json.JSONDecodeError as e:
         result['status'] = 'failed'
         result['error'] = f'JSON parse error: {e}'
@@ -1321,18 +1348,11 @@ def run_explore_batch(request_id: str, concepts: list[dict]):
 
     try:
         prompt = build_explore_batch_prompt(concepts)
-        proc = subprocess.run(
-            ['claude', '-p', prompt],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if proc.returncode != 0:
+        output, err = _run_claude_p(prompt, timeout=300, purpose='explore_batch')
+        if err:
             result['status'] = 'failed'
-            result['error'] = f'claude exited with code {proc.returncode}: {proc.stderr[:500]}'
+            result['error'] = err
         else:
-            output = proc.stdout.strip()
             json_start = output.find('{')
             json_end = output.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
@@ -1356,9 +1376,6 @@ def run_explore_batch(request_id: str, concepts: list[dict]):
                 result['status'] = 'failed'
                 result['error'] = 'Could not parse JSON from claude output'
 
-    except subprocess.TimeoutExpired:
-        result['status'] = 'failed'
-        result['error'] = 'Explore batch timed out after 5 minutes'
     except json.JSONDecodeError as e:
         result['status'] = 'failed'
         result['error'] = f'JSON parse error: {e}'
