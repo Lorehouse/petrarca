@@ -1,6 +1,39 @@
 # Knowledge System Implementation Status
 
-**Date**: April 13, 2026 (last updated — session 68: Entity matching fix for plurals/2-word entities)
+**Date**: April 13, 2026 (last updated — session 69: Insight node matching overhaul)
+
+## Session 69: Insight Node Matching Overhaul (April 13, 2026)
+
+### What
+Reviewed two voice insights captured 2026-04-12 (one about a Frederick II podcast, one about medieval Sicily / Arabic translation culture). Both were transcribed and saved correctly but the primary curriculum node and the secondary candidates were poorly chosen. Built a four-signal composite scoring system to robustly pick the primary node from candidate matches.
+
+### Bugs Found
+1. **Arbitrary primary selection**: `primary_domain = next(iter(candidate_domains))` returned an arbitrary domain from a Python set; `primary_node = candidate_nodes[0]` took whatever sorted to position 0. The Frederick II podcast was primary-linked to "The Greek Dark Ages and Homeric World" because Western Philosophy had 16 direct nodes from generic entity matches (Aristotle, Latin, Christianity, Nietzsche).
+2. **Wrong title display**: `node_title` was set to the first matched entity name in SQL order (often "Frederick II" even for a Sicily medieval podcast where Frederick II is mentioned only in passing).
+3. **False-positive entity matches**: Generic period words like "ancient", "early", "christian", "ages", and demonyms ("greek", "german", "norman") created spurious matches via the 1/2-word and 60% overlap rules.
+
+### Composite Scoring Solution
+Four orthogonal signals combined in `_composite_score()`:
+
+1. **TF-IDF specificity**: weight = 1 / entity_link_count. Rare entities outrank common ones.
+2. **Length scaling**: weight × max(0.5, min(2.0, name_length / 10)). Proper nouns ("Frederick II", 12 chars) outrank short common words ("Latin", 5 chars).
+3. **Title-entity match**: +2.0 boost (plus length bonus, scaled by entity specificity) when a node's title contains a matched entity name. "Frederick II Stupor Mundi" containing "Frederick II" is a near-guaranteed topic match.
+4. **Opening position bonus**: +4.0 if entity name appears in first 200 chars; +3.0 if a distinctive word from the entity name does. Entities in the opening sentence ("I listened to a podcast about X") are far more likely to be the topic.
+
+### Stop-List Filter
+Added `_STOP_WORDS_FOR_MATCHING` to reject matches based purely on generic words. Categories: period descriptors (ancient, modern, medieval), demonyms (greek, roman, german, italian, persian, arab, byzantine, norman), generic nouns (history, period, ages, world, century), religious/cultural categories (church, christian), polity types (empire, kingdom, civilization), discipline names (literature, philosophy, theology). Multi-word entities like "Norman Conquest of Sicily" still match via their other distinctive words (conquest, sicily).
+
+### Verification
+All three test insights now pick the correct primary node:
+- Frederick II podcast → "Frederick II Stupor Mundi" (Sicily)
+- Sicily medieval translation podcast → "The Norman Conquest of Sicily"
+- Caliphate/Mawali tweet → "The Rashidun Caliphate (632-661)"
+
+### Files Changed
+- `scripts/review_engine.py` — `process_voice_capture()` insight branch + `_entity_matches_transcript()`
+
+### Note
+This scoring only applies to insight mode. Analyze-mode voice captures still use the original LLM-based node assessment, which is more accurate but slower. The composite scoring is a heuristic alternative for the no-LLM insight path. If insight matching proves unreliable in practice, consider running a Gemini Flash classification at save time (Layer 2 in the historiographic-knowledge-design.md plan).
 
 ## Session 68: Entity Matching Fix (April 13, 2026)
 

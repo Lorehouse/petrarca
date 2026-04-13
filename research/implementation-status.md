@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 13, 2026 (session 68: Entity matching fix for plurals/2-word entities)
+**Last updated**: April 13, 2026 (session 69: Insight node matching overhaul — composite scoring)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
