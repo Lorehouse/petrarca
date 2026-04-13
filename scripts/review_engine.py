@@ -4181,13 +4181,26 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     # Generic words that appear in many entity names — too common to be informative
     # as the sole evidence of a match. "Ancient Skepticism" matching only on
     # "ancient" is a false positive when the transcript is about Frederick II.
+    # An entity matching only on these words is rejected; "Greek Dark Ages"
+    # matching only "greek" + "ages" both stops gives no distinctive match.
     _STOP_WORDS_FOR_MATCHING = {
+        # Period descriptors
         'ancient', 'modern', 'medieval', 'classical', 'late', 'early', 'middle', 'old',
         'great', 'high', 'first', 'second', 'third', 'fourth',
+        # Demonyms — common in entity names ("German Idealism", "Greek Tragedy"),
+        # weak as sole match (a podcast that says "Greek philosophers" once
+        # shouldn't match every entity starting with "Greek")
+        'german', 'italian', 'french', 'spanish', 'english', 'greek', 'roman',
+        'persian', 'arab', 'arabic', 'byzantine', 'norman',
+        # Cardinal directions and zones
         'eastern', 'western', 'northern', 'southern',
-        'history', 'historical', 'period', 'era', 'ages',
+        # Generic period/scope nouns
+        'history', 'historical', 'period', 'era', 'ages', 'world', 'century',
+        # Religious/cultural categories
         'church', 'churches', 'christian', 'christianity', 'religious',
+        # Polity / governance types
         'empire', 'kingdom', 'state', 'civilization', 'culture', 'cultural',
+        # Discipline names
         'literature', 'philosophy', 'theology', 'language', 'languages',
         'tradition', 'movement', 'movements', 'school', 'schools', 'theory',
     }
