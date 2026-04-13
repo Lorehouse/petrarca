@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -4895,6 +4896,221 @@ JSON array only:"""
         finally:
             conn.close()
 
+    # --------------------------------------------------------------------
+    # Wikidata entity review (PR 3)
+    #
+    # These handlers surface the `entity_resolutions` audit table written by
+    # scripts/backfill_wikidata.py and (later) process_voice_capture. They
+    # are the trustability surface promised in the entity-resolution plan:
+    # every ambiguous / no_match / merge-candidate resolution is queued here
+    # for user triage.
+    # --------------------------------------------------------------------
+
+    def _handle_admin_entity_queue_data(self):
+        """GET /admin/entity-queue-data — JSON list of resolutions needing review."""
+        from db import get_connection
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        status_filter = params.get('status', ['needs_review,ambiguous,no_match'])[0]
+        statuses = [s.strip() for s in status_filter.split(',') if s.strip()]
+        limit = int(params.get('limit', ['200'])[0])
+
+        conn = get_connection(readonly=True)
+        try:
+            placeholders = ','.join(['?'] * len(statuses))
+            # Only the LATEST (non-superseded) resolution per entity. This
+            # dedups any accidental re-runs of the backfill, and once PR 4's
+            # LLM disambiguation is wired up, we'll only surface the most
+            # recent verdict for a given entity.
+            rows = conn.execute(
+                f"""
+                SELECT er.id, er.entity_id, er.mention_text, er.context_excerpt,
+                       er.type_hint, er.status, er.chosen_qid, er.confidence,
+                       er.candidate_qids, er.reasoning, er.created_at,
+                       se.name AS entity_name, se.description AS entity_description,
+                       se.nexus_score
+                FROM entity_resolutions er
+                LEFT JOIN shared_entities se ON se.entity_id = er.entity_id
+                JOIN (
+                    SELECT entity_id, MAX(created_at) AS latest
+                    FROM entity_resolutions
+                    WHERE superseded_by IS NULL AND entity_id IS NOT NULL
+                    GROUP BY entity_id
+                ) latest ON latest.entity_id = er.entity_id AND latest.latest = er.created_at
+                WHERE er.status IN ({placeholders})
+                  AND er.superseded_by IS NULL
+                ORDER BY COALESCE(se.nexus_score, 0) DESC, er.confidence DESC
+                LIMIT ?
+                """,
+                (*statuses, limit),
+            ).fetchall()
+            items = []
+            for r in rows:
+                row = dict(r)
+                try:
+                    row['candidates'] = json.loads(row.get('candidate_qids') or '[]')
+                except (json.JSONDecodeError, TypeError):
+                    row['candidates'] = []
+                row.pop('candidate_qids', None)
+                items.append(row)
+
+            # Summary counts.
+            counts = {}
+            for s, n in conn.execute(
+                "SELECT status, COUNT(*) FROM entity_resolutions "
+                "WHERE superseded_by IS NULL GROUP BY status"
+            ).fetchall():
+                counts[s] = n
+            self._send_json_response(200, {'items': items, 'counts': counts})
+        finally:
+            conn.close()
+
+    def _handle_admin_entity_detail(self):
+        """GET /admin/entity/<qid> — consolidated entity view for a QID."""
+        qid = self.path.split('/admin/entity/')[-1].split('?')[0].strip()
+        if not qid.startswith('Q'):
+            self._send_json_response(400, {'error': 'qid must look like Q12345'})
+            return
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            # All mentions resolved (or proposed) to this QID.
+            resolutions = conn.execute(
+                """
+                SELECT id, entity_id, mention_text, status, confidence,
+                       reasoning, created_at, superseded_by, capture_id
+                FROM entity_resolutions
+                WHERE chosen_qid = ?
+                ORDER BY created_at DESC
+                """,
+                (qid,),
+            ).fetchall()
+            # The committed shared_entity (if any).
+            committed = conn.execute(
+                "SELECT entity_id, name, description, entity_type, nexus_score "
+                "FROM shared_entities WHERE wikidata_qid = ?",
+                (qid,),
+            ).fetchone()
+            # External IDs.
+            ext_ids = []
+            if committed:
+                ext_ids = conn.execute(
+                    "SELECT property_id, value, source FROM entity_external_ids "
+                    "WHERE entity_id = ?",
+                    (committed['entity_id'],),
+                ).fetchall()
+            # Curriculum links (if committed).
+            links = []
+            if committed:
+                links = conn.execute(
+                    """
+                    SELECT ecl.domain_id, ecl.node_id, ecl.lens_title,
+                           cn.title AS node_title
+                    FROM entity_curriculum_links ecl
+                    LEFT JOIN curriculum_nodes cn
+                        ON cn.id = ecl.node_id AND cn.domain_id = ecl.domain_id
+                    WHERE ecl.entity_id = ?
+                    """,
+                    (committed['entity_id'],),
+                ).fetchall()
+            self._send_json_response(200, {
+                'qid': qid,
+                'committed': dict(committed) if committed else None,
+                'external_ids': [dict(x) for x in ext_ids],
+                'curriculum_links': [dict(x) for x in links],
+                'resolutions': [dict(x) for x in resolutions],
+            })
+        finally:
+            conn.close()
+
+    def _handle_admin_entity_resolve(self):
+        """POST /admin/entity/resolve — manually commit a QID for an entity.
+
+        Body: {entity_id, chosen_qid, source_resolution_id?, note?}.
+
+        Writes a new entity_resolutions row with resolver_model='manual' +
+        status='resolved', supersedes any prior resolution for the same
+        entity_id, updates shared_entities.wikidata_qid.
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+        entity_id = body.get('entity_id')
+        chosen_qid = body.get('chosen_qid')
+        source_rid = body.get('source_resolution_id')
+        note = body.get('note') or ''
+        if not entity_id or not chosen_qid:
+            self._send_json_response(400, {'error': 'entity_id and chosen_qid required'})
+            return
+        if not chosen_qid.startswith('Q'):
+            self._send_json_response(400, {'error': 'chosen_qid must look like Q12345'})
+            return
+        from db import get_connection
+        conn = get_connection()
+        try:
+            # Conflict: another entity already owns this QID.
+            conflict = conn.execute(
+                "SELECT entity_id FROM shared_entities "
+                "WHERE wikidata_qid = ? AND entity_id != ?",
+                (chosen_qid, entity_id),
+            ).fetchone()
+            if conflict:
+                self._send_json_response(409, {
+                    'error': 'qid already owned',
+                    'owner_entity_id': conflict['entity_id'],
+                    'hint': 'Merge entities via hippocampus.cascade before re-assigning.',
+                })
+                return
+
+            rid = f"er_{uuid.uuid4().hex[:12]}"
+            now_ts = int(time.time())
+            reasoning = f"Manual resolution by admin. {note}".strip()
+
+            conn.execute(
+                """
+                INSERT INTO entity_resolutions (
+                    id, entity_id, capture_id, mention_text, context_excerpt,
+                    type_hint, candidate_qids, chosen_qid, confidence, status,
+                    resolver_model, reasoning, cost_usd, created_at
+                )
+                SELECT ?, ?, 'admin:manual', se.name, se.description, se.entity_type,
+                       '[]', ?, 1.0, 'resolved', 'manual', ?, 0, ?
+                FROM shared_entities se WHERE se.entity_id = ?
+                """,
+                (rid, entity_id, chosen_qid, reasoning, now_ts, entity_id),
+            )
+
+            # Supersede prior (still-active) resolutions for this entity.
+            conn.execute(
+                "UPDATE entity_resolutions SET superseded_by = ? "
+                "WHERE entity_id = ? AND id != ? AND superseded_by IS NULL",
+                (rid, entity_id, rid),
+            )
+            # Also mark the source resolution if provided.
+            if source_rid:
+                conn.execute(
+                    "UPDATE entity_resolutions SET superseded_by = ? WHERE id = ?",
+                    (rid, source_rid),
+                )
+
+            conn.execute(
+                "UPDATE shared_entities SET wikidata_qid = ? WHERE entity_id = ?",
+                (chosen_qid, entity_id),
+            )
+            conn.commit()
+            self._send_json_response(200, {
+                'ok': True,
+                'resolution_id': rid,
+                'entity_id': entity_id,
+                'qid': chosen_qid,
+            })
+        except Exception as e:
+            print(f'[admin/entity/resolve] error: {e}', flush=True)
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_process_kindle(self):
         """POST /book/process-kindle — trigger Kindle book processing."""
         content_length = int(self.headers.get('Content-Length', 0))
@@ -6095,6 +6311,8 @@ JSON array only:"""
         self._serve_html_file('curriculum_timeline.html')
 
     def do_POST(self):
+        if self.path == '/admin/entity/resolve':
+            return self._handle_admin_entity_resolve()
         if self.path == '/chat':
             return self._handle_chat()
         if self.path == '/note':
@@ -6826,6 +7044,13 @@ JSON array only:"""
             return self._handle_entities_list()
         if self.path.startswith('/entity/') and not self.path.startswith('/entity/tap') and not self.path.startswith('/entity/notes'):
             return self._handle_entity_lookup()
+        # Wikidata entity review UI (PR 3)
+        if self.path == '/admin/entity-queue':
+            return self._serve_html_file('entity_review.html')
+        if self.path.startswith('/admin/entity-queue-data'):
+            return self._handle_admin_entity_queue_data()
+        if self.path.startswith('/admin/entity/Q'):
+            return self._handle_admin_entity_detail()
         if self.path.startswith('/curriculum/review/timeline/'):
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
             return self._send_json_response(200, {'timeline': get_timeline(domain_id)})

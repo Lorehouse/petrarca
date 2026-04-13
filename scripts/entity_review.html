@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entity Review Queue — Petrarca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --rubric: #8b2500;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --rule: #e4dfd4;
+  --ok: #2a7a4a;
+  --warn: #c88a1a;
+  --bad: #b0432a;
+  --gold: #c9a84c;
+}
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+}
+header {
+  padding: 16px 24px 10px;
+  border-bottom: 2px solid var(--ink);
+  background: var(--parchment-dark);
+}
+header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  color: var(--rubric);
+  font-weight: 600;
+}
+header .sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+main {
+  padding: 18px 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.summary {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+.summary .pill {
+  background: var(--parchment-dark);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.summary .pill strong { color: var(--rubric); }
+.filters {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.filters label { color: var(--text-secondary); }
+.filters input[type="text"] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: white;
+  width: 240px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: white;
+  border: 1px solid var(--rule);
+}
+th, td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  background: var(--parchment-dark);
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+tr.row-main { cursor: pointer; }
+tr.row-main:hover { background: var(--parchment-dark); }
+tr.row-detail { background: #fbf8f0; }
+tr.row-detail > td { padding: 14px 18px; }
+.status {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.status.ambiguous { background: #fcf0cf; color: #7a5800; }
+.status.no_match { background: #f7dcd3; color: var(--bad); }
+.status.needs_review { background: #e9dfcf; color: #6a5418; }
+.status.resolved { background: #d8ecd8; color: var(--ok); }
+.status.kb_hit { background: #e0e7f0; color: #2a4a70; }
+.confidence {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.mention { font-weight: 500; }
+.desc { color: var(--text-secondary); font-size: 12.5px; }
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.candidate {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: white;
+}
+.candidate-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  gap: 10px;
+}
+.candidate-head a {
+  color: var(--rubric);
+  font-family: 'JetBrains Mono', monospace;
+  text-decoration: none;
+  font-weight: 500;
+}
+.candidate-head a:hover { text-decoration: underline; }
+.candidate-head .label {
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+.candidate-head .total {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.candidate-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.candidate-scores {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.candidate-ext {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+button.commit {
+  background: var(--rubric);
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+button.commit:hover { background: #6d1d00; }
+button.commit:disabled { background: var(--text-muted); cursor: not-allowed; }
+.reasoning {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--parchment-dark);
+  border-radius: 3px;
+  margin-top: 10px;
+  white-space: pre-wrap;
+}
+.loading, .empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--ink);
+  color: var(--parchment);
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.bad { background: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Entity Review Queue</h1>
+  <div class="sub">
+    Wikidata resolutions the deterministic resolver flagged as ambiguous or unmatchable.
+    Pick the right QID (or leave to re-run later with better anchors).
+  </div>
+</header>
+<main>
+  <div class="summary" id="summary"></div>
+  <div class="filters">
+    <label>Search: <input id="q" type="text" placeholder="mention text…"></label>
+    <label>Show:
+      <select id="status-filter">
+        <option value="needs_review,ambiguous,no_match">All pending</option>
+        <option value="ambiguous">Ambiguous only</option>
+        <option value="no_match">No match only</option>
+        <option value="needs_review">Needs review (dedup)</option>
+        <option value="resolved">Resolved</option>
+      </select>
+    </label>
+    <span id="count" class="desc"></span>
+  </div>
+  <table id="queue-table">
+    <thead>
+      <tr>
+        <th style="width: 22%">Entity</th>
+        <th style="width: 10%">Type</th>
+        <th style="width: 10%">Status</th>
+        <th style="width: 10%">Confidence</th>
+        <th style="width: 22%">Top candidate</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody id="queue-body">
+      <tr><td colspan="6" class="loading">Loading…</td></tr>
+    </tbody>
+  </table>
+</main>
+<div id="toast" class="toast"></div>
+<script>
+const tbody = document.getElementById('queue-body');
+const summary = document.getElementById('summary');
+const filterEl = document.getElementById('status-filter');
+const qEl = document.getElementById('q');
+const countEl = document.getElementById('count');
+const toast = document.getElementById('toast');
+
+let items = [];
+
+function showToast(msg, bad=false) {
+  toast.textContent = msg;
+  toast.classList.toggle('bad', bad);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+async function load() {
+  const status = filterEl.value;
+  tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading…</td></tr>';
+  const res = await fetch(`/admin/entity-queue-data?status=${encodeURIComponent(status)}&limit=500`);
+  const data = await res.json();
+  items = data.items || [];
+  renderSummary(data.counts || {});
+  render();
+}
+
+function renderSummary(counts) {
+  summary.innerHTML = '';
+  const order = ['resolved', 'kb_hit', 'needs_review', 'ambiguous', 'no_match'];
+  const labels = {
+    resolved: 'Resolved', kb_hit: 'KB hit',
+    needs_review: 'Needs review', ambiguous: 'Ambiguous', no_match: 'No match',
+  };
+  order.forEach(k => {
+    if (counts[k] !== undefined) {
+      const div = document.createElement('div');
+      div.className = 'pill';
+      div.innerHTML = `${labels[k]}: <strong>${counts[k]}</strong>`;
+      summary.appendChild(div);
+    }
+  });
+}
+
+function render() {
+  const q = qEl.value.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(it =>
+        (it.mention_text || '').toLowerCase().includes(q) ||
+        (it.entity_id || '').toLowerCase().includes(q))
+    : items;
+  countEl.textContent = `${filtered.length} items`;
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No items in this view.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  filtered.forEach((it, idx) => {
+    const top = (it.candidates && it.candidates[0]) || null;
+    const main = document.createElement('tr');
+    main.className = 'row-main';
+    main.innerHTML = `
+      <td><div class="mention">${escapeHtml(it.mention_text || '')}</div>
+          <div class="desc">${escapeHtml(it.entity_id || '')}</div></td>
+      <td>${escapeHtml(it.type_hint || '—')}</td>
+      <td><span class="status ${it.status}">${it.status}</span></td>
+      <td><span class="confidence">${Number(it.confidence || 0).toFixed(3)}</span></td>
+      <td>${top ? `<a href="https://www.wikidata.org/wiki/${top.qid}" target="_blank">${top.qid}</a> ${escapeHtml(top.label || '')}` : '—'}</td>
+      <td class="desc">${escapeHtml(it.entity_description || '')}</td>
+    `;
+    main.addEventListener('click', () => toggleDetail(main, it));
+    tbody.appendChild(main);
+  });
+}
+
+function toggleDetail(mainRow, it) {
+  const next = mainRow.nextElementSibling;
+  if (next && next.classList.contains('row-detail')) {
+    next.remove();
+    return;
+  }
+  const detail = document.createElement('tr');
+  detail.className = 'row-detail';
+  const td = document.createElement('td');
+  td.colSpan = 6;
+
+  const cands = (it.candidates || []).slice(0, 6);
+  const candsHtml = cands.map(c => `
+    <div class="candidate">
+      <div class="candidate-head">
+        <div>
+          <a href="https://www.wikidata.org/wiki/${c.qid}" target="_blank">${c.qid}</a>
+          <span class="label">${escapeHtml(c.label || '')}</span>
+        </div>
+        <div class="total">total ${Number(c.total || 0).toFixed(3)}</div>
+      </div>
+      <div class="candidate-desc">${escapeHtml(c.description || '')}</div>
+      <div class="candidate-scores">
+        ${Object.entries(c.scores || {}).map(([k,v]) => `${k}=${Number(v).toFixed(2)}`).join('  ')}
+        ${c.dates ? `  dates=${c.dates.start}..${c.dates.end}` : ''}
+      </div>
+      ${renderExtIds(c.external_ids)}
+      <button class="commit" data-qid="${c.qid}" data-entity="${it.entity_id}" data-rid="${it.id}">
+        Commit ${c.qid} → ${escapeHtml(it.entity_id || '')}
+      </button>
+    </div>
+  `).join('');
+
+  td.innerHTML = `
+    <div class="candidates">${candsHtml || '<div class="empty">No candidates recorded.</div>'}</div>
+    ${it.context_excerpt ? `<div class="reasoning"><strong>Context:</strong> ${escapeHtml(it.context_excerpt)}</div>` : ''}
+    ${it.reasoning ? `<div class="reasoning">${escapeHtml(it.reasoning)}</div>` : ''}
+  `;
+  detail.appendChild(td);
+  mainRow.after(detail);
+
+  td.querySelectorAll('button.commit').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await commit(btn.dataset.entity, btn.dataset.qid, btn.dataset.rid, btn);
+    });
+  });
+}
+
+function renderExtIds(ext) {
+  if (!ext || Object.keys(ext).length === 0) return '';
+  const bits = Object.entries(ext).map(([prop, v]) => {
+    const val = Array.isArray(v) ? v[0] : v;
+    return `${prop}=${escapeHtml(String(val))}`;
+  });
+  return `<div class="candidate-ext">${bits.join('  ')}</div>`;
+}
+
+async function commit(entity_id, qid, rid, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Committing…';
+  try {
+    const res = await fetch('/admin/entity/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entity_id, chosen_qid: qid, source_resolution_id: rid,
+        note: 'committed via /admin/entity-queue',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(`Error: ${data.error || res.status}`, true);
+      btn.disabled = false;
+      btn.textContent = `Commit ${qid}`;
+      return;
+    }
+    showToast(`${entity_id} → ${qid}`);
+    // Remove the row from the local list and rerender.
+    items = items.filter(it => it.entity_id !== entity_id);
+    render();
+  } catch (err) {
+    showToast(`Error: ${err.message}`, true);
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+filterEl.addEventListener('change', load);
+qEl.addEventListener('input', render);
+load();
+</script>
+</body>
+</html>
