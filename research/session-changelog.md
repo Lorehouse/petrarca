@@ -1,6 +1,71 @@
 # Knowledge System Implementation Status
 
-**Date**: April 13, 2026 (last updated — session 69: Insight node matching overhaul)
+**Date**: April 14, 2026 (last updated — session 70: Wikidata entity resolution backfill)
+
+## Session 70: Wikidata Entity Resolution Backfill (April 13-14, 2026)
+
+### What
+Built PR 3 of the Wikidata entity resolution rollout: Petrarca schema migration + backfill script + minimal review UI. Drove the local copy of the production DB from **0% → 89.8% canonical QID coverage** (513 of 571 entities after auto-merges) in ~10 minutes at ~$0.05 total cost.
+
+See `research/wikidata-entity-resolution-plan.md` for the full architectural plan. PRs 0-2 are already merged on limbic main (`PayloadCache`/`temporal`, `WikidataClient`, `WikidataResolver`).
+
+### Coverage journey
+| Pass | Mechanism | Resolved | Coverage | Cost |
+|---|---|---|---|---|
+| Start | — | 0 | 0% | — |
+| Pass 1 | Deterministic, independent | 219 | 37.1% | $0 |
+| Pass 2 | Deterministic, pass-1 anchors | 219 | 37.1%* | $0 |
+| LLM disambiguation | Gemini Flash picks top-K | 489 | 82.7% | ~$0.03 |
+| No-match rescue | LLM alt-queries + resolver | 510 | 86.3% | ~$0.01 |
+| LLM pass 2 + disambig rescue | Rescue caught disambig-page-only cases (Council of Nicaea) | 513 | 86.8% | ~$0.01 |
+| Merge safe dupes | merge_entity_dupes.py | 513 | 89.8%† | $0 |
+
+\* pass 2 sharpened confidences but didn't cross the commit threshold (those items moved through LLM pass)
+† denominator shrank as 20 duplicates were merged
+
+### Architecture
+Four-pass pipeline in `scripts/backfill_wikidata.py`:
+
+1. **Pass 1 (deterministic, independent)**: each entity resolved in isolation via the limbic resolver's 5 heuristics (type, date, description-embedding, coherence, rank). Produces initial commits for unambiguous cases.
+2. **Pass 2 (deterministic, with anchors)**: re-runs non-done items with pass-1 QIDs as `already_resolved` coherence anchors. Sharpens confidences for graph-connected entities (Constantinople 0.77 → 0.98 once Justinian I is an anchor).
+3. **LLM disambiguation**: Gemini Flash picks from the top-K candidates with full mention context. Guarded by `limbic.hippocampus.wikidata_resolve.validate_chosen_qid` — any QID not in the candidate set is rejected.
+4. **No-match rescue**: LLM proposes 2-3 alternate search queries (for cases like "British Palladianism" → "Palladian architecture"), deterministic resolver runs on each. QIDs still come from the API, so no hallucination path. Also catches `ambiguous` cases where every candidate is a Wikimedia disambiguation page (Council of Nicaea pattern).
+
+### Files (all under `scripts/`)
+- `db.py` — `shared_entities.wikidata_qid` + `entity_resolutions` audit + `entity_external_ids` fan-out
+- `migrate_wikidata_schema.py` — idempotent live-DB migration
+- `backfill_wikidata.py` — the full pipeline (1,100+ LOC)
+- `merge_entity_dupes.py` — dedup merger with safety classifier (SAFE/REVIEW)
+- `research-server.py` — three admin endpoints: `/admin/entity-queue[-data]`, `/admin/entity/<qid>`, `POST /admin/entity/resolve`
+- `entity_review.html` — single-page review UI in Annotated-Folio design tokens
+- `tests/test_backfill_wikidata.py` (21 tests), `tests/test_admin_entity_review.py` (9 tests), `tests/test_merge_entity_dupes.py` (15 tests)
+
+### Dedup catches (21 pairs on the corpus)
+Auto-merged via `merge_entity_dupes.py --safe-only` (20 safe, 2 REVIEW remaining for human):
+
+**SAFE (merged)**: `augustus ↔ octavian` (Q1405), `ibn_sina ↔ avicenna` (Q8011), `byzantion ↔ istanbul` (Q406), `naples ↔ neapolis` (Q2634), `cappella_palatina ↔ palatine_chapel` (Q1034853), `sasanian_empire ↔ sasanian_persia` (Q83891), plus the `_person`/`_place`-suffix family (homer, horace, aeschylus, aristophanes, euripides, augustine_of_hippo, rome, italy, france, england), plus `empedocles ↔ empedocles_of_akragas`, `gelon ↔ gelon_of_syracuse`, `constantine ↔ constantine_i`.
+
+**REVIEW**: `ancient_greece ↔ greece` (resolver conflation of modern vs ancient), `abbasid_caliphate ↔ arab_caliphates` (specific vs parent). These need human judgement — not true duplicates.
+
+### External knowledge harvested
+**1,908 external identifiers** fanned out at resolve time from the QID's P-properties: VIAF (P214), GND (P227), GeoNames (P1566), Pleiades (P1584), Getty TGN (P1667), MusicBrainz (P434), Getty ULAN (P245), BnF (P268), LCCN (P244). Downstream specialist-source enrichment becomes a cache lookup.
+
+### Safeguards validated in the wild
+- **QID hallucination caught**: validator rejected exactly 1/308 LLM picks where Gemini proposed `Q160538` (Gian Lorenzo Bernini) for "Council of Nicaea" because the candidate set contained only the disambiguation page. The subsequent rescue pass correctly recovered `Q133331` (First Council of Nicaea) via alt-query `"First Council of Nicaea"`.
+- **Dedup protection**: writes that would violate the unique-QID constraint are rewritten to `needs_review` with `chosen_qid` preserved for the merge UI. Prevented 21 silent collisions.
+- **Supersede chains**: every resolution writes update any prior non-superseded rows for the entity. The admin queue query uses `MAX(created_at)` as belt-and-suspenders.
+
+### Deployed
+- **Schema migration deployed to alif** (`/opt/petrarca/data/petrarca.db`). Additive + idempotent, verified with two invocations. 591 entities currently have `wikidata_qid IS NULL` — ready for backfill when user approves.
+
+### Not done (for follow-up)
+- Running the actual backfill against the live alif DB (deferred to user's explicit approval — backfill is reversible but involves real writes to production data).
+- PR 4: wire resolver into `process_voice_capture` for live voice transcripts. The Rollo/Normandy capture `vt_1776097010_8381` is the smoke-test target — that transcript triggered this entire project and still has 0 knowledge_items.
+- Merge admin endpoint (`POST /admin/entity/merge`) — CLI tool exists; could add a UI button later.
+- Long-tail residuals: 81 entities still unresolved. Mostly `period`-type curriculum-internal labels ("Aragonese Rule", "Augustan Satire") that don't have corresponding Wikidata entities. ~30 of these could probably be rescued via better search strategies.
+
+### Branch + PR
+`sh/wikidata-backfill` with 4 commits, pushed to origin. PR: [petrarca#2](https://github.com/houshuang/petrarca/pull/2).
 
 ## Session 69: Insight Node Matching Overhaul (April 13, 2026)
 
