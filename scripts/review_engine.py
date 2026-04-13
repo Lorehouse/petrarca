@@ -4445,8 +4445,41 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                     boost += (2.0 + len(ename) * 0.05) * _entity_weight(eid)
             return boost
 
+        # Score 3: position bonus — entities mentioned in the first sentence/200 chars
+        # are most likely the topic of the recording. "I listened to a podcast about
+        # Frederick II" puts Frederick II at position 0, while "personally Christian"
+        # appears 800 chars in. The opening positioning of an entity is a strong topic
+        # signal that distinguishes "central topic" from "mentioned in passing".
+        head = transcript_lower[:200]
+
+        def _entity_position_bonus(eid: str) -> float:
+            ename = matched_entity_names.get(eid, '').lower()
+            if not ename:
+                return 0.0
+            # Full entity name in head → strong signal
+            if len(ename) >= 5 and ename in head:
+                return 4.0
+            # Or any distinctive (non-stop, ≥5 char) word from the entity name in head
+            for w in re.split(r'\W+', ename):
+                if len(w) >= 5 and w not in _STOP_WORDS_FOR_MATCHING and w in head:
+                    return 3.0
+            return 0.0
+
+        # Cache per-entity position bonus
+        entity_pos_bonus: dict[str, float] = {
+            eid: _entity_position_bonus(eid) for eid in matched_entity_names
+        }
+
         def _composite_score(node) -> float:
-            return node_specificity.get(node['node_id'], 0.0) + _title_entity_boost(node['title'])
+            base = node_specificity.get(node['node_id'], 0.0)
+            title = _title_entity_boost(node['title'])
+            # Position bonus: max over entities linking to this node
+            pos = max(
+                (entity_pos_bonus.get(eid, 0.0)
+                 for eid in node_linked_entities.get(node['node_id'], [])),
+                default=0.0,
+            )
+            return base + title + pos
 
         # Sort direct-priority nodes by composite score
         direct_candidates = [n for n in candidate_nodes if n.get('priority') == 'direct']
