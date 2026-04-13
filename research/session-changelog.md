@@ -5,7 +5,7 @@
 ## Session 70: Wikidata Entity Resolution Backfill (April 13-14, 2026)
 
 ### What
-Built PR 3 of the Wikidata entity resolution rollout: Petrarca schema migration + backfill script + minimal review UI. Drove the local copy of the production DB from **0% → 89.8% canonical QID coverage** (513 of 571 entities after auto-merges) in ~10 minutes at ~$0.05 total cost.
+Built PR 3 of the Wikidata entity resolution rollout: Petrarca schema migration + backfill script + minimal review UI. Drove the local copy of the production DB from **0% → 90.5% canonical QID coverage** (517 of 571 entities after auto-merges and an improved rescue prompt) in ~10 minutes at ~$0.05 total cost.
 
 See `research/wikidata-entity-resolution-plan.md` for the full architectural plan. PRs 0-2 are already merged on limbic main (`PayloadCache`/`temporal`, `WikidataClient`, `WikidataResolver`).
 
