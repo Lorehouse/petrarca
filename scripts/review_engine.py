@@ -4379,45 +4379,61 @@ def process_voice_capture(transcript: str, entity_id: str = None,
 
     # --- Insight mode: save transcript + node links, skip all LLM/processing ---
     if capture_type == 'insight':
-        # Score nodes by entity specificity (TF-IDF style): a node linked by a
-        # specific entity (e.g. "Frederick II" → ~3 nodes) carries more topical
-        # signal than a node linked by a generic entity (e.g. "Latin" → 50+ nodes).
-        # Weight = sum of (1 / entity_link_count) for each entity that links to the node.
-        # This avoids "Frederick II podcast" being primary-linked to Greek Dark Ages
-        # because Western Philosophy had 16 nodes from generic entity matches.
-        node_specificity: dict[str, float] = {}
+        # Build entity_id → name lookup for matched entities (for title matching below)
+        matched_entity_names: dict[str, str] = {}
         if detected_entity_ids:
             scoring_conn = get_connection(readonly=True)
             unique_eids = list(set(detected_entity_ids))
             placeholders = ','.join('?' * len(unique_eids))
-            # Get all links for matched entities + total link count per entity
+            ent_rows = scoring_conn.execute(
+                f'SELECT entity_id, name FROM shared_entities WHERE entity_id IN ({placeholders})',
+                unique_eids
+            ).fetchall()
+            matched_entity_names = {r['entity_id']: r['name'] for r in ent_rows}
+            # Get link counts and per-entity links
             link_rows = scoring_conn.execute(
                 f'SELECT entity_id, node_id FROM entity_curriculum_links WHERE entity_id IN ({placeholders})',
                 unique_eids
             ).fetchall()
-            entity_total_links: dict[str, int] = {}
-            for r in link_rows:
-                entity_total_links[r['entity_id']] = entity_total_links.get(r['entity_id'], 0) + 1
-            # Score each node by sum of 1/link_count for entities linking to it
-            for r in link_rows:
-                weight = 1.0 / max(1, entity_total_links.get(r['entity_id'], 1))
-                node_specificity[r['node_id']] = node_specificity.get(r['node_id'], 0.0) + weight
             scoring_conn.close()
+        else:
+            link_rows = []
 
-        # Sort direct-priority nodes by specificity (descending), preserve original
-        # tie-breakers (priority, overlap) for non-direct nodes
-        def _specificity(node_id: str) -> float:
-            return node_specificity.get(node_id, 0.0)
+        # Score 1: TF-IDF specificity — node linked by a specific entity (Frederick II → 2 nodes)
+        # outranks one linked by a generic entity (Latin → 50 nodes)
+        entity_total_links: dict[str, int] = {}
+        for r in link_rows:
+            entity_total_links[r['entity_id']] = entity_total_links.get(r['entity_id'], 0) + 1
+        node_specificity: dict[str, float] = {}
+        for r in link_rows:
+            weight = 1.0 / max(1, entity_total_links.get(r['entity_id'], 1))
+            node_specificity[r['node_id']] = node_specificity.get(r['node_id'], 0.0) + weight
 
+        # Score 2: title-entity match — if a node's title contains a matched entity name,
+        # that's a near-guaranteed topic match. "Frederick II Stupor Mundi" contains
+        # "Frederick II" → strong signal. Adds a large boost to the specificity score.
+        def _title_entity_boost(title: str) -> float:
+            title_lower = title.lower()
+            boost = 0.0
+            for ename in matched_entity_names.values():
+                if len(ename) >= 5 and ename.lower() in title_lower:
+                    # Longer entity names = more specific match
+                    boost += 2.0 + len(ename) * 0.05
+            return boost
+
+        def _composite_score(node) -> float:
+            return node_specificity.get(node['node_id'], 0.0) + _title_entity_boost(node['title'])
+
+        # Sort direct-priority nodes by composite score
         direct_candidates = [n for n in candidate_nodes if n.get('priority') == 'direct']
-        direct_candidates.sort(key=lambda n: -_specificity(n['node_id']))
+        direct_candidates.sort(key=lambda n: -_composite_score(n))
         non_direct = [n for n in candidate_nodes if n.get('priority') != 'direct']
         ordered_candidates = direct_candidates + non_direct
 
         nodes_linked = [
             {'node_id': n['node_id'], 'domain_id': n['domain_id'],
              'title': n['title'], 'priority': n.get('priority', 'keyword'),
-             'specificity': round(_specificity(n['node_id']), 3)}
+             'score': round(_composite_score(n), 3)}
             for n in ordered_candidates[:20]
         ]
 
@@ -4440,9 +4456,9 @@ def process_voice_capture(transcript: str, entity_id: str = None,
             ml_triggered=[],
         )
 
-        top_specs = [(n['node_id'], _specificity(n['node_id'])) for n in direct_candidates[:5]]
+        top_scored = [(n['node_id'], round(_composite_score(n), 2)) for n in direct_candidates[:5]]
         print(f'[voice-capture] Insight saved: primary={primary_node} ({primary_title}), '
-              f'{len(nodes_linked)} nodes linked, top_specificity={top_specs}', flush=True)
+              f'{len(nodes_linked)} nodes linked, top_scored={top_scored}', flush=True)
         return {
             'status': 'completed',
             'capture_type': 'insight',
