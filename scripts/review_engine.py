@@ -1971,6 +1971,104 @@ def record_answer(item_id: str, score: str, conn) -> dict:
     return {'next_due_at': next_due, 'new_stability_days': new_stability}
 
 
+# ── Structural card grading ──────────────────────────────────────────────────
+
+def record_structural_answer(card_id: str, results: list, conn) -> dict:
+    """Grade an aspect card: apply FSRS to each position independently.
+
+    Args:
+        card_id: The structural_cards.id
+        results: List of {position_id, score} where score is 'knew' or 'missed'
+        conn: SQLite connection
+
+    Returns dict with per-position scheduling and card-level summary.
+    """
+    now = int(time.time() * 1000)
+    now_dt = datetime.now(timezone.utc)
+    position_results = []
+
+    for r in results:
+        pos_id = r.get('position_id')
+        score = r.get('score', 'missed')
+        if not pos_id:
+            continue
+
+        # Binary grading: aspect cards use knew/missed only
+        if score not in ('knew', 'missed'):
+            score = 'missed'
+
+        row = conn.execute(
+            'SELECT fsrs_card_json, stability_days, review_count FROM structural_positions WHERE id=?',
+            (pos_id,)
+        ).fetchone()
+        if not row:
+            print(f'[structural] position {pos_id} not found, skipping', flush=True)
+            continue
+
+        # Load or create FSRS card
+        card_json = row['fsrs_card_json']
+        if card_json:
+            card_data = json.loads(card_json) if isinstance(card_json, str) else card_json
+            card = FsrsCard.from_dict(card_data)
+        else:
+            card = FsrsCard()
+
+        fsrs_rating = SCORE_TO_FSRS.get(score, FsrsRating.Again)
+        new_card, _ = _fsrs_scheduler.review_card(card, fsrs_rating, now_dt)
+        new_stability = new_card.stability or 1.0
+        next_due = int(new_card.due.timestamp() * 1000)
+
+        conn.execute("""
+            UPDATE structural_positions
+            SET stability_days=?, due_at=?, last_reviewed_at=?,
+                last_score=?, review_count=review_count+1, fsrs_card_json=?
+            WHERE id=?
+        """, (new_stability, next_due, now, score, json.dumps(new_card.to_dict()), pos_id))
+
+        position_results.append({
+            'position_id': pos_id,
+            'score': score,
+            'new_stability_days': round(new_stability, 1),
+            'next_due_at': next_due,
+        })
+        print(f'[structural] {pos_id}: {score} → stability={new_stability:.1f}d due={new_card.due.strftime("%m-%d")}', flush=True)
+
+    # Update card-level review count
+    conn.execute(
+        'UPDATE structural_cards SET review_count=review_count+1 WHERE id=?',
+        (card_id,)
+    )
+
+    # Update knowledge state for the card's curriculum node
+    card_row = conn.execute(
+        'SELECT domain_id, node_id FROM structural_cards WHERE id=?', (card_id,)
+    ).fetchone()
+    if card_row and card_row['domain_id'] and card_row['node_id']:
+        knew_count = sum(1 for r in position_results if r['score'] == 'knew')
+        total = len(position_results)
+        if total > 0:
+            ratio = knew_count / total
+            if ratio >= 0.8:
+                knowledge_val, confidence_val = 'anchored', 0.85
+            elif ratio >= 0.5:
+                knowledge_val, confidence_val = 'engaged', 0.55
+            else:
+                knowledge_val, confidence_val = 'mentioned', 0.3
+            update_knowledge(card_row['domain_id'], card_row['node_id'],
+                             knowledge=knowledge_val, confidence=confidence_val,
+                             source=f"structural:{card_id}", conn=conn)
+
+    conn.commit()
+
+    knew = sum(1 for r in position_results if r['score'] == 'knew')
+    return {
+        'card_id': card_id,
+        'positions': position_results,
+        'knew': knew,
+        'total': len(position_results),
+    }
+
+
 # ── Microlearning research ────────────────────────────────────────────────────
 
 MICROLEARNING_PROMPT = """You are a knowledgeable historian and educator. Write a microlearning card for

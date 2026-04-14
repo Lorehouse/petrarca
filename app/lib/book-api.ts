@@ -400,6 +400,19 @@ export async function recordReviewResult(
   return resp.json();
 }
 
+export async function gradeStructuralCard(
+  cardId: string,
+  results: Array<{ position_id: string; score: 'knew' | 'missed' }>,
+): Promise<{ card_id: string; positions: Array<{ position_id: string; score: string; new_stability_days: number; next_due_at: number }>; knew: number; total: number }> {
+  const resp = await fetch(`${RESEARCH_BASE}/structural/grade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: cardId, results }),
+  });
+  if (!resp.ok) throw new Error(`Structural grade failed (${resp.status})`);
+  return resp.json();
+}
+
 export async function suspendReviewItem(itemId: string): Promise<void> {
   const resp = await fetch(`${RESEARCH_BASE}/curriculum/review/suspend`, {
     method: 'POST',

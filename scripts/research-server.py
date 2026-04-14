@@ -5688,6 +5688,32 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_structural_grade(self):
+        """POST /structural/grade — grade an aspect card's positions with FSRS."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        card_id = body.get('card_id')
+        results = body.get('results', [])
+        if not card_id or not results:
+            self._send_json_response(400, {'error': 'card_id and results required'})
+            return
+        from db import get_connection
+        from review_engine import record_structural_answer
+        conn = get_connection()
+        try:
+            resp = record_structural_answer(card_id, results, conn)
+            from server_log import log_interaction
+            log_interaction('structural_grade', card_id=card_id,
+                            knew=resp.get('knew'), total=resp.get('total'))
+            self._send_json_response(200, resp)
+        except Exception as e:
+            print(f'[structural/grade] Error: {e}', flush=True)
+            import traceback; traceback.print_exc()
+            self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_log_events(self):
         """POST /log/events — receive client-side interaction events.
 
@@ -6560,6 +6586,8 @@ JSON array only:"""
             return self._handle_review_generate_question()
         if self.path == '/review/answer':
             return self._handle_review_answer()
+        if self.path == '/structural/grade':
+            return self._handle_structural_grade()
         if self.path == '/review/explore':
             return self._handle_review_explore()
         if self.path == '/review/voice-memo':

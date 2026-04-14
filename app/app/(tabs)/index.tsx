@@ -10,6 +10,7 @@ import {
   fetchReviewStream, recordReviewResult, recordEntityTap,
   triggerMicrolearning, dismissMicrolearning,
   triggerFollowUp, suspendReviewItem, createFactualQuiz, suspendFact,
+  gradeStructuralCard,
 } from '../../lib/book-api';
 import { logEvent } from '../../data/logger';
 import { safeDate } from '../../lib/display-utils';
@@ -1484,7 +1485,12 @@ export default function ReviewScreen() {
                     knew: results.filter(r => r.score === 'knew').length,
                     total: results.length,
                   });
-                  // TODO: POST results to server for FSRS scheduling
+                  if (currentItem.card_id) {
+                    gradeStructuralCard(
+                      currentItem.card_id,
+                      results.map(r => ({ position_id: r.position_id, score: r.score })),
+                    ).catch(e => console.warn('[structural grade]', e));
+                  }
                   animateTransition(() => {
                     setCurrentIndex(i => i + 1);
                     maybeLoadMore();
