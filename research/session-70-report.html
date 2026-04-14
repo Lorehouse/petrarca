@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session 70 — Wikidata Entity Resolution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #efe9da;
+  --parchment-deeper: #e6dece;
+  --ink: #2a2420;
+  --ink-light: #4a4238;
+  --rubric: #8b2500;
+  --rubric-light: #a83a15;
+  --gold: #c9a84c;
+  --gold-dim: #d4bd7a;
+  --gold-bright: #b8922e;
+  --text-secondary: #6a6458;
+  --text-muted: #9a9488;
+  --rule: #d8d0c2;
+  --ok: #2a7a4a;
+  --ok-bg: #e8f5e8;
+  --warn: #c88a1a;
+  --warn-bg: #fdf5e0;
+  --bad: #b0432a;
+  --bad-bg: #fde8e4;
+  --blue: #2a5a8a;
+  --blue-bg: #e8eff8;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes growWidth {
+  from { width: 0; }
+}
+@keyframes countUp {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--parchment);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === HEADER === */
+header {
+  position: relative;
+  padding: 48px 0 40px;
+  text-align: center;
+  border-bottom: 3px double var(--ink);
+  background: linear-gradient(180deg, var(--parchment-dark) 0%, var(--parchment) 100%);
+  overflow: hidden;
+  animation: fadeUp 0.6s ease-out;
+}
+header::before {
+  content: '§ LXX';
+  position: absolute;
+  top: 16px;
+  left: 24px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+header::after {
+  content: 'PR 3 of 4';
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 600;
+  color: var(--rubric);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+header .subtitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-style: italic;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* === MAIN === */
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+/* === SECTION HEADINGS === */
+.section-head {
+  margin-top: 48px;
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--rule);
+  animation: fadeUp 0.5s ease-out both;
+}
+.section-head h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--rubric);
+  letter-spacing: -0.005em;
+}
+.section-head .section-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* === HERO — COVERAGE ARC === */
+.hero {
+  margin-top: 40px;
+  animation: fadeUp 0.6s ease-out 0.15s both;
+}
+.hero-number {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.hero-number .big {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--rubric);
+  line-height: 1;
+  animation: countUp 0.7s ease-out 0.4s both;
+}
+.hero-number .big .of {
+  font-size: 36px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.hero-number .label {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.arc {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--parchment-deeper);
+  border: 1px solid var(--rule);
+  margin-bottom: 8px;
+}
+.arc-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  animation: growWidth 0.8s ease-out both;
+}
+.arc-seg.s1 { background: var(--rubric); flex-basis: 37.1%; animation-delay: 0.3s; }
+.arc-seg.s2 { background: var(--rubric-light); flex-basis: 8.5%; animation-delay: 0.5s; font-size: 0; }
+.arc-seg.s3 { background: var(--gold-bright); flex-basis: 37.1%; animation-delay: 0.7s; }
+.arc-seg.s4 { background: var(--ok); flex-basis: 7.8%; animation-delay: 0.9s; font-size: 10px; }
+.arc-rest { flex: 1; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); }
+
+.arc-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+.arc-labels span { font-family: 'JetBrains Mono', monospace; }
+
+.arc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.arc-legend .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+/* === CARD GRID === */
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 8px;
+}
+.card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 16px 18px;
+  animation: fadeUp 0.4s ease-out both;
+  transition: box-shadow 0.2s;
+}
+.card:hover {
+  box-shadow: 0 2px 12px rgba(42,36,32,0.08);
+}
+.card:nth-child(1) { animation-delay: 0.1s; }
+.card:nth-child(2) { animation-delay: 0.15s; }
+.card:nth-child(3) { animation-delay: 0.2s; }
+.card:nth-child(4) { animation-delay: 0.25s; }
+.card:nth-child(5) { animation-delay: 0.3s; }
+.card:nth-child(6) { animation-delay: 0.35s; }
+.card:nth-child(7) { animation-delay: 0.4s; }
+.card:nth-child(8) { animation-delay: 0.45s; }
+.card h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+.card p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.card .tag {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 3px;
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tag.deployed { background: var(--ok-bg); color: var(--ok); }
+.tag.ready { background: var(--blue-bg); color: var(--blue); }
+.tag.tested { background: var(--warn-bg); color: var(--warn); }
+
+/* === PIPELINE === */
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+}
+.pipe-step {
+  display: grid;
+  grid-template-columns: 200px 40px 1fr;
+  align-items: start;
+  min-height: 72px;
+  animation: slideIn 0.4s ease-out both;
+}
+.pipe-step:nth-child(1) { animation-delay: 0.1s; }
+.pipe-step:nth-child(2) { animation-delay: 0.2s; }
+.pipe-step:nth-child(3) { animation-delay: 0.3s; }
+.pipe-step:nth-child(4) { animation-delay: 0.4s; }
+.pipe-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 12px;
+  text-align: right;
+  padding-right: 16px;
+}
+.pipe-label small {
+  display: block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.pipe-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.pipe-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2.5px solid var(--rubric);
+  background: white;
+  margin-top: 15px;
+  z-index: 1;
+}
+.pipe-step:last-child .pipe-dot { border-color: var(--ok); background: var(--ok); }
+.pipe-stem {
+  width: 2px;
+  flex: 1;
+  background: var(--rule);
+  margin-top: -1px;
+}
+.pipe-step:last-child .pipe-stem { display: none; }
+.pipe-detail {
+  padding: 12px 0 12px 16px;
+  border-left: none;
+}
+.pipe-detail .result {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ok);
+  margin-bottom: 3px;
+}
+.pipe-detail .result.warn { color: var(--warn); }
+.pipe-detail .result.neutral { color: var(--text-secondary); }
+.pipe-detail .note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* === CALLOUT BOX === */
+.callout {
+  margin-top: 16px;
+  background: white;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--gold);
+  border-radius: 0 5px 5px 0;
+  padding: 18px 22px;
+  animation: fadeUp 0.5s ease-out both;
+}
+.callout.alert {
+  border-left-color: var(--bad);
+  background: #fefaf8;
+}
+.callout h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.callout p {
+  font-size: 13.5px;
+  color: var(--ink-light);
+  line-height: 1.6;
+}
+.callout code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--parchment-dark);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* === TABLE === */
+.dedup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-top: 12px;
+  animation: fadeUp 0.5s ease-out both;
+}
+.dedup-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--rule);
+}
+.dedup-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--parchment-dark);
+  vertical-align: top;
+}
+.dedup-table tr:hover td { background: var(--parchment-dark); }
+.dedup-table .qid {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--rubric);
+  font-weight: 500;
+}
+.dedup-table .arrow { color: var(--gold); font-weight: 600; }
+.dedup-table .why { color: var(--text-secondary); font-size: 12px; font-style: italic; }
+
+/* === NUMBERED LIST === */
+.choices {
+  list-style: none;
+  counter-reset: choice;
+  margin-top: 12px;
+}
+.choices li {
+  counter-increment: choice;
+  position: relative;
+  padding: 10px 0 10px 48px;
+  border-bottom: 1px solid var(--parchment-dark);
+  font-size: 13.5px;
+  color: var(--ink-light);
+  line-height: 1.55;
+  animation: slideIn 0.35s ease-out both;
+}
+.choices li:nth-child(1) { animation-delay: 0.05s; }
+.choices li:nth-child(2) { animation-delay: 0.1s; }
+.choices li:nth-child(3) { animation-delay: 0.15s; }
+.choices li:nth-child(4) { animation-delay: 0.2s; }
+.choices li:nth-child(5) { animation-delay: 0.25s; }
+.choices li:nth-child(6) { animation-delay: 0.3s; }
+.choices li::before {
+  content: counter(choice);
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--parchment-dark);
+  border: 1.5px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rubric);
+}
+.choices li strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* === NEXT STEPS === */
+.steps {
+  list-style: none;
+  margin-top: 12px;
+}
+.steps li {
+  position: relative;
+  padding: 8px 0 8px 32px;
+  font-size: 13.5px;
+  color: var(--ink-light);
+  line-height: 1.5;
+  animation: slideIn 0.35s ease-out both;
+}
+.steps li::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 15px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--rule);
+  border-radius: 2px;
+}
+.steps li code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  background: var(--parchment-dark);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* === RESIDUAL BREAKDOWN === */
+.residual-chart {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  height: 140px;
+  margin-top: 16px;
+  padding: 0 20px;
+}
+.residual-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+.residual-bar .bar {
+  width: 100%;
+  max-width: 80px;
+  border-radius: 4px 4px 0 0;
+  animation: growHeight 0.6s ease-out both;
+  position: relative;
+}
+@keyframes growHeight {
+  from { height: 0 !important; }
+}
+.residual-bar .bar.period { background: var(--rubric); height: 100%; animation-delay: 0.2s; }
+.residual-bar .bar.place { background: var(--gold-bright); height: 24%; animation-delay: 0.3s; }
+.residual-bar .bar.person { background: var(--blue); height: 18%; animation-delay: 0.4s; }
+.residual-bar .bar.event { background: var(--ok); height: 15%; animation-delay: 0.5s; }
+.residual-bar .bar.concept { background: var(--text-muted); height: 3%; min-height: 6px; animation-delay: 0.6s; }
+.residual-bar .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.residual-bar .type {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.residual-note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 16px;
+  padding-left: 20px;
+  border-left: 2px solid var(--rule);
+  line-height: 1.6;
+}
+
+/* === FOOTER STATS === */
+.stats-bar {
+  margin-top: 56px;
+  padding: 20px 0;
+  border-top: 3px double var(--ink);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.stat {
+  text-align: center;
+  animation: fadeUp 0.4s ease-out both;
+}
+.stat:nth-child(1) { animation-delay: 0.1s; }
+.stat:nth-child(2) { animation-delay: 0.15s; }
+.stat:nth-child(3) { animation-delay: 0.2s; }
+.stat:nth-child(4) { animation-delay: 0.25s; }
+.stat:nth-child(5) { animation-delay: 0.3s; }
+.stat:nth-child(6) { animation-delay: 0.35s; }
+.stat .val {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--rubric);
+  line-height: 1;
+}
+.stat .val.gold { color: var(--gold-bright); }
+.stat .lbl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.colophon {
+  text-align: center;
+  margin-top: 24px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Note about alif */
+.note-box {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--parchment-dark);
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.note-box strong { color: var(--ink); }
+
+@media (max-width: 700px) {
+  .cards { grid-template-columns: 1fr; }
+  .pipe-step { grid-template-columns: 140px 32px 1fr; }
+  .stats-bar { justify-content: center; }
+  .residual-chart { gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Session 70 — Wikidata Entity Resolution</h1>
+  <div class="subtitle">Overnight autonomous work report &middot; April 13&ndash;14, 2026</div>
+</header>
+
+<main>
+
+<!-- ============ COVERAGE ARC ============ -->
+<div class="hero">
+  <div class="hero-number">
+    <div class="big">517 <span class="of">/ 571</span></div>
+    <div class="label">entities resolved to canonical Wikidata QIDs &mdash; <strong>90.5%</strong></div>
+  </div>
+
+  <div class="arc">
+    <div class="arc-seg s1">37.1%</div>
+    <div class="arc-seg s2"></div>
+    <div class="arc-seg s3">82.7%</div>
+    <div class="arc-seg s4">+7.8</div>
+    <div class="arc-rest">54</div>
+  </div>
+  <div class="arc-labels">
+    <span>0%</span>
+    <span>90.5%</span>
+  </div>
+  <div class="arc-legend">
+    <span><span class="dot" style="background:var(--rubric)"></span>Pass 1 &mdash; Deterministic</span>
+    <span><span class="dot" style="background:var(--rubric-light)"></span>Pass 2 &mdash; Coherence anchors</span>
+    <span><span class="dot" style="background:var(--gold-bright)"></span>LLM disambiguation</span>
+    <span><span class="dot" style="background:var(--ok)"></span>Rescue + merge</span>
+    <span><span class="dot" style="background:var(--parchment-deeper);border:1px solid var(--rule)"></span>Residual (54)</span>
+  </div>
+</div>
+
+<!-- ============ WHAT WAS BUILT ============ -->
+<div class="section-head">
+  <h2>What Was Built</h2>
+  <div class="section-note">8 deliverables across 13 commits, all on branch <code style="font-family:'JetBrains Mono',monospace;font-size:12px">sh/wikidata-backfill</code></div>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <h3>Schema Migration</h3>
+    <p>3 new tables (<code>entity_resolutions</code>, <code>entity_external_ids</code>, unique-index <code>wikidata_qid</code>). Idempotent script runs safely on repeat.</p>
+    <span class="tag deployed">Deployed to server</span>
+  </div>
+  <div class="card">
+    <h3>Backfill Script</h3>
+    <p>1,100 LOC. Four-pass pipeline: deterministic &times;2, LLM disambiguation (Gemini Flash), no-match rescue via alternate queries. Resumable via <code>BatchProcessor</code>.</p>
+    <span class="tag ready">Ready to run</span>
+  </div>
+  <div class="card">
+    <h3>Admin Review UI</h3>
+    <p><code>/admin/entity-queue</code>, <code>/admin/entity/&lt;qid&gt;</code>, manual resolve + merge buttons. Annotated Folio design tokens. One-click commit per candidate.</p>
+    <span class="tag ready">Ready to deploy</span>
+  </div>
+  <div class="card">
+    <h3>Dedup Merger</h3>
+    <p>20 auto-merged &mdash; <em>augustus&thinsp;&harr;&thinsp;octavian</em>, <em>ibn_sina&thinsp;&harr;&thinsp;avicenna</em>, <em>homer&thinsp;&harr;&thinsp;homer_person</em>, etc. Safety classifier (SAFE vs REVIEW) prevents bad merges.</p>
+    <span class="tag tested">Validated locally</span>
+  </div>
+  <div class="card">
+    <h3>67 Unit Tests</h3>
+    <p>Backfill helpers, admin query semantics, merge tool, supersede chains, QID uniqueness constraint, PK collision handling, dedup detection.</p>
+    <span class="tag tested">All passing</span>
+  </div>
+  <div class="card">
+    <h3>PR 4 Scaffold</h3>
+    <p>The Rollo/Normandy transcript resolves 11/13 entities end-to-end: Rollo &rarr; Q273773, Richard I &rarr; Q333359, Gunnor &rarr; Q270777, &AElig;thelred &rarr; Q183499.</p>
+    <span class="tag tested">Full-circle validated</span>
+  </div>
+  <div class="card">
+    <h3>Deployment Guide</h3>
+    <p>Step-by-step runbook in <code>research/wikidata-deployment-guide.md</code>. Rollback procedure included (reversible via one SQL).</p>
+    <span class="tag ready">Ready</span>
+  </div>
+  <div class="card">
+    <h3>Cleanup Tools</h3>
+    <p>Stale audit row cleanup (122 rows retroactively superseded). Improved rescue prompt for non-English alternate queries (Arabic, Greek).</p>
+    <span class="tag tested">Applied locally</span>
+  </div>
+</div>
+
+<!-- ============ THE PIPELINE ============ -->
+<div class="section-head" style="margin-top:56px">
+  <h2>The Pipeline</h2>
+  <div class="section-note">Each pass builds on the previous &mdash; anchors from earlier passes improve later scoring</div>
+</div>
+
+<div class="pipeline">
+  <div class="pipe-step">
+    <div class="pipe-label">Pass 1<small>Deterministic, independent</small></div>
+    <div class="pipe-line"><div class="pipe-dot"></div><div class="pipe-stem"></div></div>
+    <div class="pipe-detail">
+      <div class="result">+219 resolved &mdash; 37.1%</div>
+      <div class="note">Each entity resolved in isolation via the limbic resolver's 5 heuristics (type, date, description-embedding, coherence, rank). Cost: $0. Clear wins: Rome, Diocletian, Ali, Alexander the Great.</div>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-label">Pass 2<small>Coherence anchors</small></div>
+    <div class="pipe-line"><div class="pipe-dot"></div><div class="pipe-stem"></div></div>
+    <div class="pipe-detail">
+      <div class="result warn">+0 committed (confidences sharpened)</div>
+      <div class="note">Re-runs non-done items with pass-1 QIDs as <code>already_resolved</code>. Constantinople jumped 0.77 &rarr; 0.98 once Justinian I was anchored &mdash; but margin threshold still too tight to commit. These items moved through to LLM pass.</div>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-label">LLM Disambiguation<small>Gemini Flash</small></div>
+    <div class="pipe-line"><div class="pipe-dot"></div><div class="pipe-stem"></div></div>
+    <div class="pipe-detail">
+      <div class="result">+270 resolved &mdash; 82.7%</div>
+      <div class="note">308 ambiguous cases presented to Gemini with top-K candidates + context. 91% pick rate. 1 QID hallucination caught by <code>validate_chosen_qid</code>. Uthman correctly picked Q37731 (3rd Caliph) over Q5686263 (basketball player) despite the deterministic resolver ranking the basketball player higher.</div>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-label">No-match Rescue<small>Alt-query + resolver</small></div>
+    <div class="pipe-line"><div class="pipe-dot"></div><div class="pipe-stem"></div></div>
+    <div class="pipe-detail">
+      <div class="result">+28 rescued &mdash; 90.5%</div>
+      <div class="note">LLM proposes alternate search queries (&ldquo;British Palladianism&rdquo; &rarr; &ldquo;Palladian architecture&rdquo;, &ldquo;Council of Nicaea&rdquo; &rarr; &ldquo;First Council of Nicaea&rdquo;). Deterministic resolver runs on each &mdash; QIDs still come from the API, so no hallucination path. Also catches disambiguation-page-only candidates.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SURPRISE: HALLUCINATION ============ -->
+<div class="section-head" style="margin-top:56px">
+  <h2>Surprises</h2>
+</div>
+
+<div class="callout alert">
+  <h3>The Council of Nicaea Hallucination</h3>
+  <p>Gemini proposed <code>Q160538</code> for &ldquo;Council of Nicaea&rdquo; with confidence 1.0, confidently reasoning about &ldquo;the First Ecumenical Council of 325 AD.&rdquo;</p>
+  <p style="margin-top:8px"><code>Q160538</code> is actually <strong>Gian Lorenzo Bernini</strong>, the Italian sculptor. Pure hallucination.</p>
+  <p style="margin-top:8px"><strong>Root cause:</strong> Wikidata search for &ldquo;Council of Nicaea&rdquo; returned only the disambiguation page (<code>Q232572</code>). With only one useless candidate, the LLM tried to generate the &ldquo;right&rdquo; QID from memory &mdash; and got it spectacularly wrong.</p>
+  <p style="margin-top:8px"><strong>Resolution:</strong> <code>validate_chosen_qid</code> rejected the pick (not in candidate set). The disambiguation-page-only rescue then tried &ldquo;First Council of Nicaea&rdquo; and recovered the correct <code>Q133331</code>.</p>
+  <p style="margin-top:8px"><strong>Takeaway:</strong> The &ldquo;LLM never generates QIDs&rdquo; invariant is load-bearing. This is the second documented hallucination incident (the first was me hallucinating 5/7 QIDs during PR 1 test fixture construction).</p>
+</div>
+
+<div class="callout" style="margin-top:16px">
+  <h3>20 Real Duplicates Hiding in the Curriculum Data</h3>
+  <p>The QID layer exposed entity duplicates that had been silently diverging in the curriculum graph for months. Some are data-model artifacts (<code>_person</code> suffix), others are genuinely interesting historical-naming cases:</p>
+</div>
+
+<table class="dedup-table">
+  <thead>
+    <tr><th>QID</th><th>Canonical</th><th></th><th>Duplicate</th><th>Why they're the same</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="qid">Q1405</td><td>augustus</td><td class="arrow">&harr;</td><td>octavian</td><td class="why">Same person, different life stages (pre/post 27 BC)</td></tr>
+    <tr><td class="qid">Q8011</td><td>avicenna</td><td class="arrow">&harr;</td><td>ibn_sina</td><td class="why">Latinized vs Arabic name for the Persian polymath</td></tr>
+    <tr><td class="qid">Q406</td><td>istanbul</td><td class="arrow">&harr;</td><td>byzantion</td><td class="why">Same city, 2,600 years apart</td></tr>
+    <tr><td class="qid">Q6691</td><td>homer_person</td><td class="arrow">&harr;</td><td>homer</td><td class="why">Auto-generated <code>_person</code> suffix from curriculum pipeline</td></tr>
+    <tr><td class="qid">Q2634</td><td>naples</td><td class="arrow">&harr;</td><td>neapolis</td><td class="why">Modern Italian vs ancient Greek founding name</td></tr>
+    <tr><td class="qid">Q8413</td><td>constantine</td><td class="arrow">&harr;</td><td>constantine_i</td><td class="why">Bare name vs regnal ordinal &mdash; both Constantine the Great</td></tr>
+  </tbody>
+</table>
+
+<!-- ============ DESIGN CHOICES ============ -->
+<div class="section-head" style="margin-top:56px">
+  <h2>Design Choices Made</h2>
+  <div class="section-note">Decisions I made autonomously overnight, with reasoning</div>
+</div>
+
+<ol class="choices">
+  <li><strong>Two-pass deterministic before LLM.</strong> Pass 1 resolves the easy cases for free ($0). Pass 2 uses those as coherence anchors to sharpen confidences on harder cases. LLM only touches items that can't be resolved deterministically &mdash; saves ~70% of LLM calls.</li>
+  <li><strong>Gemini Flash over Claude for disambiguation.</strong> 1&ndash;2s per call vs 5&ndash;15s. $0.05 total vs ~$15. For picking one from a short list with context, Flash quality is sufficient &mdash; 91% pick rate, 0.3% hallucination rate.</li>
+  <li><strong>QIDs from API only, never from LLM.</strong> The <code>validate_chosen_qid</code> guard rejects any LLM-proposed QID not in the candidate set. Proved load-bearing by the Council of Nicaea incident.</li>
+  <li><strong>Supersede-on-write, not delete-and-replace.</strong> Every resolution write chains via <code>superseded_by</code>. Full audit history preserved through deterministic &rarr; LLM &rarr; rescue &rarr; manual pipeline. Admin UI shows latest via <code>MAX(created_at)</code>.</li>
+  <li><strong>Dedup safety classifier.</strong> Auto-merge only obvious cases: <code>_person</code> suffix, known aliases, identical names. Flag uncertain pairs (ancient_greece &harr; greece, abbasid_caliphate &harr; arab_caliphates) for human review rather than risk conflation.</li>
+  <li><strong>Schema deployed ahead of backfill.</strong> Additive-only ALTERs are zero-risk. Deploying early let me test endpoints and verify the migration was idempotent before data existed. Backfill itself is deferred to your explicit approval since it writes to production.</li>
+</ol>
+
+<div class="note-box" style="margin-top:24px">
+  <strong>On naming:</strong> Throughout the overnight work I referred to the production server as &ldquo;alif&rdquo; &mdash; that&rsquo;s the SSH alias for the Hetzner VM. Both Petrarca and the Alif Arabic project share the same machine. I&rsquo;ll say &ldquo;the server&rdquo; or &ldquo;Hetzner&rdquo; going forward to avoid confusion.
+</div>
+
+<!-- ============ WHAT'S LEFT ============ -->
+<div class="section-head" style="margin-top:56px">
+  <h2>What's Left</h2>
+  <div class="section-note">Deployment runbook: <code>research/wikidata-deployment-guide.md</code></div>
+</div>
+
+<ul class="steps">
+  <li>Merge <a href="https://github.com/houshuang/petrarca/pull/2" style="color:var(--rubric)">PR #2</a> (13 commits, branch <code>sh/wikidata-backfill</code>)</li>
+  <li>Deploy <code>research-server.py</code> to the server (adds admin endpoints)</li>
+  <li>Run backfill: <code>python3 scripts/backfill_wikidata.py --pass all</code> &mdash; ~10 min, ~$0.05, resumable</li>
+  <li>Run safe merges: <code>python3 scripts/merge_entity_dupes.py --apply --safe-only</code></li>
+  <li>Triage ~54 residuals at <code>/admin/entity-queue</code></li>
+  <li>PR 4: Wire resolver into <code>process_voice_capture()</code> &mdash; re-process the Rollo transcript for real</li>
+</ul>
+
+<!-- ============ RESIDUAL BREAKDOWN ============ -->
+<div class="section-head" style="margin-top:48px">
+  <h2>The Residual 54</h2>
+  <div class="section-note">What couldn't be resolved &mdash; and why that's OK</div>
+</div>
+
+<div class="residual-chart">
+  <div class="residual-bar">
+    <div class="count">34</div>
+    <div class="bar period"></div>
+    <div class="type">period</div>
+  </div>
+  <div class="residual-bar">
+    <div class="count">8</div>
+    <div class="bar place"></div>
+    <div class="type">place</div>
+  </div>
+  <div class="residual-bar">
+    <div class="count">6</div>
+    <div class="bar person"></div>
+    <div class="type">person</div>
+  </div>
+  <div class="residual-bar">
+    <div class="count">5</div>
+    <div class="bar event"></div>
+    <div class="type">event</div>
+  </div>
+  <div class="residual-bar">
+    <div class="count">1</div>
+    <div class="bar concept"></div>
+    <div class="type">concept</div>
+  </div>
+</div>
+
+<p class="residual-note">
+  The &ldquo;period&rdquo; type dominates residuals: &ldquo;Augustan Satire,&rdquo; &ldquo;French Classical Theater,&rdquo; &ldquo;Gothic Secular Architecture&rdquo; &mdash; these are Petrarca&rsquo;s curriculum-internal categorical labels, not entities that exist in Wikidata. They can stay un-resolved indefinitely. The few remaining persons/places (Abu Bakr, Marcellus, Patton) are findable but require non-English search or disambiguation &mdash; triage via the admin queue.
+</p>
+
+<!-- ============ STATS BAR ============ -->
+<div class="stats-bar">
+  <div class="stat"><div class="val">$0.05</div><div class="lbl">Total cost</div></div>
+  <div class="stat"><div class="val">~10m</div><div class="lbl">Wall time</div></div>
+  <div class="stat"><div class="val">67</div><div class="lbl">Tests</div></div>
+  <div class="stat"><div class="val">13</div><div class="lbl">Commits</div></div>
+  <div class="stat"><div class="val gold">1,908</div><div class="lbl">External IDs</div></div>
+  <div class="stat"><div class="val">20<span style="font-size:16px;color:var(--text-muted)">+2</span></div><div class="lbl">Dedup pairs</div></div>
+</div>
+
+<p class="colophon">
+  Composed autonomously, April 13&ndash;14 2026 &middot; Claude Opus 4.6 &middot; Petrarca project
+</p>
+
+</main>
+</body>
+</html>
