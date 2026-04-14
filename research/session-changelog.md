@@ -1,6 +1,32 @@
 # Knowledge System Implementation Status
 
-**Date**: April 14, 2026 (last updated — session 74: FSRS scheduling + sequence cards)
+**Date**: April 14, 2026 (last updated — session 75: activation gating + voice pipeline)
+
+## Session 75: Activation Gating + Voice Pipeline + Auth Fix (April 14, 2026)
+
+### Structural Card Expansion
+- Generated ~523 new aspect cards across 5 domains (Greece 65, Byzantine 81, Islamic 83, Music 94, Architecture 75) via Gemini Flash batch generation
+- Total structural cards: ~648 aspect + 8 sequence = ~656 cards, ~2600+ positions
+
+### Activation Gating (deployed)
+- Aspect cards gated by `ASPECT_GATE_THRESHOLD = 5` knowledge items in domain — prevents quizzing on unstudied material
+- Sequence cards additionally gated by `SEQUENCE_GATE_THRESHOLD = 3` reviewed aspect positions
+- Domain-diverse selection via `ROW_NUMBER() OVER (PARTITION BY domain_id)` — each batch shows cards from different domains
+- Active: Sicily, Rome, Greece, Byzantine, Islamic. Blocked: Music, Architecture (0 KI)
+
+### Voice Capture Fix for Novel Topics
+- Voice captures about topics outside all curricula (Rollo/Normans, Iran) now extract facts + create ML cards instead of silently dropping
+- Updated `VOICE_CAPTURE_ANALYSIS_PROMPT` to always extract facts/wonderings regardless of node matching
+- Fallback ML creation from extracted facts when 0 node assessments
+- Rollo retest: 9 facts → 9 ML cards (4 wonderings + 5 novel facts). Previously: 0
+
+### Voice Pipeline Audit
+- Audited all 38 voice transcripts: 31 with KIs (working), 4 chapter recalls (correct design), 2 novel topics (fixed above), 1 explore capture
+- Pipeline verified: confidence_tagged corrections ✅, no ML from missed facts ✅, dedup ✅, domain routing ✅
+
+### Claude Auth Sync Fix
+- `sync_claude_auth.sh` updated to read from macOS keychain (`Claude Code-credentials`) instead of stale snapshot file
+- Launchd interval reduced from 4h → 2h
 
 ## Session 74: Deploy Aspect Cards + FSRS Scheduling + Sequence Cards (April 14, 2026)
 
