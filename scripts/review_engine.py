@@ -486,14 +486,17 @@ LEARNER'S VOICE CAPTURE (transcribed speech):
 {transcript}
 
 Instructions:
-1. Extract every concrete FACT the learner states or implies. Be thorough — include dates, names, events, causal claims, and connections. Each fact should be a standalone statement.
-2. Map each fact to the most relevant curriculum node from the list above. Use the exact node_id. A fact can map to multiple nodes if relevant. CRITICAL MAPPING RULE: Only map a fact to a node if the fact is GENUINELY ABOUT that node's subject matter. The fact must belong to the same historical period and topic as the node. Do NOT map medieval facts to ancient nodes or vice versa. Do NOT map facts to nodes just because they share a word (e.g., a medieval monk writing is NOT about the Roman historian Tacitus; Arab prisoners are NOT about Roman slavery; medieval church politics is NOT about Roman religion). When in doubt, leave the fact unmapped rather than force a bad match.
+1. ALWAYS extract every concrete FACT the learner states or implies, even if no curriculum nodes match. Be thorough — include dates, names, events, causal claims, and connections. Each fact should be a standalone statement. Facts with no matching node should have an empty node_ids array.
+2. Map each fact to the most relevant curriculum node from the list above. Use the exact node_id. A fact can map to multiple nodes if relevant. CRITICAL MAPPING RULE: Only map a fact to a node if the fact is GENUINELY ABOUT that node's subject matter. The fact must belong to the same historical period and topic as the node. Do NOT map medieval facts to ancient nodes or vice versa. Do NOT map facts to nodes just because they share a word (e.g., a medieval monk writing is NOT about the Roman historian Tacitus; Arab prisoners are NOT about Roman slavery; medieval church politics is NOT about Roman religion). When in doubt, leave the fact unmapped (empty node_ids) rather than force a bad match.
 3. For each node that has at least one mapped fact, assess the knowledge demonstrated:
    - "anchored": learner shows confident, detailed knowledge (multiple facts, connections, temporal placement)
    - "engaged": learner demonstrates real knowledge but with gaps or uncertainty
    - "mentioned": learner references the topic but with little substance
-4. Extract ALL wonderings, questions, uncertainties, "I think...", "I'm not sure if...", speculative statements. These are the most valuable signals. Rephrase as clear research questions.
+4. ALWAYS extract wonderings, questions, uncertainties, "I think...", "I'm not sure if...", speculative statements — even if no nodes match. These are the most valuable signals. Rephrase as clear research questions.
 5. CONFIDENCE_TAGGED: For each key factual claim, tag the learner's apparent confidence: "certain" (stated as fact), "uncertain" (hedged, "I think...", "maybe..."), or "wrong" (stated confidently but incorrect).
+6. ALWAYS provide overall_summary and entities_mentioned, regardless of node matching.
+
+IMPORTANT: The transcript may cover topics NOT in the curriculum nodes list. That's fine — still extract all facts, wonderings, entities, and summary. The node matching is optional; fact extraction is mandatory.
 
 Output JSON:
 {{"facts": [{{"fact": "specific factual claim", "node_ids": ["node_id_1"], "source_excerpt": "relevant 1-2 sentences from transcript"}}],
@@ -4871,6 +4874,31 @@ def process_voice_capture(transcript: str, entity_id: str = None,
             print(f'[voice-capture→ml] wondering → {card_id}: {w[:60]}', flush=True)
         except Exception as e:
             print(f'[voice-capture→ml] failed: {e}', flush=True)
+
+    # --- Fallback: when no nodes matched, create ML cards from extracted facts ---
+    # This ensures voice captures about novel topics (outside all curricula) still
+    # produce reviewable content rather than being silently lost.
+    if not node_assessments and facts:
+        summary = analysis.get('overall_summary', '')
+        topic = summary[:100] if summary else (entity_name or 'voice capture')
+        for f in facts[:5]:
+            fact_text = f.get('fact', '') if isinstance(f, dict) else str(f)
+            if not fact_text or len(fact_text) < 10:
+                continue
+            query = f'From voice capture about {topic}: {fact_text}'
+            try:
+                card_id = create_microlearning_request(
+                    query=query,
+                    source_node_id=primary_node,
+                    source_domain=primary_domain,
+                    source_type='voice_capture',
+                )
+                ml_triggered.append({'id': card_id, 'query': fact_text[:80]})
+                print(f'[voice-capture→ml] novel-fact → {card_id}: {fact_text[:60]}', flush=True)
+            except Exception as e:
+                print(f'[voice-capture→ml] novel-fact failed: {e}', flush=True)
+        if ml_triggered:
+            print(f'[voice-capture] Novel topic: created {len(ml_triggered)} ML cards from extracted facts', flush=True)
 
     # --- Log transcript ---
     vt_row = _log_voice_transcript(
