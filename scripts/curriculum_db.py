@@ -923,39 +923,28 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     existing review/ML items. Only includes cards that have due positions.
     """
     due_cutoff = now_ms + 24 * 3600 * 1000
-    if domain_filter:
-        card_rows = conn.execute('''
+    # Query each card type separately to guarantee mix (3 aspect + 2 sequence max)
+    domain_clause = "AND sc.domain_id LIKE ?" if domain_filter else ""
+    domain_params = [f'%{domain_filter}%'] if domain_filter else []
+    card_rows = []
+    for card_type, limit in [('aspect', 3), ('sequence', 2)]:
+        rows = conn.execute(f'''
             SELECT sc.id, sc.card_type, sc.title, sc.description,
                    sc.domain_id, sc.node_id,
                    sc.date_start, sc.date_end, sc.review_count, sc.hooks,
                    cd.title as domain_title
             FROM structural_cards sc
             LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
-            WHERE sc.card_type IN ('aspect', 'sequence')
-            AND sc.domain_id LIKE ?
+            WHERE sc.card_type = ?
+            {domain_clause}
             AND EXISTS (
                 SELECT 1 FROM structural_positions sp
                 WHERE sp.card_id = sc.id AND sp.due_at <= ?
             )
             ORDER BY sc.review_count ASC, sc.due_at ASC
-            LIMIT 5
-        ''', (f'%{domain_filter}%', due_cutoff)).fetchall()
-    else:
-        card_rows = conn.execute('''
-            SELECT sc.id, sc.card_type, sc.title, sc.description,
-                   sc.domain_id, sc.node_id,
-                   sc.date_start, sc.date_end, sc.review_count, sc.hooks,
-                   cd.title as domain_title
-            FROM structural_cards sc
-            LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
-            WHERE sc.card_type IN ('aspect', 'sequence')
-            AND EXISTS (
-                SELECT 1 FROM structural_positions sp
-                WHERE sp.card_id = sc.id AND sp.due_at <= ?
-            )
-            ORDER BY sc.review_count ASC, sc.due_at ASC
-            LIMIT 5
-        ''', (due_cutoff,)).fetchall()
+            LIMIT ?
+        ''', [card_type] + domain_params + [due_cutoff, limit]).fetchall()
+        card_rows.extend(rows)
 
     if not card_rows:
         return items
