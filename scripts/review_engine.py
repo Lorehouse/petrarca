@@ -13,6 +13,7 @@ import re
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from claude_llm import call_claude, call_claude_json, call_claude_or_gemini, call_claude_search
@@ -4282,6 +4283,41 @@ def process_voice_capture(transcript: str, entity_id: str = None,
           f'directly linked nodes: {len(directly_linked_node_ids)}, '
           f'domains: {candidate_domains}', flush=True)
 
+    # --- Domain routing: when entity matching finds few nodes, use Gemini Flash
+    # to identify the most relevant curriculum domains from the transcript ---
+    routed_domain_ids: list[str] = []
+    if len(directly_linked_node_ids) < 5:
+        try:
+            from gemini_llm import call_llm as _gemini_call
+            all_domains = conn.execute(
+                "SELECT DISTINCT domain_id FROM curriculum_nodes ORDER BY domain_id"
+            ).fetchall()
+            domain_info = []
+            for d in all_domains:
+                title_row = conn.execute(
+                    "SELECT title FROM curriculum_nodes WHERE domain_id = ? AND level = 1 LIMIT 1",
+                    (d['domain_id'],)
+                ).fetchone()
+                domain_info.append(f"- {d['domain_id']}: {title_row['title'] if title_row else '?'}")
+            domain_list = '\n'.join(domain_info)
+            route_prompt = (
+                f"Which 3 curriculum domains are most relevant to this voice transcript?\n\n"
+                f"Domains:\n{domain_list}\n\n"
+                f"Transcript (excerpt):\n{transcript[:1500]}\n\n"
+                f'Return JSON: {{"domains": ["domain_id_1", "domain_id_2", "domain_id_3"]}}'
+            )
+            route_raw = _gemini_call(route_prompt, max_tokens=200,
+                                     response_mime_type="application/json")
+            if route_raw:
+                routed = json.loads(route_raw).get("domains", [])[:3]
+                valid_ids = {d['domain_id'] for d in all_domains}
+                routed_domain_ids = [d for d in routed if d in valid_ids]
+                for rid in routed_domain_ids:
+                    candidate_domains.add(rid)
+                print(f'[voice-capture] Domain routing: {routed_domain_ids}', flush=True)
+        except Exception as e:
+            print(f'[voice-capture] Domain routing failed (non-fatal): {e}', flush=True)
+
     # Build candidate nodes: start with directly-linked, then add relevant siblings
     candidate_nodes = []
     seen_node_ids = set()
@@ -4324,6 +4360,26 @@ def process_voice_capture(transcript: str, entity_id: str = None,
                     'overlap': overlap,
                 })
                 seen_node_ids.add(n['id'])
+
+    # Phase 2b: Nodes from LLM-routed domains (when entity matching was sparse)
+    if routed_domain_ids:
+        routed_placeholders = ','.join('?' * len(routed_domain_ids))
+        routed_nodes = conn.execute(
+            f"SELECT id, domain_id, title, description FROM curriculum_nodes "
+            f"WHERE domain_id IN ({routed_placeholders}) AND level >= 2",
+            routed_domain_ids,
+        ).fetchall()
+        for n in routed_nodes:
+            if n['id'] in seen_node_ids:
+                continue
+            candidate_nodes.append({
+                'node_id': n['id'],
+                'domain_id': n['domain_id'],
+                'title': n['title'],
+                'description': (n['description'] or '')[:200],
+                'priority': 'routed',
+            })
+            seen_node_ids.add(n['id'])
 
     # Phase 3: If still very few nodes, expand only the primary domain
     # (the one with the most direct links — avoids dumping 70 Ancient Greece
@@ -4379,7 +4435,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         }
 
     # Sort: direct links first, then siblings by overlap, then domain fillers
-    priority_order = {'direct': 0, 'sibling': 1, 'domain': 2, 'keyword': 3}
+    priority_order = {'direct': 0, 'sibling': 1, 'routed': 2, 'domain': 3, 'keyword': 4}
     candidate_nodes.sort(key=lambda n: (priority_order.get(n.get('priority', 'keyword'), 3),
                                          -n.get('overlap', 0)))
 
@@ -4719,7 +4775,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
             print(f'[voice-capture→ml] failed: {e}', flush=True)
 
     # --- Log transcript ---
-    _log_voice_transcript(
+    vt_row = _log_voice_transcript(
         source='voice_capture',
         node_id=primary_node or entity_id or 'general',
         domain_id=primary_domain or '',
@@ -4729,6 +4785,18 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         llm_result={**analysis, 'knowledge_updates': knowledge_updates},
         ml_triggered=ml_triggered,
     )
+
+    # --- Background: resolve entities to Wikidata QIDs ---
+    if entities_mentioned:
+        capture_id = vt_row if isinstance(vt_row, str) else 'unknown'
+        # Only pass assessed nodes for linking (not the full candidate list)
+        assessed_node_map = {na.get('node_id', ''): node_domain_map.get(na.get('node_id', ''), '')
+                             for na in node_assessments if na.get('node_id') in node_domain_map}
+        threading.Thread(
+            target=_resolve_voice_entities_background,
+            args=(entities_mentioned, transcript, capture_id, assessed_node_map),
+            daemon=True,
+        ).start()
 
     result = {
         'status': 'completed',
@@ -4804,6 +4872,242 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     print(f'[voice-capture] Done: {len(facts)} facts → {len(knowledge_updates)} nodes, '
           f'{len(ml_triggered)} ML cards', flush=True)
     return result
+
+
+def _resolve_voice_entities_background(entities_mentioned: list, transcript: str,
+                                       capture_id: str, node_domain_map: dict) -> None:
+    """Background: resolve entity mentions to Wikidata QIDs and backfill shared_entities.
+
+    Runs in a daemon thread after the main voice capture response is sent.
+    Creates/updates shared_entities rows and writes entity_resolutions audit trail.
+    """
+    from db import get_connection
+    if not entities_mentioned:
+        return
+
+    try:
+        from gemini_llm import call_llm
+        from limbic.amygdala.embed import EmbeddingModel
+        from limbic.amygdala.temporal import DateRange
+        from limbic.amygdala.wikidata import WikidataClient
+        from limbic.hippocampus.wikidata_resolve import WikidataResolver, validate_chosen_qid
+    except ImportError as e:
+        print(f'[voice-entity-resolve] limbic not available: {e}', flush=True)
+        return
+
+    print(f'[voice-entity-resolve] Starting resolution for {len(entities_mentioned)} entities', flush=True)
+
+    # Step 1: Extract structured mentions with type/date hints via Gemini
+    entity_list = ', '.join(str(e) for e in entities_mentioned[:25])
+    extract_prompt = (
+        f"For each entity, provide the type and approximate date range.\n\n"
+        f"Entities: {entity_list}\n\n"
+        f"Transcript context:\n{transcript[:2000]}\n\n"
+        f'Return JSON: {{"mentions": [{{"mention": "...", "type": "person|place|event|work|concept|other", '
+        f'"date_start": year_or_null, "date_end": year_or_null}}]}}'
+    )
+    raw = call_llm(extract_prompt, max_tokens=2000, response_mime_type="application/json")
+    if not raw:
+        print('[voice-entity-resolve] Gemini extraction returned empty', flush=True)
+        return
+    try:
+        mentions_data = json.loads(raw).get("mentions", [])
+    except (json.JSONDecodeError, AttributeError):
+        print('[voice-entity-resolve] Bad JSON from extraction', flush=True)
+        return
+
+    # Deduplicate and normalize
+    seen = set()
+    mentions = []
+    for m in mentions_data:
+        name = (m.get("mention") or "").strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        mentions.append(m)
+
+    if not mentions:
+        return
+
+    # Step 2: Deterministic resolution with anchors
+    client = WikidataClient(user_agent="Petrarca/0.1 (mailto:stian@haklev.com)")
+    embedder = EmbeddingModel()
+    resolver = WikidataResolver(client=client, embedder=embedder)
+
+    # Load already-resolved QIDs as anchors
+    conn = get_connection(readonly=True)
+    existing_anchors = {}
+    for row in conn.execute("SELECT entity_id, wikidata_qid FROM shared_entities WHERE wikidata_qid IS NOT NULL"):
+        existing_anchors[row['entity_id']] = row['wikidata_qid']
+    conn.close()
+
+    anchors = dict(existing_anchors)
+    resolutions: list[tuple[dict, object]] = []
+
+    for m in mentions:
+        name = m.get("mention", "")
+        s, e = m.get("date_start"), m.get("date_end")
+        date_hint = None
+        if s is not None or e is not None:
+            if s is None: s = e
+            if e is None: e = s
+            date_hint = DateRange(start=min(s, e), end=max(s, e))
+        try:
+            res = resolver.resolve(
+                name,
+                context_text=transcript[:800],
+                type_hint=m.get("type"),
+                date_hint=date_hint,
+                already_resolved=anchors,
+            )
+        except Exception as exc:
+            print(f'[voice-entity-resolve] resolve failed for {name!r}: {exc}', flush=True)
+            resolutions.append((m, None))
+            continue
+        if res.status == "resolved":
+            anchors[name] = res.chosen_qid
+        resolutions.append((m, res))
+
+    # Step 3: LLM disambiguation for ambiguous
+    disambig_prompt_tpl = (
+        "Disambiguate this entity mention to the correct Wikidata entity.\n\n"
+        "MENTION: {mention}\nTYPE: {type_hint}\nDATE HINT: {date_hint}\n"
+        "CONTEXT:\n{context}\n\nCANDIDATES:\n{candidates}\n\n"
+        "Pick the QID that best matches. If none fit, return null.\n"
+        'Return JSON: {{"chosen_qid": "Q123" or null, "confidence": 0.0-1.0, "reasoning": "brief"}}'
+    )
+    for i, (m, res) in enumerate(resolutions):
+        if res is None or res.status != "ambiguous":
+            continue
+        candidates = res.candidates[:5]
+        if not candidates:
+            continue
+        cand_block = "\n".join(
+            f"{j+1}. {c.qid}: {c.label} — {(c.description or '')[:200]} [score {c.total:.2f}]"
+            for j, c in enumerate(candidates)
+        )
+        prompt = disambig_prompt_tpl.format(
+            mention=m.get("mention", ""),
+            type_hint=m.get("type") or "(unknown)",
+            date_hint=f"{m.get('date_start')}..{m.get('date_end')}"
+            if (m.get("date_start") or m.get("date_end")) else "(none)",
+            context=transcript[:500],
+            candidates=cand_block,
+        )
+        answer_raw = call_llm(prompt, max_tokens=400, response_mime_type="application/json")
+        if not answer_raw:
+            continue
+        try:
+            answer = json.loads(answer_raw)
+        except json.JSONDecodeError:
+            continue
+        chosen = answer.get("chosen_qid")
+        if not chosen or not validate_chosen_qid(candidates, chosen):
+            if chosen:
+                print(f'[voice-entity-resolve] Hallucination guard: {m.get("mention")} → {chosen} rejected', flush=True)
+            continue
+        res.status = "resolved"
+        res.chosen_qid = chosen
+        res.confidence = float(answer.get("confidence") or 0.7)
+        res.reasoning = f"LLM disambiguation: {answer.get('reasoning', '')}"
+        anchors[m.get("mention", "")] = chosen
+
+    # Step 4: Write results — audit trail + backfill shared_entities
+    resolved_count = 0
+    created_count = 0
+    conn = get_connection()
+    conn.execute('PRAGMA busy_timeout = 60000')
+
+    for m, res in resolutions:
+        if res is None:
+            continue
+        mention = m.get("mention", "")
+
+        # Write audit row
+        rid = f"er_{uuid.uuid4().hex[:12]}"
+        cand_payload = [
+            {"qid": c.qid, "label": c.label, "description": c.description,
+             "total": c.total, "scores": c.scores, "rank": c.rank}
+            for c in (res.candidates or [])[:10]
+        ]
+        conn.execute(
+            """INSERT INTO entity_resolutions (
+                id, entity_id, capture_id, mention_text, context_excerpt,
+                type_hint, date_hint_start, date_hint_end, candidate_qids,
+                chosen_qid, confidence, status, resolver_model, reasoning,
+                cost_usd, created_at
+            ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                rid, f"voice:{capture_id}", mention,
+                transcript[:500],
+                m.get("type"),
+                m.get("date_start"), m.get("date_end"),
+                json.dumps(cand_payload),
+                res.chosen_qid, res.confidence, res.status,
+                "voice+gemini", res.reasoning or "", 0.0,
+                int(time.time()),
+            ),
+        )
+
+        if res.status != "resolved" or not res.chosen_qid:
+            continue
+        resolved_count += 1
+
+        # Check if QID already exists in shared_entities
+        existing = conn.execute(
+            "SELECT entity_id FROM shared_entities WHERE wikidata_qid = ?",
+            (res.chosen_qid,)
+        ).fetchone()
+        if existing:
+            # Update audit row with the existing entity_id
+            conn.execute("UPDATE entity_resolutions SET entity_id = ? WHERE id = ?",
+                         (existing['entity_id'], rid))
+            continue
+
+        # Check if there's an entity with same name but no QID
+        name_slug = re.sub(r'\W+', '_', mention.lower()).strip('_')
+        existing_by_name = conn.execute(
+            "SELECT entity_id FROM shared_entities WHERE entity_id = ? AND wikidata_qid IS NULL",
+            (name_slug,)
+        ).fetchone()
+        if existing_by_name:
+            # Assign the QID to the existing entity
+            conn.execute("UPDATE shared_entities SET wikidata_qid = ? WHERE entity_id = ?",
+                         (res.chosen_qid, existing_by_name['entity_id']))
+            conn.execute("UPDATE entity_resolutions SET entity_id = ? WHERE id = ?",
+                         (existing_by_name['entity_id'], rid))
+            print(f'[voice-entity-resolve] Assigned {res.chosen_qid} to existing entity {name_slug}', flush=True)
+            continue
+
+        # Create new shared_entity
+        chosen_cand = next((c for c in res.candidates if c.qid == res.chosen_qid), None)
+        label = chosen_cand.label if chosen_cand else mention
+        desc = (chosen_cand.description or "")[:500] if chosen_cand else ""
+        entity_type = m.get("type") or "other"
+        date_start = m.get("date_start")
+        date_end = m.get("date_end")
+
+        conn.execute(
+            """INSERT OR IGNORE INTO shared_entities
+            (entity_id, name, description, entity_type, date_start, date_end, wikidata_qid, nexus_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+            (name_slug, label, desc, entity_type, date_start, date_end, res.chosen_qid),
+        )
+        conn.execute("UPDATE entity_resolutions SET entity_id = ? WHERE id = ?",
+                     (name_slug, rid))
+
+        # Auto-link to curriculum nodes from the voice capture's node assessments
+        for node_id, domain_id in node_domain_map.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO entity_curriculum_links (entity_id, domain_id, node_id) VALUES (?, ?, ?)",
+                (name_slug, domain_id, node_id),
+            )
+        created_count += 1
+
+    conn.commit()
+    conn.close()
+    print(f'[voice-entity-resolve] Done: {resolved_count} resolved, {created_count} new entities created '
+          f'(of {len(mentions)} mentions)', flush=True)
 
 
 def _gather_node_sources(node_id: str, domain_id: str, conn) -> str:
