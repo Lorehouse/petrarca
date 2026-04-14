@@ -1,6 +1,40 @@
 # Knowledge System Implementation Status
 
-**Date**: April 14, 2026 (last updated — session 71: structural review redesign)
+**Date**: April 14, 2026 (last updated — session 74: FSRS scheduling + sequence cards)
+
+## Session 74: Deploy Aspect Cards + FSRS Scheduling + Sequence Cards (April 14, 2026)
+
+### What
+Completed Phases 2 and 4 of the structural review redesign: aspect cards fully deployed with FSRS scheduling, and sequence cards built end-to-end.
+
+### Changes
+- **FSRS scheduling for structural positions**: `record_structural_answer()` in `review_engine.py` — per-position FSRS with independent `stability_days`, `due_at`, `fsrs_card_json`. Knowledge state updated from `knew/total` ratio (≥80% → anchored, ≥50% → engaged, <50% → mentioned).
+- **`POST /structural/grade` endpoint**: Accepts `{card_id, results: [{position_id, score}]}`, returns per-position scheduling. Shared by both aspect and sequence cards.
+- **Client wiring**: `gradeStructuralCard()` in `book-api.ts`, called fire-and-forget from `onComplete` in both AspectCard and SequenceCard handlers.
+- **4 failed aspect nodes retried**: Frederick II Stupor Mundi, Lucky Luciano, Sicilian Culture, Latin Literature — all generated successfully (14 new positions).
+- **Sequence cards** (`generate_sequence_cards.py`): Gathers date-type key_facts + entity date ranges per domain, Gemini identifies natural chronological sequences (5-8 milestones each). 8 sequences generated: "Struggle of the Orders", "Punic Wars", "Collapse of the Republic", "Five Good Emperors", "Late Roman Empire" (Rome) + "Rise and Siege of Syracuse", "Arab-Norman Sicily", "Era of Mafia and State Collusion" (Sicily). 38 milestones total.
+- **SequenceCard component** (`app/components/SequenceCard.tsx`): Timeline UI with dot/connector layout, 2 rotating blanks (most-due positions selected by urgency), anchor positions dimmed. Year markers, temporal hook annotations, binary grading, summary + mnemonics for missed.
+- **Stream mixing fix**: `_mix_structural_cards()` now queries each type separately (3 aspect + 2 sequence) to prevent aspect cards from monopolizing all slots.
+- **Server deploy fix**: Stashed Session 73 direct-deploy artifacts on server before git pull.
+
+### Design decisions
+- **Per-position FSRS, not per-card**: Each position in a structural card gets independent scheduling. This mirrors Alif's sentence→word model — one card interaction yields multiple FSRS signals.
+- **Binary grading only**: Aspect and sequence cards use knew/missed (no "partly"). Granularity comes from per-position tracking, not per-card nuance.
+- **2 blanks per sequence card**: Most-due positions become blanks, rest shown as anchors. Picks by urgency: never-reviewed → most-overdue. Card looks different each appearance.
+- **Type-guaranteed mixing**: Separate queries with limits (3+2) rather than one combined query, because 125 due aspect cards were crowding out 8 sequence cards.
+
+### Totals
+- 125 aspect cards (529 positions) + 8 sequence cards (38 milestones) = 133 structural cards
+- Domains: Sicily (70+3), Rome (55+5)
+- All deployed to server and mobile
+
+---
+
+## Session 73: Aspect Cards — Structural Review System Foundation (April 14, 2026)
+
+See commit `2c89f13` for full changes. Schema, generation, component, stream mixing.
+
+---
 
 ## Session 72: Review-First 4-Tab Navigation (April 14, 2026)
 

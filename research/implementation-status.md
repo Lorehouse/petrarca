@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 14, 2026 (session 72: review-first 4-tab nav)
+**Last updated**: April 14, 2026 (session 74: FSRS scheduling + sequence cards)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -111,6 +111,8 @@
 | `ExplorerCapture` | Voice/text entity note capture |
 | `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `SynthesisChat` | Inline chat modal for synthesis |
+| `AspectCard` | Structural review: multi-signal per topic. Know All, reveal-then-mark, binary grading, mnemonics. 289 lines. |
+| `SequenceCard` | Structural review: timeline with dot/connector layout, 2 rotating blanks (most-due positions), anchor positions dimmed. |
 
 ### Client Data Layer
 | Module | Role |
@@ -125,7 +127,7 @@
 | `logger.ts` | Interaction event logging (`logEvent()`) — sends to `/log/events` (research-server.py :8090), dual-layer: SQLite `interaction_log` + JSONL |
 | `voice-upload-service.ts` | Background retry of pending voice elicitation uploads on app foreground. 48h expiry. Idempotent via request_id. Failed uploads (422) kept on device for manual retry. |
 | `upload-queue.ts` | Persistent background upload queue for book page photos with exponential backoff |
-| `book-api.ts` | Book API client — `fetchKindleBrowse()`, `includeKindleBook()`, `curateKindleBook()`, `classifyKindleBooks()` |
+| `book-api.ts` | Book API client — `fetchKindleBrowse()`, `includeKindleBook()`, `curateKindleBook()`, `classifyKindleBooks()`, `gradeStructuralCard()`, `recordReviewResult()` |
 | `types.ts` | `ArticleMeta`, `ArticleContent`, `Article`, `TopicSynthesis`, etc. |
 
 ## Server: Key Modules
@@ -137,9 +139,9 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
 | `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
-| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
+| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `record_structural_answer()` (per-position FSRS for aspect+sequence cards), `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
 | `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
-| `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
+| `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards + structural card mixing), `_mix_structural_cards()` (aspect + sequence, type-guaranteed slots), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation (Opus) + graph utilities. Generates JSON + inserts into SQLite. Entity tagging (Gemini Flash) + JSON entity index. NOT for runtime data |
 | `bootstrap_entities.py` | Extracts rich entities (descriptions, Wikipedia, coordinates) from curricula via Gemini Flash → `shared_entities` + `entity_curriculum_links` SQLite tables. Run after curriculum generation for voice capture entity matching |
 | `backfill_wikidata.py` | 4-pass Wikidata entity resolution: (1) deterministic scoring, (2) anchor-boosted re-pass, (3) Gemini Flash LLM disambiguation, (4) no-match rescue with alternate queries. Writes `entity_resolutions` audit trail + `entity_external_ids`. 509/570 entities resolved (89.3%) |
@@ -174,6 +176,8 @@
 | `book_research_agent.py` | Autonomous book research via Gemini+Search |
 | `resurfacing_engine.py` | Cross-book resurfacing prompts |
 | `extract_key_facts.py` | Key facts extraction from curriculum nodes |
+| `generate_aspect_cards.py` | Generate aspect cards from key_facts: non-leaking titles + reverse cues via Gemini Flash. 125 cards, 529 positions (Sicily + Rome) |
+| `generate_sequence_cards.py` | Generate sequence cards from key_facts + entity dates: natural chronological sequences via Gemini Flash. 8 sequences, 38 milestones (Sicily + Rome) |
 
 ### Experiments & Utilities
 | Script | Role |
@@ -228,6 +232,7 @@
 | POST | `/review/follow-up/generate` | Generate sideways follow-up queries via Gemini Flash |
 | POST | `/review/create-factual-quiz` | One-click create microlearning_quiz from key_fact suggestion (passes fact_id for linking) |
 | POST | `/review/suspend-fact` | Suspend all quizzes sharing a fact_id ("Not interested in this fact") |
+| POST | `/structural/grade` | Grade structural card positions (aspect + sequence). Per-position FSRS scheduling. `{card_id, results: [{position_id, score}]}` |
 | POST | `/log/events` | Client interaction event ingestion (replaces log_server.py:8091). JSONL body. Dual-layer: SQLite + JSONL. |
 | GET | `/review/queue` | Review queue candidates |
 | GET | `/review/stats` | Review statistics |

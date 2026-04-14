@@ -632,18 +632,19 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] FSRS progression model: 8-week simulation with different session compositions
 - [x] Key finding: synchronic cards are a cross-domain reward (never unlock within single domain)
 
-### Phase 2: Aspect Cards (Session 73 — in progress)
-- [x] Schema: structural_cards + structural_positions + exposure_log tables created on server
+### Phase 2: Aspect Cards (Session 73-74 — done)
+- [x] Schema: structural_cards + structural_positions tables created on server
 - [x] Generation prompt: non-leaking titles + reverse cue variants via Gemini Flash
-- [x] Batch generated aspect cards for Sicily (70) + Rome (55) domains
+- [x] Batch generated aspect cards for Sicily (70) + Rome (55) domains — 125 cards, 529 positions
 - [x] AspectCard React component (289 lines): Know All, reveal-then-mark, binary grading, mnemonics
 - [x] Integrated into review stream (_mix_structural_cards in curriculum_db.py)
-- [ ] FSRS scheduling endpoint for per-position grading
-- [ ] Deploy and test end-to-end
-- [ ] Per-aspect FSRS scheduling in structural_positions table
+- [x] FSRS scheduling: `POST /structural/grade` endpoint, `record_structural_answer()` in review_engine.py
+- [x] Per-position FSRS scheduling (each position gets independent stability/due_at/fsrs_card_json)
+- [x] Knowledge state update from card ratio (≥80% knew → anchored, ≥50% → engaged, <50% → mentioned)
+- [x] Client wiring: `gradeStructuralCard()` in book-api.ts, fire-and-forget from onComplete
+- [x] Deployed and tested end-to-end (knew → 8.3d stability, missed → 0.2d stability)
+- [x] 4 failed nodes retried and generated (Frederick II, Lucky Luciano, Sicilian Culture, Latin Literature)
 - [ ] Aspect-specific mnemonic generation (different strategy per type)
-- [ ] Integrate into review stream (replace current knowledge_item cards)
-- [ ] Remove "partly" grade for aspect cards (binary knew/missed)
 - [ ] Trust line: "3/4 known. 'What year?' due Thursday"
 
 ### Phase 3: Quick Quiz Cards
@@ -653,14 +654,17 @@ The existing tables remain. New tables are additive. The migration path:
 - [ ] Integrate into review stream as primary card type
 - [ ] Session composition logic: mix structural + quick quiz cards
 
-### Phase 4: Sequence Cards
-- [ ] Define sequence boundaries per domain (LLM-assisted)
-- [ ] Milestone selection from key_facts + entity dates
-- [ ] Build SequenceCard component with rotating blanks
+### Phase 4: Sequence Cards (Session 74 — done)
+- [x] Define sequence boundaries per domain (LLM-assisted via `generate_sequence_cards.py`)
+- [x] Milestone selection from key_facts + entity dates (Gemini identifies natural sequences)
+- [x] 8 sequences generated: 5 Rome + 3 Sicily, 38 milestones total
+- [x] SequenceCard component with rotating blanks (2 per appearance, most-due positions)
+- [x] Timeline UI: dot/connector layout, year markers, anchor positions dimmed at 0.7 opacity
+- [x] Cross-domain hooks on sequence milestones (e.g., "Athens building the Parthenon")
+- [x] FSRS scheduling per position via shared `POST /structural/grade` endpoint
+- [x] Integrated into review stream: guaranteed 2 sequence + 3 aspect cards per batch
 - [ ] Scale annotations (temporal proportion, duration comparisons)
-- [ ] Cross-domain hooks on sequence milestones
-- [ ] FSRS scheduling per position + per sequence card
-- [ ] Integrate into review stream
+- [ ] Knowledge-gating: require ≥3 known positions before showing a sequence card
 
 ### Phase 5: Synchronic Cards
 - [ ] Cross-domain entity query (using Wikidata date ranges)
