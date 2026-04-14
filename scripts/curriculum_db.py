@@ -926,22 +926,50 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     # Query each card type separately to guarantee mix (3 aspect + 2 sequence max)
     domain_clause = "AND sc.domain_id LIKE ?" if domain_filter else ""
     domain_params = [f'%{domain_filter}%'] if domain_filter else []
+    # Activation gating: only show structural cards for domains the user has studied.
+    # Aspect cards require ≥5 knowledge_items in the domain (from books/voice/elicitation).
+    # Sequence cards additionally require ≥3 reviewed aspect positions in the domain.
+    ASPECT_GATE_THRESHOLD = 5
+    SEQUENCE_GATE_THRESHOLD = 3
+
     card_rows = []
     for card_type, limit in [('aspect', 3), ('sequence', 2)]:
+        gate_clause = f"""
+            AND (SELECT COUNT(*) FROM knowledge_items ki
+                 WHERE ki.curriculum_domain = sc.domain_id) >= {ASPECT_GATE_THRESHOLD}"""
+        if card_type == 'sequence':
+            gate_clause += f"""
+            AND (SELECT COUNT(*) FROM structural_positions sp2
+                 JOIN structural_cards sc2 ON sc2.id = sp2.card_id
+                 WHERE sc2.domain_id = sc.domain_id
+                 AND sc2.card_type = 'aspect'
+                 AND sp2.review_count > 0) >= {SEQUENCE_GATE_THRESHOLD}"""
+        # Domain-diverse selection: pick best card per domain, then take top N.
+        # Without this, all cards would come from whichever domain was generated first.
         rows = conn.execute(f'''
-            SELECT sc.id, sc.card_type, sc.title, sc.description,
-                   sc.domain_id, sc.node_id,
-                   sc.date_start, sc.date_end, sc.review_count, sc.hooks,
-                   cd.title as domain_title
-            FROM structural_cards sc
-            LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
-            WHERE sc.card_type = ?
-            {domain_clause}
-            AND EXISTS (
-                SELECT 1 FROM structural_positions sp
-                WHERE sp.card_id = sc.id AND sp.due_at <= ?
+            SELECT id, card_type, title, description, domain_id, node_id,
+                   date_start, date_end, review_count, hooks, domain_title
+            FROM (
+                SELECT sc.id, sc.card_type, sc.title, sc.description,
+                       sc.domain_id, sc.node_id,
+                       sc.date_start, sc.date_end, sc.review_count, sc.hooks,
+                       cd.title as domain_title,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY sc.domain_id
+                           ORDER BY sc.review_count ASC, sc.due_at ASC
+                       ) as rn
+                FROM structural_cards sc
+                LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
+                WHERE sc.card_type = ?
+                {domain_clause}
+                AND EXISTS (
+                    SELECT 1 FROM structural_positions sp
+                    WHERE sp.card_id = sc.id AND sp.due_at <= ?
+                )
+                {gate_clause}
             )
-            ORDER BY sc.review_count ASC, sc.due_at ASC
+            WHERE rn = 1
+            ORDER BY review_count ASC, RANDOM()
             LIMIT ?
         ''', [card_type] + domain_params + [due_cutoff, limit]).fetchall()
         card_rows.extend(rows)
