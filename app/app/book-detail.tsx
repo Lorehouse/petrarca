@@ -651,7 +651,7 @@ export default function BookDetailScreen() {
           </View>
         )}
         {reviewDueCount > 0 && (
-          <Pressable onPress={() => router.push('/(tabs)/review')} style={styles.reviewBadge}>
+          <Pressable onPress={() => router.push('/(tabs)')} style={styles.reviewBadge}>
             <Text style={styles.reviewBadgeText}>
               {'\u2726'} {reviewDueCount} review item{reviewDueCount !== 1 ? 's' : ''} due
             </Text>

@@ -21,14 +21,28 @@ export default function TabsLayout() {
         },
       }}
     >
+      {/* ── Visible tabs (4-tab layout) ── */}
       <Tabs.Screen name="index" options={{
-        title: 'Feed',
-      }} />
-      <Tabs.Screen name="review" options={{
         title: 'Review',
+      }} />
+      <Tabs.Screen name="voice" options={{
+        title: 'Voice',
+      }} />
+      <Tabs.Screen name="stats" options={{
+        title: 'Stats',
+      }} />
+      <Tabs.Screen name="more" options={{
+        title: 'More',
+      }} />
+
+      {/* ── Hidden tabs (accessible via navigation, not in tab bar) ── */}
+      <Tabs.Screen name="feed" options={{
+        title: 'Feed',
+        href: null,
       }} />
       <Tabs.Screen name="library" options={{
         title: 'Library',
+        href: null,
       }} />
       <Tabs.Screen name="topics" options={{
         title: 'Topics',
