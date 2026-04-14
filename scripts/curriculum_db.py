@@ -932,8 +932,11 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     ASPECT_GATE_THRESHOLD = 5
     SEQUENCE_GATE_THRESHOLD = 3
 
+    # TEMP: structural-only mode — show only aspect/sequence cards for focused testing
+    STRUCTURAL_ONLY = True
+
     card_rows = []
-    for card_type, limit in [('aspect', 3), ('sequence', 2)]:
+    for card_type, limit in [('aspect', 10 if STRUCTURAL_ONLY else 3), ('sequence', 5 if STRUCTURAL_ONLY else 2)]:
         gate_clause = f"""
             AND (SELECT COUNT(*) FROM knowledge_items ki
                  WHERE ki.curriculum_domain = sc.domain_id) >= {ASPECT_GATE_THRESHOLD}"""
@@ -1046,6 +1049,9 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
             item['date_end'] = card.get('date_end')
 
         structural_items.append(item)
+
+    if STRUCTURAL_ONLY:
+        return structural_items
 
     # Interleave: insert structural cards every 3rd position
     merged = []
