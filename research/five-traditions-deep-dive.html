@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Five Research Traditions & Petrarca</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400&display=swap');
+
+:root {
+  --parchment: #f5f0e8;
+  --parchment-deep: #ebe4d6;
+  --parchment-dark: #e0d8c8;
+  --ink: #2c2416;
+  --ink-light: #5c4d3a;
+  --ink-faint: #8a7d6b;
+  --red-ink: #8b3a3a;
+  --blue-ink: #3a4f6b;
+  --green-ink: #3a5c3a;
+  --gold: #b8960c;
+  --sienna: #8b5e3c;
+  --purple-ink: #5c3a6b;
+  --teal-ink: #2e5c5c;
+  --shadow: rgba(44, 36, 22, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--parchment);
+  color: var(--ink);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 18px;
+  line-height: 1.7;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 24px 120px;
+}
+
+h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 2.4em;
+  color: var(--ink);
+  margin: 60px 0 8px;
+  line-height: 1.15;
+}
+
+h1 .sub {
+  display: block;
+  font-size: 0.45em;
+  font-weight: 400;
+  color: var(--ink-faint);
+  font-family: 'Source Sans 3', sans-serif;
+  margin-top: 8px;
+  letter-spacing: 0.5px;
+}
+
+h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 1.7em;
+  color: var(--ink);
+  margin: 56px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--parchment-dark);
+}
+
+h3 {
+  font-family: 'Source Sans 3', sans-serif;
+  font-weight: 600;
+  font-size: 1.1em;
+  color: var(--ink-light);
+  margin: 32px 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+h4 {
+  font-family: 'Crimson Pro', serif;
+  font-weight: 600;
+  font-size: 1.15em;
+  color: var(--ink);
+  margin: 24px 0 8px;
+}
+
+p { margin: 0 0 16px; }
+
+a { color: var(--blue-ink); text-decoration: none; border-bottom: 1px solid transparent; }
+a:hover { border-bottom-color: var(--blue-ink); }
+
+blockquote {
+  margin: 20px 0;
+  padding: 16px 24px;
+  background: var(--parchment-deep);
+  border-left: 3px solid var(--gold);
+  font-style: italic;
+  color: var(--ink-light);
+}
+
+blockquote strong { color: var(--ink); font-style: normal; }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  background: var(--parchment-deep);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Navigator */
+nav.toc {
+  background: var(--parchment-deep);
+  border: 1px solid var(--parchment-dark);
+  border-radius: 8px;
+  padding: 24px 28px;
+  margin: 32px 0 48px;
+}
+
+nav.toc h3 { margin-top: 0; font-size: 0.9em; }
+
+nav.toc ol {
+  list-style: none;
+  counter-reset: toc;
+  padding: 0;
+}
+
+nav.toc li {
+  counter-increment: toc;
+  margin: 8px 0;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.95em;
+}
+
+nav.toc li::before {
+  content: counter(toc) ".";
+  color: var(--ink-faint);
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+nav.toc a { color: var(--ink); font-weight: 500; }
+
+/* Researcher sections */
+.researcher {
+  margin: 64px 0;
+  padding-top: 32px;
+}
+
+.researcher-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.researcher-header .institution {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85em;
+  color: var(--ink-faint);
+}
+
+/* Colored accent bars per researcher */
+.accent-koedinger { border-left: 4px solid var(--blue-ink); padding-left: 20px; }
+.accent-karpicke { border-left: 4px solid var(--red-ink); padding-left: 20px; }
+.accent-bjork { border-left: 4px solid var(--green-ink); padding-left: 20px; }
+.accent-wineburg { border-left: 4px solid var(--sienna); padding-left: 20px; }
+.accent-jarvela { border-left: 4px solid var(--purple-ink); padding-left: 20px; }
+
+/* Insight boxes */
+.insight {
+  margin: 24px 0;
+  padding: 16px 20px;
+  border-radius: 6px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+.insight-petrarca {
+  background: #f0ede4;
+  border: 1px solid var(--gold);
+  border-left: 4px solid var(--gold);
+}
+
+.insight-tension {
+  background: #f5ece8;
+  border: 1px solid var(--red-ink);
+  border-left: 4px solid var(--red-ink);
+}
+
+.insight-opportunity {
+  background: #ecf0ec;
+  border: 1px solid var(--green-ink);
+  border-left: 4px solid var(--green-ink);
+}
+
+.insight .label {
+  font-weight: 700;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.insight-petrarca .label { color: var(--gold); }
+.insight-tension .label { color: var(--red-ink); }
+.insight-opportunity .label { color: var(--green-ink); }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.9em;
+}
+
+th, td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--parchment-dark);
+}
+
+th {
+  font-weight: 600;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.5px;
+}
+
+/* Collapsible sections */
+details {
+  margin: 16px 0;
+  border: 1px solid var(--parchment-dark);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+summary {
+  padding: 12px 16px;
+  background: var(--parchment-deep);
+  cursor: pointer;
+  font-family: 'Source Sans 3', sans-serif;
+  font-weight: 500;
+  font-size: 0.95em;
+  color: var(--ink-light);
+}
+
+summary:hover { background: var(--parchment-dark); }
+details[open] summary { border-bottom: 1px solid var(--parchment-dark); }
+details .inner { padding: 16px 20px; }
+
+/* Key finding callouts */
+.finding {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid var(--parchment-dark);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.9em;
+}
+
+.finding .stat {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 400;
+  font-size: 1.3em;
+  color: var(--blue-ink);
+  min-width: 72px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.outreach-hook {
+  margin: 24px 0;
+  padding: 20px 24px;
+  background: white;
+  border: 1px solid var(--parchment-dark);
+  border-radius: 8px;
+}
+
+.outreach-hook h4 {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--teal-ink);
+  margin: 0 0 12px;
+}
+
+.email-link {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  color: var(--blue-ink);
+}
+
+/* Source pills */
+.source {
+  display: inline-block;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.78em;
+  color: var(--ink-faint);
+  background: var(--parchment-deep);
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin: 2px 2px;
+}
+</style>
+</head>
+<body>
+
+<h1>Five Research Traditions <br>& Petrarca
+  <span class="sub">Deep analysis of the academic foundations Petrarca builds on, departs from, and could contribute to. April 2026.</span>
+</h1>
+
+<p>Petrarca sits at the intersection of five research traditions that rarely talk to each other. Each tradition has generated powerful insights that Petrarca uses, but none has attempted what Petrarca does: a single system combining retrieval practice, knowledge state modeling, curriculum graphs, voice elicitation, article novelty detection, and adaptive review — for a solo user across arbitrary humanities domains, with no historical student data and no fixed question bank.</p>
+
+<p>This report goes deep into the seminal papers and recent work of five key researchers, maps specific overlaps and tensions with Petrarca's design, and identifies where productive conversations could happen.</p>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ol>
+  <li><a href="#koedinger">Kenneth Koedinger — Knowledge-Learning-Instruction</a></li>
+  <li><a href="#karpicke">Jeffrey Karpicke — Retrieval Practice & Elaborative Retrieval</a></li>
+  <li><a href="#bjork">Robert & Elizabeth Bjork — Desirable Difficulties & New Theory of Disuse</a></li>
+  <li><a href="#wineburg">Sam Wineburg — Historical Thinking as Unnatural Act</a></li>
+  <li><a href="#jarvela">Sanna Järvelä — Self-Regulated Learning & AI Co-Regulation</a></li>
+  <li><a href="#synthesis">Synthesis: Where Petrarca Stands</a></li>
+</ol>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- KOEDINGER -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="researcher" id="koedinger">
+<div class="researcher-header">
+  <h2>1. Kenneth Koedinger</h2>
+  <span class="institution">Carnegie Mellon University &middot; HCI Institute &middot; <span class="email-link">koedinger@cmu.edu</span></span>
+</div>
+
+<div class="accent-koedinger">
+
+<h3>The Seminal Work: KLI Framework (2012)</h3>
+
+<p>The Knowledge-Learning-Instruction framework (<a href="http://pact.cs.cmu.edu/pubs/KLI-KoedingerCorbettPerfetti2012-pre.pdf">Cognitive Science 36(5), 2012</a>) is the most rigorous attempt to map what kinds of knowledge exist, how each is learned, and what instruction each requires. It provides three coordinated taxonomies:</p>
+
+<h4>Knowledge Components: Not All Knowledge Is Equal</h4>
+
+<p>A KC is "an acquired unit of cognitive function or structure that can be inferred from performance on a set of related tasks." Koedinger classifies them along two axes — <strong>conditions</strong> (constant vs. variable) and <strong>response</strong> (constant vs. variable) — yielding a complexity gradient:</p>
+
+<table>
+<tr><th>Type</th><th>Conditions</th><th>Response</th><th>Example</th><th>Common label</th></tr>
+<tr><td>Constant-constant</td><td>Fixed</td><td>Fixed</td><td>"gravitational acceleration = 9.8 m/s²"</td><td>Fact</td></tr>
+<tr><td>Variable-constant</td><td>Variable</td><td>Fixed</td><td>"if noun was previously mentioned, use 'the'"</td><td>Concept/Rule</td></tr>
+<tr><td>Variable-variable</td><td>Variable</td><td>Variable</td><td>Area calculation given arbitrary shapes</td><td>Skill/Schema</td></tr>
+<tr><td>Variable-variable + rationale</td><td>Variable</td><td>Variable</td><td>Proof of why area formula works</td><td>Principle</td></tr>
+</table>
+
+<p>Empirically, KC complexity correlates with description length (facts average 6–9 words; principles 12–21) and execution time (vocabulary KCs: 3–6s; geometry principles: 10–14s).</p>
+
+<h4>The Asymmetry Hypothesis</h4>
+
+<p>This is KLI's central claim. Three types of learning processes exist — <strong>Memory/Fluency</strong> (spacing, testing), <strong>Induction/Refinement</strong> (generalization, discrimination), and <strong>Understanding/Sense-making</strong> (self-explanation, argumentation). The asymmetry: <em>simpler processes remain necessary for complex knowledge, but complex processes fail to help simple knowledge.</em></p>
+
+<ul>
+  <li><strong>Facts</strong>: Memory processes are essential (++). Sense-making is irrelevant — nothing to explain.</li>
+  <li><strong>Rules</strong>: Induction is essential (++). Memory still needed (+). Sense-making may not help — "implicit rule learning is more efficient."</li>
+  <li><strong>Principles</strong>: All three needed. But principles can be "reconstructed" if forgotten, unlike facts which are simply lost.</li>
+</ul>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment</span>
+  Petrarca's design principle #7 — "Facts first, then concepts" — is the asymmetry hypothesis in action. You need memory processes (FSRS scheduling, retrieval practice) even for complex knowledge like historical causation. But you also need elaborative retrieval for principles, which is why review cards have memory hooks, temporal connections, and follow-up queries rather than just cue-response pairs. KLI validates the multi-modal review approach.
+</div>
+
+<h4>Learning Curves as Diagnostic</h4>
+
+<p>Koedinger's operational tool: plot error rate vs. practice opportunity for each KC. A well-defined KC produces a smooth, declining curve. A bad KC model produces blips — irregular jumps suggesting the KC is too coarse (combining distinct sub-skills) or too fine (splitting what's actually one skill).</p>
+
+<p>The Additive Factors Model (AFM): <code>logit(p) = Σ αᵢ·Xᵢ + Σ βⱼ·Yⱼ + Σ γⱼ·Yⱼ·Tⱼ</code> where αᵢ = student proficiency, βⱼ = KC difficulty, γⱼ = KC learning rate, Tⱼ = practice count. LFA found that splitting "Compose-by-multiplication" into sub-skills revealed one sub-skill at 92% mastery while the other was at only 60% — students were "graduating" prematurely.</p>
+
+<div class="insight insight-opportunity">
+  <span class="label">Opportunity for Petrarca</span>
+  Petrarca has FSRS grading data on 100+ knowledge items. Plotting learning curves per curriculum node would reveal which nodes are well-defined (smooth decline) and which need splitting. This is directly testable: does Petrarca's 50–80 node curriculum decomposition produce smooth learning curves, or do some nodes mask sub-skill heterogeneity?
+</div>
+
+<h3>Recent Work: LLMs Cannot Replace Domain Models</h3>
+
+<p>A 2025 study from Koedinger's group (<a href="https://arxiv.org/html/2504.05570v1">"Can Large Language Models Match Tutoring System Adaptivity?"</a>, AIED 2025) benchmarked GPT-4o, Llama3-8B, and Llama3-70B against an intelligent tutoring system. The damning result: <strong>omitting knowledge component information from prompts produced no statistically significant change in LLM outputs</strong>. LLMs failed to adapt to the specific skill being practiced. GPT-4o followed formatting instructions best (97.57%) but "tends to provide overly direct feedback that diverges from effective tutoring."</p>
+
+<div class="finding">
+  <div class="stat">0%</div>
+  <div>Statistical significance of KC information on LLM output. All three models ignored the explicit knowledge model in their prompts. Being good at language ≠ being pedagogically sound.</div>
+</div>
+
+<p>Their conclusion: "Future research may prioritize <strong>hybrid settings that embed LLMs within ITS frameworks</strong> rather than seeking to replace ITS." This validates Petrarca's architecture: LLMs for content generation (Gemini for follow-ups, Opus for curricula), but structured models (FSRS, curriculum DAGs, knowledge levels) for tracking and adaptation.</p>
+
+<h3>The Critical Gap</h3>
+
+<p>All KLI empirical work is in <strong>structured tutoring</strong> — math, chemistry, programming. There is no evidence for KCs in reading, history, or informal learning. KLI requires assessment events with observable correct/incorrect responses. In reading, there are no natural "steps" that produce such signals. This is exactly the problem Petrarca solves with voice elicitation (uncued recall produces observable knowledge signals) and graded review (knew/partly/missed provides binary-like assessment events per KC).</p>
+
+<div class="insight insight-tension">
+  <span class="label">Productive Tension</span>
+  Koedinger's KCs are <em>empirically discovered</em> from student data using AFM/LFA. Petrarca's curriculum nodes are <em>expert-generated</em> by Opus. These are fundamentally different approaches. Koedinger would argue: how do you know your 50-node Roman History curriculum captures the right grain size without fitting it to performance data? Petrarca's answer: we validate via learning curves on FSRS data post-hoc, and we can split/merge nodes based on grading patterns. But this hasn't been done yet.
+</div>
+
+<div class="outreach-hook">
+  <h4>What to say if you contact him</h4>
+  <p>"Your KLI framework's asymmetry hypothesis — that memory processes are needed even for complex knowledge — directly shaped our design. We use FSRS scheduling (memory/fluency) alongside elaborative retrieval with temporal hooks and cross-domain connections (sense-making). But we're doing this for history and humanities, not math — domains where KCs aren't naturally decomposable into discrete steps. We have grading data on 100+ items that could be analyzed with your learning curve methodology. Would this extension of KLI to informal reading be of interest?"</p>
+  <p><span class="email-link">koedinger@cmu.edu</span></p>
+</div>
+
+</div><!-- accent -->
+</div><!-- researcher -->
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- KARPICKE -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="researcher" id="karpicke">
+<div class="researcher-header">
+  <h2>2. Jeffrey Karpicke</h2>
+  <span class="institution">Purdue University &middot; Cognition & Learning Lab &middot; <span class="email-link">karpicke@purdue.edu</span></span>
+</div>
+
+<div class="accent-karpicke">
+
+<h3>The Seminal Work: Retrieval Practice Produces More Learning (Science, 2011)</h3>
+
+<p><a href="https://learninglab.psych.purdue.edu/downloads/2011/2011_Karpicke_Blunt_Science.pdf">Karpicke & Blunt, Science 331(6018), 2011</a>. 80 undergraduates, four conditions: study-once, repeated study, elaborative concept mapping (while viewing text), and retrieval practice (read → free recall → restudy → recall). Total learning time matched. One-week delayed test with both verbatim and inference questions.</p>
+
+<div class="finding">
+  <div class="stat">d=1.50</div>
+  <div>Effect size for retrieval practice vs. concept mapping on the final test. Retrieval practice produced 50% higher retention scores. Even on <em>inference questions</em> requiring connecting multiple concepts — not just factual recall.</div>
+</div>
+
+<div class="finding">
+  <div class="stat">d=1.01</div>
+  <div>Effect size when the final test was <em>making a concept map from memory</em>. Even when assessed via concept mapping, retrieval practice still dominated concept mapping as a study method. 101 of 120 students performed better after retrieval practice.</div>
+</div>
+
+<p><strong>The metacognitive illusion:</strong> 75% of students believed concept mapping would be equally or more effective than retrieval practice. The opposite of reality. Students predicted repeated study would produce the best retention. This is the illusion of fluency — rereading feels productive because it increases processing ease, which people mistake for learning.</p>
+
+<h3>The Theoretical Framework: Episodic Context Account (2014)</h3>
+
+<p><a href="https://learninglab.psych.purdue.edu/downloads/2014/2014_Karpicke_Lehman_Aue_PLM.pdf">Karpicke, Lehman & Aue, Psychology of Learning and Motivation vol. 61, 2014</a>. This is Karpicke's definitive theoretical chapter. Four assumptions:</p>
+
+<ol>
+  <li><strong>Events occur within slowly drifting temporal context.</strong> Both item features and context features are encoded together.</li>
+  <li><strong>Context reinstatement during retrieval.</strong> When context has shifted since study, you must reinstate prior context to guide memory search. Free recall requires more reinstatement than recognition.</li>
+  <li><strong>Context updating during successful retrieval.</strong> When an item studied in context A is retrieved in context B, its representation becomes a composite of A+B. Future retrieval can be cued by <em>either</em> context. <strong>This is the core mechanism</strong> — retrieval creates richer, more robust context associations.</li>
+  <li><strong>Retrieval restricts the search set.</strong> Updated composite contexts allow more precise memory search, reducing interference from competing items.</li>
+</ol>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment: Why Voice Elicitation Is Theoretically Optimal</span>
+  Free recall is the form of retrieval that requires the <em>most</em> context reinstatement (assumption 2), which produces the <em>most</em> context updating (assumption 3), which creates the <em>richest</em> composite representations. Voice elicitation — "tell me everything you know about Byzantium" with no cues — is exactly this. Karpicke's theory predicts it should be the most powerful form of retrieval practice, superior to cued recall (review cards), recognition (multiple choice), and rereading.
+</div>
+
+<h4>Why Spacing Works (The Context Account)</h4>
+
+<p>Spaced retrieval occurs in a context more different from the study context, producing more distinctive context features during updating. Massed retrieval has redundant context. <strong>Spacing works because it increases context reinstatement demands, not because of algorithm precision.</strong></p>
+
+<p>Critical implication: FSRS optimizes <em>when</em> to retrieve, but the <em>quality</em> of the retrieval event matters more. A perfectly scheduled flashcard with a minimal cue ("Who assassinated Caesar?") produces less context updating than a badly scheduled free-recall session ("Tell me about the fall of the Roman Republic"). The modality hierarchy:</p>
+
+<table>
+<tr><th>Retrieval Type</th><th>Context Reinstatement</th><th>Learning Benefit</th></tr>
+<tr><td>Free recall (voice elicitation)</td><td>Maximum</td><td>Highest</td></tr>
+<tr><td>Cued recall (open-ended question)</td><td>High</td><td>High</td></tr>
+<tr><td>Recognition (multiple choice)</td><td>Low</td><td>Moderate</td></tr>
+<tr><td>Rereading</td><td>None</td><td>Minimal</td></tr>
+</table>
+
+<h4>Against "Elaborative Retrieval" as Semantic Activation</h4>
+
+<p>Karpicke directly argues against Carpenter's (2009) "elaborative retrieval hypothesis" — that retrieval activates semantically related words providing additional retrieval routes. Three problems: (1) the evidence is correlational; (2) more associates should cause cue overload, not improvement; (3) directly inducing semantic elaboration (generating mediators) does NOT reproduce retrieval practice effects (d=0.47 vs. d=0.60). Retrieval practice is <em>not</em> elaboration. It's context reinstatement.</p>
+
+<div class="insight insight-tension">
+  <span class="label">Productive Tension</span>
+  Petrarca's review cards are designed around "elaborative" features — memory hooks, temporal connections, follow-up queries, cross-domain links. Karpicke would argue: these are encoding enrichments, which are good, but the <em>act of retrieval itself</em> is what drives learning, and the elaborative features might actually be <em>providing cues that reduce retrieval effort</em>, weakening the benefit. The purest Karpicke-aligned design would be: voice elicitation with <em>no</em> prompts, then show enriched cards <em>after</em> recall, not before. Petrarca's review cards might be mixing encoding support (good for initial learning) with retrieval practice (good for retention) in ways that undermine the retrieval mechanism.
+</div>
+
+<h3>Metacognitive Illusions (Karpicke, Butler & Roediger, 2009)</h3>
+
+<p><a href="https://learninglab.psych.purdue.edu/downloads/2009/2009_Karpicke_Butler_Roediger.pdf">Memory 17(4), 2009</a>. Survey of 177 high-performing undergraduates (SAT>1400). 84% listed rereading as a study strategy; only 11% reported practicing recall. Of those who self-tested, only <strong>8% believed retrieval itself enhances learning</strong> — the rest used testing purely for diagnosis (finding gaps).</p>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment: The Michel Thomas Connection</span>
+  The metacognitive illusion is precisely why the "I'll manage your memory" principle matters. Users will <em>feel</em> like rereading articles is more effective than voice recall sessions. They will prefer browsing the knowledge atlas to doing retrieval practice. The system must <em>take responsibility</em> for choosing retrieval over re-exposure — because users systematically choose wrong. Michel Thomas removed the metacognitive burden ("don't try to remember, I'll manage that") and Karpicke's data explains why this works: it bypasses the fluency illusion.
+</div>
+
+<h3>What Karpicke Hasn't Done</h3>
+
+<p>His empirical work is with paired associates, word lists, and short science texts (~200–500 words). No studies on retrieval practice for deeply relational framework knowledge — "how does the Roman Republic's collapse relate to Caesar's assassination." No studies on voice/oral recall specifically (though overt vs. covert retrieval produces equivalent effects, suggesting modality doesn't matter). No engagement with AI/LLMs — his publication pace has slowed since 2017, with recent work on clinical populations (children with language disorders).</p>
+
+<div class="outreach-hook">
+  <h4>What to say if you contact him</h4>
+  <p>"Your episodic context account predicts that free recall with maximum context reinstatement should produce the strongest learning. We built a system where users do exactly that — open-ended voice recall of everything they know about a topic, with no cues — followed by graded review cards. Your 2011 Science paper's finding that retrieval practice beats concept mapping even on inference questions directly justified our 'elaborative retrieval, not flashcards' design. But we have a tension: our review cards provide temporal hooks and cross-domain connections <em>before</em> the user recalls. Does this cueing reduce the retrieval benefit? We have behavioral data from 50+ sessions that could speak to this."</p>
+  <p><span class="email-link">karpicke@purdue.edu</span></p>
+</div>
+
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- BJORK -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="researcher" id="bjork">
+<div class="researcher-header">
+  <h2>3. Robert & Elizabeth Bjork</h2>
+  <span class="institution">UCLA &middot; Bjork Learning & Forgetting Lab &middot; <span class="email-link">rabjork@psych.ucla.edu</span></span>
+</div>
+
+<div class="accent-bjork">
+
+<h3>The Seminal Work: New Theory of Disuse (1992)</h3>
+
+<p><a href="https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/07/RBjork_EBjork_1992.pdf">Bjork & Bjork, 1992</a>. Memory has two independent strength indices:</p>
+
+<ul>
+  <li><strong>Storage Strength (SS)</strong> — how deeply encoded/interconnected a memory is. Can only increase. Invisible in the moment.</li>
+  <li><strong>Retrieval Strength (RS)</strong> — how accessible it is right now. Fluctuates freely based on context and recency.</li>
+</ul>
+
+<p>Four postulates:</p>
+
+<ol>
+  <li>Current performance is entirely a function of RS. SS is invisible — you can only infer it from relearning speed.</li>
+  <li>SS can only increase (barring brain damage). It accumulates with each encounter.</li>
+  <li>High SS retards the loss of RS. Well-learned material is forgotten more slowly.</li>
+  <li><strong>The critical counterintuitive postulate: SS gains are inversely related to current RS.</strong> Maximum learning occurs when retrieval is effortful — when RS is low. This is the engine behind all desirable difficulties.</li>
+</ol>
+
+<h4>Mapping to FSRS</h4>
+
+<table>
+<tr><th>Bjork</th><th>FSRS</th><th>Interpretation</th></tr>
+<tr><td>Storage Strength</td><td>Stability (S)</td><td>Higher stability = slower forgetting rate</td></tr>
+<tr><td>Retrieval Strength</td><td>Retrievability (R)</td><td>R = exp(-t/S), probability of recall at time t</td></tr>
+<tr><td>SS gain ∝ 1/RS</td><td>ΔS increases when R is low at time of successful recall</td><td>FSRS implements this directly — successful retrieval at lower R yields larger S increases</td></tr>
+</table>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment</span>
+  FSRS correctly implements the core Bjork mechanism. But Bjork's model has no notion of isolated items — SS reflects interconnection with related knowledge. FSRS treats each card independently. This is the content-awareness gap that Petrarca's curriculum graph <em>partially</em> addresses: curriculum nodes have prerequisite edges that encode semantic relationships, but FSRS scheduling doesn't use them. A fully Bjork-aligned system would schedule items based on the state of <em>related</em> items, not just each item independently.
+</div>
+
+<h3>Desirable Difficulties: The Complete List</h3>
+
+<ol>
+  <li><strong>Spacing</strong> — distributing practice over time. "One of the most robust results in all of cognitive psychology."</li>
+  <li><strong>Interleaving</strong> — mixing categories rather than blocking. Forces discrimination. <a href="https://web.williams.edu/Psychology/Faculty/Kornell/Publications/Kornell.Bjork.2008a.pdf">Kornell & Bjork (2008)</a>: d=0.99 for classifying new paintings by interleaved vs. blocked artists. But 78% of participants preferred blocking even after seeing their own superior interleaved scores.</li>
+  <li><strong>Retrieval practice</strong> — retrieving information rather than restudying it.</li>
+  <li><strong>Generation</strong> — producing answers rather than reading them (fl____ vs. "flower"). Recruits qualitatively different neural encoding circuits.</li>
+  <li><strong>Varying conditions</strong> — changing environmental context and task parameters.</li>
+  <li><strong>Reducing feedback frequency</strong> — aggregate feedback > trial-by-trial.</li>
+  <li><strong>Perceptual disfluency</strong> — harder-to-read fonts enhance deeper processing.</li>
+  <li><strong>Pretesting</strong> — testing before instruction, despite poor performance, enhances subsequent learning.</li>
+</ol>
+
+<h4>When Difficulties Become Undesirable</h4>
+
+<p>The boundary conditions are critical for Petrarca's design:</p>
+<ul>
+  <li>When learners <strong>lack sufficient background knowledge</strong> to engage the difficulty. Generating without prerequisite context produces misconceptions.</li>
+  <li>When <strong>element interactivity is too high</strong> — too many novel, interacting elements overwhelm working memory.</li>
+  <li>Interleaving hurts during <strong>initial learning of completely novel material</strong> for low-knowledge learners. Recommendation: start with blocking, shift to interleaving.</li>
+  <li>The general principle: a difficulty is desirable only if the learner can <strong>engage the retrieval/encoding process it's designed to trigger</strong>. If it simply prevents engagement, it's undesirable.</li>
+</ul>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment: The 70% Novelty Sweet Spot</span>
+  Petrarca's finding that articles with ~70% novel claims + ~30% familiar context are most engaging is the desirable/undesirable difficulty boundary. Enough familiar context to engage the difficulty (30% known = prerequisite knowledge present), enough novelty to trigger deep processing (70% new). Below ~30% familiar → difficulty is undesirable (nothing to hook onto). Above ~50% familiar → difficulty is too easy (no deep processing triggered).
+</div>
+
+<h3>Retrieval-Induced Forgetting (RIF)</h3>
+
+<p><a href="https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/07/Anderson_RBjork_EBjork_1994.pdf">Anderson, Bjork & Bjork, 1994</a>. Practicing retrieval of some items from a category <strong>suppresses</strong> recall of unpracticed items from the same category. Only strong/high-frequency exemplars are suppressed — active inhibition, not simple competition.</p>
+
+<div class="finding">
+  <div class="stat">d=0.55</div>
+  <div>RIF suppression effect when practicing 5 items × 3 reps from a category. The unreviewed items from that category showed substantial recall impairment compared to items from entirely unpracticed categories. Effects dissipated after ~7 days.</div>
+</div>
+
+<div class="insight insight-tension">
+  <span class="label">Design Implication for Petrarca</span>
+  Reviewing many cards from the same curriculum in one session will temporarily suppress recall of unreviewed nodes from that curriculum. Petrarca's cross-curriculum interleaving in the review stream is protective, but the "Same topic" related_facts checklist could trigger RIF for unchecked items. <strong>Concrete recommendation:</strong> Don't cluster same-topic cards in the review stream. The current interleaving by source_type (SR cards, ML voice, ML follow-up) is good, but within SR cards, actively separate same-curriculum items. And the related_facts checklist should perhaps be shown <em>after</em> the card is graded, not during retrieval.
+</div>
+
+<h3>Metacognitive Illusions (Bjork, Dunlosky & Kornell, 2013)</h3>
+
+<p><a href="https://sanlab.psych.ucla.edu/wp-content/uploads/sites/13/2016/07/RBjork_Dunlosky_Kornell_2012.pdf">Annual Review of Psychology, 64, 2013</a>. Four systematic illusions:</p>
+
+<ol>
+  <li><strong>Fluency illusion</strong> — processing ease at encoding predicts judgments of learning but not actual retention.</li>
+  <li><strong>Stability bias</strong> — treating current recall ability as if it will persist. Failing to account for forgetting OR future learning.</li>
+  <li><strong>Foresight bias</strong> — overestimating future recall ability when information is currently visible.</li>
+  <li><strong>Massing preference</strong> — even after experiencing superior interleaved performance, 78% still prefer blocking.</li>
+</ol>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment: The Stability Bias Explains the Fear of Forgetting</span>
+  Petrarca's design insight — "the fear of forgetting stops reading nonfiction" — is the stability bias in action. Users feel their knowledge is decaying (declining RS) and mistake this for permanent loss. But SS is intact — the knowledge is still there, just less accessible. The Michel Thomas principle ("I'll manage your memory") works precisely because it bypasses the stability bias. The user stops monitoring their own RS (which is anxiety-inducing and inaccurate) and trusts the system to schedule retrievals that maintain accessibility.
+</div>
+
+<div class="outreach-hook">
+  <h4>What to say if you contact them</h4>
+  <p>"Your New Theory of Disuse directly shaped our scheduling approach — we use FSRS, which implements your fourth postulate (SS gain ∝ 1/RS) by increasing stability more when retrievability is low at time of recall. But we have a question about RIF in review streams: we interleave topics across cards, partly as a desirable difficulty (your interleaving work), but also to avoid suppressing unreviewed same-topic items. Is there empirical guidance on the minimum inter-item spacing needed to avoid RIF within a review session? We have behavioral data from 50+ review sessions that could speak to this."</p>
+  <p><span class="email-link">rabjork@psych.ucla.edu</span> (Robert) &middot; Elizabeth may be more responsive — Robert is semi-retired.</p>
+</div>
+
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- WINEBURG -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="researcher" id="wineburg">
+<div class="researcher-header">
+  <h2>4. Sam Wineburg</h2>
+  <span class="institution">Stanford University &middot; Stanford History Education Group &middot; <span class="email-link">wineburg@stanford.edu</span></span>
+</div>
+
+<div class="accent-wineburg">
+
+<h3>The Seminal Work: Historical Problem Solving (1991)</h3>
+
+<p><a href="https://marcuse.faculty.history.ucsb.edu/classes/2c/500/91WineburgReadingHistTexts.pdf">Journal of Educational Psychology, 83, 1991</a>. Eight historians and eight AP students read eight conflicting documents about the Battle of Lexington Green, thinking aloud. The documents were chosen to contradict each other: minuteman depositions, British diary entries, a London newspaper story, a colonial letter, a textbook excerpt, a historical novel excerpt.</p>
+
+<h4>Three Cognitive Heuristics That Distinguish Experts</h4>
+
+<ol>
+  <li><strong>Sourcing</strong> — Before reading content, historians examined who wrote it, when, for what purpose, for what audience. Students skipped straight to content. "In every study of historical reading, bar none, sourcing is the touchstone that distinguishes expert from novice practice."</li>
+  <li><strong>Corroboration</strong> — Historians constantly compared claims across all eight documents, treating contradictions as productive evidence. Students treated disagreement as a problem to resolve.</li>
+  <li><strong>Contextualization</strong> — Historians placed each document within its temporal, spatial, and political circumstances. "What is happening around this document to make it what it is?"</li>
+</ol>
+
+<p><strong>The textbook reversal:</strong> Students rated the textbook as most reliable. Historians rated it among the least — it flattened complexity, erased uncertainty, and presented interpretation as fact.</p>
+
+<h4>Three Levels of Representation</h4>
+
+<p>Historians construct three representations of each document (from the companion paper, <a href="https://marcuse.faculty.history.ucsb.edu/classes/2c/500/91WineburgReadingHistTexts.pdf">AERJ 28(3), 1991</a>):</p>
+
+<ol>
+  <li><strong>The text</strong> — literal surface meaning</li>
+  <li><strong>The event</strong> — a situation model of what actually happened</li>
+  <li><strong>The subtext</strong> — the text as rhetorical artifact, revealing both conscious persuasive intent and unconscious worldview</li>
+</ol>
+
+<p>Students operated only at level 1. Historians spent enormous effort on level 3 — excavating what was <em>unsaid</em>. This is "reading against the grain."</p>
+
+<h3>The "Unnatural Act" Thesis</h3>
+
+<p>Historical thinking is unnatural because <strong>presentism</strong> is "our psychological condition at rest, a way of thinking that requires little effort and comes quite naturally." We automatically judge past actors by present values because our cognitive default assumes people in the past thought like us. Historical thinking requires:</p>
+
+<ul>
+  <li>Suspending immediate moral judgment</li>
+  <li>Embracing ambiguity and multiple valid interpretations</li>
+  <li>Recognizing the fundamental <em>otherness</em> of the past</li>
+  <li>Valuing questions over definitive answers</li>
+</ul>
+
+<div class="insight insight-petrarca">
+  <span class="label">Petrarca Alignment: Deep</span>
+  Wineburg's three heuristics map directly to Petrarca's microlearning card design:
+  <br><strong>Sourcing</strong> → Cards include primary sources ("who wrote about this") and material evidence ("what survives, where to visit")
+  <br><strong>Corroboration</strong> → Cross-article claim tracking, delta-only reports showing what's new since last read, novelty detection
+  <br><strong>Contextualization</strong> → Temporal hooks as THE key retention mechanism, "anchor to known events" as first priority
+  <br><br>Petrarca is training Wineburg's heuristics as <em>habits of mind</em> through the card design, not as explicit instruction. Every card that includes a date, a source, and a cross-reference is a micro-exercise in sourcing + contextualization + corroboration.
+</div>
+
+<h3>Facts vs. Frameworks: Wineburg's Nuanced Position</h3>
+
+<p>Wineburg "resoundingly supports domain-specific knowledge" and rejects generic critical thinking skills. But he ranks five assessment methods for historical understanding:</p>
+
+<ol>
+  <li>Understanding present events through historical perspective (highest)</li>
+  <li>Sifting documentary records to construct probable accounts</li>
+  <li>Appreciating historical narratives</li>
+  <li>Answering reflective questions</li>
+  <li>Factual recall (lowest)</li>
+</ol>
+
+<p>His model: "repeated passes at material, each deeper and probing further, with instruction organized around themes and questions, connections and challenges, patterns and puzzles."</p>
+
+<div class="insight insight-tension">
+  <span class="label">Productive Tension</span>
+  Petrarca's design principle #7 explicitly prioritizes factual scaffolding (dates, entities, places, sequences) <em>before</em> higher-order thinking — the reverse of Wineburg's ranking. The resolution: these aren't contradictory at different <em>timescales</em>. Petrarca builds the factual scaffold first so that later engagement with Wineburg-style historical thinking has something to operate on. You can't do sourcing or contextualization without knowing dates and actors. But Petrarca should eventually push toward Wineburg's higher-order skills once the scaffold is solid. The design doc acknowledges this: "If the user reaches a point of factual confidence, THEN we can explore pushing toward deeper analytical skills."
+</div>
+
+<h3>Reading Like a Historian: The SHEG Curriculum</h3>
+
+<p>Tested in a <a href="https://www.tandfonline.com/doi/abs/10.1080/07370008.2011.634081">quasi-experimental study (Reisman, 2012)</a> with 236 students across five San Francisco high schools over six months. Key result: teaching historical thinking skills <strong>did not come at the expense of factual learning</strong>. Treatment students performed better on factual knowledge retention tests too. This suggests the facts-vs-thinking tradeoff may be false — teaching the heuristics actually improves fact retention, perhaps because contextualization creates more durable encoding.</p>
+
+<h3>Recent Work: AI and Verification</h3>
+
+<p>Caulfield & Wineburg's <em>Verified</em> (2023) addresses ChatGPT directly: "It's easy to forget that [large language models] don't know the subject — they just know the sort of things that people say about the subject, whether they're true or not." They introduce the SIFT method: <strong>S</strong>top, <strong>I</strong>nvestigate the source, <strong>F</strong>ind better coverage, <strong>T</strong>race claims to original context.</p>
+
+<div class="insight insight-opportunity">
+  <span class="label">Opportunity</span>
+  Petrarca's atomic claims are extracted by LLMs, which means they inherit the verification problem Wineburg warns about. The system should eventually apply sourcing heuristics to its own generated content — flagging claims that lack primary source attribution, noting when claims come from a single source without corroboration. This is a natural extension of the novelty detection system: not just "is this new?" but "is this verified?"
+</div>
+
+<div class="outreach-hook">
+  <h4>What to say if you contact him</h4>
+  <p>"Your three heuristics — sourcing, corroboration, contextualization — directly shaped our learning card design. Every card includes primary source attribution, material evidence, and temporal contextualization. We're building the factual scaffold that makes these heuristics <em>possible</em> — because you can't contextualize the Battle of Lexington without knowing what else was happening in 1775. Your Reisman (2012) finding that teaching historical thinking actually improves fact retention is important to us — it suggests our phased approach (facts first, then heuristics) could be collapsed. Have you seen technology that trains these heuristics as habits rather than explicit instruction?"</p>
+  <p><span class="email-link">wineburg@stanford.edu</span></p>
+</div>
+
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- JARVELA -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="researcher" id="jarvela">
+<div class="researcher-header">
+  <h2>5. Sanna Järvelä</h2>
+  <span class="institution">University of Oulu &middot; LET Lab &middot; <span class="email-link">sanna.jarvela@oulu.fi</span></span>
+</div>
+
+<div class="accent-jarvela">
+
+<h3>Theoretical Foundation: HASRL Model (2023)</h3>
+
+<p><a href="https://bera-journals.onlinelibrary.wiley.com/doi/10.1111/bjet.13325">Järvelä, Nguyen & Hadwin, BJET 54(5), 2023</a>. The Human-AI Shared Regulation in Learning model has two parallel subsystems:</p>
+
+<p><strong>Human subsystem:</strong> Learner models → Monitoring → Regulatory triggers → Responses → Metacognitive products</p>
+
+<p><strong>AI subsystem:</strong> AI models → Monitoring → Detect triggers → Diagnose → Act → Learn</p>
+
+<p>The key architectural insight: AI and human operate in parallel, with AI detecting triggers the human may not be metacognitively aware of. But the AI is a <em>co-regulator</em> whose role is to raise metacognitive awareness, not to make decisions for the learner.</p>
+
+<h4>What "Shared Regulation" Means Concretely</h4>
+
+<p>Three forms of regulation (from <a href="https://doi.org/10.1080/00461520.2012.748006">Järvelä & Hadwin, Educational Psychologist 48(1), 2013</a>):</p>
+
+<ol>
+  <li><strong>Self-regulation (SRL)</strong> — individual monitoring and control of own learning</li>
+  <li><strong>Co-regulation</strong> — one agent (human or AI) temporarily scaffolding another's regulation</li>
+  <li><strong>Socially shared regulation (SSRL)</strong> — group members jointly negotiating goals, monitoring, strategies</li>
+</ol>
+
+<p>In Petrarca's context, the system is a co-regulator: it detects that knowledge is decaying (a regulatory trigger the user may not be aware of), diagnoses which domain needs attention, and acts by scheduling review. The question is whether this co-regulation should be transparent or opaque.</p>
+
+<h3>The Offloading Critique: Järvelä's Central Warning</h3>
+
+<p>From the <a href="https://bera-journals.onlinelibrary.wiley.com/doi/10.1111/bjet.13560">Hybrid Intelligence paper (BJET, 2025)</a>:</p>
+
+<blockquote>
+"If cognitive AI were designed to replace certain thinking processes of learners, it could pose a risk by eventually diminishing their cognitive abilities."
+</blockquote>
+
+<blockquote>
+"If an HI system is designed to take over certain cognitive tasks without fostering the underlying skills in humans, it may result in a gradual decline in joint performance in the long run."
+</blockquote>
+
+<h4>AI Should vs. Should Not</h4>
+
+<table>
+<tr><th>AI Should</th><th>AI Should Not</th></tr>
+<tr><td>Detect regulatory triggers learners are unaware of</td><td>Make decisions about what to learn next</td></tr>
+<tr><td>Raise metacognitive awareness ("prompt to reflect")</td><td>Replace monitoring with invisible automated tracking</td></tr>
+<tr><td>Provide scaffolding that gradually transfers responsibility</td><td>Create permanent dependency</td></tr>
+<tr><td>Track emotional/motivational states</td><td>Optimize for engagement alone</td></tr>
+</table>
+
+<div class="insight insight-tension">
+  <span class="label">The Central Tension with Petrarca</span>
+  Petrarca's Michel Thomas principle — "I'll manage your memory" — is <em>deliberately</em> offloading a regulatory function that Järvelä argues should remain with the learner. Petrarca says: the fear of forgetting is the barrier, so remove it. Järvelä says: taking away monitoring responsibilities atrophies self-regulation skills.
+  <br><br>
+  <strong>Who is right?</strong> Possibly both, at different timescales. Petrarca's offloading removes an <em>acute</em> barrier (the fear that stops reading). But if the system succeeds and the user reads productively for years, do they lose the ability to self-regulate their learning when the system isn't available? The Bjorks would add: the metacognitive illusion means users would self-regulate <em>badly</em> anyway (choosing rereading over retrieval). Outsourcing to a system that implements desirable difficulties may produce better outcomes than self-regulation, even in the long run.
+</div>
+
+<h3>How She Measures SRL: The SMA Grid</h3>
+
+<p>The <a href="https://doi.org/10.1007/s10648-025-10113-4">SMA grid (Ed Psych Review, 2025)</a> maps SRL processes (Cognition, Affect, Metacognition, Motivation) against data streams (log files, eye-tracking, EDA, facial expressions, audio/video, self-report). Key findings:</p>
+
+<ul>
+  <li>EDA and heart rate → emotional/motivational regulation</li>
+  <li>Eye-gaze → cognitive regulation (attention allocation)</li>
+  <li>Log data → behavioral regulation (strategy selection)</li>
+  <li>Motivation and affect remain underrepresented in measurement</li>
+</ul>
+
+<p>Her lab has built LSTM models to predict regulatory activities from EDA + video + audio data, tested with 94 secondary students wearing EDA sensors during science lessons.</p>
+
+<div class="insight insight-opportunity">
+  <span class="label">Opportunity: Petrarca Has Rich Behavioral Data</span>
+  Petrarca already logs extensive behavioral data (interaction_log + JSONL) — time-on-card, grading patterns, voice elicitation duration, review session completion rates, suspend actions. This is a rich stream of SRL <em>traces</em> in Järvelä's framework. Analyzing these logs through her CAMM lens could reveal: Does the user's grading accuracy improve within sessions (cognitive regulation)? Do session lengths correlate with time of day or recent reading (motivational regulation)? Does card suspension predict topic avoidance (emotional regulation)?
+</div>
+
+<h3>What Järvelä Misses</h3>
+
+<p>Her work does not engage with spaced repetition, retrieval practice, or the testing effect at all. She has zero overlap with the Bjork/Karpicke memory science tradition. Her "knowledge" concept is about regulatory processes (metacognition, planning, monitoring), not factual recall or conceptual understanding. She doesn't distinguish between SRL for different knowledge types. This is a significant blind spot — the cognitive science of memory and the educational science of self-regulation rarely talk to each other.</p>
+
+<div class="outreach-hook">
+  <h4>What to say if you contact her</h4>
+  <p>"Your HASRL model raises a challenge for our design. We deliberately offload the memory-monitoring regulatory function — 'I'll manage your memory for you' — because our user research showed that the fear of forgetting was the primary barrier to reading nonfiction. Your framework would predict this creates dependency. But we'd argue it creates <em>productive</em> co-regulation: the system handles monitoring (which humans do badly — Bjork's metacognitive illusions), while the user handles strategy (choosing what to read, how deeply to engage, when to do voice recall). Is there a version of shared regulation where permanent asymmetric role division is <em>healthy</em> rather than dependency-forming? We'd love to discuss — we have 50+ sessions of behavioral data that could be analyzed through your CAMM framework."</p>
+  <p><span class="email-link">sanna.jarvela@oulu.fi</span></p>
+</div>
+
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SYNTHESIS -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div id="synthesis" style="margin-top: 80px;">
+<h2>6. Synthesis: Where Petrarca Stands</h2>
+
+<h3>What Petrarca Does That Nobody Else Does</h3>
+
+<p>No existing system combines all of these in one architecture:</p>
+
+<table>
+<tr><th>Capability</th><th>Petrarca</th><th>Closest academic work</th><th>Gap</th></tr>
+<tr><td>Curriculum DAGs for arbitrary domains</td><td>Opus-generated, 50–80 nodes with prerequisite edges</td><td>Koedinger's KCs (empirically discovered)</td><td>KCs require historical student data; Petrarca generates from scratch</td></tr>
+<tr><td>Free-recall voice elicitation</td><td>Two modes: distant (salience) + fresh (retention)</td><td>Karpicke's retrieval practice (text-based)</td><td>Karpicke hasn't studied voice/oral recall for complex knowledge</td></tr>
+<tr><td>FSRS scheduling + knowledge levels</td><td>FSRS-6 with retention=0.80, 4-level knowledge states</td><td>Bjork's SS/RS theory</td><td>FSRS treats items independently; Bjork's SS involves interconnection</td></tr>
+<tr><td>Historical thinking via card design</td><td>Sources, dates, material evidence, cross-refs in every card</td><td>Wineburg's SHEG curriculum</td><td>SHEG is explicit instruction; Petrarca trains implicitly via card structure</td></tr>
+<tr><td>Offloaded memory management</td><td>"I'll manage your memory" principle</td><td>Järvelä's HASRL (AI as co-regulator)</td><td>Järvelä insists on transparency and gradual transfer; Petrarca is permanently opaque</td></tr>
+<tr><td>Article novelty detection</td><td>70% novelty sweet spot, delta-only reports</td><td>—</td><td>No academic equivalent for individual knowledge-aware content filtering</td></tr>
+</table>
+
+<h3>The Five Traditions Don't Talk to Each Other</h3>
+
+<p>Petrarca bridges research communities that rarely overlap:</p>
+
+<ul>
+  <li><strong>Koedinger</strong> (CMU) publishes in Cognitive Science, EDM, AIED. Doesn't cite Bjork or Karpicke.</li>
+  <li><strong>Karpicke</strong> (Purdue) publishes in JEP, Science, Psych Science. Doesn't cite Koedinger.</li>
+  <li><strong>Bjork</strong> (UCLA) publishes in Annual Review, JEP, Memory & Cognition. Cites Karpicke but not Koedinger or Wineburg.</li>
+  <li><strong>Wineburg</strong> (Stanford) publishes in JEP, Cognition & Instruction, Teachers College Record. Doesn't cite any of the above.</li>
+  <li><strong>Järvelä</strong> (Oulu) publishes in BJET, Learning & Instruction, CHB. Doesn't cite Karpicke or Bjork.</li>
+</ul>
+
+<p>Petrarca is the first system to operationalize insights from all five traditions simultaneously. This is both a strength (richer design) and a vulnerability (no single community will fully understand what it does or why).</p>
+
+<h3>Unresolved Design Questions from This Analysis</h3>
+
+<ol>
+  <li><strong>Cueing vs. retrieval purity.</strong> Karpicke's episodic context account predicts that providing temporal hooks and connections <em>before</em> retrieval reduces the retrieval benefit. Should review cards show enrichments only <em>after</em> grading?</li>
+  <li><strong>Learning curve diagnostics.</strong> Koedinger's AFM methodology could be applied to FSRS grading data to validate curriculum node granularity. Which nodes need splitting?</li>
+  <li><strong>RIF in review streams.</strong> Bjork's retrieval-induced forgetting suggests same-topic clustering hurts. The related_facts checklist should perhaps appear <em>after</em> grading, not during.</li>
+  <li><strong>Transparency of monitoring.</strong> Järvelä argues AI monitoring should be visible to the learner. Should the knowledge atlas show <em>why</em> items were scheduled, not just what you know?</li>
+  <li><strong>Implicit historical thinking training.</strong> Wineburg's SHEG data shows teaching heuristics improves fact retention. Should Petrarca eventually make the sourcing/contextualization/corroboration framework explicit?</li>
+  <li><strong>Content-aware scheduling.</strong> Bjork's SS is interconnected; FSRS is item-independent. Could curriculum prerequisite edges inform scheduling — e.g., reviewing a prerequisite node before its dependent?</li>
+</ol>
+
+<h3>Priority Contact Order</h3>
+
+<table>
+<tr><th>#</th><th>Researcher</th><th>Why them</th><th>Email</th></tr>
+<tr><td>1</td><td>Jeffrey Karpicke</td><td>Petrarca is his theory made real. Voice elicitation = maximum context reinstatement.</td><td class="email-link">karpicke@purdue.edu</td></tr>
+<tr><td>2</td><td>Kenneth Koedinger</td><td>KC framework + learning curves are directly testable against Petrarca data.</td><td class="email-link">koedinger@cmu.edu</td></tr>
+<tr><td>3</td><td>Elizabeth Bjork</td><td>Desirable difficulties as coherent system design, not isolated techniques. More responsive than Robert.</td><td class="email-link">elbjork@psych.ucla.edu</td></tr>
+<tr><td>4</td><td>Sam Wineburg</td><td>Historical thinking heuristics in card design. Humanities perspective.</td><td class="email-link">wineburg@stanford.edu</td></tr>
+<tr><td>5</td><td>Sanna Järvelä</td><td>Productive disagreement on AI offloading. Could analyze behavioral data through CAMM.</td><td class="email-link">sanna.jarvela@oulu.fi</td></tr>
+</table>
+
+<p style="margin-top: 48px; font-family: 'Source Sans 3', sans-serif; font-size: 0.85em; color: var(--ink-faint);">
+Generated 2026-04-07 by deep analysis of seminal papers and recent work. Sources linked throughout.
+See also: <code>research/academic-landscape-and-collaborations.md</code> for the broader landscape, <code>research/petrarca-collaborators.html</code> for the full researcher database.
+</p>
+
+</div>
+
+</body>
+</html>

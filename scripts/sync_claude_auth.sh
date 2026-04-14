@@ -1,11 +1,14 @@
 #!/bin/bash
-# Sync Claude OAuth credentials from macOS keychain to Hetzner server.
+# Sync Claude OAuth credentials to Hetzner server.
+# Reads from ~/.claude-accounts/personal.json (stable snapshot maintained by
+# the claude-use fish function) rather than keychain, so local account swaps
+# never leak non-personal creds to the server.
 # Run via launchd every 4 hours to keep server auth fresh.
 
 set -euo pipefail
 
-CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null) || {
-    echo "$(date): Failed to read keychain" >> /tmp/claude-auth-sync.log
+CREDS=$(cat "$HOME/.claude-accounts/personal.json" 2>/dev/null) || {
+    echo "$(date): No personal snapshot at ~/.claude-accounts/personal.json" >> /tmp/claude-auth-sync.log
     exit 1
 }
 

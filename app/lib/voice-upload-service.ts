@@ -231,11 +231,11 @@ async function retryPendingUploads() {
         }
       } catch (e: any) {
         console.log(`[voice-upload-service] Retry failed for ${p.nodeTitle}: ${e}`);
-        // Don't retry permanent client errors (400, 404)
+        // Don't retry permanent client errors (400, 404) or disk-full (507)
         const status = e?.status;
-        if (status && status >= 400 && status < 500) {
+        if (status && ((status >= 400 && status < 500) || status === 507)) {
           logEvent('voice_upload_permanent_fail', { node_id: p.nodeId, status });
-          await markFailed(p.audioUri, `HTTP ${status}`);
+          await markFailed(p.audioUri, status === 507 ? 'Server disk full' : `HTTP ${status}`);
           continue;
         }
         // Expire entries older than 48h

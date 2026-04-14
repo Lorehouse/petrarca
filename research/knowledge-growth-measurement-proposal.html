@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Growth Measurement — Petrarca Research Proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Crimson+Pro:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f7f4ec;
+  --parchment-dark: #f0ece2;
+  --ink: #2a2420;
+  --ink-light: #1a1a18;
+  --rubric: #8b2500;
+  --text-body: #333333;
+  --text-secondary: #6a6458;
+  --text-muted: #b0a898;
+  --text-faint: #ccc;
+  --rule: #e4dfd4;
+  --rule-dark: #2a2420;
+  --gold: #c9a84c;
+  --success: #2a7a4a;
+  --info: #2a4a6a;
+  --warning: #92600e;
+
+  --k-unknown: #d5d0c6;
+  --k-mentioned: #d4b96a;
+  --k-engaged: #c9a84c;
+  --k-anchored: #8b2500;
+}
+
+body {
+  font-family: 'Crimson Pro', Georgia, serif;
+  background: var(--parchment);
+  color: var(--text-body);
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+.page {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 24px 120px;
+}
+
+/* ═══ Header ═══ */
+header {
+  margin-bottom: 36px;
+}
+h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 32px;
+  color: var(--ink);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+h1 .star { color: var(--rubric); }
+.subtitle {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.double-rule {
+  margin-top: 14px;
+  border: none;
+  border-top: 2px solid var(--ink);
+  position: relative;
+}
+.double-rule::after {
+  content: '';
+  display: block;
+  border-top: 1px solid var(--ink);
+  margin-top: 5px;
+}
+.meta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 16px;
+}
+
+/* ═══ Sections ═══ */
+.section-head {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--rubric);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 48px 0 18px;
+}
+h2 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  font-size: 24px;
+  color: var(--ink);
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+h3 {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.4;
+  margin: 28px 0 8px;
+}
+h4 {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--rubric);
+  margin: 20px 0 6px;
+}
+
+p { margin-bottom: 12px; }
+
+/* ═══ TOC ═══ */
+.toc {
+  background: var(--parchment-dark);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 20px 24px;
+  margin: 24px 0 36px;
+}
+.toc-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--rubric);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 10px;
+}
+.toc ol {
+  padding-left: 20px;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 15px;
+  line-height: 2;
+}
+.toc a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+.toc a:hover {
+  color: var(--rubric);
+  border-bottom-color: var(--rubric);
+}
+
+/* ═══ Callouts ═══ */
+.callout {
+  border-left: 3px solid var(--rubric);
+  padding: 14px 18px;
+  margin: 20px 0;
+  background: rgba(139, 37, 0, 0.03);
+}
+.callout.insight {
+  border-left-color: var(--info);
+  background: rgba(42, 74, 106, 0.03);
+}
+.callout.gap {
+  border-left-color: var(--warning);
+  background: rgba(146, 96, 14, 0.03);
+}
+.callout.implemented {
+  border-left-color: var(--success);
+  background: rgba(42, 122, 74, 0.03);
+}
+.callout-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+.callout .callout-label { color: var(--rubric); }
+.callout.insight .callout-label { color: var(--info); }
+.callout.gap .callout-label { color: var(--warning); }
+.callout.implemented .callout-label { color: var(--success); }
+
+/* ═══ Cards ═══ */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 16px;
+}
+.card-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.card-meta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 10px;
+}
+
+/* ═══ Tables ═══ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--rule-dark);
+}
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+tr:last-child td { border-bottom: none; }
+.status-done { color: var(--success); font-weight: 500; }
+.status-not { color: var(--warning); font-weight: 500; }
+.status-partial { color: var(--info); font-weight: 500; }
+
+/* ═══ Code ═══ */
+pre {
+  background: #2a2420;
+  color: #f0ece2;
+  border-radius: 3px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 16px 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  background: rgba(42, 36, 32, 0.06);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ═══ Diagram ═══ */
+.diagram {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 24px;
+  margin: 20px 0;
+  text-align: center;
+}
+.diagram svg { max-width: 100%; }
+
+/* ═══ Metric bars ═══ */
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.metric-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 120px;
+  text-align: right;
+}
+.metric-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--rule);
+  border-radius: 0;
+  overflow: hidden;
+}
+.metric-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.metric-value {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 40px;
+}
+
+/* ═══ Timeline ═══ */
+.timeline {
+  position: relative;
+  margin: 24px 0 24px 24px;
+  padding-left: 24px;
+  border-left: 2px solid var(--rule);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 24px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -31px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--rubric);
+  background: var(--parchment);
+}
+.timeline-item.done::before {
+  background: var(--success);
+  border-color: var(--success);
+}
+.timeline-item.current::before {
+  background: var(--rubric);
+  border-color: var(--rubric);
+}
+.timeline-date {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.timeline-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+}
+.timeline-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ═══ Tier badges ═══ */
+.tier {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+.tier-1 { background: #c0dcc8; color: #1a4a2a; }
+.tier-2 { background: #f2e8c8; color: #5a4a10; }
+.tier-3 { background: #e0c0b8; color: #5a1a10; }
+
+/* ═══ Research ref cards ═══ */
+.ref-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+@media (max-width: 600px) {
+  .ref-grid { grid-template-columns: 1fr; }
+}
+.ref-card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 12px 14px;
+}
+.ref-card .name {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+}
+.ref-card .detail {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.ref-card .tag {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  margin-top: 6px;
+}
+.tag-tool { background: #c0d0e0; color: var(--info); }
+.tag-theory { background: #f2e8c8; color: var(--warning); }
+.tag-metric { background: #c0dcc8; color: #1a4a2a; }
+.tag-system { background: #e0c0b8; color: #5a1a10; }
+
+/* ═══ Asterism ═══ */
+.asterism {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 18px;
+  margin: 36px 0;
+  letter-spacing: 0.3em;
+}
+
+/* ═══ Nav ═══ */
+.float-nav {
+  position: fixed;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  line-height: 2;
+  z-index: 100;
+  max-width: 160px;
+}
+.float-nav a {
+  display: block;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.float-nav a:hover { color: var(--rubric); }
+@media (max-width: 1000px) {
+  .float-nav { display: none; }
+}
+
+/* ═══ Comparison table ═══ */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+.comparison-col {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 16px;
+}
+.comparison-col h4 {
+  margin-top: 0;
+}
+.comparison-col ul {
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ═══ Misc ═══ */
+blockquote {
+  border-left: 3px solid var(--rule);
+  padding: 8px 16px;
+  margin: 16px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+ul, ol {
+  padding-left: 24px;
+  margin-bottom: 12px;
+}
+li { margin-bottom: 4px; }
+strong { color: var(--ink); }
+em { font-style: italic; }
+a { color: var(--info); }
+
+.footnote {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--rule);
+  margin-top: 48px;
+  padding-top: 16px;
+}
+</style>
+</head>
+<body>
+
+<nav class="float-nav">
+  <a href="#gap">The Gap</a>
+  <a href="#foundations">Foundations</a>
+  <a href="#researchers">Researchers</a>
+  <a href="#tools">Tools & Libraries</a>
+  <a href="#tier1">Tier 1: Passive</a>
+  <a href="#tier2">Tier 2: Voice Sweeps</a>
+  <a href="#tier3">Tier 3: Scheduling</a>
+  <a href="#profiles">Knowledge Profiles</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#decisions">Decisions</a>
+  <a href="#references">References</a>
+</nav>
+
+<div class="page">
+
+<header>
+  <h1><span class="star">✦</span> Knowledge Growth Measurement</h1>
+  <div class="subtitle">A proposal for longitudinal tracking of learning in Petrarca</div>
+  <div class="double-rule"></div>
+  <div class="meta">April 2026 &middot; Synthesized from 7 research documents &middot; Sessions 39–60</div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TOC -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="toc">
+  <div class="toc-title">✦ Contents</div>
+  <ol>
+    <li><a href="#gap">The Gap: What We Can't Answer Today</a></li>
+    <li><a href="#foundations">Theoretical Foundations</a></li>
+    <li><a href="#researchers">Key Researchers & Systems</a></li>
+    <li><a href="#tools">Tools, Libraries & Algorithms</a></li>
+    <li><a href="#tier1">Tier 1: Passive Growth Tracking</a></li>
+    <li><a href="#tier2">Tier 2: Voice Knowledge Sweeps</a></li>
+    <li><a href="#tier3">Tier 3: Type-Differentiated Scheduling</a></li>
+    <li><a href="#profiles">Knowledge Profiles & the Digital Twin</a></li>
+    <li><a href="#roadmap">Implementation Roadmap</a></li>
+    <li><a href="#decisions">Open Design Decisions</a></li>
+    <li><a href="#references">References & Bibliography</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 1. THE GAP -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="gap">✦ The Problem</div>
+<h2>What We Can't Answer Today</h2>
+
+<p>Petrarca can say <em>"you know 35 of 70 Sicily nodes at the engaged level."</em> It cannot say <em>"you knew 20 a month ago and your connectivity score has doubled."</em> The fundamental measurement question — <strong>is the system actually working?</strong> — remains unanswered.</p>
+
+<p>Across sessions 39–60, substantial infrastructure was built: FSRS-6 scheduling, voice capture pipelines, knowledge profiles with transcript chunking, a statistics dashboard, card provenance tracking. All of it measures <strong>current state</strong>. None measures <strong>change over time</strong>.</p>
+
+<div class="callout gap">
+  <div class="callout-label">The Core Gap</div>
+  <p style="margin:0;">The April 5 deep-dive proposed a 5-phase plan. Phase 5 (knowledge profiles) was partially implemented because it was immediately useful for prompt quality. Phases 1–4 — the actual baseline sweep and longitudinal tracking — were never started. The most foundational piece, "record a baseline sweep NOW," was explicitly marked as Phase 1, do-this-first.</p>
+</div>
+
+<h3>What Exists vs. What's Missing</h3>
+
+<table>
+  <thead>
+    <tr><th>Component</th><th>Status</th><th>Session</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Transcript chunking + embedding (786 chunks)</td><td class="status-done">Done</td><td>56</td></tr>
+    <tr><td>Domain portraits (5 domains)</td><td class="status-done">Done</td><td>56</td></tr>
+    <tr><td>LEARNER CONTEXT injection in 6 LLM templates</td><td class="status-done">Done</td><td>56</td></tr>
+    <tr><td>FSRS-6 scheduling (py-fsrs, retention=0.80)</td><td class="status-done">Done</td><td>58</td></tr>
+    <tr><td>Statistics dashboard with knowledge bars</td><td class="status-done">Done</td><td>53</td></tr>
+    <tr><td>Card provenance (origin badge, About modal)</td><td class="status-done">Done</td><td>60</td></tr>
+    <tr><td>FSRS scheduling drift fix (229/256 items)</td><td class="status-done">Done</td><td>60</td></tr>
+    <tr><td style="border-top: 2px solid var(--rule)">Knowledge transitions table</td><td class="status-not" style="border-top: 2px solid var(--rule)">Not built</td><td></td></tr>
+    <tr><td>Network metrics over time</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>Voice knowledge sweeps</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>Growth visualization</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>Type-differentiated scheduling</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>Pathfinder network comparison</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>SNAFU recall analysis</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>IRT growth tracking</td><td class="status-not">Not built</td><td></td></tr>
+    <tr><td>FSRS calibration check</td><td class="status-not">Not done</td><td></td></tr>
+    <tr><td>Baseline sweep recording</td><td class="status-not">Never done</td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 2. FOUNDATIONS -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="foundations">✦ Theory</div>
+<h2>Theoretical Foundations</h2>
+
+<p>The proposal draws on five well-established research traditions, each contributing a distinct lens on how to measure whether someone is actually learning.</p>
+
+<h3>1. Expert-Novice Knowledge Structures</h3>
+
+<p>Chi, Feltovich & Glaser (1981) established the foundational finding: <strong>experts categorize by deep principles, novices by surface features.</strong> The difference isn't knowledge amount — it's knowledge <em>organization</em>. Experts have richly interconnected schemas; novices store disconnected facts.</p>
+
+<p>This was synthesized by the NRC's <em>How People Learn</em> (2000): "It is not simply general abilities, such as memory or intelligence, nor is it the use of general strategies that differentiate experts from novices. Instead, experts have acquired extensive knowledge that affects what they notice and how they organize, represent, and interpret information."</p>
+
+<div class="callout insight">
+  <div class="callout-label">Key Implication</div>
+  <p style="margin:0;">Petrarca should track not just <em>what</em> the user knows but <em>how their knowledge is organized</em>. A user who knows 50 facts about Sicily but can't connect them to larger patterns is still at a novice stage. The curriculum node structure already captures organizational principles — the gap is in measuring whether the user's mental model matches.</p>
+</div>
+
+<h3>2. Free Recall as Assessment</h3>
+
+<p>Free recall — asking someone "tell me everything you know about X" — is one of the most powerful assessment methods in cognitive psychology because it reveals <em>organization</em>, not just content.</p>
+
+<p>The research hierarchy is well-established:</p>
+<ul>
+  <li><strong>Free recall</strong> (open-ended) → reveals both relational and item-specific processing</li>
+  <li><strong>Cued recall</strong> (prompted) → reveals primarily item-specific processing</li>
+  <li><strong>Recognition</strong> (multiple choice) → reveals only familiarity</li>
+</ul>
+
+<p>Experts recall in larger, more organized chunks. They spontaneously articulate connections between items. Novices list isolated facts in random order. Schneider, Korkel & Weinert (1989) showed that domain knowledge predicted recall better than IQ — knowledge organization trumps general ability.</p>
+
+<p>This directly validates Petrarca's voice elicitation: voice dumps are a direct implementation of free recall protocols. The system could analyze not just <em>what's mentioned</em> but <em>recall order, clustering, causal language, and cross-references</em>.</p>
+
+<h3>3. Pathfinder Networks: The North Star Metric</h3>
+
+<p>Goldsmith, Johnson & Acton (1991) validated <strong>Pathfinder networks</strong> as knowledge assessment tools. The similarity between a student's concept network and the instructor's network correlated with exam performance at <strong>r = .74</strong> — a remarkably strong predictor.</p>
+
+<div class="callout">
+  <div class="callout-label">Why This Matters for Petrarca</div>
+  <p style="margin:0;">The curriculum graph <em>IS</em> the expert network. Each domain has ~50-80 nodes with prerequisite edges, entity links, and temporal relationships. The gap between the learner's demonstrated network and the curriculum graph, measured by structural similarity, is the single most informative metric of learning. The trajectory of <code>edge_overlap</code> from 0.0 toward 1.0 is the primary growth signal.</p>
+</div>
+
+<p>Three comparison metrics from Pathfinder research:</p>
+<ul>
+  <li><strong>PRX (Proximity Correlation)</strong> — Pearson correlation on raw proximity ratings between all concept pairs</li>
+  <li><strong>GTD (Graph-Theoretic Distance)</strong> — Correlation of shortest-path distances between all node pairs</li>
+  <li><strong>PFC (Pathfinder Closeness)</strong> — Jaccard-like measure of shared neighborhoods per node</li>
+</ul>
+
+<h3>4. Fuzzy-Trace Theory: Why Types of Knowledge Decay Differently</h3>
+
+<p>Brainerd & Reyna's Fuzzy-Trace Theory (FTT) distinguishes two memory traces:</p>
+
+<div class="comparison">
+  <div class="comparison-col">
+    <h4>Verbatim Traces</h4>
+    <ul>
+      <li>Specific facts, dates, names, sequences</li>
+      <li>Decay quickly (days to a week)</li>
+      <li>Need frequent refreshment</li>
+      <li>Easier to relearn once decayed</li>
+      <li>E.g., "Battle of Salamis was 480 BCE"</li>
+    </ul>
+  </div>
+  <div class="comparison-col">
+    <h4>Gist Traces</h4>
+    <ul>
+      <li>Frameworks, causal chains, arguments</li>
+      <li>Persist much longer (weeks to months)</li>
+      <li>Reactivated by a single encounter</li>
+      <li>Grow stronger with integration</li>
+      <li>E.g., "Greek colonization was driven by trade"</li>
+    </ul>
+  </div>
+</div>
+
+<p>The 2025 MINERVA2 integration (Chang, Johns & Brainerd, <em>Psychological Review</em>) is the first computational operationalization of FTT — gist as distributional semantic vectors, verbatim as holographic word-form vectors. Currently FSRS treats all items identically. FTT says they shouldn't be.</p>
+
+<h3>5. The Testing Effect and Spreading Activation</h3>
+
+<p>Karpicke & Blunt (2011) showed retrieval practice outperforms even concept mapping, even on concept-map tests. The mechanism: retrieval activates and strengthens the <em>entire semantic network</em> around a concept, not just the target memory.</p>
+
+<p>The elaborative retrieval hypothesis (Carpenter, 2009): testing one concept strengthens memory for <em>related, untested concepts</em> — as long as they're well-integrated. This means Petrarca's emphasis on connections (temporal hooks, cross-domain links) means reviewing one node should strengthen related nodes through spreading activation.</p>
+
+<p>Anderson, Bjork & Bjork (1994) found retrieval-induced forgetting — but Chan et al. (2006) showed this <em>reverses</em> for well-integrated knowledge with delay. Petrarca's connected knowledge structure provides natural protection.</p>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 3. RESEARCHERS -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="researchers">✦ People & Systems</div>
+<h2>Key Researchers & Their Systems</h2>
+
+<div class="ref-grid">
+  <div class="ref-card">
+    <div class="name">ALEKS / Knowledge Space Theory</div>
+    <div class="detail">Doignon & Falmagne. Models knowledge as feasible subsets. Converges in ~25 questions among millions of states via continuous Markov procedure. Curriculum prerequisite edges <em>are</em> a knowledge space.</div>
+    <div class="tag tag-system">Assessment System</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">GENCAT</div>
+    <div class="detail">Feng & Lan (UMass, Feb 2026). LLMs generate + predict student open-ended responses. GIRT model with Llama-3.2-1B backbone. Up to 4.32% AUC improvement. Closest existing system to Petrarca's voice approach.</div>
+    <div class="tag tag-system">Assessment System</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">SPARFA / SPARFA-Trace</div>
+    <div class="detail">Lan et al. (JMLR 2014). Discovers latent concepts from binary response data. SPARFA-Trace extends to temporal tracking with Kalman filter. Could validate if curriculum structure matches actual review performance.</div>
+    <div class="tag tag-system">Factor Analysis</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Pathfinder Networks</div>
+    <div class="detail">Schvaneveldt (1990), Goldsmith et al. (1991). Student-expert network similarity r=.74 with exam performance. The PFC metric is the single best proxy for "how much do you actually know."</div>
+    <div class="tag tag-metric">Network Metric</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">SNAFU</div>
+    <div class="detail">Zemla & Austerweil. Python tool for semantic networks from free recall data. 6 network estimation methods. Adaptation needed: extract entities from transcripts, treat as "items" in recall order.</div>
+    <div class="tag tag-tool">Python Tool</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Andy Matuschak / Orbit</div>
+    <div class="detail">Pivoted to "comprehension before memory." Key distinction: retrieval prompts (test recall) vs. salience prompts (keep ideas top-of-mind). Orbit development stalled (last commit Oct 2024).</div>
+    <div class="tag tag-theory">Design Theory</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Jeffrey Karpicke</div>
+    <div class="detail">Purdue. 2011 <em>Science</em> paper: retrieval practice beats concept mapping. Successive relearning, elaborative retrieval hypothesis. Retrieval benefits all learners regardless of working memory capacity.</div>
+    <div class="tag tag-theory">Retrieval Practice</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Sam Wineburg</div>
+    <div class="detail">Historical thinking as "unnatural act." Sourcing heuristic distinguishes expert from novice. Four strategies: sourcing, contextualization, corroboration, close reading. Peter Seixas extended to "Big Six" framework.</div>
+    <div class="tag tag-theory">Historical Thinking</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Walter Kintsch</div>
+    <div class="detail">Construction-Integration model. Three levels: surface form, textbase, situation model. "Deeper comprehension depends upon the construction of a situation model." Voice analysis should assess which level the user operates at.</div>
+    <div class="tag tag-theory">Comprehension</div>
+  </div>
+  <div class="ref-card">
+    <div class="name">Duolingo HLR</div>
+    <div class="detail">Settles & Meeder (ACL 2016). Half-Life Regression: <code>p = 2^(-Δ/h)</code>. Feature vector includes knowledge type. Improved daily retention 12%. GitHub available. Alternative to FSRS for type-differentiated scheduling.</div>
+    <div class="tag tag-system">Scheduling</div>
+  </div>
+</div>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 4. TOOLS -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="tools">✦ Toolbox</div>
+<h2>Tools, Libraries & Algorithms</h2>
+
+<h3>Python Libraries (pip-installable)</h3>
+
+<table>
+  <thead>
+    <tr><th>Tool</th><th>Install</th><th>What It Does</th><th>Relevance</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>py-fsrs</strong></td><td><code>pip install fsrs</code></td><td>FSRS-6 scheduler (21 params) with built-in optimizer</td><td>Already in use. Has per-deck parameter support.</td></tr>
+    <tr><td><strong>py-irt</strong></td><td><code>pip install py-irt</code></td><td>Bayesian IRT (PyTorch/Pyro), 2PL model</td><td>Calibrated ability estimates for growth tracking after 200+ reviews</td></tr>
+    <tr><td><strong>pyBKT</strong></td><td><code>pip install pyBKT</code></td><td>Bayesian Knowledge Tracing</td><td>Track knowledge mastery over time from quiz responses</td></tr>
+    <tr><td><strong>catsim</strong></td><td><code>pip install catsim</code></td><td>IRT-based Computerized Adaptive Testing</td><td>Adaptive question selection for discovery probes</td></tr>
+    <tr><td><strong>SNAFU</strong></td><td><code>pip install git+…snafu-py</code></td><td>Semantic network from free recall</td><td>Analyze voice transcript recall structure</td></tr>
+    <tr><td><strong>NetworkX</strong></td><td><code>pip install networkx</code></td><td>Graph analysis</td><td>Pathfinder metrics, network density, clustering</td></tr>
+    <tr><td><strong>SparFAE</strong></td><td><code>git clone bpaassen/sparfae</code></td><td>SPARFA factor analysis</td><td>Discover latent concepts from review response data</td></tr>
+  </tbody>
+</table>
+
+<h3>Algorithms to Implement In-House</h3>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="card-title">Pathfinder PFC Metric</div>
+    <div class="card-desc">Compare curriculum graph to learner's demonstrated network. Straightforward with NetworkX. The edge overlap trajectory is the primary growth signal.</div>
+    <div class="card-meta">Key metric</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Knowledge Structure Density</div>
+    <div class="card-desc">Ratio of actual connections to possible connections between known nodes per domain. Simple graph metric that distinguishes chain-like (novice) from dense (expert) networks.</div>
+    <div class="card-meta">Network metric</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Recall Clustering Analysis</div>
+    <div class="card-desc">Extract entities from transcript in order, measure whether they cluster by theme/period (expert pattern) vs. random order (novice pattern). SNAFU-style.</div>
+    <div class="card-meta">Voice analysis</div>
+  </div>
+  <div class="card">
+    <div class="card-title">FActScore-style Scoring</div>
+    <div class="card-desc">Decompose transcript into atomic claims, verify each against curriculum/key_facts. Percentage of supported claims = factual accuracy.</div>
+    <div class="card-meta">Accuracy metric</div>
+  </div>
+</div>
+
+<h3>Key FSRS-6 Detail</h3>
+
+<p>FSRS-6 (21 parameters, 3,872 GitHub stars) tracks memory through the DSR model: Stability (interval at which R drops to 90%), Difficulty (1–10 scale), Retrievability via power function <code>R(t,S) = (1 + factor * t/S)^(-w20)</code>.</p>
+
+<p>Critical limitation: FSRS treats each item in isolation with binary recall. It has <strong>no concept of knowledge type, semantic relationships, or partial knowledge</strong>. The Difficulty parameter adapts organically, but can't distinguish a date from a framework. Per-deck optimization showed up to 16.9% RMSE reduction — the mechanism for type differentiation.</p>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 5. TIER 1 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="tier1">✦ Proposal</div>
+<h2><span class="tier tier-1">Tier 1</span> Passive Growth Tracking</h2>
+
+<p>No new user interaction required. Built entirely from existing data. The system already records knowledge level transitions, review scores, and timestamps — it just isn't plotting them.</p>
+
+<h3>1A. Knowledge State Timeline</h3>
+
+<p>Track when each node moves between levels (unknown → mentioned → engaged → anchored). The data exists in <code>knowledge_items</code> — we just need to log transitions.</p>
+
+<pre><code>CREATE TABLE IF NOT EXISTS knowledge_transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id TEXT NOT NULL,
+    domain_id TEXT NOT NULL,
+    from_level TEXT NOT NULL,   -- 'unknown', 'mentioned', 'engaged', 'anchored'
+    to_level TEXT NOT NULL,
+    source TEXT NOT NULL,       -- 'article', 'book', 'voice', 'review', 'quiz'
+    source_id TEXT,             -- article_id, book_id, transcript_id
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_kt_domain ON knowledge_transitions(domain_id);
+CREATE INDEX IF NOT EXISTS idx_kt_created ON knowledge_transitions(created_at);</code></pre>
+
+<p>Instrument <code>update_knowledge()</code> in <code>curriculum_db.py</code> to write a transition row whenever the level changes. Then build a timeline visualization showing the cumulative count of nodes at each level over time per domain.</p>
+
+<div class="callout implemented">
+  <div class="callout-label">What This Answers</div>
+  <p style="margin:0;">"Am I learning more over time?" with a concrete chart. The simplest and most motivating visualization: "I knew 30% of Sicilian history in April, now I know 52%."</p>
+</div>
+
+<h3>1B. Network Density Over Time</h3>
+
+<p>Use existing curriculum prerequisite edges + knowledge states to compute Goldsmith's edge overlap metric. Store as a time series — compute on dashboard load and snapshot weekly via cron.</p>
+
+<pre><code>import networkx as nx
+
+def compute_network_metrics(domain_id: str, conn) -> dict:
+    """Compute learner vs expert network similarity from existing data."""
+    curriculum = load_curriculum(domain_id)
+    states = {r[0]: r[1] for r in conn.execute(
+        "SELECT node_id, knowledge FROM knowledge_items WHERE domain_id = ?",
+        (domain_id,)
+    ).fetchall()}
+
+    expert_G = nx.DiGraph()
+    learner_G = nx.DiGraph()
+    for node in curriculum['nodes']:
+        expert_G.add_node(node['id'])
+        for prereq in node.get('prerequisites', []):
+            expert_G.add_edge(prereq, node['id'])
+        if states.get(node['id'], 'unknown') != 'unknown':
+            learner_G.add_node(node['id'])
+            for prereq in node.get('prerequisites', []):
+                if states.get(prereq, 'unknown') != 'unknown':
+                    learner_G.add_edge(prereq, node['id'])
+
+    e_edges = set(expert_G.edges())
+    l_edges = set(learner_G.edges())
+    overlap = len(e_edges & l_edges) / len(e_edges) if e_edges else 0
+
+    return {
+        'node_coverage': len(learner_G.nodes()) / len(expert_G.nodes()),
+        'edge_overlap': overlap,  # THIS is the Goldsmith C metric — r=.74
+        'density': nx.density(learner_G) if len(learner_G) > 1 else 0,
+    }</code></pre>
+
+<pre><code>CREATE TABLE IF NOT EXISTS network_metrics_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id TEXT NOT NULL,
+    node_coverage REAL NOT NULL,
+    edge_overlap REAL NOT NULL,
+    density REAL NOT NULL,
+    nodes_known INTEGER NOT NULL,
+    nodes_total INTEGER NOT NULL,
+    computed_at INTEGER NOT NULL DEFAULT (unixepoch())
+);</code></pre>
+
+<h3>1C. Review Performance Trend</h3>
+
+<p>Already have the data: <code>knowledge_items</code> has <code>last_score</code>, <code>stability_days</code>, <code>due_at</code>, <code>last_reviewed_at</code>. Three analyses:</p>
+
+<ul>
+  <li><strong>Average stability per domain over time</strong> — are items getting easier to retain?</li>
+  <li><strong>Distribution shift</strong> — % knew vs % partly vs % missed per week</li>
+  <li><strong>FSRS calibration</strong> — compute retrievability at review time: <code>R = (1 + factor * elapsed/stability)^(-w20)</code>, compare to actual score. Validates whether FSRS is well-calibrated. Important: use only post-session-60 data (the scheduling drift fix invalidated earlier data).</li>
+</ul>
+
+<h3>1D. Growth Visualization Page</h3>
+
+<p>Standalone HTML page at <code>/knowledge/growth</code>, following the existing pattern (like <code>knowledge_atlas.html</code>). D3.js line charts:</p>
+
+<ul>
+  <li><strong>Coverage timeline</strong> — % curriculum known per domain over time. Multiple lines, one per domain.</li>
+  <li><strong>Edge overlap trajectory</strong> — the Goldsmith C metric over time. The primary growth signal.</li>
+  <li><strong>Review performance</strong> — weekly knew/partly/missed distribution.</li>
+  <li><strong>Stability growth</strong> — average stability per domain (items getting easier to retain = learning working).</li>
+</ul>
+
+<div class="callout">
+  <div class="callout-label">Framing Principle (Michel Thomas)</div>
+  <p style="margin:0;">Show what has been learned (filled area growing) rather than what remains (empty area shrinking). "Your empire of knowledge is growing" beats "you still have 466 gaps." Positive framing matters enormously.</p>
+</div>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 6. TIER 2 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="tier2">✦ Proposal</div>
+<h2><span class="tier tier-2">Tier 2</span> Voice Knowledge Sweeps</h2>
+
+<p>The centerpiece of the proposal. A "knowledge sweep" is a periodic (monthly) domain-wide voice assessment — 3 minutes of free recall scored against the full curriculum. Unlike per-node elicitation (which tests one concept), a sweep assesses the big picture.</p>
+
+<h3>Why This Works</h3>
+
+<p>From the research:</p>
+<ul>
+  <li>Free recall reveals knowledge <em>organization</em>, not just content (Tulving; Zemla & Austerweil)</li>
+  <li>Chronological prompting activates temporal scaffolding — the factual backbone we're building</li>
+  <li>3 minutes is enough to reveal structure without exhausting the speaker</li>
+  <li>The same prompt can be repeated monthly to track growth</li>
+  <li><strong>No existing system does repeated domain-level voice free recall as a longitudinal growth metric.</strong> This is genuinely novel.</li>
+</ul>
+
+<h3>The Protocol</h3>
+
+<h4>Step 1: Prompt</h4>
+<blockquote>"Tell me the history of Sicily — everything you can remember, in roughly chronological order. Speak for about 3 minutes."</blockquote>
+
+<p>Or for a focused sweep:</p>
+<blockquote>"Walk me through the timeline of ancient Greece from the Dark Ages to Alexander. What are the key periods, events, and people?"</blockquote>
+
+<h4>Step 2: Transcribe</h4>
+<p>Soniox API (already integrated).</p>
+
+<h4>Step 3: Score via LLM</h4>
+<p>For each curriculum node: Was it mentioned? Were facts correct? Were connections articulated? Use Opus via <code>claude -p</code> (batch task, accuracy matters, cost doesn't).</p>
+
+<h4>Step 4: Compute Five Metrics</h4>
+
+<table>
+  <thead>
+    <tr><th>Metric</th><th>Measures</th><th>How Computed</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Coverage</strong></td><td>Breadth — how many nodes mentioned</td><td>nodes mentioned / total nodes</td></tr>
+    <tr><td><strong>Accuracy</strong></td><td>Correctness — FActScore-style</td><td>correct facts / total facts stated</td></tr>
+    <tr><td><strong>Connectivity</strong></td><td>Structure — connections articulated</td><td>connections stated / possible connections between mentioned nodes</td></tr>
+    <tr><td><strong>Organization</strong></td><td>Expert-like recall patterns</td><td>Chronological/thematic clustering vs. random order (0.0–1.0)</td></tr>
+    <tr><td><strong>Depth</strong></td><td>Level of understanding (Kintsch)</td><td>Presence of causal language, perspective-taking, counterfactuals, cross-domain refs</td></tr>
+  </tbody>
+</table>
+
+<h4>Step 5: Compare to Last Sweep</h4>
+<p>Compute deltas across all metrics. Link each sweep to its predecessor for delta tracking.</p>
+
+<h3>Database Schema</h3>
+
+<pre><code>CREATE TABLE IF NOT EXISTS knowledge_sweeps (
+    id TEXT PRIMARY KEY,
+    domain_id TEXT NOT NULL,
+    sweep_type TEXT NOT NULL DEFAULT 'timeline',
+    prompt TEXT NOT NULL,
+    transcript TEXT NOT NULL,
+    audio_path TEXT,
+
+    -- Raw metrics
+    nodes_mentioned INTEGER NOT NULL DEFAULT 0,
+    nodes_total INTEGER NOT NULL DEFAULT 0,
+    facts_correct INTEGER NOT NULL DEFAULT 0,
+    facts_total INTEGER NOT NULL DEFAULT 0,
+    connections_articulated INTEGER NOT NULL DEFAULT 0,
+    connections_possible INTEGER NOT NULL DEFAULT 0,
+
+    -- Derived scores (0.0–1.0)
+    coverage_score REAL NOT NULL DEFAULT 0.0,
+    accuracy_score REAL NOT NULL DEFAULT 0.0,
+    connectivity_score REAL NOT NULL DEFAULT 0.0,
+    organization_score REAL NOT NULL DEFAULT 0.0,
+    composite_score REAL NOT NULL DEFAULT 0.0,
+
+    -- Detailed results (JSON)
+    nodes_detail TEXT NOT NULL DEFAULT '[]',
+    facts_detail TEXT NOT NULL DEFAULT '[]',
+    connections_detail TEXT NOT NULL DEFAULT '[]',
+    organization_detail TEXT DEFAULT '{}',
+    llm_assessment TEXT DEFAULT '{}',
+
+    -- Growth tracking
+    previous_sweep_id TEXT,
+    delta_coverage REAL,
+    delta_accuracy REAL,
+    delta_connectivity REAL,
+    delta_organization REAL,
+    delta_composite REAL,
+
+    created_at INTEGER NOT NULL
+);</code></pre>
+
+<h3>Sweep Variants (Rotate Monthly)</h3>
+
+<table>
+  <thead>
+    <tr><th>Month</th><th>Format</th><th>What It Tests</th><th>Duration</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><strong>Full timeline narrative</strong></td><td>Chronological scaffold, breadth, coverage</td><td>3 min</td></tr>
+    <tr><td>2</td><td><strong>Connection prompts</strong></td><td>"What connects the Normans to Byzantium?"</td><td>45s × 4</td></tr>
+    <tr><td>3</td><td><strong>Timeline again</strong></td><td>Direct delta comparison with Month 1</td><td>3 min</td></tr>
+    <tr><td>4</td><td><strong>Explain-to-a-friend</strong></td><td>Feynman test — can you explain <em>why</em>?</td><td>90s</td></tr>
+    <tr><td>5</td><td><strong>Same-moment probe</strong></td><td>"What was happening elsewhere when Frederick II ruled?"</td><td>2 min</td></tr>
+  </tbody>
+</table>
+
+<h3>Post-Sweep Results Page</h3>
+
+<ul>
+  <li><strong>Coverage map</strong> — which nodes were mentioned (green), missed (red), new since last sweep (gold)</li>
+  <li><strong>Growth chart</strong> — line plot of composite score over sweeps</li>
+  <li><strong>Key gaps</strong> — "The most important area you didn't mention"</li>
+  <li>Framed positively: "Your knowledge of Sicily has grown from 35% to 52% coverage"</li>
+</ul>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 7. TIER 3 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="tier3">✦ Proposal</div>
+<h2><span class="tier tier-3">Tier 3</span> Type-Differentiated Scheduling</h2>
+
+<p>Currently FSRS uses uniform parameters for all items. Fuzzy-Trace Theory says verbatim traces (dates, names) decay faster than gist traces (frameworks, causal chains). The <code>key_facts</code> already have <code>type</code> (date/event/person/connection/significance), so the mechanism is in place.</p>
+
+<h3>Option A: Separate desired_retention per Type</h3>
+
+<pre><code># Trivial to implement — just different FSRS retention targets
+TYPE_RETENTION = {
+    'date':       0.85,    # Higher target → more frequent review
+    'event':      0.82,
+    'person':     0.82,
+    'connection': 0.75,    # Lower target → less review (gist persists)
+    'significance': 0.75,
+}</code></pre>
+
+<h3>Option B: Duolingo Half-Life Regression</h3>
+
+<p>Replace FSRS per-item with HLR: <code>log(h) = θ · x</code> where the feature vector includes knowledge type. HLR naturally learns different decay rates per type. Improved retention by 12% at Duolingo. But requires 50+ reviews per type to train reliably.</p>
+
+<h3>Option C: Type-Differentiated Stability Multipliers</h3>
+
+<pre><code>TYPE_STABILITY = {
+    # Verbatim — decays faster, needs more frequent review
+    'date':       {'initial': 1.0, 'knew_mult': 2.0, 'partly_mult': 1.3},
+    'event':      {'initial': 1.5, 'knew_mult': 2.2, 'partly_mult': 1.4},
+    'person':     {'initial': 1.5, 'knew_mult': 2.2, 'partly_mult': 1.4},
+    # Gist — persists longer, bigger jumps when demonstrated
+    'connection': {'initial': 3.0, 'knew_mult': 3.0, 'partly_mult': 1.8},
+    'significance': {'initial': 3.0, 'knew_mult': 3.0, 'partly_mult': 1.8},
+}</code></pre>
+
+<div class="callout insight">
+  <div class="callout-label">Recommendation</div>
+  <p style="margin:0;">Start with Option A (trivial to implement via py-fsrs's per-item retention target). Run for 2 months, then evaluate. Option B (HLR) is more principled but needs data. Option C is an intermediate step if you're not yet using py-fsrs natively.</p>
+</div>
+
+<h3>Natural Spacing Credit</h3>
+
+<p>When reading an article that maps to curriculum nodes, those nodes get a passive "re-encounter." This is more effective than artificial SRS because of contextual variation (different articles = different encoding contexts). Proposed: apply a small stability bump (×1.3) to nodes when they appear in articles being read. Track whether article-reinforced nodes show higher retention than review-only nodes.</p>
+
+<h3>FSRS Calibration</h3>
+
+<p>After 100+ reviewed items (which should exist by now), compare FSRS-predicted retrievability at review time to actual outcomes:</p>
+
+<pre><code>def calibration_check(conn):
+    """Compare FSRS-predicted retrievability to actual review outcomes."""
+    rows = conn.execute("""
+        SELECT stability_days, last_reviewed_at, due_at, last_score
+        FROM knowledge_items
+        WHERE last_score IS NOT NULL AND stability_days > 0
+        AND last_reviewed_at > 1743724800  -- only post-session-60 data
+    """).fetchall()
+    # For each review, compute predicted R at review time
+    # Compare to actual score (knew=1.0, partly=0.5, missed=0.0)
+    # Plot calibration curve: predicted R (binned) vs actual retention</code></pre>
+
+<p>Important: only use post-session-60 data. The scheduling drift fix revealed 229/256 items had wrong <code>due_at</code> values — earlier data is unreliable for calibration.</p>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 8. KNOWLEDGE PROFILES -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="profiles">✦ Context</div>
+<h2>Knowledge Profiles & the Digital Twin</h2>
+
+<p>Session 56 implemented the knowledge profile system — the first concrete step toward making LLM prompts aware of the learner. Here's what exists and what it enables for growth measurement.</p>
+
+<h3>What's Built</h3>
+
+<ul>
+  <li><strong>786 transcript chunks</strong> with embeddings (limbic.amygdala)</li>
+  <li><strong>5 domain portraits</strong> synthesized from all voice data per domain</li>
+  <li><strong>LEARNER CONTEXT</strong> injected into all 6 LLM templates (question gen, ML cards, enrichment, follow-ups, entity research, Hamarquizen)</li>
+  <li><strong>Dual retrieval</strong>: relational links (chunk → node) + semantic search (embedding similarity)</li>
+</ul>
+
+<h3>How Profiles Connect to Growth Measurement</h3>
+
+<p>The profile system creates the <em>observability layer</em> that growth measurement needs:</p>
+
+<table>
+  <thead>
+    <tr><th>Growth Metric</th><th>Profile Data That Feeds It</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Coverage</td><td>Chunk-node links tell which nodes the user has discussed. More links over time = growing coverage.</td></tr>
+    <tr><td>Depth</td><td>Chunk types (captured_fact vs. interesting vs. wondering) evolve. More "interesting" and "connection" chunks = deeper processing.</td></tr>
+    <tr><td>Connectivity</td><td>Cross-domain entity links in transcript chunks. Number of entity-bridge chunks is a connectivity proxy.</td></tr>
+    <tr><td>Organization</td><td>Domain portraits capture the user's organizing framework. Comparing portraits over time shows framework evolution.</td></tr>
+  </tbody>
+</table>
+
+<h3>The "Digital Twin" Vision</h3>
+
+<p>The aspiration (from the April 6 deep analysis): voice elicitation data should build toward a "limited digital twin of my brain."</p>
+
+<div class="comparison">
+  <div class="comparison-col">
+    <h4 style="color: var(--rubric);">What a Digital Twin Would Know</h4>
+    <ul>
+      <li>"Stian finds the Alexander-Aristotle relationship fascinating"</li>
+      <li>"Stian confuses Hiero I and Archimedes chronology"</li>
+      <li>"When thinking about Byzantium, organizes around Constantinople as a city, not emperors"</li>
+      <li>"Strong on Arab Sicily, weak on Norman succession"</li>
+    </ul>
+  </div>
+  <div class="comparison-col">
+    <h4 style="color: var(--warning);">What the System Currently Knows</h4>
+    <ul>
+      <li><code>knowledge_state: "engaged"</code></li>
+      <li><code>confidence: 0.45</code></li>
+      <li><code>last_score: "partly"</code></li>
+      <li><code>review_count: 3</code></li>
+    </ul>
+    <p style="margin-top: 8px; font-size: 13px;">That's the entire user model for a topic. Hours of voice data reduced to two numbers.</p>
+  </div>
+</div>
+
+<h3>Two Modes of Elicitation</h3>
+
+<p>A critical insight from the deep analysis: voice elicitation serves fundamentally different purposes depending on temporal distance.</p>
+
+<div class="comparison">
+  <div class="comparison-col">
+    <h4>Distant Recall</h4>
+    <ul>
+      <li>Topics studied over time through multiple sources</li>
+      <li>Reveals <strong>what matters to the learner</strong></li>
+      <li>Personal salience mapping</li>
+      <li>"Interesting" field is gold — original thinking</li>
+    </ul>
+  </div>
+  <div class="comparison-col">
+    <h4>Fresh Recall</h4>
+    <ul>
+      <li>Chapter just read, podcast just heard</li>
+      <li>Rich in specific facts</li>
+      <li>Without processing, only gists survive</li>
+      <li><strong>Retention prevention</strong> — anti-forgetting</li>
+    </ul>
+  </div>
+</div>
+
+<p>The system should tag elicitations by mode (the UI already distinguishes chapter_recall vs. curriculum recall) and weight the data differently. Knowledge sweeps are explicitly a <em>distant recall</em> task, designed to reveal organization and growth.</p>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 9. ROADMAP -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="roadmap">✦ Plan</div>
+<h2>Implementation Roadmap</h2>
+
+<div class="timeline">
+
+  <div class="timeline-item current">
+    <div class="timeline-date">Phase 1 — 1-2 sessions</div>
+    <div class="timeline-title"><span class="tier tier-1">Tier 1</span> Passive Growth Tracking</div>
+    <div class="timeline-desc">
+      <strong>No new user interaction.</strong> Add <code>knowledge_transitions</code> table, instrument <code>update_knowledge()</code>. Add <code>network_metrics_log</code> table, compute on dashboard load + weekly cron. Build growth visualization HTML page at <code>/knowledge/growth</code>. Run FSRS calibration script.
+      <br><br><em>Answers: "Am I learning?" with a concrete chart from existing data.</em>
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div class="timeline-date">Phase 2 — 1 session</div>
+    <div class="timeline-title"><span class="tier tier-2">Tier 2</span> Record Baseline Sweep</div>
+    <div class="timeline-desc">
+      <strong>Do this before anything else in Tier 2.</strong> Add <code>knowledge_sweeps</code> table. Create <code>run_knowledge_sweep()</code> in <code>review_engine.py</code>. Add sweep scoring prompt. Add <code>POST /api/knowledge-sweep</code> endpoint. <strong>Record first 3-minute Sicily sweep</strong>. Score against all 70 nodes.
+      <br><br><em>Establishes ground truth. The longer we wait, the more growth we miss measuring.</em>
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div class="timeline-date">Phase 3 — 1 session</div>
+    <div class="timeline-title"><span class="tier tier-2">Tier 2</span> Sweep Results + Monthly Delta</div>
+    <div class="timeline-desc">
+      Sweep results page (coverage map, growth chart, gaps, positive framing). Delta computation between sweeps. Sweep variant prompts (connection, Feynman, same-moment). Add UI entry point (✦ drawer or voice-elicitation variant).
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div class="timeline-date">Phase 4 — 1 session</div>
+    <div class="timeline-title"><span class="tier tier-3">Tier 3</span> Type-Differentiated Scheduling</div>
+    <div class="timeline-desc">
+      Different <code>desired_retention</code> per knowledge type. Natural spacing credit from article reading. FSRS calibration analysis with post-fix data.
+      <br><br><em>Requires enough review data to validate. Run after 2+ months of reviews.</em>
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div class="timeline-date">Phase 5 — Later</div>
+    <div class="timeline-title">Deeper Analysis</div>
+    <div class="timeline-desc">
+      SNAFU-style recall order analysis. Pathfinder PFC metric. IRT growth tracking (after 200+ reviews). Knowledge growth timeline viz with time slider. Knowledge atlas evolution animation.
+    </div>
+  </div>
+
+</div>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 10. DECISIONS -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="decisions">✦ Decisions Needed</div>
+<h2>Open Design Decisions</h2>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="card-title">Sweep Frequency</div>
+    <div class="card-desc">Monthly is proposed. More frequent risks testing effect masking actual growth (you get better at the sweep, not at the knowledge). Less frequent = slower feedback. Monthly is the research sweet spot.</div>
+    <div class="card-meta">Recommended: monthly</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Sweep Scoring Model</div>
+    <div class="card-desc">Sweeps are infrequent (monthly) so cost doesn't matter. Accuracy matters a lot. Opus via <code>claude -p</code> since it's a batch task, or Gemini for speed?</div>
+    <div class="card-meta">Recommended: Opus</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Growth Viz Location</div>
+    <div class="card-desc">Standalone HTML (like knowledge atlas) at <code>/knowledge/growth</code>? Or integrated into the statistics dashboard? Different mental model: longitudinal vs. snapshot.</div>
+    <div class="card-meta">Recommended: standalone</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Passive Tracking Granularity</div>
+    <div class="card-desc">Log network metrics weekly via cron, or compute on every dashboard load? Dashboard gives fresh numbers; cron gives the time series.</div>
+    <div class="card-meta">Recommended: both</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Scheduling Approach</div>
+    <div class="card-desc">Option A (per-type <code>desired_retention</code>), Option B (HLR), or Option C (custom stability multipliers)? Trade-off: simplicity vs. principled modeling vs. data requirements.</div>
+    <div class="card-meta">Recommended: start with A</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Kintsch Level Assessment</div>
+    <div class="card-desc">Should sweep scoring distinguish surface-form, textbase, and situation model recall? Adds richness but complexity. Could be a Phase 5 addition.</div>
+    <div class="card-meta">Recommended: defer to Phase 5</div>
+  </div>
+</div>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 11. WHAT'S NOVEL -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head">✦ Novelty</div>
+<h2>What Doesn't Exist Anywhere Else</h2>
+
+<p>After extensive literature search across all 7 research documents: <strong>no existing system tracks a reader's knowledge state across multiple books and articles over months, using the combination of reading behavior, structured review, and free recall that Petrarca proposes.</strong></p>
+
+<p>The combination of:</p>
+<ul>
+  <li>Curriculum-aligned scoring of free voice recall</li>
+  <li>Longitudinal comparison across sweeps</li>
+  <li>Network structure analysis (not just fact counting)</li>
+  <li>Type-differentiated scheduling based on Fuzzy-Trace Theory</li>
+</ul>
+
+<p>...does not exist in the literature. The closest systems:</p>
+<ul>
+  <li><strong>ALEKS/KST</strong> — uses binary mastery, not graduated understanding</li>
+  <li><strong>GENCAT</strong> — uses LLMs but for testing, not self-reported knowledge mapping</li>
+  <li><strong>SPARFA</strong> — tracks knowledge over time but requires structured Q&A, not reading</li>
+  <li><strong>Pathfinder</strong> — validated at r=.74 but never applied to voice transcript data</li>
+  <li><strong>SNAFU</strong> — analyzes recall structure but for category fluency, not domain knowledge</li>
+</ul>
+
+<p>Pathfinder network comparison has been validated but never applied to voice transcript data. This is publishable research.</p>
+
+<div class="asterism">⁂</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- 12. REFERENCES -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-head" id="references">✦ Bibliography</div>
+<h2>References</h2>
+
+<h3>Knowledge Assessment Systems</h3>
+<ul>
+  <li>Doignon, J.-P. & Falmagne, J.-C. (1985). "Spaces for the Assessment of Knowledge." <em>International Journal of Man-Machine Studies</em>.</li>
+  <li>Feng, W. & Lan, A. (2026). "GENCAT: Generative Computerized Adaptive Testing." arXiv:2602.20020.</li>
+  <li>Lan, A.S. et al. (2014). "Sparse Factor Analysis for Learning and Content Analytics." <em>JMLR</em>, 15, 1771-1812.</li>
+  <li>Lan, A.S. & Studer, C. (2014). "Time-varying Learning and Content Analytics via Sparse Factor Analysis." <em>KDD</em>.</li>
+  <li>Ipeirotis, P.G. & Rizakos, G. (2026). "AI Oral Exams via Council of LLMs." arXiv:2603.18221.</li>
+</ul>
+
+<h3>Knowledge Networks</h3>
+<ul>
+  <li>Goldsmith, T.E., Johnson, P.J., & Acton, W.H. (1991). "Assessing Structural Knowledge." <em>Journal of Educational Psychology</em>.</li>
+  <li>Schvaneveldt, R.W. (1990). <em>Pathfinder Associative Networks</em>. Ablex Publishing.</li>
+  <li>Zemla, J.C. & Austerweil, J.L. (2020). "SNAFU: The Semantic Network and Fluency Utility." <em>Behavior Research Methods</em>, 52, 1681-1699.</li>
+</ul>
+
+<h3>Expert-Novice & Historical Thinking</h3>
+<ul>
+  <li>Chi, M.T.H., Feltovich, P., & Glaser, R. (1981). "Categorization and Representation of Physics Problems." <em>Cognitive Science</em>, 5, 121-152.</li>
+  <li>Bransford, J., Brown, A., & Cocking, R. (2000). <em>How People Learn</em>. National Academies Press.</li>
+  <li>Wineburg, S. (2001). <em>Historical Thinking and Other Unnatural Acts</em>. Temple University Press.</li>
+  <li>Seixas, P. & Morton, T. (2013). <em>The Big Six: Historical Thinking Concepts</em>.</li>
+  <li>Schneider, W., Korkel, J., & Weinert, F.E. (1989). "Domain-Specific Knowledge and Memory Performance." <em>J. Educational Psychology</em>.</li>
+</ul>
+
+<h3>Retrieval Practice & Memory</h3>
+<ul>
+  <li>Karpicke, J.D. & Blunt, J.R. (2011). "Retrieval Practice Produces More Learning than Elaborative Studying." <em>Science</em>, 331, 772-775.</li>
+  <li>Roediger, H.L. & Karpicke, J.D. (2006). "Test-Enhanced Learning." <em>Psychological Science</em>, 17, 249-255.</li>
+  <li>Anderson, M.C., Bjork, R.A., & Bjork, E.L. (1994). "Remembering Can Cause Forgetting." <em>J. Exp. Psych: LMC</em>.</li>
+  <li>Chan, J.C.K., McDermott, K.B., & Roediger, H.L. (2006). "Retrieval-Induced Facilitation." <em>J. Exp. Psych: General</em>.</li>
+  <li>Rawson, K.A. & Dunlosky, J. (2022). "Successive Relearning: An Underexplored but Potent Technique." <em>Current Directions</em>.</li>
+</ul>
+
+<h3>Fuzzy-Trace Theory & Scheduling</h3>
+<ul>
+  <li>Brainerd, C.J. & Reyna, V.F. (2002). "Fuzzy-Trace Theory and False Memory." <em>Current Directions</em>.</li>
+  <li>Chang, M., Johns, B.T., & Brainerd, C.J. (2025). "True and false recognition in MINERVA2." <em>Psychological Review</em>, 132(4).</li>
+  <li>Settles, B. & Meeder, B. (2016). "A Trainable Spaced Repetition Model." <em>ACL</em>.</li>
+  <li>Ye, J. (2024). "FSRS: A Modern Spaced Repetition Algorithm." <em>IEEE TKDE</em>.</li>
+</ul>
+
+<h3>Comprehension & Text Analysis</h3>
+<ul>
+  <li>Kintsch, W. (1998). <em>Comprehension: A Paradigm for Cognition</em>. Cambridge University Press.</li>
+  <li>McNamara, D.S. et al. (2004). "Coh-Metrix: Analysis of Text on Cohesion and Language." <em>Behavior Research Methods</em>.</li>
+  <li>Min, S. et al. (2023). "FActScore: Fine-grained Atomic Evaluation of Factual Precision." <em>EMNLP</em>.</li>
+</ul>
+
+<h3>Learning Science & Assessment</h3>
+<ul>
+  <li>Koedinger, K., Corbett, A., & Perfetti, C. (2012). "The Knowledge-Learning-Instruction Framework." <em>Cognitive Science</em>.</li>
+  <li>Novak, J.D. & Gowin, D.B. (1984). <em>Learning How to Learn</em>. Cambridge University Press.</li>
+  <li>Ericsson, K.A. & Simon, H.A. (1993). <em>Protocol Analysis: Verbal Reports as Data</em>. MIT Press.</li>
+  <li>Lalor, J.P. et al. (2023). "py-irt: A Scalable Item Response Theory Library." <em>SIGCSE</em>.</li>
+</ul>
+
+<h3>Petrarca Research Documents</h3>
+<ul>
+  <li><code>knowledge-systems-deep-dive.md</code> (Apr 5) — Main proposal: voice sweep protocol, 5 growth metrics, Pathfinder networks, type-differentiated scheduling</li>
+  <li><code>knowledge-assessment-research.md</code> (Apr 4) — Literature review: expert/novice structures, free recall, Wineburg, Kintsch 3-level model</li>
+  <li><code>learning-science-for-knowledge-mapping.md</code> (Mar 16) — Testing effect, CMU Knowledge Components, GENCAT, backward design, innovative question formats</li>
+  <li><code>knowledge-profile-system-design.md</code> (Apr 6) — Implementation design: transcript chunks, domain portraits, prompt injection</li>
+  <li><code>knowledge-elicitation-deep-analysis.md</code> (Apr 6) — Gap analysis: transcripts are write-only, two modes of elicitation, digital twin vision</li>
+  <li><code>knowledge-modeling.md</code> (Mar 7) — Earlier research: DKT, Graphiti, RemNote, InfraNodus</li>
+  <li><code>knowledge-mapping-20-questions.md</code> (Mar 2026) — Adaptive self-report: KST + CAT + LLM for 20-question domain mapping</li>
+</ul>
+
+<div class="footnote">
+  <p>Generated April 2026. Synthesized from 7 research documents written across sessions 39–60 of Petrarca development. All referenced Python libraries are pip-installable or available on GitHub. The proposal assumes the existing infrastructure: Hetzner VM, SQLite (petrarca.db), limbic.amygdala embeddings, Soniox transcription, FSRS-6 scheduling via py-fsrs.</p>
+</div>
+
+</div><!-- .page -->
+</body>
+</html>

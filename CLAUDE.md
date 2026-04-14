@@ -1,8 +1,30 @@
-# Petrarca — Intelligent Read-Later App
+# Petrarca — Quiz-First Knowledge Retention App
 
-A mobile-first read-later app combining incremental reading, user knowledge modeling, and algorithmic article selection. Named after Francesco Petrarca, pioneer of systematic reading methods. Built for one power user (Stian), not a social platform.
+A mobile-first knowledge retention app combining structural review cards, voice input, and user knowledge modeling. Named after Francesco Petrarca, pioneer of systematic reading methods. Built for one power user (Stian), not a social platform.
 
-**Frontend**: Expo SDK 54 (React Native), 2-tab layout (Feed / Library) + ✦ drawer. **Backend**: Hetzner VM — nginx (:8083 content, :8084 web), research-server.py (:8090), 4-hour cron pipeline. **Data**: SQLite (petrarca.db, canonical), JSON fallback.
+**Frontend**: Expo SDK 54 (React Native), review-first layout. **Backend**: Hetzner VM — nginx (:8083 content, :8084 web), research-server.py (:8090). **Data**: SQLite (petrarca.db, canonical). **Design doc**: `research/structural-review-redesign.md`
+
+## DISABLED SUBSYSTEMS (Session 71, 2026-04-14)
+
+The following code is **preserved but disabled**. Do NOT build features on top of, maintain, or fix bugs in these subsystems unless explicitly asked:
+
+- **Feed tab** (`app/(tabs)/index.tsx`) — read-later article discovery, disabled
+- **Article ingestion** (`scripts/build_articles.py`, `scripts/import_url.py`) — no feed to populate
+- **Twitter bookmark fetch** (`scripts/fetch_twitter_bookmarks.py`) — content source disabled
+- **Readwise sync** (`scripts/fetch_readwise_reader.py`) — content source disabled
+- **Email ingestion** (`research-server.py _handle_ingest_email()`) — content source disabled
+- **Kindle sync launchd** (`scripts/com.petrarca.kindle-sync.plist`) — book progress not critical
+- **Amazon scraper** (`scripts/amazon_library_scraper.py`) — metadata enrichment disabled
+- **Podcast sync** (`scripts/podcast_sync.py`) — not integrated into review
+- **Synthesis reader** (`app/app/synthesis-reader.tsx`) — depends on article pipeline
+- **Article reader** (`app/app/reader.tsx`) — depends on article pipeline
+- **Reading trails** (`app/app/trails.tsx`) — depends on article pipeline
+- **Landscape view** (`app/app/landscape.tsx`) — article visualization
+- **Queue tab** (`app/(tabs)/queue.tsx`) — article queue
+- **Topics tab** (`app/(tabs)/topics.tsx`) — article topics
+- **Standalone HTML visualizations** (`scripts/knowledge_atlas.html`, `knowledge_growth.html`, etc.) — moving to native app
+
+**Active subsystems**: Review stream, voice elicitation/capture, physical books + curriculum mapping, curriculum generation, entity system + Wikidata resolution, microlearning cards, FSRS scheduling, interaction logging.
 
 ## Design Principles & North Star
 
@@ -36,6 +58,7 @@ These principles are the intellectual foundation of the project. They override i
 
 | Working on... | Read first |
 |--------------|-----------|
+| **v2 Redesign (START HERE)** | `research/structural-review-redesign.md` — Quiz-first app, structural cards, 8-phase plan, experiments, open questions |
 | **Any feature work** | `research/implementation-status.md` (architecture, screens, scripts, endpoints, algorithms) |
 | **UI changes** | `design/DESIGN_GUIDE.md` — MUST READ. "The Annotated Folio" Renaissance visual language. |
 | **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
@@ -76,6 +99,7 @@ This project is exploratory — 60+ sessions in many directions. That means:
 - **Voice capture dedup**: `process_voice_capture()` checks SHA-256 hash of transcript text before processing — prevents duplicate ingestion of same podcast/voice note.
 - **Voice capture domain routing**: When entity matching finds <5 linked nodes, Gemini Flash picks top-3 curriculum domains → all nodes from those domains become candidates. Fixes novel-entity transcripts (e.g., Rollo/Normandy). Background thread then resolves `entities_mentioned` to Wikidata QIDs via `_resolve_voice_entities_background()`.
 - **Wikidata entity resolution**: `shared_entities.wikidata_qid` (89.3% coverage). Audit trail in `entity_resolutions` table. External IDs in `entity_external_ids` (1906 VIAF/GND/GeoNames/etc.). Admin review at `/admin/entity-queue`.
+- **Voice transcript reprocessing needed**: 38 transcripts total. 8 have no knowledge_items (including Rollo vt_1776097010_8381). 37 have no entity resolutions (pre-Wikidata). Reprocess Rollo first as test, then batch the rest. See `research/structural-review-redesign.md` Phase 0.
 - **Interaction logging**: Dual-layer via `/log/events` endpoint — SQLite `interaction_log` table + JSONL files. Server-side logging on both grading endpoints. Client sends via `logger.ts` to `:8090/log/events`.
 - **Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40), not just one domain. Cross-curriculum context + temporal cross-refs injected into question generation.
 - **Book pre-scan**: `GET /book/prescan/{book_id}` shows known/new/missing nodes + cross-book overlaps.

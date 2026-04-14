@@ -32,9 +32,27 @@
 
 ### Andrew Lan — UMass Amherst
 - **Role**: Associate Professor, Manning College of Information and Computer Sciences
-- **Key work**: GENCAT (Feb 2026) — Generative Computerized Adaptive Testing using LLMs for both response modeling and question selection. Develops a Generative Item Response Theory (GIRT) model that predicts/generates student open-ended responses, not just correctness. BOBCAT (IJCAI 2021). Won grand prize in U.S. Dept. of Education's Automated Scoring Challenge for reading comprehension.
-- **Petrarca relevance**: **Highest-priority contact.** GENCAT is essentially what Petrarca does: using LLMs to assess open-ended student responses (voice recall in Petrarca's case) rather than just correct/incorrect binary outcomes. His automated scoring of reading comprehension responses directly addresses Petrarca's voice-based knowledge assessment challenge. The GIRT model's approach of predicting the content of student responses (not just correctness) aligns with Petrarca's rich knowledge state tracking.
-- **Links**: [Homepage](https://people.umass.edu/~andrewlan/), [GENCAT paper](https://arxiv.org/abs/2602.20020)
+- **Key work**: GENCAT (Feb 2026) — Generative Computerized Adaptive Testing using LLMs for both response modeling and question selection. Develops a Generative Item Response Theory (GIRT) model that predicts/generates student open-ended responses, not just correctness. BOBCAT (IJCAI 2021). SPARFA (JMLR 2014, with Waters, Studer & Baraniuk) — Sparse Factor Analysis discovering latent concepts from binary response data. Won grand prize in U.S. Dept. of Education's Automated Scoring Challenge for reading comprehension.
+- **GENCAT detail**: GIRT gives each student a latent knowledge vector, interpolates between learned "TRUE" and "FALSE" embeddings to condition a Llama-3.2-1B backbone. Training: SFT then DPO alignment. Three question selection strategies: uncertainty-based, diversity-based (best early), information-based (Fisher Information). Up to 4.32% AUC improvement at early testing stages (t=5). **Code status: repo listed as `github.com/umass-ml4ed/GENCAT` in paper but NOT yet public** (the lab's 25 public repos don't include it as of April 2026).
+- **SPARFA-Trace** (KDD 2014): Extends SPARFA to temporal tracking using message-passing Kalman filter. Jointly traces learner knowledge over time, models transitions from learning resources, includes forgetting. Code: `bpaassen/sparfae` on GitHub (third-party Python implementation).
+- **Petrarca relevance**: **Highest-priority contact.** GENCAT is the closest existing system to Petrarca's voice assessment approach. SPARFA-Trace could validate whether Petrarca's hand-crafted curriculum node structure matches the latent structure in actual review performance. His automated scoring of reading comprehension directly addresses voice-based knowledge assessment.
+- **Links**: [Homepage](https://people.umass.edu/~andrewlan/), [GENCAT paper](https://arxiv.org/abs/2602.20020), [umass-ml4ed GitHub](https://github.com/umass-ml4ed)
+
+### Jean-Claude Falmagne & Jean-Paul Doignon — UC Irvine / Université Libre de Bruxelles
+- **Role**: Founders of Knowledge Space Theory (KST)
+- **Key work**: *Knowledge Spaces* (1999), *Learning Spaces* (Springer, 2011). ALEKS (Assessment and LEarning in Knowledge Spaces) — commercial adaptive learning system using KST, serving 4-5 million students annually. The core innovation: model a domain as a collection of feasible "knowledge states" (sets of items a learner could plausibly know), assess by Bayesian half-split selection (pick the question where P(states containing it) ≈ 0.5), converge in ~25 questions even with millions of possible states.
+- **Algorithm detail**: Continuous Markov Procedure — start with uniform probability over feasible states, Bayesian update after each response incorporating careless error (β) and lucky guess (η) rates, terminate when max(P(K)) > threshold.
+- **Petrarca relevance**: The curriculum prerequisite edges already define a knowledge space. KST's adaptive assessment algorithm could be used for the "discovery probe" feature — assessing 466 uncovered nodes efficiently by exploiting prerequisite structure to infer states from a small number of probes. **Limitation:** KST assumes binary mastery; Petrarca needs graduated levels (unknown → mentioned → engaged → anchored).
+- **Code**: R package `kst` on CRAN (canonical implementation, actively maintained). Python: `milansegedinac/kst` on GitHub (dormant since 2016). No mature Python implementation.
+- **Links**: [ALEKS KST explanation](https://www.aleks.com/about_aleks/knowledge_space_theory), [Wikipedia: Knowledge Space](https://en.wikipedia.org/wiki/Knowledge_space)
+
+### Jarrett Ye — Creator of FSRS (Free Spaced Repetition Scheduler)
+- **Role**: Independent researcher; FSRS is now the default scheduler in Anki
+- **Key work**: FSRS-6 (2025-2026) — 21-parameter scheduler using DSR model (Difficulty, Stability, Retrievability). Uses a **power forgetting curve** (not exponential) with trainable shape parameter. Published "A Stochastic Shortest Path Algorithm for Optimizing Spaced Repetition Scheduling" (ACM KDD) and "Optimizing Spaced Repetition Schedule by Capturing the Dynamics of Memory" (IEEE TKDE).
+- **Algorithm**: Stability S = interval where R drops to 90%. Forgetting: R(t,S) = (1 + factor·t/S)^(-w20). After successful recall: S'_r = S·[e^(w8·(11-D)·S^(-w9)·(e^(w10·(1-R))-1)·...) + 1]. Key insight: stability saturation (S^(-w9)) means high-stability memories resist further increases.
+- **Petrarca relevance**: FSRS is the most mature open-source scheduling algorithm. py-fsrs (`pip install fsrs`, v6.3.1, March 2026) includes an optimizer that trains parameters on your review history. **Critical limitation for Petrarca:** FSRS treats each item in isolation — no concept of knowledge type, semantic relationships, or partial knowledge. Binary recall only. To differentiate by type, use separate parameter presets per knowledge type (showed up to 16.9% RMSE reduction).
+- **Code**: `open-spaced-repetition/fsrs4anki` (3,872 stars), `open-spaced-repetition/py-fsrs` (402 stars), `open-spaced-repetition/fsrs-rs` (Rust with Python bindings)
+- **Links**: [GitHub org](https://github.com/open-spaced-repetition), [Benchmark](https://github.com/open-spaced-repetition/srs-benchmark)
 
 ### Knowledge Tracing with Forgetting
 - **Key researchers**: Multiple groups working on DKT-Forget variants
@@ -51,11 +69,24 @@
 
 ## 2. Free Recall and Knowledge Structure Researchers
 
-### Jeffrey Zemla — Syracuse University
-- **Role**: Department of Psychology
-- **Key work**: SNAFU (Semantic Network and Fluency Utility) — tool for estimating semantic networks from verbal fluency data. "Free recall of semantically related words reveals similarity structure" (Memory & Cognition, 2026). Methods for estimating individual-level semantic networks from free recall, not just group averages.
-- **Petrarca relevance**: **Directly applicable.** Zemla's method for estimating semantic networks from free recall data is essentially what Petrarca needs for voice-based knowledge assessment. When a user does a voice dump about Roman history, the order and clustering of concepts they mention reveals their mental knowledge structure. SNAFU could be adapted to analyze Petrarca's voice transcripts, comparing user knowledge networks against expert/curriculum networks. His individual-level (not just group) estimation is crucial for Petrarca's single-user model.
-- **Links**: [SNAFU tool](https://pubmed.ncbi.nlm.nih.gov/32128696/), [Semantic networks from free recall](https://link.springer.com/article/10.3758/s13421-026-01851-z)
+### Jeffrey Zemla — Syracuse University (and Joseph Austerweil — UW-Madison)
+- **Role**: Zemla: Department of Psychology. Austerweil: Department of Psychology, UW-Madison.
+- **Key work**: SNAFU (Semantic Network and Fluency Utility) — Python tool with six network estimation methods: First Edge, Naive Random Walk, Pathfinder, Correlation-based, **U-INVITE** (maximum likelihood censored random walk — assumes fluency responses follow a random walk on the semantic network), Hierarchical U-INVITE. Metrics: cluster switches, cluster sizes, perseverations, intrusions, word frequency, age-of-acquisition. Published in *Behavior Research Methods* 52, 1681-1699 (2020). Also: "Free recall of semantically related words reveals similarity structure" (*Memory & Cognition*, 2026).
+- **Code**: `AusterweilLab/snafu-py` on GitHub — actively maintained (v2.6.7, Jan 2026, 397 commits, 25 stars). Install: `pip install git+https://github.com/AusterweilLab/snafu-py`. **Not on PyPI** (the `snafu` PyPI package is unrelated).
+- **Adaptation needed for Petrarca**: SNAFU expects discrete items from a known vocabulary (like animal names in category fluency tasks). Voice transcripts contain sentences. Preprocessing: extract named entities and curriculum concepts from transcripts, treat them as "items" in recall order, then use U-INVITE or Pathfinder to estimate semantic network structure. Compare to curriculum graph.
+- **Petrarca relevance**: **Directly applicable with adaptation.** Individual-level (not just group) network estimation is crucial for Petrarca's single-user model. The U-INVITE method is most promising — it models recall as a censored random walk, which is a reasonable model for how someone narrates what they know about a topic.
+- **Links**: [SNAFU paper](https://pubmed.ncbi.nlm.nih.gov/32128696/), [GitHub](https://github.com/AusterweilLab/snafu-py), [Semantic networks from recall](https://link.springer.com/article/10.3758/s13421-026-01851-z)
+
+### Roger Schvaneveldt — New Mexico State University (Emeritus)
+- **Role**: Created Pathfinder network scaling
+- **Key work**: *Pathfinder Associative Networks* (Ablex, 1990). The PFNET algorithm derives knowledge structure from similarity judgments: takes an N×N proximity matrix, prunes any direct link where a shorter indirect path exists (using Minkowski r-metric with max path length q). PFNet(N-1, ∞) produces the sparsest network. The MST-Pathfinder variant (Quirin et al., 2008) runs in O(N² log N).
+- **Petrarca relevance**: Pathfinder is the theoretical basis for comparing learner knowledge structure to expert structure. We don't need raw proximity judgments — we can derive the learner's network from voice recall (which nodes are mentioned, which connections articulated) and compare to the curriculum graph.
+- **Code**: Pathfinder 9.0 (commercial, not open source). R: `SemNeT` CRAN package includes `PF()` function. Python: SNAFU includes Pathfinder as one of six network estimation methods. No standalone Python PFNET library exists, but straightforward to implement via NetworkX.
+
+### Timothy Goldsmith, Paul Johnson & William Acton — University of New Mexico
+- **Key work**: "Assessing Structural Knowledge" (*Journal of Educational Psychology*, 1991). Validated Pathfinder networks as knowledge assessment tools: similarity between each student's network and the instructor's network (measured by C metric — shared links) correlated with exam performance at **r = .74**. This is among the strongest predictive validities ever found for a structural knowledge measure.
+- **Three metrics**: PRX (Proximity Correlation — Pearson on raw ratings), GTD (Graph-Theoretic Distance — correlation of shortest-path distances), PFC (Pathfinder Closeness — Jaccard on per-node neighborhoods).
+- **Petrarca relevance**: **The most important single finding for Petrarca's growth measurement.** The curriculum graph IS the expert network. The gap between the learner's demonstrated structure (from voice recall + review performance) and the curriculum graph, measured by PFC or edge overlap, is the single best metric of learning. Tracking this over time = tracking knowledge growth.
 
 ### Michael Kahana — University of Pennsylvania
 - **Role**: Professor, Department of Psychology; Director, Computational Memory Lab
@@ -77,6 +108,11 @@
 ---
 
 ## 3. Concept Mapping and Knowledge Graph Researchers
+
+### Joseph Novak — Cornell University (Emeritus)
+- **Role**: Developer of the concept mapping framework (1970s-80s), based on Ausubel's assimilation theory
+- **Key work**: *Learning How to Learn* (Cambridge, 1984, with Gowin). Created the concept map scoring system: propositions (1 pt), hierarchy levels (5 pts), cross-links (10 pts), examples (1 pt). The heavily weighted cross-links are the key insight — they represent the most meaningful form of knowledge.
+- **Petrarca relevance**: Cross-links between different curriculum areas (cross-domain connections) should be scored more heavily than within-domain connections. The 10:1 weighting of cross-links vs. propositions validates Petrarca's emphasis on temporal hooks and cross-domain connections as the highest-value knowledge. Jackson et al. (2024, *J. Engineering Education*) confirmed concept maps detect "deep content understandings as well as misconceptions."
 
 ### Alberto Canas — Institute for Human and Machine Cognition (IHMC)
 - **Role**: Former Associate Director, IHMC
@@ -143,9 +179,30 @@
 - **Links**: [Bjork Lab](https://bjorklab.psych.ucla.edu/research/), [Publications](https://bjorklab.psych.ucla.edu/robert-a-bjork-publications/)
 
 ### Jeffrey Karpicke — Purdue University
-- **Key work**: "Retrieval Practice Produces More Learning than Elaborative Studying with Concept Mapping" (Science, 2011). Showed retrieval practice is superior to concept mapping for meaningful learning. Documented that students lack metacognitive awareness of testing benefits.
-- **Petrarca relevance**: Karpicke's work validates Petrarca's voice-based free recall as the assessment mechanism — it's literally retrieval practice. However, his finding that retrieval practice beats concept mapping creates a tension with Petrarca's curriculum-as-concept-map approach. Resolution: Petrarca uses curriculum structure for organization but voice recall for assessment, combining both strengths. His finding about students' poor metacognition about testing supports Petrarca's "system manages your memory" principle.
-- **Links**: [Purdue Learning Lab](https://learninglab.psych.purdue.edu/)
+- **Role**: Professor, Department of Psychological Sciences
+- **Key work**: "Retrieval Practice Produces More Learning than Elaborative Studying with Concept Mapping" (*Science*, 2011). Definitive review chapter: "Retrieval-based learning" (2025, in Wixted's *Learning and Memory*, 3rd ed., Vol. 4). The **episodic context account** (Karpicke, Lehman & Aue, 2014): retrieval practice works by forcing context reinstatement → context updating → better future retrieval cues. This explains why free recall > cued recall > recognition, and why spaced retrieval beats massed retrieval.
+- **Latest (2025)**: Fordyce, Redick, Bedwell & Karpicke, "Individual differences in working memory and the benefit of retrieval practice" (*J. Memory & Language*, 144) — retrieval practice benefits **all learners regardless of working memory capacity**. The benefit is robust, not an individual-differences artifact.
+- **The elaborative retrieval hypothesis** (Carpenter, 2009, extended by Karpicke): During retrieval, semantically related information is activated — testing one concept can strengthen memory for *related, untested concepts* if they're well-integrated. This means reviewing one curriculum node should strengthen related nodes through spreading activation.
+- **Petrarca relevance**: Karpicke's work validates voice-based free recall as both the best assessment AND the best learning mechanism. The episodic context account explains why encountering concepts in varied contexts (different articles/books) strengthens memory more than identical reviews. The elaborative retrieval hypothesis validates Petrarca's connected curriculum: reviewing one node benefits its neighbors. **No computational tools from his lab** — his contribution is theoretical and empirical.
+- **Links**: [Purdue Learning Lab](https://learninglab.psych.purdue.edu/), [Publications](https://learninglab.psych.purdue.edu/publications/)
+
+### Charles Brainerd & Valerie Reyna — Cornell University
+- **Role**: Brainerd: Professor of Human Development. Reyna: Professor of Human Development, Co-Director of Cornell's Center for Behavioral Economics and Decision Research.
+- **Key work**: Fuzzy-Trace Theory (FTT) — memory encodes experiences into two parallel, independent traces: **verbatim** (exact surface details) and **gist** (semantic meaning, patterns, bottom-line interpretations). Key principles: (1) parallel storage, (2) dissociated retrieval, (3) differential survival — verbatim decays faster, (4) gist preference — people preferentially rely on gist when possible. The 2025 MINERVA2 integration (Chang, Johns & Brainerd, *Psychological Review*, 132(4)) is the first computational operationalization: gist as distributional semantic vectors, verbatim as holographic word-form vectors.
+- **Decay rates**: FTT literature does NOT provide specific half-life numbers (e.g., "14 days vs 45 days"). It operates qualitatively: verbatim traces become substantially inaccessible within days-to-a-week; gist traces persist weeks-to-months. Within ~1 week, recognition is "mainly based on gist." As verbatim decays, true memory decreases but false memory increases (because gist supports confabulation while verbatim suppresses it).
+- **Petrarca relevance**: **Foundational for type-differentiated scheduling.** Dates/names/specific numbers are verbatim traces → short intervals, frequent review. Frameworks/mental models/causal chains are gist traces → longer intervals, reactivation prompts. The existing key_facts `type` field (date/event/person/connection/significance) maps directly to the FTT distinction. Use qualitative principle to set initial parameters, then calibrate from actual review data.
+- **Links**: [Brainerd faculty page](https://www.human.cornell.edu/people/cb299), [Reyna faculty page](https://www.human.cornell.edu/people/vr53)
+
+### Katherine Rawson & John Dunlosky — Kent State University
+- **Role**: Rawson: Professor of Psychology. Dunlosky: Professor of Psychology, former editor of *J. Experimental Psychology: General*.
+- **Key work**: "Successive Relearning: An Underexplored but Potent Technique" (*Current Directions in Psychological Science*, 2022). Protocol: practice until correct, then practice again in spaced sessions until correct again. Key findings: (1) **Three relearning sessions may be sufficient** for maximal benefits. (2) Recalling items once across 3 spaced sessions > recalling each item 3 times in one session (by 2×). (3) Retention at 1 month: 68% with successive relearning vs 11% baseline. (4) **The "relearning override" effect**: extra effort to learn deeply initially doesn't persist — better to spend time on additional spaced encounters.
+- **Petrarca relevance**: The relearning override finding validates Petrarca's article-based resurfacing model — encountering concepts through different articles/books is more effective than deep-drilling on first contact. The "3 sessions sufficient" finding suggests the review system should aim for 3 well-spaced encounters per node rather than continuous drilling.
+- **Links**: [Rawson profile](https://www.kent.edu/psychology/profile/katherine-rawson), [Dunlosky profile](https://www.kent.edu/psychology/profile/john-dunlosky)
+
+### Walter Kintsch — University of Colorado (Emeritus)
+- **Role**: Former director of the Institute of Cognitive Science at CU Boulder
+- **Key work**: Construction-Integration (CI) model (*Comprehension: A Paradigm for Cognition*, Cambridge, 1998). Defines three levels of text representation: **surface form** (exact words), **textbase** (explicit propositions), **situation model** (integrated mental representation combining text with prior knowledge). The CI model describes comprehension as: (1) construction — activate text elements and general knowledge, (2) integration — irrelevant activations suppressed, relevant ones strengthened.
+- **Petrarca relevance**: Kintsch's three levels map directly to voice recall assessment: surface form recall ("the book said...") = weak; textbase recall (correct propositions) = moderate; situation model recall (explains *why*, makes inferences, connects to other knowledge) = strong. Operationalized by checking for causal language, counterfactual reasoning, perspective-taking, cross-source connections.
 
 ### Nate Kornell — Williams College
 - **Role**: Professor of Cognitive Psychology
@@ -155,18 +212,22 @@
 
 ### Burr Settles / Duolingo Research Team
 - **Role**: Head of Research & AI, Duolingo
-- **Key work**: Half-Life Regression (HLR) model (ACL, 2016) — combines psycholinguistic theory with ML, estimates memory half-life per item. BirdBrain — proprietary model that simultaneously estimates exercise difficulty and learner proficiency, processing ~1B exercises/day. Improved daily engagement by 12%.
-- **Petrarca relevance**: HLR provides a concrete, implementable model for Petrarca's knowledge decay tracking. Rather than Petrarca's current knowledge levels (unknown → mentioned → engaged → anchored), HLR would assign each curriculum node a half-life that evolves with reading exposure. BirdBrain's dual estimation (content difficulty + learner state) maps to Petrarca's need to jointly model article complexity and user knowledge. However, Duolingo operates on discrete vocabulary items; Petrarca's challenge is adapting this to fluid conceptual knowledge.
-- **Links**: [Blog post on BirdBrain](https://blog.duolingo.com/learning-how-to-help-you-learn-introducing-birdbrain/), [HLR paper](https://research.duolingo.com/papers/settles.acl16.pdf)
+- **Key work**: Half-Life Regression (HLR) model (*ACL*, 2016) — `p = 2^(-Δ/h)` where `log(h) = θ · x` (half-life is a linear function of item features). Features: times_reviewed, times_correct, item difficulty tags. Improved daily retention by 12%. BirdBrain — proprietary model estimating exercise difficulty + learner proficiency, processing ~1B exercises/day.
+- **HLR advantage over FSRS for Petrarca**: The feature vector explicitly includes per-item properties. Since key_facts have `type` (date/event/person/connection/significance), HLR could learn different decay rates per type automatically. Simpler than full FSRS (no 21 parameters), directly trainable.
+- **Code**: `github.com/duolingo/halflife-regression` (open source). Not pip-installable but provides the algorithm.
+- **Petrarca relevance**: HLR is the most practical scheduling alternative for Petrarca's needs — simpler than FSRS, directly accommodates knowledge type via feature vectors. BirdBrain's dual estimation maps to jointly modeling article complexity and user knowledge.
+- **Links**: [HLR repo](https://github.com/duolingo/halflife-regression), [HLR paper](https://aclanthology.org/P16-1174/), [BirdBrain blog](https://blog.duolingo.com/learning-how-to-help-you-learn-introducing-birdbrain/)
 
 ---
 
 ## 6. Andy Matuschak's Network
 
-### Andy Matuschak — Independent Researcher
-- **Key work**: The "mnemonic medium" — embedding spaced repetition review within narrative prose (Quantum Country, with Michael Nielsen). "How can we develop transformative tools for thought?" (2019, with Nielsen). Concept of "timeful texts" — texts with an authored time dimension.
-- **Petrarca relevance**: Matuschak's work is the most direct intellectual ancestor of Petrarca. Key differences: Matuschak embeds author-written prompts within text; Petrarca auto-generates knowledge tracking from unmodified articles. Matuschak uses flashcard-style prompts; Petrarca uses voice-based free recall. Matuschak's insight that the mnemonic medium creates "ongoing contact with material" is exactly Petrarca's review system design. His finding that "exponential returns in memory stability" are achievable with review validates the approach. His struggle with downstream impact measurement (failed university experiments) suggests Petrarca's rich logging could provide the data he needs.
-- **Links**: [Notes](https://notes.andymatuschak.org/Mnemonic_medium), [Timeful texts](https://notes.andymatuschak.org/zAb9R6nYuTyN6PBC4rQY9aY), [Impact through intimacy](https://andymatuschak.org/impact-through-intimacy/)
+### Andy Matuschak — Independent Researcher (Patreon-funded)
+- **Key work**: The "mnemonic medium" — embedding spaced repetition review within narrative prose (Quantum Country, with Michael Nielsen). "How can we develop transformative tools for thought?" (2019, with Nielsen). "Exorcising us of the Primer" (July 2024) — significant pivot critiquing authoritarian learning tools.
+- **2024-2026 developments**: "How Might We Learn?" (2024) — 6-part AI-augmented learning framework (tractable immersion, guidance in action, synthesized dynamic media, contextualized study, dynamic practice, social connection). **Salience prompts** concept: distinct from retrieval prompts — designed to keep ideas top-of-mind so you notice opportunities to apply them, not just recallable on demand. Matuschak notes "the scheduling is probably all wrong" for salience prompts in current SRS. **Comprehension-before-memory pivot**: "What seems like a problem of forgetting is sometimes a problem of never having understood."
+- **Orbit status**: 1,810 stars, last commit October 2024 (multiblock question/answer support). Only 4 commits in 2024, none in 2025-2026. Development appears stalled. Matuschak admitted it consumed research time: "we've learned surprisingly little about [core questions] since their introduction — mostly because I've been focused on building Orbit." **Cautionary tale for Petrarca: experiments before infrastructure.**
+- **Petrarca relevance**: Matuschak's trajectory validates Petrarca's design choices (dynamic questions, voice recall, comprehension-first). The salience prompts distinction suggests curriculum framework nodes (e.g., "causes of Roman decline") should be scheduled differently from factual items — you want them to *activate when relevant*, not just be recallable. Key differences from Petrarca: Matuschak embeds author-written prompts; Petrarca auto-generates tracking from unmodified sources. Matuschak uses flashcards; Petrarca uses voice-based free recall.
+- **Links**: [Notes](https://notes.andymatuschak.org/Mnemonic_medium), [Orbit repo](https://github.com/andymatuschak/orbit), [Primer essay](https://andymatuschak.org/primer/), [How Might We Learn?](https://andymatuschak.org/hmwl/)
 
 ### Michael Nielsen — Independent Researcher
 - **Key work**: Co-author of Quantum Country, co-author of "How can we develop transformative tools for thought?" Wrote extensively about making memory systems widespread.
@@ -192,6 +253,13 @@
 - **Key paper**: "GENCAT: Generative Computerized Adaptive Testing" (arXiv, Feb 2026)
 - **Innovation**: Uses LLMs to model and generate open-ended student responses, not just predict correctness. Two-step training: supervised fine-tuning then Direct Preference Optimization.
 - **Petrarca relevance**: **Most directly applicable recent research.** GENCAT's core insight — that open-ended responses contain much richer information about knowledge state than binary correct/incorrect — is Petrarca's fundamental design principle. The DPO alignment step for matching predicted responses to actual knowledge states could be used to train Petrarca's voice assessment model.
+
+### Panos Ipeirotis & George Rizakos — NYU Stern School of Business
+- **Role**: Ipeirotis: Professor of Data Science. Rizakos: Research associate.
+- **Key work**: "AI Oral Exams via Council of LLMs" (arXiv:2603.18221, March 2026). Developed a system where an ElevenLabs AI agent conducts ~25-minute voice exams, transcripts are graded independently by Claude, Gemini, and ChatGPT on a rubric, then models enter a **deliberation round** seeing each other's scores and critiques. Post-deliberation: 60% of ratings within 1 point, 29% exact match, Krippendorff's α = 0.86. Cost: $0.42/student vs ~$750 human.
+- **Key finding**: Gemini dropped scores by 2 points on average after seeing Claude's criticism of specific gaps — the deliberation round is where real calibration happens.
+- **Petrarca relevance**: **Directly implementable for voice sweep scoring.** The council approach (independent scoring → deliberation → synthesis) could replace single-model scoring for monthly knowledge sweeps, providing more reliable longitudinal measurements. Even a 2-model version (Claude + Gemini) with cross-review would improve consistency. The rubric-based approach maps to Petrarca's curriculum-node-based scoring.
+- **Links**: [Paper](https://arxiv.org/abs/2603.18221), [Ipeirotis homepage](https://www.stern.nyu.edu/faculty/bio/panos-ipeirotis)
 
 ### Marti Hearst — UC Berkeley
 - **Role**: Professor, School of Information and CS Division; former ACL President; CHI Academy member; ACM Fellow
@@ -292,14 +360,16 @@
 9. **Templeton Foundation** — Has funded work on intellectual virtues and learning.
 
 ### Potential Collaboration Models
-1. **Andrew Lan (UMass)** — Adapt GENCAT for reading assessment. Joint paper on open-ended knowledge tracing from voice recall.
+1. **Andrew Lan (UMass)** — Adapt GENCAT for reading assessment. Joint paper on open-ended knowledge tracing from voice recall. Also: apply SPARFA-Trace to validate curriculum node structure against actual review performance.
 2. **Jeremy Manning (Dartmouth)** — Apply his Naturalistic Free Recall methods to Petrarca's voice data. Joint dataset/analysis paper.
-3. **Jeffrey Zemla (Syracuse)** — Apply SNAFU network estimation to Petrarca's voice transcripts. Compare user knowledge networks against curriculum structures.
-4. **Alexandra List (Penn State)** — Use Petrarca's data to study her multiple-text integration framework longitudinally in a naturalistic setting.
-5. **Ivar Braten (Oslo)** — Natural geographic connection (Norwegian). Study epistemic cognition in Petrarca's reading patterns.
-6. **Danielle McNamara (ASU)** — Apply Coh-Metrix to Petrarca's article corpus. Integrate iSTART-style strategy instruction.
-7. **Ryan Baker (UPenn)** — Apply his EDM methods to Petrarca's interaction logs.
-8. **CHI Tools for Thought Workshop organizers (Microsoft Research et al.)** — Submit Petrarca as a system paper to CHI 2026 workshop.
+3. **Jeffrey Zemla (Syracuse)** — Apply SNAFU network estimation to Petrarca's voice transcripts. Compare user knowledge networks against curriculum structures using U-INVITE method.
+4. **Panos Ipeirotis (NYU)** — Adapt Council of LLMs scoring for knowledge sweep assessment. Joint paper on multi-model deliberation for domain knowledge assessment (vs. his course-exam use case).
+5. **Alexandra List (Penn State)** — Use Petrarca's data to study her multiple-text integration framework longitudinally in a naturalistic setting.
+6. **Ivar Braten (Oslo)** — Natural geographic connection (Norwegian). Study epistemic cognition in Petrarca's reading patterns.
+7. **Danielle McNamara (ASU)** — Apply Coh-Metrix to Petrarca's article corpus. Integrate iSTART-style strategy instruction.
+8. **Ryan Baker (UPenn)** — Apply his EDM methods to Petrarca's interaction logs.
+9. **Jarrett Ye (FSRS)** — Collaborate on type-differentiated scheduling; contribute Petrarca's review data as a non-flashcard benchmark for FSRS evaluation.
+10. **CHI Tools for Thought Workshop organizers (Microsoft Research et al.)** — Submit Petrarca as a system paper to CHI 2026 workshop.
 
 ---
 
@@ -307,26 +377,32 @@
 
 | Priority | Researcher | Institution | Why |
 |----------|-----------|-------------|-----|
-| 1 | Andrew Lan | UMass Amherst | GENCAT = LLM-based open-ended knowledge assessment. Won NCES reading comprehension scoring challenge. |
+| 1 | Andrew Lan | UMass Amherst | GENCAT = LLM-based open-ended knowledge assessment. SPARFA-Trace for temporal tracking. Won NCES scoring challenge. |
 | 2 | Jeremy Manning | Dartmouth | Naturalistic Free Recall dataset + automated scoring. Closest to Petrarca's voice assessment. |
-| 3 | Jeffrey Zemla | Syracuse | SNAFU for estimating knowledge networks from recall data. |
-| 4 | Alexandra List | Penn State | 2025 framework for prior knowledge + multiple text integration. |
-| 5 | Ivar Braten | U of Oslo | Multiple document comprehension + epistemic cognition. Norwegian. |
-| 6 | Danielle McNamara | ASU | iSTART + Coh-Metrix. Learning Engineering Institute director. |
-| 7 | Marti Hearst | UC Berkeley | Semantic Reader + Learning@Scale founder. |
-| 8 | Chris Piech | Stanford | DKT originator. Education AI focus. |
-| 9 | Ryan Baker | UPenn | EDM methods + KT fairness across reading ability. |
-| 10 | Bjorn Herrmann | U of Toronto | LLM-based automated speech recall scoring across languages. |
+| 3 | Jeffrey Zemla | Syracuse | SNAFU for estimating knowledge networks from recall data. Actively maintained Python code. |
+| 4 | Panos Ipeirotis | NYU Stern | Council of LLMs for oral exam scoring. α=0.86 reliability. $0.42/student. |
+| 5 | Alexandra List | Penn State | 2025 framework for prior knowledge + multiple text integration. |
+| 6 | Ivar Braten | U of Oslo | Multiple document comprehension + epistemic cognition. Norwegian. |
+| 7 | Danielle McNamara | ASU | iSTART + Coh-Metrix. Learning Engineering Institute director. |
+| 8 | Marti Hearst | UC Berkeley | Semantic Reader + Learning@Scale founder. |
+| 9 | Chris Piech | Stanford | DKT originator. Education AI focus. |
+| 10 | Ryan Baker | UPenn | EDM methods + KT fairness across reading ability. |
+| 11 | Bjorn Herrmann | U of Toronto | LLM-based automated speech recall scoring across languages. |
 
 ---
 
 ## Highest-Value Research Papers for Petrarca (Must-Read)
 
 1. Feng & Lan (2026). "GENCAT: Generative Computerized Adaptive Testing." arXiv 2602.20020.
-2. Herrmann (2025). "Language-Agnostic Automated Assessment of Listeners' Speech Recall Using LLMs." PMC12125525.
-3. Manning et al. (2024). "The Naturalistic Free Recall Dataset." Scientific Data.
-4. List (2025). "Integrating prior knowledge and multiple texts: expanding the Documents Model Framework." Reading and Writing.
-5. Zemla (2026). "Free recall of semantically related words reveals similarity structure." Memory & Cognition.
-6. Liu et al. (2024). "A Survey of Knowledge Tracing: Models, Variants, and Applications." IEEE TLT.
-7. CHI 2025 Tools for Thought Workshop synthesis (2025). arXiv 2508.21036.
-8. "Is there a better way to forget? Modelling memory decay in DKT." Knowledge-Based Systems (2025).
+2. Goldsmith, Johnson & Acton (1991). "Assessing Structural Knowledge." *J. Educational Psychology*. [Pathfinder r=.74]
+3. Ipeirotis & Rizakos (2026). "AI Oral Exams via Council of LLMs." arXiv 2603.18221.
+4. Herrmann (2025). "Language-Agnostic Automated Assessment of Listeners' Speech Recall Using LLMs." PMC12125525.
+5. Manning et al. (2024). "The Naturalistic Free Recall Dataset." *Scientific Data*.
+6. Karpicke (2025). "Retrieval-based learning." In Wixted, *Learning and Memory*, 3rd ed. [Definitive review]
+7. Rawson & Dunlosky (2022). "Successive Relearning." *Current Directions in Psychological Science*. [3 sessions sufficient]
+8. List (2025). "Integrating prior knowledge and multiple texts." *Reading and Writing*.
+9. Zemla & Austerweil (2020). "SNAFU." *Behavior Research Methods*, 52. [Tool paper]
+10. Chang, Johns & Brainerd (2025). "True and false recognition in MINERVA2." *Psychological Review*, 132(4). [Computational FTT]
+11. Liu et al. (2024). "A Survey of Knowledge Tracing." *IEEE TLT*.
+12. CHI 2025 Tools for Thought Workshop synthesis (2025). arXiv 2508.21036.
+13. Settles & Meeder (2016). "A Trainable Spaced Repetition Model." *ACL*. [Duolingo HLR]

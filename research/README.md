@@ -17,7 +17,8 @@ Master index of all research documents. **Always update this file when adding ne
 
 ## Read When Working On...
 
-- **Feed/ranking**: [novelty-system-architecture.md](novelty-system-architecture.md), [claims-topics-feedback-spec.md](claims-topics-feedback-spec.md)
+- **v2 Redesign (START HERE)**: [structural-review-redesign.md](structural-review-redesign.md) — Quiz-first app, structural cards, aspect-based grading, voice priority, 8-phase plan
+- **Feed/ranking** *(DISABLED)*: [novelty-system-architecture.md](novelty-system-architecture.md), [claims-topics-feedback-spec.md](claims-topics-feedback-spec.md)
 - **Synthesis**: [synthesis-pipeline-design.md](synthesis-pipeline-design.md), [synthesis-knowledge-tracking.md](synthesis-knowledge-tracking.md)
 - **Books**: [book-companion-handoff.md](book-companion-handoff.md), [book-companion-experiments.md](book-companion-experiments.md)
 - **Knowledge mapping**: [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md), [curriculum-system-audit.md](curriculum-system-audit.md), [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md)
