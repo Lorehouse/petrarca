@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 14, 2026 (session 70+: Wikidata entity resolution backfill + live voice capture integration)
+**Last updated**: April 14, 2026 (session 72: review-first 4-tab nav)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -12,9 +12,11 @@
 │ native: exp://alifstian.duckdns.org:8082                    │
 │ web:    http://alifstian.duckdns.org:8084                   │
 │                                                             │
-│ 2 tabs: Feed | Library                                      │
-│ ✦ drawer: Syntheses, Voice Notes, Queue, Knowledge Map,     │
-│           Projects, Review, Book Review, Kindle Library      │
+│ 4 tabs: Review | Voice | Stats | More                       │
+│ Review: landing screen, card stream + floating mic FAB      │
+│ Voice: elicitation, capture, sweeps, notes                  │
+│ Stats: due counts, domains, source breakdown                │
+│ More: library, explore, projects, system settings            │
 │                                                             │
 │ State: module-level vars in store.ts → AsyncStorage          │
 │ Sync:  content-sync.ts (manifest hash comparison + ?since=)  │
@@ -53,15 +55,18 @@
 
 ## App Screens
 
-### Tab Screens
-| Screen | File | Role |
-|--------|------|------|
-| Feed | `(tabs)/index.tsx` | ContinueBar + SynthesisScroll + ArticleRow list. Web: sidebar layout. Mobile: filter pills. |
-| Library | `(tabs)/library.tsx` | Unified books (physical+Kindle). Filter tabs: Reading/All/Finished/Kindle. Swipe-to-archive. |
-| Review | `(tabs)/review.tsx` | 3-tab: Cards / Voice / Explore. FSRS-6 scheduled review cards with rich narrative answers, memory hooks, 6 sideways follow-ups, factual quiz suggestions (one-tap fire-and-forget creation), "Same topic" checklist, "Quizzes for this topic" existing quiz listing. Multi-cue quizzes auto-generated on grading via Gemini Flash. Suspend via ⋯ menu. "Not interested in this fact" suspends all cues for a fact_id. Instant fade transitions, session persistence. Generic entities filtered. Multi-quiz ML cards. Nexus cards. Knowledge Explorer. |
-| Topics | `(tabs)/topics.tsx` | Synthesis-led view, accessible via ✦ drawer |
-| Queue | `(tabs)/queue.tsx` | Reading queue |
-| Log | `(tabs)/log.tsx` | Activity timeline |
+### Tab Screens (4 visible + 5 hidden)
+| Screen | File | Visible | Role |
+|--------|------|---------|------|
+| **Review** | `(tabs)/index.tsx` | Yes (landing) | FSRS-6 review card stream. Status bar (due count, domains, progress). Floating mic FAB for quick voice capture. Rich narrative answers, memory hooks, 6 follow-ups, quiz suggestions, "Same topic" checklist, existing quiz listing. Multi-cue quizzes. Suspend via menu. Entity/date taps navigate to timeline. |
+| **Voice** | `(tabs)/voice.tsx` | Yes | Hub for all voice features: Guided Recall (elicitation), Capture Voice (free-form), Knowledge Sweep, Voice Notes history. |
+| **Stats** | `(tabs)/stats.tsx` | Yes | Key numbers (due today, due this week, total items, domains). Domain/source breakdowns. Link to full web dashboard. |
+| **More** | `(tabs)/more.tsx` | Yes | Library (physical books, Kindle), Explore (knowledge map, timeline, ancient map), Tools (projects, activity log), System (user guide, feedback). |
+| Feed | `(tabs)/feed.tsx` | Hidden | *Disabled (session 71)*. Was `index.tsx`. ContinueBar + ArticleRow list. |
+| Library | `(tabs)/library.tsx` | Hidden | Accessible from More tab. Physical+Kindle books. |
+| Topics | `(tabs)/topics.tsx` | Hidden | *Disabled*. Synthesis-led view. |
+| Queue | `(tabs)/queue.tsx` | Hidden | *Disabled*. Reading queue. |
+| Log | `(tabs)/log.tsx` | Hidden | Accessible from More tab. Activity timeline. |
 
 ### Stack Screens
 | Screen | File | Role |

@@ -1,6 +1,72 @@
 # Knowledge System Implementation Status
 
-**Date**: April 14, 2026 (last updated — session 70b: production backfill + voice capture integration)
+**Date**: April 14, 2026 (last updated — session 71: structural review redesign)
+
+## Session 72: Review-First 4-Tab Navigation (April 14, 2026)
+
+### What
+Implemented Phase 1 of the structural review redesign: the app now opens to Review, with a 4-tab layout (Review / Voice / Stats / More). This is the first user-visible change from the session 71 redesign plan.
+
+### Changes
+- **Tab restructure**: Renamed `(tabs)/review.tsx` → `(tabs)/index.tsx` (makes Review the landing screen). Renamed old `(tabs)/index.tsx` → `(tabs)/feed.tsx` (hidden with `href: null`).
+- **3 new tab screens**:
+  - `voice.tsx` — Hub for Guided Recall, Capture Voice, Knowledge Sweep, Voice Notes
+  - `stats.tsx` — Fetches from `/review/stats` + `/curriculum/review/generate` endpoints. Shows due count, domains, source breakdown, link to full dashboard.
+  - `more.tsx` — Replaces the PetrarcaDrawer as primary navigation. Library, Explore tools, Projects, System settings.
+- **Review screen cleanup**: Removed internal Cards/Voice/Explore sub-tabs. Removed PetrarcaDrawer integration. Date/entity taps now navigate to `/timeline` instead of inline KnowledgeExplorer. Added compact status bar (due count + progress).
+- **Floating mic FAB**: Dark circular button on Review tab for one-tap voice capture access.
+- **Route fix**: `book-detail.tsx` updated from `/(tabs)/review` → `/(tabs)`.
+- **Root layout**: Added missing Stack.Screen entries for voice-elicitation, voice-capture, knowledge-sweep, map.
+- **Implementation status**: Updated architecture diagram (4-tab layout) and tab screens table.
+
+### Design decisions
+- Voice tab is a hub (cards linking to existing screens) rather than embedding the elicitation/capture UI directly — keeps the tab lightweight and the complex recording screens as full-screen experiences.
+- Stats tab fetches real data rather than being a placeholder — immediately useful even before native charts in Phase 7.
+- PetrarcaDrawer code preserved but no longer referenced from any active screen. It can be removed in a future cleanup.
+- The old Feed tab is hidden (`href: null`) not deleted — all article code preserved per session 71 decision.
+
+### Phase 1 status from design doc
+- [x] Restructure navigation: 4 tabs (Review, Voice, Stats, More)
+- [x] App opens to Review tab
+- [x] Move Library to More tab
+- [x] Disable Feed tab (hide, don't delete)
+- [x] Add floating mic button on Review tab
+- [ ] Disable launchd jobs for Twitter/Kindle/Amazon sync (deferred — low priority, already non-functional)
+
+---
+
+## Session 71: Structural Review Redesign (April 14, 2026)
+
+### What
+Major architectural pivot: Petrarca moves from read-later app to quiz-first knowledge retention app. Design document: `research/structural-review-redesign.md`.
+
+### Key decisions
+- **Disabled**: Feed tab, article ingestion, Twitter/Readwise/Kindle/Amazon sync, standalone HTML visualizations. Code preserved but inactive. See CLAUDE.md "DISABLED SUBSYSTEMS" section.
+- **New card types**: Structural review cards — Aspect (multi-signal per topic), Sequence (temporal ordering), Synchronic (cross-domain contemporaries), Cast (people+roles), Causal Chain, Quick Quiz (fast binary)
+- **"Partly" grade eliminated**: Replaced by per-aspect binary knew/missed. Each aspect independently FSRS-scheduled.
+- **Voice priority**: Fresh captures (48h) get highest review priority.
+- **Navigation**: 4 tabs — Review (landing), Voice, Stats, More
+- **Analytics**: In-app native stats screen (replacing standalone HTML pages)
+- **FSRS**: maximum_interval raised from 365 to 3650 days
+
+### Analysis findings
+- Only 3/265 knowledge_items had actual multicue quizzes (pipeline barely fired)
+- 57% of knowledge_items never reviewed; 153/265 overdue
+- 38 voice transcripts: 8 have no knowledge_items, 37 have no entity resolutions
+- FSRS maximum_interval=365 caps known items at 274 days
+- Alif comparison: desired_retention=0.95 (calibrated from 21k reviews), sentence-based multi-signal, leech detection, 11-factor selector
+
+### 8 experiments defined
+See design doc § Experiments & Hypotheses: aspect decomposition quality, binary vs ternary grading, collateral exposure effect, structural vs plain quizzes, synchronic cross-domain recall, session rhythm engagement, voice priority retention, mnemonic type effectiveness.
+
+### Implementation: 8 phases
+0=Foundation (done), 1=Review-first shell, 2=Aspect cards, 3=Quick quizzes, 4=Sequences, 5=Synchronic, 6=Cast/Causal, 7=Analytics, 8=Voice enhancements
+
+### Pending
+- Rollo transcript (vt_1776097010_8381) needs reprocessing through full pipeline
+- 37/38 transcripts need entity resolution reprocessing
+- PR #2 (Wikidata backfill) needs merging
+- Another branch has "more flexible questions" work in progress
 
 ## Session 70b: Production Backfill + Voice Capture Integration (April 14, 2026)
 

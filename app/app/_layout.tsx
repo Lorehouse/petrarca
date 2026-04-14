@@ -85,6 +85,10 @@ export default function RootLayout() {
         <Stack.Screen name="project-detail" />
         <Stack.Screen name="hamarquizen" />
         <Stack.Screen name="timeline" />
+        <Stack.Screen name="voice-elicitation" />
+        <Stack.Screen name="voice-capture" />
+        <Stack.Screen name="knowledge-sweep" />
+        <Stack.Screen name="map" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <FeedbackCapture />
