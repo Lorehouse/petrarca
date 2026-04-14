@@ -933,7 +933,7 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     SEQUENCE_GATE_THRESHOLD = 3
 
     # TEMP: structural-only mode — show only aspect/sequence cards for focused testing
-    STRUCTURAL_ONLY = True
+    STRUCTURAL_ONLY = False
 
     card_rows = []
     for card_type, limit in [('aspect', 10 if STRUCTURAL_ONLY else 3), ('sequence', 5 if STRUCTURAL_ONLY else 2)]:
