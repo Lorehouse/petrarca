@@ -22,6 +22,7 @@ Master index of all research documents. **Always update this file when adding ne
 - **Books**: [book-companion-handoff.md](book-companion-handoff.md), [book-companion-experiments.md](book-companion-experiments.md)
 - **Knowledge mapping**: [knowledge-curriculum-vision.md](knowledge-curriculum-vision.md), [curriculum-system-audit.md](curriculum-system-audit.md), [learning-science-for-knowledge-mapping.md](learning-science-for-knowledge-mapping.md)
 - **Historiographic/interpretive knowledge**: [historiographic-knowledge-design.md](historiographic-knowledge-design.md)
+- **Wikidata entity resolution**: [wikidata-deployment-guide.md](wikidata-deployment-guide.md) (runbook), `scripts/backfill_wikidata.py` (4-pass pipeline), `scripts/merge_entity_dupes.py`, `scripts/reprocess_voice_with_qids.py`
 - **Growth measurement**: [knowledge-growth-measurement-proposal.html](knowledge-growth-measurement-proposal.html)
 - **Calibration/thresholds**: [experiment-results-report.md](experiment-results-report.md), `scripts/ground-truth/`
 - **UX**: [ux-redesign-spec.md](ux-redesign-spec.md), [web-app-audit.md](web-app-audit.md), [mobile-app-audit.md](mobile-app-audit.md)
@@ -35,6 +36,11 @@ Master index of all research documents. **Always update this file when adding ne
 | [implementation-status.md](implementation-status.md) | **CURRENT STATE** — System snapshot: architecture, screens, scripts, endpoints, algorithms, deployment | Active |
 | [session-changelog.md](session-changelog.md) | **HISTORY** — Session-by-session implementation log (sessions 20-62) | Active |
 | [system-state-of-the-art.md](system-state-of-the-art.md) | **COMPREHENSIVE** — Single file covering all research, validated algorithms, data structures, UI mockups, pipeline architecture | Active |
+
+## Operational
+| Document | Description | Status |
+|----------|-------------|--------|
+| [wikidata-deployment-guide.md](wikidata-deployment-guide.md) | Step-by-step runbook for Wikidata entity resolution: schema migration, backfill, dedup merges, admin triage | Active |
 
 ## Foundational
 | Document | Description | Status |

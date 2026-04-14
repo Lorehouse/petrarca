@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 13, 2026 (session 69: Insight node matching overhaul — composite scoring)
+**Last updated**: April 14, 2026 (session 70+: Wikidata entity resolution backfill + live voice capture integration)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -137,6 +137,11 @@
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation (Opus) + graph utilities. Generates JSON + inserts into SQLite. Entity tagging (Gemini Flash) + JSON entity index. NOT for runtime data |
 | `bootstrap_entities.py` | Extracts rich entities (descriptions, Wikipedia, coordinates) from curricula via Gemini Flash → `shared_entities` + `entity_curriculum_links` SQLite tables. Run after curriculum generation for voice capture entity matching |
+| `backfill_wikidata.py` | 4-pass Wikidata entity resolution: (1) deterministic scoring, (2) anchor-boosted re-pass, (3) Gemini Flash LLM disambiguation, (4) no-match rescue with alternate queries. Writes `entity_resolutions` audit trail + `entity_external_ids`. 509/570 entities resolved (89.3%) |
+| `merge_entity_dupes.py` | Find-and-merge duplicate entities sharing the same Wikidata QID. Safety classifier: SAFE (suffix-dupe, known-alias, of-place, regnal) vs REVIEW. SQL merge across 5 tables |
+| `reprocess_voice_with_qids.py` | Standalone tool to resolve a voice transcript's entities to Wikidata QIDs. Validates resolver pipeline without touching live code |
+| `migrate_wikidata_schema.py` | Idempotent schema migration: adds `wikidata_qid` column + `entity_resolutions` + `entity_external_ids` tables |
+| `cleanup_stale_resolutions.py` | Remove stale/superseded resolution audit rows |
 | `log_server.py` | Legacy interaction log collection (:8091) — replaced by `/log/events` in research-server.py |
 | `server_log.py` | Dual-layer logging: `log_interaction()` (SQLite + JSONL), `log_client_events()` (batch JSONL parser) |
 | `enrich_entities.py` | Entity enrichment batch: Gemini Flash extraction from card content → shared_entities dedup + insert |
@@ -281,6 +286,12 @@
 | GET | `/curriculum/:domain/coverage` | Curriculum coverage stats |
 | GET | `/book/prescan/:id` | Book pre-scan: known/new nodes, missing prerequisites, cross-book overlaps |
 
+### Admin (Entity Resolution)
+| GET | `/admin/entity-queue` | HTML review page for unresolved/ambiguous entities |
+| GET | `/admin/entity-queue-data` | JSON: latest-per-entity resolution data |
+| GET | `/admin/entity/<qid>` | Consolidated entity view |
+| POST | `/admin/entity/resolve` | Manual QID commit (409 on conflict) |
+
 ### Other
 | POST | `/chat` | Research chat |
 | POST | `/research/topic` | Topic research |
@@ -300,13 +311,15 @@
 
 ## SQLite Schema (petrarca.db)
 
-35 tables organized into 7 areas:
+37 tables organized into 8 areas:
 
 **Content pipeline**: `articles`, `article_sections`, `atomic_claims`, `claim_similarities`, `nli_verdicts`, `article_similarities`, `article_novelty_matrix`, `paragraph_claim_map`, `article_curriculum_nodes`, `delta_reports`, `concept_clusters`, `near_duplicates`, `syntheses`, `pipeline_meta`, `cluster_meta`
 
 **Books & Kindle**: `physical_books`, `book_captures`, `book_curriculum_mappings`, `kindle_books`, `available_epubs`
 
-**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities`, `entity_curriculum_links`
+**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities` (with `wikidata_qid`), `entity_curriculum_links`
+
+**Entity Resolution**: `entity_resolutions` (append-only audit trail — every Wikidata resolution decision with candidates, confidence, reasoning, supersede chain), `entity_external_ids` (1906 VIAF/GND/GeoNames/Pleiades/Getty/MusicBrainz/BnF/LCCN IDs harvested from resolved entities)
 
 **Review & Microlearning**: `review_items`, `microlearning_cards`, `microlearning_quizzes` (fact_id + rich_answer columns for multi-cue linking)
 

@@ -1,6 +1,32 @@
 # Knowledge System Implementation Status
 
-**Date**: April 14, 2026 (last updated — session 70: Wikidata entity resolution backfill)
+**Date**: April 14, 2026 (last updated — session 70b: production backfill + voice capture integration)
+
+## Session 70b: Production Backfill + Voice Capture Integration (April 14, 2026)
+
+### What
+Deployed the full Wikidata entity resolution stack to production and wired it into the live voice capture pipeline.
+
+### Production backfill
+- Merged [PR #2](https://github.com/houshuang/petrarca/pull/2) (backfill + admin UI + merge tool)
+- Ran 4-pass backfill on live alif DB: **509/570 entities resolved (89.3%)**, 1906 external IDs
+- Applied 21 safe dedup merges (augustus↔octavian, homer↔homer_person, etc.)
+- 61 unresolved — mostly curriculum-internal period labels, not real entities
+
+### Voice capture integration ([PR #3](https://github.com/houshuang/petrarca/pull/3))
+Two additions to `process_voice_capture()` in `review_engine.py`:
+1. **Domain routing** (foreground): When entity matching finds <5 nodes, Gemini Flash picks top-3 domains → all nodes become candidates. Fixes the novel-entity problem.
+2. **Background entity resolution**: Daemon thread resolves `entities_mentioned` to Wikidata QIDs (deterministic + Gemini disambiguation). Auto-creates `shared_entities` rows for novel entities.
+
+### Validation
+Ran `reprocess_voice_with_qids.py` on the canonical Rollo transcript (`vt_1776097010_8381`): 11/13 entities resolved correctly — Rollo→Q273773, Richard I→Q333359 (of Normandy), Gunnor→Q270777, Æthelred→Q183499.
+
+### Environment notes
+- `GEMINI_KEY` must be exported for SSH-invoked scripts: `export GEMINI_KEY=$(grep GEMINI_KEY /opt/petrarca/.env | cut -d= -f2)`
+- limbic synced to server via rsync (not git): `rsync -av ~/src/limbic/limbic/ alif:/opt/limbic/limbic/`
+- systemd unit is `petrarca-research.service`
+
+---
 
 ## Session 70: Wikidata Entity Resolution Backfill (April 13-14, 2026)
 

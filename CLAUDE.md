@@ -41,9 +41,10 @@ These principles are the intellectual foundation of the project. They override i
 | **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
 | **Microlearning cards** | `review_engine.py` (MICROLEARNING_PROMPT, _run_microlearning_research), `curriculum_db.py` (generate_review_stream ML mixing) |
 | **Curriculum/entities** | `research/curriculum-system-audit.md` (audit + code paths), `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
+| **Wikidata/entity resolution** | `research/wikidata-deployment-guide.md` (runbook), `scripts/backfill_wikidata.py` (4-pass pipeline), `scripts/merge_entity_dupes.py`, `scripts/reprocess_voice_with_qids.py`. Admin: `/admin/entity-queue` |
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |
-| **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()` |
+| **Voice recall** | `voice-elicitation.tsx` — Know Nothing + Skip, book/chapter/curriculum recall, auto-loads more. Server: `review_engine.py` `run_voice_elicitation()`. Voice capture: domain routing (Gemini) + background Wikidata entity resolution |
 | **Historiographic/insights** | `research/historiographic-knowledge-design.md` (theories, debates, attributed claims — layered proposal). Voice capture `source='insight'` in `review_engine.py`. |
 | **Knowledge atlas** | `scripts/knowledge_atlas.html` (standalone D3 web viz), `curriculum_db.py` `get_knowledge_atlas_data()`, served at `/knowledge/atlas` |
 | **Knowledge growth** | `scripts/knowledge_growth.html` (D3 viz), `curriculum_db.py` (`compute_network_metrics`, `get_knowledge_growth_data`), `research/knowledge-growth-measurement-proposal.html` |
@@ -73,6 +74,8 @@ This project is exploratory — 60+ sessions in many directions. That means:
 - **Review scheduling priority**: SR cards first (book-sourced highest, gap-fill penalized -5.0 and capped at 3/batch). ML cards interleaved by `source_type`: voice_wondering/correction at 1:3, follow_up at 1:7. Never front-load ML cards.
 - **Voice elicitation → knowledge_items**: `run_voice_elicitation()` creates knowledge_items for nodes that don't have one yet (14-day initial stability). Uses `confidence_tagged` to create `correction` ML cards for wrong facts. Does NOT create ML cards from missed facts (user prefers reading to fill gaps).
 - **Voice capture dedup**: `process_voice_capture()` checks SHA-256 hash of transcript text before processing — prevents duplicate ingestion of same podcast/voice note.
+- **Voice capture domain routing**: When entity matching finds <5 linked nodes, Gemini Flash picks top-3 curriculum domains → all nodes from those domains become candidates. Fixes novel-entity transcripts (e.g., Rollo/Normandy). Background thread then resolves `entities_mentioned` to Wikidata QIDs via `_resolve_voice_entities_background()`.
+- **Wikidata entity resolution**: `shared_entities.wikidata_qid` (89.3% coverage). Audit trail in `entity_resolutions` table. External IDs in `entity_external_ids` (1906 VIAF/GND/GeoNames/etc.). Admin review at `/admin/entity-queue`.
 - **Interaction logging**: Dual-layer via `/log/events` endpoint — SQLite `interaction_log` table + JSONL files. Server-side logging on both grading endpoints. Client sends via `logger.ts` to `:8090/log/events`.
 - **Multi-domain chapter mapping**: `create_review_items_for_chapter()` maps against top-2-3 curricula (similarity >= 0.40), not just one domain. Cross-curriculum context + temporal cross-refs injected into question generation.
 - **Book pre-scan**: `GET /book/prescan/{book_id}` shows known/new/missing nodes + cross-book overlaps.
