@@ -35,19 +35,6 @@ export default function MoreTab() {
 
       <DoubleRule />
 
-      {/* Library */}
-      <Text style={styles.sectionLabel}>Library</Text>
-      <NavItem
-        title="Physical Books"
-        subtitle="Your reading list and chapter mapping"
-        onPress={() => navigate('library', '/(tabs)/library')}
-      />
-      <NavItem
-        title="Kindle Library"
-        subtitle="Browse & manage your full Kindle library"
-        onPress={() => navigate('kindle_browse', '/kindle-browse')}
-      />
-
       {/* Explore */}
       <Text style={styles.sectionLabel}>Explore</Text>
       <NavItem

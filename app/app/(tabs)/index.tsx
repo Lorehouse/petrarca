@@ -17,6 +17,8 @@ import { setFeedbackContext } from '../../lib/feedback-context';
 import EntitySheet from '../../components/EntitySheet';
 import AncientMap from '../../components/AncientMap';
 import { detectDates } from '../../components/KnowledgeExplorer';
+import AspectCard from '../../components/AspectCard';
+import type { AspectCardData } from '../../components/AspectCard';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -1471,7 +1473,25 @@ export default function ReviewScreen() {
 
         {currentItem && (
           <Animated.View style={{ opacity: fadeAnim }}>
-            {currentItem.type === 'entity_intro' ? (
+            {currentItem.type === 'aspect' ? (
+              <AspectCard
+                key={currentItem.card_id || `aspect-${currentIndex}`}
+                card={currentItem as unknown as AspectCardData}
+                onComplete={(results) => {
+                  logEvent('aspect_card_complete', {
+                    card_id: currentItem.card_id,
+                    results: results.map(r => ({ id: r.position_id, score: r.score })),
+                    knew: results.filter(r => r.score === 'knew').length,
+                    total: results.length,
+                  });
+                  // TODO: POST results to server for FSRS scheduling
+                  animateTransition(() => {
+                    setCurrentIndex(i => i + 1);
+                    maybeLoadMore();
+                  });
+                }}
+              />
+            ) : currentItem.type === 'entity_intro' ? (
               <EntityIntroCard
                 key={`intro-${currentItem.entity_id || currentIndex}`}
                 item={currentItem}

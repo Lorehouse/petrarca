@@ -21,7 +21,7 @@ export default function TabsLayout() {
         },
       }}
     >
-      {/* ── Visible tabs (4-tab layout) ── */}
+      {/* ── Visible tabs (5-tab layout) ── */}
       <Tabs.Screen name="index" options={{
         title: 'Review',
       }} />
@@ -31,6 +31,9 @@ export default function TabsLayout() {
       <Tabs.Screen name="stats" options={{
         title: 'Stats',
       }} />
+      <Tabs.Screen name="library" options={{
+        title: 'Library',
+      }} />
       <Tabs.Screen name="more" options={{
         title: 'More',
       }} />
@@ -38,10 +41,6 @@ export default function TabsLayout() {
       {/* ── Hidden tabs (accessible via navigation, not in tab bar) ── */}
       <Tabs.Screen name="feed" options={{
         title: 'Feed',
-        href: null,
-      }} />
-      <Tabs.Screen name="library" options={{
-        title: 'Library',
         href: null,
       }} />
       <Tabs.Screen name="topics" options={{

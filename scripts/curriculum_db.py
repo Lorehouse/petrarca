@@ -915,6 +915,115 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
     return item
 
 
+def _mix_structural_cards(items: list, conn, domain_filter: str | None,
+                          now_ms: int) -> list:
+    """Mix structural (aspect) cards into the review stream.
+
+    Inserts aspect cards at positions 3, 6, 9 (every 3rd card) among the
+    existing review/ML items. Only includes cards that have due positions.
+    """
+    # Query aspect cards with at least one due position
+    soon = now_ms + 24 * 3600 * 1000
+    if domain_filter:
+        card_rows = conn.execute(f'''
+            SELECT sc.id, sc.card_type, sc.title, sc.domain_id, sc.node_id,
+                   sc.date_start, sc.date_end, sc.review_count,
+                   cd.title as domain_title
+            FROM structural_cards sc
+            LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
+            WHERE sc.card_type = 'aspect'
+            AND sc.domain_id LIKE ?
+            AND EXISTS (
+                SELECT 1 FROM structural_positions sp
+                WHERE sp.card_id = sc.id AND sp.due_at <= ?
+            )
+            ORDER BY sc.review_count ASC, sc.due_at ASC
+            LIMIT 5
+        ''', (f'%{domain_filter}%', now_ms + 24 * 3600 * 1000)).fetchall()
+    else:
+        card_rows = conn.execute('''
+            SELECT sc.id, sc.card_type, sc.title, sc.domain_id, sc.node_id,
+                   sc.date_start, sc.date_end, sc.review_count,
+                   cd.title as domain_title
+            FROM structural_cards sc
+            LEFT JOIN curriculum_domains cd ON cd.id = sc.domain_id
+            WHERE sc.card_type = 'aspect'
+            AND EXISTS (
+                SELECT 1 FROM structural_positions sp
+                WHERE sp.card_id = sc.id AND sp.due_at <= ?
+            )
+            ORDER BY sc.review_count ASC, sc.due_at ASC
+            LIMIT 5
+        ''', (now_ms + 24 * 3600 * 1000,)).fetchall()
+
+    if not card_rows:
+        return items
+
+    structural_items = []
+    for card_row in card_rows:
+        card = dict(card_row)
+        # Load positions for this card
+        positions = [dict(r) for r in conn.execute('''
+            SELECT id, position, fact_id, question_text, answer_text,
+                   question_variants, hook_type, mnemonic, mnemonic_type,
+                   stability_days, due_at, review_count, last_score
+            FROM structural_positions
+            WHERE card_id = ?
+            ORDER BY position
+        ''', (card['id'],)).fetchall()]
+
+        # Parse question_variants JSON
+        for p in positions:
+            try:
+                p['question_variants'] = json.loads(p['question_variants'] or '[]')
+            except (json.JSONDecodeError, TypeError):
+                p['question_variants'] = []
+
+        structural_items.append({
+            'type': 'aspect',
+            'card_id': card['id'],
+            'title': card['title'],
+            'domain_id': card['domain_id'],
+            'domain_title': card.get('domain_title', ''),
+            'node_id': card['node_id'],
+            'positions': [{
+                'position_id': p['id'],
+                'position': p['position'],
+                'question_text': p['question_text'],
+                'answer_text': p['answer_text'],
+                'question_variants': p['question_variants'],
+                'hook_type': p['hook_type'] or 'IDENTITY',
+                'fact_type': p['hook_type'] or 'event',
+                'mnemonic': p['mnemonic'],
+                'mnemonic_type': p['mnemonic_type'],
+                'stability_days': p['stability_days'] or 1.0,
+                'due_at': p['due_at'] or 0,
+                'review_count': p['review_count'] or 0,
+                'last_score': p['last_score'],
+            } for p in positions],
+            'provenance': {
+                'origin': 'structural',
+                'review_count': card['review_count'] or 0,
+            },
+        })
+
+    # Interleave: insert structural cards every 3rd position
+    merged = []
+    struct_idx = 0
+    for i, item in enumerate(items):
+        merged.append(item)
+        if (i + 1) % 3 == 0 and struct_idx < len(structural_items):
+            merged.append(structural_items[struct_idx])
+            struct_idx += 1
+
+    # Append remaining structural cards
+    while struct_idx < len(structural_items):
+        merged.append(structural_items[struct_idx])
+        struct_idx += 1
+
+    return merged
+
+
 def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                            offset: int = 0, conn=None) -> dict:
     """Generate a stream of review cards from knowledge_items.
@@ -1491,6 +1600,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             items = merged
         except Exception as e:
             print(f'[review-stream] microlearning query failed: {e}', flush=True)
+            import traceback; traceback.print_exc()
+
+        # ── Mix in structural (aspect) cards ─────────────────────────────
+        try:
+            items = _mix_structural_cards(items, conn, domain_filter, now_ms)
+        except Exception as e:
+            print(f'[review-stream] structural card mixing failed: {e}', flush=True)
             import traceback; traceback.print_exc()
 
         # ── Entity annotations ───────────────────────────────────────────

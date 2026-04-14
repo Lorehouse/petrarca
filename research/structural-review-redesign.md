@@ -61,17 +61,18 @@ The following subsystems are **preserved in code but disabled** in the app. Futu
 
 **Current**: 3 tabs (Feed, Review, Library) + drawer with 15+ items
 
-**Proposed**: 4 tabs, review is the landing screen
+**Proposed**: 5 tabs, review is the landing screen
 
 ```
 Tabs (bottom bar):
   1. Review (landing)     — Card stream + voice quick-access
   2. Voice                — Voice elicitation + capture
   3. Stats                — Detailed analytics (native, not HTML)
-  4. More                 — Library, settings, knowledge explorer, admin
+  4. Library              — Books, curricula, knowledge explorer
+  5. More                 — Settings, admin, knowledge explorer, map
 ```
 
-**Rationale**: Alif's 6-tab layout works well on mobile. But Petrarca's core loop is tighter: review cards and voice input. Stats deserves its own tab (not a buried drawer link) because the user wants detailed analytics visible. "More" absorbs the remaining functionality (library, books, knowledge explorer, map, settings).
+**Rationale**: Alif's 6-tab layout works well on mobile. Stats and Library both deserve their own tabs (user feedback: "stats should be a tab, and library should also be a tab"). Library is used often enough to warrant direct access, not buried in More. "More" absorbs settings, admin, and less-frequently-used screens.
 
 **Key change**: The app opens to the Review tab. No feed, no articles, no curation. You open Petrarca to review knowledge and capture voice input.
 
@@ -123,27 +124,31 @@ All structural cards follow the same pattern:
 **When shown**: First encounter with topic, or multiple aspects due simultaneously
 **Time**: 20-30 seconds for 3-5 FSRS signals
 
+**CRITICAL: Title must not leak answers.** Frame by event/domain, not by person. Bad: "Pompey's Pirate Campaign" + "Who led it?" (trivial). Good: "The Mediterranean Pirate Crisis, 67 BC" or "Clearing the Pirates" — then "Who led it?" is a real question.
+
+**Reverse cues**: Aspect cards must support BOTH directions. Not just "who/when/how about [event]" but also "What was Pompey's famous military campaign?" and "Who cleared the Mediterranean pirates?" Every fact should be approachable from multiple entry points. The system generates cue variants per aspect and rotates them across appearances.
+
 ```
 ┌─────────────────────────────────────────┐
-│ Pompey's Pirate Campaign                │
+│ The Mediterranean Pirate Crisis         │
 │ roman_republic · 1st century BC         │
 │                                         │
-│ What do you remember?                   │
+│ What do you remember?        [Know All] │
 │                                         │
-│  ○ Who led it?          [Reveal]        │
-│  ○ What year?           [Reveal]        │
-│  ○ How long?            [Reveal]        │
-│  ○ What authority?      [Reveal]        │
+│  ○ Who led the campaign? [Reveal]       │
+│  ○ What year?            [Reveal]       │
+│  ○ How long did it take? [Reveal]       │
+│  ○ What legal authority? [Reveal]       │
 └─────────────────────────────────────────┘
 
-After revealing:
+After revealing (or tapping Know All → all flip, mark any missed):
 
 │  ✓ Who led it?     → Pompey       [Knew]  │
 │  ✗ What year?      → 67 BC        [Missed] │
 │  ✓ How long?       → ~3 months    [Knew]  │
 │  ✓ What authority? → Lex Gabinia  [Knew]  │
 │                                            │
-│ ─── Focusing on: the date ─────────────── │
+│ ─── Mnemonic for: the date ────────────── │
 │ ⋆ 67 BC — 6 years after Spartacus         │
 │   (73 BC), 6 years before Caesar crosses   │
 │   the Rubicon (49 BC).                     │
@@ -151,6 +156,11 @@ After revealing:
 │ 3/4 known · "What year?" due Thursday     │
 │                          [Continue →]      │
 ```
+
+**Reveal flow** (user input):
+- **"Know All" button** for confident moments — flips all aspects, user marks any missed
+- **Default flow**: tap to reveal one at a time, then mark knew/missed
+- The "Focusing on" / mnemonic section appears ONLY for missed aspects — it's remediation, not decoration
 
 **Key behaviors**:
 - User does mental free recall BEFORE revealing (preserves elaborative retrieval benefit)
@@ -196,6 +206,8 @@ After revealing:
 └─────────────────────────────────────────┘
 ```
 
+**Reverse question framing**: Each position should support multiple question types. "Who allied with Rome vs Carthage?" should ALSO be askable as "What did Hiero II do?" or "Who was the last independent ruler of Syracuse?" The system generates variant framings and rotates across appearances, ensuring the same fact is tested from different angles.
+
 **Bounding units** (natural sequence boundaries):
 
 | Type | Examples | Typical Size |
@@ -207,9 +219,11 @@ After revealing:
 
 **Rotating blanks**: Each appearance of a sequence card blanks DIFFERENT positions based on FSRS state. Positions that are well-known become anchors; weak positions become blanks. The card is never identical twice.
 
-**Scale annotations**: Show temporal proportions — "273 years, longer than the USA has existed", "80 years between Gelon and Dionysius I". These encode the SCALE of history, not just the ordering.
+**Scale annotations**: Must use **meaningful temporal hooks**, not arbitrary duration comparisons. Bad: "273 years, longer than the USA has existed" (not useful — no historical connection). Good: "80 years between Gelon and Dionysius I — the same gap as WWI to today" or better, anchoring to contemporaneous events the user knows. Prefer: (1) anchors to known events, (2) causal/contextual connections, (3) same-moment cross-domain hooks. Avoid: random modern-era comparisons with no conceptual link.
 
-**Generation**: Sequences are generated from existing key_facts + entity date ranges within a curriculum domain. LLM selects the 5-8 most important milestones and generates cross-domain hooks.
+**Include events, not just rulers**: Sequence cards should mix rulers/persons with significant events — "expulsion of Jews from Spain", "revolution in Italy", "fall of Acre". Pure ruler-succession lists miss the historical texture. LLM should select a mix of political, cultural, and military milestones.
+
+**Generation**: Sequences are generated from existing key_facts + entity date ranges within a curriculum domain. LLM selects the 5-8 most important milestones (mix of persons and events) and generates cross-domain hooks.
 
 ### Card Type 3: Synchronic Card (geographic contemporaries)
 
@@ -237,7 +251,9 @@ After revealing:
 
 **Cross-domain hooks auto-emerge**: "Norman brothers conquering both ends of Europe simultaneously" — the frame makes the connection obvious without needing to state it explicitly.
 
-**Generation**: For any anchor year/event, query all entities of type ruler/major_figure whose date range spans that year, grouped by domain. LLM selects the most interesting 5-7 regional snapshots.
+**Relevance filter (user feedback)**: Only show cross-domain connections where there's an **actual historical relationship**. Don't show China alongside Europe just because it's the same year — unless there's a real connection (trade routes, Mongol conquests spanning both, etc.). Focus on: (1) connected regions (Europe + Middle East + North Africa for medieval), (2) domains the user is actively studying, (3) cross-domain connections that illuminate something (Muslims in West Asia while Crusades in Levant). Geographic curiosity without narrative connection is noise.
+
+**Generation**: For any anchor year/event, query all entities of type ruler/major_figure whose date range spans that year, grouped by domain. LLM selects the most interesting 5-7 regional snapshots, **filtering for narrative connections** rather than arbitrary geographic completeness.
 
 **Wikidata integration**: The recently deployed Wikidata entity resolution (89.3% QID coverage) enables rich cross-domain queries. Entity date ranges and external IDs make synchronic card generation more reliable.
 
@@ -283,10 +299,11 @@ After revealing:
 └─────────────────────────────────────────┘
 ```
 
-### Card Type 6: Quick Quiz (single-signal, fast)
+### Card Type 6: Quick Quiz (single-signal, validation)
 
 **Tests**: One specific aspect, position, or relationship
-**When shown**: Individual aspects due for review (the most common card type as knowledge matures)
+**Role**: Primarily a **signal/validation tool**, not the core learning vehicle. Structural cards are the primary mechanism. Quick quizzes provide targeted signal for individual aspects and help validate whether structural card learning transfers. May be reduced or removed if structural cards provide sufficient coverage.
+**When shown**: Individual aspects due for review, especially to validate specific weak points
 **Time**: 5-8 seconds for 1 FSRS signal
 
 ```
@@ -335,9 +352,11 @@ After revealing:
 
 **Session rhythm**: fast-fast-**MEDIUM**-fast-fast-**MEDIUM**-fast-fast-**MEDIUM**-fast. Structural cards are the peaks (satisfying, story-like); quick quizzes are the steady beat (efficient, precise).
 
-**Natural progression**: As knowledge matures, sessions shift from 30% structural / 70% quiz to 10% structural / 90% quiz. Sessions get faster and cover more ground.
+**Natural progression**: As knowledge matures, sessions shift from heavy structural cards (the most exciting part to test) toward a mix. Quick quizzes serve primarily as validation probes — they confirm that knowledge from structural cards transfers to isolated recall. Their role may shrink if structural cards provide sufficient signal.
 
-**Signal density**: ~14 FSRS signals from 10 cards in 2.5 minutes. Current system: ~10 imprecise signals from 10 rich cards in 5 minutes. 2.8x improvement in signal-per-minute.
+**Signal density**: ~14 FSRS signals from 10 cards in 2.5 minutes. Current system: ~10 imprecise signals from 10 rich cards in 5 minutes. 2.8x improvement in signal-per-minute. Structural cards should not slow sessions too much — the key is that each structural card covers MULTIPLE learning points per interaction.
+
+**Structural cards per session**: Not yet determined — this is the most important parameter to test empirically. Start with 2-3 per 10-card session and calibrate based on session completion time and engagement.
 
 ## Scheduling & Analytics
 
@@ -362,7 +381,7 @@ When a fact appears as an ANCHOR (filled position) on a structural card:
 | Shown as anchor | Collateral exposure | 0.3× |
 | Not shown | Nothing | 0× |
 
-The 0.3× collateral exposure: log the exposure, extend `due_at` by ~15-20% of current interval, but don't count as a full review. This lets well-known facts that keep appearing as anchors drift to very long intervals naturally.
+The 0.3× collateral exposure: log the exposure, extend `due_at` by ~15-20% of current interval, but don't count as a full review. This lets well-known facts that keep appearing as anchors drift to very long intervals naturally. **User note**: 0.3× may be too high — "might be lower, but we can try this as a start." Calibrate from data.
 
 **Exposure log** (new table):
 ```sql
@@ -386,7 +405,9 @@ From Math Academy's Fractional Implicit Repetition: reviewing an advanced topic 
 - His approximate date range (temporal knowledge)
 - His association with Syracuse (geographic knowledge)
 
-**Implementation**: Build an encompassing graph from curriculum_prerequisites + entity_curriculum_links. When a structural card position is answered correctly, give 0.2× implicit credit to encompassed facts. Track in exposure_log with `exposure_type='implicit'`.
+**⚠️ Caution (user feedback)**: Implicit credit has a perverse incentive risk. Current system: "I see a rich answer with lots of detail, so I don't mark 'knew' because I didn't recall ALL details." For implicit credit to work, the answer to the tested question must be **unambiguous and complete** — the user must clearly know everything needed to produce the answer. If the question is "Who seized power after civil war?" and the answer is "Dionysius I (405 BC)", the user either knows this or doesn't. Self-assessment must be trivially easy. Don't grant implicit credit for facts that required complex multi-part recall.
+
+**Implementation**: Build an encompassing graph from curriculum_prerequisites + entity_curriculum_links. When a structural card position is answered correctly, give 0.2× implicit credit to encompassed facts. Track in exposure_log with `exposure_type='implicit'`. Start conservative — only grant implicit credit when the answer unambiguously demonstrates knowledge of the prerequisite.
 
 ### Anchor Calibration
 
@@ -428,6 +449,8 @@ All analytics move from standalone HTML pages to a native React Native stats scr
 
 ### Stats Sections
 
+Inspired by Alif's stats but adapted for Petrarca. The most important metric: **how many facts have reached reliable long-term recall, and how is the pipeline flowing?**
+
 **Today Hero**:
 - Cards reviewed today, signal count, time spent
 - Knowledge transitions today (unknown→mentioned, mentioned→engaged, etc.)
@@ -437,6 +460,13 @@ All analytics move from standalone HTML pages to a native React Native stats scr
 - Horizontal stacked bars: unknown / mentioned / engaged / anchored
 - Node coverage % and edge overlap % (Goldsmith C metric)
 - Tap domain → domain detail with per-node breakdown
+
+**Pipeline Model** (the key stats section — user feedback):
+- **Fact stability distribution**: How many facts at short (1-7d) / medium (7-30d) / long (30-90d) / graduated (90d+) stability. This is the primary progress metric.
+- **Unit completeness**: For each "unit of knowledge" (curriculum node / event / entity), how many recall hooks are known vs total? E.g., "Battle of Actium: 3/5 aspects anchored." Show units where ALL hooks are solid vs partially known.
+- **Pipeline flow**: New facts introduced (from books, voice, etc.) → in processing → short-term recall → long-term maintenance. Visualize the flow: how many enter, how fast they graduate, what's the steady-state maintenance load.
+- **Voice capture lag**: When new voice captures are processed, how long until the generated items enter the review stream and reach stable recall? Track the lifecycle from capture → knowledge_item → first review → graduated.
+- NOT Leitner boxes (facts come from external sources, not internally generated cards).
 
 **Review Performance** (rolling 7d / 30d):
 - Grade distribution across card types (knew/missed per aspect, position, quick quiz)
@@ -585,18 +615,31 @@ The existing tables remain. New tables are additive. The migration path:
 - [ ] Consider reprocessing all voice transcripts through updated pipeline
 - [ ] Merge Wikidata entity resolution work (PR #2 + backfill)
 
-### Phase 1: Review-First App Shell (Session 72 — done)
-- [x] Restructure navigation: 4 tabs (Review, Voice, Stats, More)
+### Phase 1: Review-First App Shell (Session 72 — partially done)
+- [x] Restructure navigation: 4 tabs initially (Review, Voice, Stats, More)
 - [x] App opens to Review tab
 - [x] Move Library to More tab
 - [x] Disable Feed tab (hide, don't delete)
 - [x] Add floating mic button on Review tab
+- [ ] **Upgrade to 5 tabs**: Move Library out of More into its own tab (Review / Voice / Stats / Library / More)
 - [ ] Disable launchd jobs for Twitter/Kindle/Amazon sync
 
-### Phase 2: Aspect Cards
-- [ ] Implement aspect decomposition for key_facts (structured generation prompt)
-- [ ] Batch generate aspects for all 265 knowledge_items with key_facts
-- [ ] Build AspectCard component in review.tsx
+### Phase 1.5: Simulation (Session 73 — done)
+- [x] Run coverage simulation on Syracuse + Late Republic (529 facts, 109 entities)
+- [x] Validate retrieval hook taxonomy: 3,881 hooks across 529 facts (7.3 avg per fact)
+- [x] Model reverse cues: eliminates single-coverage facts (86 → 0)
+- [x] Knowledge-gating rules defined (sequence ≥3 positions, synchronic ≥2 domains, cast ≥2 roles)
+- [x] FSRS progression model: 8-week simulation with different session compositions
+- [x] Key finding: synchronic cards are a cross-domain reward (never unlock within single domain)
+
+### Phase 2: Aspect Cards (Session 73 — in progress)
+- [x] Schema: structural_cards + structural_positions + exposure_log tables created on server
+- [x] Generation prompt: non-leaking titles + reverse cue variants via Gemini Flash
+- [x] Batch generated aspect cards for Sicily (70) + Rome (55) domains
+- [x] AspectCard React component (289 lines): Know All, reveal-then-mark, binary grading, mnemonics
+- [x] Integrated into review stream (_mix_structural_cards in curriculum_db.py)
+- [ ] FSRS scheduling endpoint for per-position grading
+- [ ] Deploy and test end-to-end
 - [ ] Per-aspect FSRS scheduling in structural_positions table
 - [ ] Aspect-specific mnemonic generation (different strategy per type)
 - [ ] Integrate into review stream (replace current knowledge_item cards)
@@ -649,6 +692,20 @@ The existing tables remain. New tables are additive. The migration path:
 - [ ] Auto-detect contemporaneous mentions → generate synchronic cards
 - [ ] Batch reprocess historical transcripts through updated pipeline
 - [ ] Voice capture from Review tab (floating mic → quick capture)
+
+## Simulation: Coverage & Learning Over Time (user request)
+
+**Goal**: Before building card types, validate coverage and learning dynamics using real data from the database.
+
+**Steps**:
+1. Choose 2-3 key timelines/events from the DB (e.g., Syracuse tyrants, Late Roman Republic, Norman Sicily)
+2. Map out ALL card types that would be generated: which aspect cards, sequence cards, synchronic cards, cast cards, causal chain cards, quick quizzes
+3. For each fact/aspect, list every card where it appears and in what role (blank vs anchor)
+4. Check: does every important fact get tested from multiple angles? Are there gaps?
+5. Simulate learning over time: assume some recall rate, model FSRS scheduling, track how many facts reach long-term stability over N weeks
+6. Model: how many new facts per voice capture, how long until they enter maintenance
+
+**Output**: A concrete walkthrough showing "here are the 15 cards generated for the Syracuse tyrant period, here are the 40 facts they cover, here's how learning progresses over 4 weeks at 10 cards/day." This validates that the structural card system actually achieves comprehensive coverage before we build it.
 
 ## Experiments & Hypotheses
 
@@ -712,33 +769,31 @@ Per day:
 - voice_captures_count, items_generated
 ```
 
-## Decisions Needing User Input
+## Decisions (Resolved from User Feedback)
 
-These are marked **INPUT NEEDED** — the implementation can proceed with reasonable defaults, but user preference would improve the design:
+1. **✅ Aspect card reveal flow** — "Know All" shortcut button for confident moments (flips all aspects, user marks any missed). Default flow: tap to reveal one at a time, then mark knew/missed. The "check" tap should flip all remaining to reduce interaction cost.
 
-1. **INPUT NEEDED: Aspect card reveal flow** — Should aspects auto-reveal after tapping (instant feedback), or require a separate "check" tap (forces commitment before seeing answer)? Default: require tap-to-reveal, then tap knew/missed.
+2. **✅ Blanks per sequence card** — Start with 2 blanks. Tune based on accuracy data.
 
-2. **INPUT NEEDED: How many blanks per sequence card?** 2-3 feels right for a 5-milestone sequence, but should we start aggressive (4 blanks) or conservative (2 blanks) and adapt? Default: start with 2, increase as user accuracy improves.
+3. **✅ Synchronic card domain selection** — Only show cross-domain connections where there's an actual historical relationship. Not arbitrary geographic contemporaries (China alongside Europe = noise unless there's a real connection like Mongols, trade routes). Focus on connected regions the user is studying.
 
-3. **INPUT NEEDED: Synchronic card domain selection** — Show all domains you're studying, or limit to 5-6 most active? Some domains (Western Philosophy, Classical Reception) have very few entities. Default: top 5 by review activity + any domain with a directly relevant entity.
+4. **✅ Transition from legacy cards** — Keep learned knowledge states (upgrade into new system). Ditch the legacy card TYPE if structural cards provide sufficient coverage. Evaluate after 2 weeks: are legacy cards providing useful signal that structural cards don't? If not, remove them.
 
-4. **INPUT NEEDED: Transition timeline** — How fast to phase out legacy knowledge_item cards? Immediate (risk: jarring), gradual over 2 weeks (mix old and new), or keep both indefinitely? Default: 2-week transition, decreasing legacy card ratio.
-
-5. **INPUT NEEDED: Stats screen priority** — Should Stats be a tab (always visible) or a More sub-screen? It takes a tab slot but the user said "very detailed statistics screen." Default: tab.
+5. **✅ Stats and Library** — Both are tabs. 5-tab layout: Review / Voice / Stats / Library / More.
 
 ## Open Questions
 
-1. **Sequence boundary curation**: Should sequence boundaries be manually curated (higher quality) or auto-generated from curriculum structure (scalable)? Probably start manual (one-time LLM-assisted generation per domain), then automate.
+1. **Sequence boundary curation**: Should sequence boundaries be manually curated (higher quality) or auto-generated from curriculum structure (scalable)? User feedback: "should be automatic." Probably start with LLM-assisted generation, then automate fully.
 
-2. **How many structural cards per session?** The proposal says 2-3 per 10-card session. Needs testing — too many structural cards slow sessions; too few reduce learning richness.
+2. **How many structural cards per session?** Start with 2-3 per 10-card session. User: "shouldn't slow the session too much if you get multiple learning points per structure card." This is the most exciting parameter to test.
 
-3. **Synchronic card domain breadth**: How many domains should a synchronic card span? All active curricula? Only ones the user is studying? Need to balance breadth (interesting connections) vs relevance (user knows enough to care).
+3. ~~**Synchronic card domain breadth**~~ → RESOLVED: Only show cross-domain where there's an actual relationship. No arbitrary China-alongside-Europe.
 
-4. **Transition from legacy cards**: How to handle the 265 existing knowledge_items? Migrate all to aspect cards? Keep legacy cards alongside new types? Probably: batch-generate aspects for all, then phase out legacy card display over 2-3 weeks.
+4. ~~**Transition from legacy cards**~~ → RESOLVED: Keep knowledge states, ditch legacy card type if structural cards cover it. Evaluate after 2 weeks.
 
-5. **Collateral exposure weight**: The proposed 0.3× is a guess. Need to calibrate from data — does seeing a fact as an anchor actually improve retention? If so, by how much?
+5. **Collateral exposure weight**: Start at 0.3× but expect to lower. Calibrate from data.
 
-6. **Quick quiz question quality**: The current multicue generation is freeform LLM ("generate 2-4 cues"). The proposed system needs structured, type-driven generation. How reliable is this? Need to test with pipeline-eval fixtures.
+6. **Quick quiz role**: User: "not even sure we need individual quizzes." Keep for signal/validation, but structural cards are primary. May reduce or remove quizzes if structural cards provide sufficient coverage.
 
 7. **Cross-domain Wikidata queries for synchronic cards**: Performance? The backfill gave 509/570 entities QIDs. For synchronic queries, we need date ranges on entities — how complete is this data? Need to audit entity date coverage.
 
