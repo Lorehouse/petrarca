@@ -1,6 +1,47 @@
 # Knowledge System Implementation Status
 
-**Date**: April 15, 2026 (last updated — session 76: entity-first architecture Phase 1)
+**Date**: April 15, 2026 (last updated — session 77: entity-first Phase 1 observation + 4 fixes)
+
+## Session 77: Entity-First Phase 1 Observation + Cleanup Fixes (April 15, 2026)
+
+### Observation Phase (Priority 0)
+Per the Session 77 prompt, the session began with an observation pass against production state — no code until the data was read. Inspection scripts were scp'd to alif and run against `/opt/petrarca/data/petrarca.db`. 11 `knowledge_entities` rows + 2 entity-path voice transcripts (Karl XII `vt_1776272899_7705`, Viking Paris `vt_1776274698_7861`) were small enough to enumerate fact-by-fact rather than sample.
+
+**What worked well in Phase 1:**
+- Question quality is genuinely strong. Memory hooks anchored Karl XII to Peter the Great's 1697 Grand Embassy, the 1708 Russian campaign to Napoleon's 1812 Moscow disaster (104 years apart), Charles the Fat's 886 humiliation to the 843 Treaty of Verdun. Match north-star principle 6 (temporal hooks).
+- Entity grouping from `VOICE_CAPTURE_ENTITY_PROMPT` was sensible: 5 entities from Karl XII transcript, 6 from Viking Paris. No over-splitting (each date its own entity) or under-splitting (one giant container).
+- All 11 entity items appeared correctly in `generate_review_stream()` with `knowledge_weight=6.0` and proper FSRS scheduling. Karl XII graded `knew` → rescheduled +26.9d with stability 8.3d via the existing curriculum-grading codepath.
+
+**Bugs found:**
+1. **Double Wikidata resolution fire.** Every mention from entity-path captures had exactly 2 rows in `entity_resolutions` — 17 mentions → 34 rows on Karl XII capture. Root cause: when `process_voice_capture()` falls through to `_process_voice_capture_entity_path()` at line 4991, the entity path fires its own resolution thread, then control returns and the curriculum-path thread fires AGAIN at line 5026 with the same `entities_mentioned` list.
+2. **`voice_transcripts.node_title` carried curriculum garbage.** Karl XII transcript was logged as `node_title='1693 Earthquake'`; Viking Paris as `'Charles Ives'`. Caused by the entity path inheriting curriculum-path's loose-name-match fallback.
+3. **Karl XII Wikidata resolution failed**: search returned only paintings (Q119811370 by Schröder, Q106357900 by Ankarcrona). The actual person is Q52934 labeled "Carl XII of Sweden" — verified by direct `wbsearchentities` calls. The English spelling "Karl XII" isn't an alias on Q52934.
+4. **"Count Odo" mapped to Q67389525 "Count Ödön Széchenyi Fire Brigade Museum"** in Istanbul. Resolver accepted single candidate at `total=0.596 type=0.30 date=0.00` because it crossed the 0.55 threshold — no LLM disambiguation ran (only fires on `ambiguous` status).
+
+**Design gaps:**
+- A. Entity cards had `follow_up_queries: []` because `generate_entity_question` only called `_key_fact_to_question` (which generates rich_answer + memory_hook) but not `_generate_follow_up_queries`.
+- B. `entity_type` defaulted to literal `"entity"` because the prompt didn't ask for type classification and `shared_entities.entity_type` was rarely populated yet.
+- C. Parentheticals and honorifics on entity names broke Wikidata search: "Viking siege of Paris (885-886)", "Emperor Charles the Fat", "Russian Campaign (1708-1709)" all returned `no_match` or wrong matches.
+
+**Findings written to `research/session-77-observations.md`** before any code change.
+
+### Fixes Shipped (commit `5bb9e88`)
+- **Bug 1 fix**: added `entity_path_triggered` flag in `process_voice_capture()`; the curriculum-path resolution thread is skipped when entity path took over. Eliminates 2× Gemini extraction + Wikidata search per fallback capture.
+- **Bug 2 fix**: `_log_voice_transcript` inside `_process_voice_capture_entity_path` now prefers `next(iter(entity_facts.keys()))` (the LLM's primary entity) over the curriculum-path's `entity_name` arg.
+- **Gap A fix**: `generate_entity_question` now calls `_generate_follow_up_queries` after `_key_fact_to_question`, passing `entity_name` as `node_title` and the picked fact's question/answer as `fact_context`.
+- **Gap B fix**: added `entity_types` field to `VOICE_CAPTURE_ENTITY_PROMPT` output (one of `person|place|event|battle|dynasty|work|organization|concept`); threaded through entity creation so `knowledge_entities.entity_type` carries the LLM classification when no `shared_entities` row exists.
+- **Gap C fix**: added explicit CANONICAL NAMING block to the prompt with BAD/GOOD examples — strip parenthetical date qualifiers, strip honorifics unless part of canonical name (keeps "Pope Gregory VII", "Count Odo of Paris"), prefer common English spellings ("Karl" over "Carl").
+- **Backfill**: ran a one-shot script against the 11 existing `knowledge_entities` rows to regenerate `cached_question` so they pick up follow_up_queries. All 11 got 6 follow-ups each. Quality sample for Karl XII: *Voltaire's 1731 History of Charles XII, Baltic German Livonian nobility, Johann Reinhold Patkul, Swedish copper industry*. These follow north-star principle 11 — sideways, not deeper.
+
+### Verified Live
+- `petrarca-research` restarted cleanly. `POST /curriculum/review/generate` returns entity items with 6 follow-ups now exposed as top-level field on each card.
+
+### Deferred to Session 78 / Priority 2 (Resolver-Level Work)
+- **Bug 3 — Karl XII spelling**: Wikidata search returns only paintings for "Karl XII of Sweden" because Q52934's English label is "Carl XII of Sweden". Requires limbic-level fix: alternate-spelling retry for regnal names (Karl/Carl/Charles, Frederick/Friedrich/Friedrich), or upstream Wikidata alias contribution.
+- **Bug 4 — Count Odo → Fire Brigade Museum**: resolver accepted a single candidate with `type_score < 0.5 AND date_score < 0.5`. Fix: require LLM disambiguation when both type and date scores are weak, even on single-candidate matches.
+
+### Commits
+`5bb9e88` (all four fixes + observations doc).
 
 ## Session 76: Entity-First Architecture Phase 1 + Production Fixes (April 14–15, 2026)
 

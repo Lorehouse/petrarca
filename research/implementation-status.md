@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 14, 2026 (session 75: activation gating + voice pipeline + structural-only mode)
+**Last updated**: April 15, 2026 (session 77: entity-first Phase 1 observation pass + 4 cleanup fixes)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
