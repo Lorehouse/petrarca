@@ -713,6 +713,74 @@ def _build_entity_intro_items(items: list[dict], entity_knowledge: dict[str, str
     return result
 
 
+def _build_entity_capture_intros(items: list[dict], conn) -> list[dict]:
+    """Insert entity-briefing cards before the first review of a fresh
+    entity_capture item.
+
+    Fires when ALL of:
+    - item.type == 'review' (entity_capture items render as review type)
+    - provenance.origin == 'entity_capture'
+    - review_count == 0 (never reviewed yet)
+    - linked shared_entities row has a meaningful description
+
+    One intro per entity per session, inserted before that entity's first
+    review appearance. May prove redundant with the rich_answer once
+    observed; if so, gate on capture-age or drop entirely.
+    """
+    # Find candidate entity_ids (fresh entity_capture items)
+    candidates: dict[str, int] = {}  # entity_id → first item index in `items`
+    for i, item in enumerate(items):
+        if item.get('type') != 'review':
+            continue
+        prov = item.get('provenance') or {}
+        if prov.get('origin') != 'entity_capture':
+            continue
+        if (item.get('review_count') or 0) != 0:
+            continue
+        eid = prov.get('entity_id') or item.get('entity_id')
+        if not eid or eid in candidates:
+            continue
+        candidates[eid] = i
+
+    if not candidates:
+        return items
+
+    details = _load_entity_details_for_intros(list(candidates.keys()), conn)
+
+    # Build intros only for entities with a non-trivial description
+    intros_by_idx: dict[int, list[dict]] = {}
+    for eid, idx in candidates.items():
+        d = details.get(eid)
+        if not d:
+            continue
+        desc = (d.get('description') or '').strip()
+        if len(desc) < 20:
+            continue  # No useful briefing possible
+        intros_by_idx.setdefault(idx, []).append({
+            'type': 'entity_intro',
+            'entity_id': eid,
+            'entity_name': d['name'],
+            'entity_type': d.get('entity_type'),
+            'modern_name': d.get('modern_name'),
+            'description': desc,
+            'latitude': d.get('latitude'),
+            'longitude': d.get('longitude'),
+            'wikipedia_url': d.get('wikipedia_url'),
+            'date_start': d.get('date_start'),
+            'date_end': d.get('date_end'),
+        })
+
+    if not intros_by_idx:
+        return items
+
+    result: list[dict] = []
+    for i, item in enumerate(items):
+        for intro in intros_by_idx.get(i, []):
+            result.append(intro)
+        result.append(item)
+    return result
+
+
 MAX_NEXUS_CARDS = 2  # max nexus cards per review batch
 
 
@@ -1231,7 +1299,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             ke_rows = conn.execute(
                 '''SELECT id, entity_id, entity_name, entity_type, wikidata_qid,
                           stability_days, due_at, last_reviewed_at, last_score,
-                          review_count, cached_question, created_at
+                          review_count, cached_question, created_at, sources
                    FROM knowledge_entities
                    WHERE cached_question IS NOT NULL'''
             ).fetchall()
@@ -1276,6 +1344,15 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 score -= 1.0
                 fact_type_adj = -1.0
 
+            # Parse sources (voice captures) for About-this-card provenance.
+            # Each entry: {source, capture_id, source_text, added_at}
+            try:
+                ke_sources = json.loads(item.get('sources') or '[]')
+                if not isinstance(ke_sources, list):
+                    ke_sources = []
+            except (json.JSONDecodeError, TypeError):
+                ke_sources = []
+
             # Pseudo-fields so the existing card builder treats this like
             # a review item but with entity framing
             ent_type = (item.get('entity_type') or 'entity').title()
@@ -1289,7 +1366,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             item['node_level'] = 2
             item['node_date_start'] = None
             item['triggered_follow_ups'] = '[]'
-            item['sources'] = '[]'
+            item['sources'] = json.dumps(ke_sources)
 
             item['_provenance'] = {
                 'origin': 'entity_capture',
@@ -1299,7 +1376,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'overdue_days': round(overdue_days, 1),
                 'knowledge_weight': knowledge_weight,
                 'fact_type_adj': fact_type_adj,
-                'sources': [],
+                'sources': ke_sources,
                 'created_at': item.get('created_at'),
                 'due_at': due_at,
                 'last_reviewed_at': item.get('last_reviewed_at'),
@@ -1765,6 +1842,12 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
         # Insert entity intro cards for unknown entities
         entity_knowledge = _load_entity_knowledge(conn)
         items = _build_entity_intro_items(items, entity_knowledge, conn)
+
+        # Insert entity intro cards for freshly-captured entity_capture items
+        # (review_count=0). Briefs the user on the entity's identity before the
+        # first quiz question. Skipped when the shared_entities row has no
+        # useful description — rich_answer still covers the gap post-grade.
+        items = _build_entity_capture_intros(items, conn)
 
         # Nexus cards disabled — detection works (entities spanning 3+ curricula)
         # but cards lack synthesized content. Needs LLM-generated connection

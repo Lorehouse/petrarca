@@ -276,6 +276,12 @@ function getOriginBadge(item: ResurfacingItem): { label: string; icon: string } 
   if (origin === 'voice_wondering') return { label: 'Voice', icon: '\uD83C\uDF99' };
   if (origin === 'follow_up') return { label: 'Follow-up', icon: '\uD83D\uDD0D' };
   if (origin === 'entity_research') return { label: 'Entity', icon: '\uD83D\uDC64' };
+  if (origin === 'entity_capture') {
+    // Distinguish Wikidata-anchored captures with a "linked" marker.
+    // Unresolved captures keep a plain speech-bubble icon.
+    if (p.wikidata_qid) return { label: 'Captured', icon: '\uD83D\uDD37' };  // 🔷 blue diamond — linked
+    return { label: 'Captured', icon: '\uD83D\uDCAC' };  // 💬 speech balloon
+  }
   if (origin === 'user_request') return { label: 'Requested', icon: '\u2726' };
   return null;
 }
@@ -309,6 +315,7 @@ function AboutCardModal({ item, visible, onClose }: {
     voice_wondering: 'Voice elicitation wondering',
     follow_up: 'Follow-up query research',
     entity_research: 'Entity deep-dive research',
+    entity_capture: 'Voice capture (entity-keyed)',
     user_request: 'User-requested research',
     unknown: 'Unknown origin',
   };
@@ -320,8 +327,12 @@ function AboutCardModal({ item, visible, onClose }: {
     not_due: 'Not yet due (filler)',
   };
 
-  // Build source books list
+  // Build source lists: book chapters vs. voice captures live on the same
+  // `sources` array but have distinct shapes (book_id vs. source='voice_capture').
   const bookSources = (p?.sources || []).filter(s => s.book_id);
+  const voiceSources = (p?.sources || []).filter(s =>
+    s.source === 'voice_capture' || s.source === 'voice_elicitation'
+  );
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -358,6 +369,33 @@ function AboutCardModal({ item, visible, onClose }: {
                   )}
                 </View>
               ))}
+            </>}
+
+            {/* Voice captures — appears for entity_capture and related origins */}
+            {voiceSources.length > 0 && <>
+              <Text style={ab.sectionLabel}>VOICE CAPTURE</Text>
+              {voiceSources.map((src, i: number) => (
+                <View key={`v-${i}`} style={ab.sourceRow}>
+                  {src.source_text ? (
+                    <Text style={ab.value}>&ldquo;{src.source_text}&rdquo;</Text>
+                  ) : null}
+                  {src.capture_id && (
+                    <Text style={ab.detail}>Capture: {src.capture_id}</Text>
+                  )}
+                  {src.added_at && (
+                    <Text style={ab.detail}>Captured: {safeDate(src.added_at)}</Text>
+                  )}
+                </View>
+              ))}
+            </>}
+
+            {/* Wikidata identity (entity_capture items) */}
+            {p?.wikidata_qid && <>
+              <Text style={ab.sectionLabel}>WIKIDATA</Text>
+              <Text style={ab.value}>{p.wikidata_qid}</Text>
+              {p?.entity_id && (
+                <Text style={ab.detail}>Entity: {p.entity_id}</Text>
+              )}
             </>}
 
             {/* ML provenance */}
