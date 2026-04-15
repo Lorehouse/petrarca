@@ -396,6 +396,10 @@ CREATE TABLE IF NOT EXISTS knowledge_entities (
     cached_question TEXT,
     question_history TEXT NOT NULL DEFAULT '[]',
     fsrs_card_json TEXT,
+    -- Phase 2: cached Wikidata structured properties (P22, P26, P39, P580, etc.)
+    -- Populated lazily by _fetch_wikidata_props() when entity has a QID.
+    -- JSON shape: {"fetched_at": unix_ts, "props": {"P22": [{"qid":..., "label":...}, ...], ...}}
+    wikidata_props_json TEXT,
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ke_entity ON knowledge_entities(entity_id);
@@ -870,6 +874,8 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS idx_ke_entity ON knowledge_entities(entity_id)",
     "CREATE INDEX IF NOT EXISTS idx_ke_due ON knowledge_entities(due_at)",
     "CREATE INDEX IF NOT EXISTS idx_ke_qid ON knowledge_entities(wikidata_qid)",
+    # Phase 2: cached Wikidata structured properties for enrichment
+    "ALTER TABLE knowledge_entities ADD COLUMN wikidata_props_json TEXT",
 ]
 
 

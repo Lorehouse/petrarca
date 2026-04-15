@@ -1327,7 +1327,7 @@ Short answer: {answer}
 
 {learner_context}
 
-If learner context is provided, personalize the memory hook using connections the
+{entity_graph_context_block}If learner context is provided, personalize the memory hook using connections the
 learner has already made. Reference their known temporal anchors rather than generic ones.
 
 Generate:
@@ -1340,9 +1340,36 @@ Output JSON only:
 {{"rich_answer":"...","memory_hook":"..."}}"""
 
 
+# Wrapper block header used only when entity_graph_context is non-empty.
+# Keeping it as a separate constant lets the prompt remain readable when
+# there's no graph context to inject (block is omitted entirely, not left
+# as a labeled-but-empty section).
+_ENRICH_ENTITY_GRAPH_BLOCK = """Entity graph context (from the learner's own captures and Wikidata):
+{entity_graph_context}
+
+Use this context to GROUND the memory_hook in what the learner already knows.
+STRICT RULE: Do NOT assert facts that don't appear in the "Short answer", the
+"Topic description", or the learner's captured facts. Wikidata properties are
+hints for ANCHORS, not license to introduce new claims.
+
+When Wikidata properties suggest a natural follow-up fact (e.g. succession,
+family), frame it as a RETRIEVAL PROMPT — "do you remember who succeeded
+him?" — not as an assertion.
+
+"""
+
+
 def _key_fact_to_question(fact: dict, node_title: str, node_description: str,
-                          conn=None, node_id=None, domain_id=None) -> dict:
-    """Convert a key_fact to the cached_question format, with LLM enrichment."""
+                          conn=None, node_id=None, domain_id=None,
+                          entity_graph_context: str = '') -> dict:
+    """Convert a key_fact to the cached_question format, with LLM enrichment.
+
+    `entity_graph_context` is the Phase 2 entity-first enrichment block
+    (Wikidata properties + scoped temporal neighbors + voice co-occurrence),
+    built by `_format_entity_graph_context`. Empty string for curriculum-path
+    callers — the prompt block is omitted in that case, keeping behaviour
+    identical to Phase 1.
+    """
     result = {
         'question': fact['question'],
         'answer_guidance': fact['answer'],
@@ -1358,6 +1385,12 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str,
     if conn and node_id and domain_id:
         learner_ctx = get_learner_context(node_id, domain_id, conn)
 
+    egc_block = (
+        _ENRICH_ENTITY_GRAPH_BLOCK.format(entity_graph_context=entity_graph_context)
+        if entity_graph_context.strip()
+        else ''
+    )
+
     # Enrich bare answers with narrative + memory hook
     try:
         enriched = call_claude_json(_ENRICH_PROMPT.format(
@@ -1366,6 +1399,7 @@ def _key_fact_to_question(fact: dict, node_title: str, node_description: str,
             question=fact['question'],
             answer=fact['answer'],
             learner_context=learner_ctx,
+            entity_graph_context_block=egc_block,
         ), timeout=90, model='sonnet')
         if enriched and isinstance(enriched, dict):
             if enriched.get('rich_answer'):
@@ -1717,13 +1751,416 @@ def _build_quiz_suggestions(node_id: str, domain_id: str, conn) -> list[dict]:
 
 
 # ── Entity-keyed question generation (Phase 1 of entity-first architecture) ─
+# Phase 2 (Session 78) extends question generation with entity-graph context:
+# Wikidata structured properties, scoped temporal neighbors, voice-capture
+# co-occurrence. All enrichment preserves the invariant that cards reference
+# facts the user has actually captured — Wikidata properties are framed as
+# retrieval prompts ("you captured X reigned Y-Z; who succeeded?"), never
+# as standalone assertions. See research/entity-first-architecture.md.
+
+# Per-type Wikidata property sets. Conservative starter set — extend as we
+# observe which properties produce retention-useful enrichment. Every P-number
+# here is verified (P1365=replaces, P1366=replaced by; the Phase 2 prompt's
+# "P2962" was wrong).
+_WIKIDATA_PROPS_BY_TYPE: dict[str, tuple[str, ...]] = {
+    'person': (
+        'P22',    # father
+        'P25',    # mother
+        'P26',    # spouse
+        'P40',    # child
+        'P27',    # country of citizenship
+        'P19',    # place of birth
+        'P20',    # place of death
+        'P39',    # position held
+        'P106',   # occupation
+        'P569',   # date of birth
+        'P570',   # date of death
+        'P1365',  # replaces (predecessor in position)
+        'P1366',  # replaced by (successor in position)
+    ),
+    'battle': (
+        'P710',   # participant
+        'P276',   # location
+        'P585',   # point in time
+        'P580',   # start time
+        'P582',   # end time
+        'P607',   # conflict (parent war)
+        'P1542',  # has effect / caused by
+    ),
+    'event': (
+        'P710',   # participant
+        'P31',    # instance of
+        'P585',   # point in time
+        'P580',   # start time
+        'P582',   # end time
+        'P276',   # location
+        'P1542',  # has effect
+    ),
+    'place': (
+        'P17',    # country
+        'P131',   # located in administrative territorial entity
+        'P571',   # inception
+        'P576',   # dissolution
+    ),
+    'work': (
+        'P50',    # author
+        'P577',   # publication date
+        'P136',   # genre
+    ),
+}
+
+# Wikidata-props cache freshness: refetch after this many days.
+_WIKIDATA_PROPS_TTL_DAYS = 90
+
+
+def _fetch_wikidata_props(qid: str, entity_type: str | None) -> dict:
+    """Fetch structured Wikidata properties for an entity.
+
+    Returns {"P22": [{"qid": "Q...", "label": "..."}, ...], "P569": [{"time": "+1682-..."}], ...}
+    Property types are one of:
+    - wikibase-item   → {"qid", "label"}  (requires a secondary get_many to resolve labels)
+    - time            → {"time"} raw Wikidata string
+    - external-id     → {"value"}
+    - string          → {"value"}
+
+    Returns {} on any failure (no QID, network error, etc.). Never raises.
+    """
+    if not qid:
+        return {}
+    try:
+        from limbic.amygdala.wikidata import WikidataClient
+    except ImportError:
+        return {}
+
+    # Look up props for the given type. For unknown/legacy types (e.g. the
+    # literal 'entity' fallback used before Session 77's classifier fix), fetch
+    # the UNION of all property sets. Most won't apply to the entity — they
+    # just return empty lists — but this avoids missing battle/event props
+    # when the type label is stale.
+    type_key = (entity_type or '').lower()
+    props_to_fetch = _WIKIDATA_PROPS_BY_TYPE.get(type_key)
+    if props_to_fetch is None:
+        all_props: set[str] = set()
+        for ps in _WIKIDATA_PROPS_BY_TYPE.values():
+            all_props.update(ps)
+        props_to_fetch = tuple(sorted(all_props))
+
+    try:
+        client = WikidataClient(user_agent="Petrarca/0.1 (mailto:stian@haklev.com)")
+        entity = client.get(qid)
+        if entity is None:
+            return {}
+
+        result: dict[str, list[dict]] = {}
+        qids_needing_labels: set[str] = set()
+
+        for prop in props_to_fetch:
+            statements = entity.claims.get(prop, [])
+            if not statements:
+                continue
+            values = []
+            for stmt in statements:
+                if stmt.get('rank') == 'deprecated':
+                    continue
+                mainsnak = stmt.get('mainsnak') or {}
+                dtype = mainsnak.get('datatype')
+                dv = (mainsnak.get('datavalue') or {}).get('value')
+                if dv is None:
+                    continue
+                if dtype == 'wikibase-item' and isinstance(dv, dict) and 'id' in dv:
+                    values.append({'qid': dv['id']})
+                    qids_needing_labels.add(dv['id'])
+                elif dtype == 'time' and isinstance(dv, dict):
+                    values.append({'time': dv.get('time', '')})
+                elif dtype == 'external-id':
+                    values.append({'value': dv})
+                elif isinstance(dv, str):
+                    values.append({'value': dv})
+            if values:
+                result[prop] = values
+
+        # Second pass: resolve labels for referenced QIDs
+        if qids_needing_labels:
+            label_entities = client.get_many(list(qids_needing_labels))
+            for prop, values in result.items():
+                for v in values:
+                    ref_qid = v.get('qid')
+                    if ref_qid and ref_qid in label_entities:
+                        lbl = label_entities[ref_qid].label('en')
+                        if lbl:
+                            v['label'] = lbl
+
+        return result
+    except Exception as e:
+        print(f'[entity-q] wikidata props fetch failed for {qid}: {e}', flush=True)
+        return {}
+
+
+def _get_or_fetch_entity_props(ke_row: dict, conn) -> dict:
+    """Return cached Wikidata props, refetching if absent or stale.
+
+    Reads `wikidata_props_json` from the knowledge_entities row. If missing,
+    stale (> TTL), or empty, hits Wikidata and caches the fresh result via
+    a separate short write transaction. Returns just the {"P..": [...]} dict,
+    not the full cache envelope.
+    """
+    cached_raw = ke_row.get('wikidata_props_json')
+    if cached_raw:
+        try:
+            cached = json.loads(cached_raw)
+            fetched_at = cached.get('fetched_at', 0)
+            age_days = (time.time() - fetched_at) / 86400.0
+            if age_days < _WIKIDATA_PROPS_TTL_DAYS and cached.get('props'):
+                return cached['props']
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    qid = ke_row.get('wikidata_qid')
+    if not qid:
+        return {}
+
+    # Release any existing read lock before network I/O
+    props = _fetch_wikidata_props(qid, ke_row.get('entity_type'))
+    if not props:
+        return {}
+
+    # Short write transaction — LLM calls haven't run yet
+    envelope = {'fetched_at': int(time.time()), 'props': props}
+    try:
+        from db import get_connection
+        wconn = get_connection()
+        wconn.execute(
+            'UPDATE knowledge_entities SET wikidata_props_json=? WHERE id=?',
+            (json.dumps(envelope), ke_row['id']),
+        )
+        wconn.commit()
+        wconn.close()
+    except Exception as e:
+        print(f'[entity-q] failed to cache wikidata props for {ke_row.get("id")}: {e}',
+              flush=True)
+
+    return props
+
+
+def _get_scoped_temporal_neighbors(
+    entity_id: str | None, qid: str | None,
+    date_start: int | None, date_end: int | None,
+    conn, window_years: int = 50, limit: int = 5,
+) -> list[dict]:
+    """Find entities in the user's own graph with overlapping date ranges.
+
+    Scope: `shared_entities` rows that are either (a) keyed in
+    `knowledge_entities`, or (b) linked via `entity_curriculum_links` to a
+    `knowledge_items` row the user has seen. Excludes the entity itself.
+
+    Returns list of dicts: [{"name", "description", "date_start", "date_end",
+    "entity_type", "source"}]. `source` is 'entity' or 'curriculum'. Sorted
+    by temporal proximity (closest date_start first).
+    """
+    if date_start is None and date_end is None:
+        return []
+    ds = date_start if date_start is not None else date_end
+    de = date_end if date_end is not None else date_start
+    window_lo = (ds or 0) - window_years
+    window_hi = (de or 0) + window_years
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT se.entity_id, se.name, se.description, se.entity_type,
+                   se.date_start, se.date_end,
+                   CASE
+                       WHEN EXISTS (SELECT 1 FROM knowledge_entities ke2
+                                    WHERE ke2.entity_id = se.entity_id)
+                       THEN 'entity'
+                       ELSE 'curriculum'
+                   END AS source
+            FROM shared_entities se
+            WHERE se.date_start IS NOT NULL
+              AND se.date_end IS NOT NULL
+              AND se.date_start <= ?
+              AND se.date_end >= ?
+              AND (se.entity_id != ? OR ? IS NULL)
+              AND (
+                  EXISTS (
+                      SELECT 1 FROM knowledge_entities ke
+                      WHERE ke.entity_id = se.entity_id
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM entity_curriculum_links ecl
+                      JOIN knowledge_items ki
+                          ON ki.curriculum_domain = ecl.domain_id
+                         AND ki.curriculum_node_id = ecl.node_id
+                      WHERE ecl.entity_id = se.entity_id
+                  )
+              )
+            ORDER BY ABS(se.date_start - ?) ASC
+            LIMIT ?
+            """,
+            (window_hi, window_lo, entity_id, entity_id, ds or 0, limit),
+        ).fetchall()
+    except Exception as e:
+        print(f'[entity-q] temporal-neighbor query failed: {e}', flush=True)
+        return []
+
+    return [dict(r) for r in rows]
+
+
+def _get_voice_cooccurring_entities(
+    entity_name: str, conn, limit: int = 3,
+) -> list[dict]:
+    """Entities most frequently mentioned alongside this one in voice captures.
+
+    Walks `voice_transcripts.llm_result.entities_mentioned`. For each
+    transcript that mentions this entity, tally all OTHER entities in the
+    same list. Return top-N by count.
+
+    Uses simple name matching (case-insensitive substring) because
+    entity_name is what the LLM extracted — not necessarily a QID.
+    """
+    if not entity_name:
+        return []
+
+    target = entity_name.strip().lower()
+    counts: dict[str, int] = {}
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT llm_result FROM voice_transcripts
+            WHERE llm_result IS NOT NULL
+              AND llm_result LIKE ?
+            """,
+            (f'%{entity_name}%',),
+        ).fetchall()
+    except Exception as e:
+        print(f'[entity-q] co-occurrence query failed: {e}', flush=True)
+        return []
+
+    for r in rows:
+        try:
+            lr = json.loads(r['llm_result']) if r['llm_result'] else {}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        mentioned = lr.get('entities_mentioned') or []
+        if not isinstance(mentioned, list):
+            continue
+        names = [str(m).strip() for m in mentioned if m]
+        # Did this transcript actually mention our target?
+        if not any(target == n.lower() or target in n.lower() for n in names):
+            continue
+        for n in names:
+            if n.lower() == target or target in n.lower():
+                continue
+            counts[n] = counts.get(n, 0) + 1
+
+    ranked = sorted(counts.items(), key=lambda kv: -kv[1])[:limit]
+    return [{'name': n, 'count': c} for n, c in ranked]
+
+
+def _format_entity_graph_context(
+    entity_name: str,
+    props: dict,
+    neighbors: list[dict],
+    cooccur: list[dict],
+) -> str:
+    """Render entity-graph context into a prompt-ready text block.
+
+    Returns empty string when nothing to say — the prompt template then
+    just emits a blank line rather than a labeled-but-empty section.
+    """
+    blocks: list[str] = []
+
+    # --- Wikidata structured properties ---
+    prop_lines: list[str] = []
+    _HUMAN_LABEL = {
+        'P22': 'father',
+        'P25': 'mother',
+        'P26': 'spouse',
+        'P40': 'child',
+        'P27': 'citizenship',
+        'P19': 'birthplace',
+        'P20': 'place of death',
+        'P31': 'type',
+        'P39': 'position held',
+        'P106': 'occupation',
+        'P569': 'born',
+        'P570': 'died',
+        'P1365': 'succeeded',   # this entity replaces X
+        'P1366': 'succeeded by',  # this entity replaced by X
+        'P710': 'participants',
+        'P276': 'location',
+        'P585': 'date',
+        'P580': 'start',
+        'P582': 'end',
+        'P607': 'part of war',
+        'P1542': 'consequence',
+        'P17': 'country',
+        'P131': 'located in',
+        'P571': 'founded',
+        'P576': 'dissolved',
+        'P50': 'author',
+        'P577': 'published',
+        'P136': 'genre',
+    }
+
+    def _fmt_value(v: dict) -> str:
+        if 'label' in v:
+            return v['label']
+        if 'qid' in v:
+            return v['qid']
+        if 'time' in v:
+            t = v['time'] or ''
+            sign = '-' if t.startswith('-') else ''
+            year_part = t.lstrip('+-').split('-')[0]
+            return f'{sign}{year_part}' if year_part else t
+        return str(v.get('value', ''))
+
+    for prop, values in props.items():
+        label = _HUMAN_LABEL.get(prop, prop)
+        rendered = [_fmt_value(v) for v in values[:5]]
+        # Dedup while preserving order (Julian/Gregorian calendar dupes etc.)
+        seen: set[str] = set()
+        unique_rendered = []
+        for r in rendered:
+            if r and r not in seen:
+                seen.add(r)
+                unique_rendered.append(r)
+        if unique_rendered:
+            prop_lines.append(f'- {label}: {", ".join(unique_rendered[:3])}')
+    if prop_lines:
+        blocks.append('Wikidata properties for ' + entity_name + ':\n' + '\n'.join(prop_lines))
+
+    # --- Temporal neighbors (scoped) ---
+    if neighbors:
+        lines = []
+        for n in neighbors[:5]:
+            dates = ''
+            if n.get('date_start') is not None and n.get('date_end') is not None:
+                ds = n['date_start']
+                de = n['date_end']
+                dates = f' ({ds}–{de})' if ds != de else f' ({ds})'
+            desc = (n.get('description') or '')[:80]
+            lines.append(f'- {n["name"]}{dates}: {desc}'.rstrip(': '))
+        blocks.append("Other entities you've captured from the same period:\n" + '\n'.join(lines))
+
+    # --- Voice-capture co-occurrence ---
+    if cooccur:
+        lines = [f'- {c["name"]} (mentioned together in {c["count"]} capture{"s" if c["count"] != 1 else ""})'
+                 for c in cooccur]
+        blocks.append("Entities you've discussed alongside " + entity_name + ':\n' + '\n'.join(lines))
+
+    return '\n\n'.join(blocks)
+
 
 def generate_entity_question(ke_id: str, conn) -> dict:
     """Generate a review question for a knowledge_entities item.
 
-    Uses the same key_facts → _key_fact_to_question() path as curriculum items,
-    substituting entity name/description for node_title/node_description.
-    No curriculum context or cross-curriculum lookups — entity-only.
+    Phase 1: uses `_key_fact_to_question` with entity_name/desc substituted.
+    Phase 2: additionally enriches the LLM prompt with entity-graph context
+    (Wikidata props + scoped temporal neighbors + voice co-occurrence). The
+    enrichment context is passed to `_key_fact_to_question` via its
+    optional `entity_graph_context` parameter. No curriculum context.
     """
     row = conn.execute('SELECT * FROM knowledge_entities WHERE id=?', (ke_id,)).fetchone()
     if not row:
@@ -1749,21 +2186,40 @@ def generate_entity_question(ke_id: str, conn) -> dict:
 
     entity_name = item.get('entity_name') or ''
     entity_desc = ''
-    # Pull description from shared_entities if linked (post Wikidata resolution)
+    entity_date_start = None
+    entity_date_end = None
+    # Pull description + dates from shared_entities if linked (post Wikidata resolution)
     if item.get('entity_id'):
         try:
             se_row = conn.execute(
-                'SELECT description FROM shared_entities WHERE entity_id=?',
+                'SELECT description, date_start, date_end FROM shared_entities WHERE entity_id=?',
                 (item['entity_id'],)
             ).fetchone()
-            if se_row and se_row['description']:
-                entity_desc = se_row['description']
+            if se_row:
+                if se_row['description']:
+                    entity_desc = se_row['description']
+                entity_date_start = se_row['date_start']
+                entity_date_end = se_row['date_end']
         except Exception:
             pass
+
+    # --- Phase 2: entity-graph context ---
+    # Assemble enrichment BEFORE the LLM call. All three sources degrade
+    # gracefully to empty on missing QID / missing dates / DB errors.
+    props = _get_or_fetch_entity_props(item, conn) if item.get('wikidata_qid') else {}
+    neighbors = _get_scoped_temporal_neighbors(
+        item.get('entity_id'), item.get('wikidata_qid'),
+        entity_date_start, entity_date_end, conn,
+    )
+    cooccur = _get_voice_cooccurring_entities(entity_name, conn)
+    entity_graph_context = _format_entity_graph_context(
+        entity_name, props, neighbors, cooccur,
+    )
 
     result = _key_fact_to_question(
         fact, entity_name, entity_desc,
         conn=None, node_id=None, domain_id=None,
+        entity_graph_context=entity_graph_context,
     )
 
     # Generate sideways follow-up queries (Gemini Flash) so entity cards get
