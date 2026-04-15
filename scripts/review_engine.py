@@ -5308,29 +5308,47 @@ def _process_voice_capture_entity_path(
             raise
 
     # --- Pre-generate cached questions in the background ---
+    # Follows the CLAUDE.md write-lock discipline: read → close → slow Claude
+    # work → open → write. Never hold a connection during the LLM call, and
+    # never share a conn across entities (ML research threads are also writing).
     if ke_ids_created:
         def _pregen_entity_questions():
             from db import get_connection as _gc
-            c = _gc()
             generated = 0
             for kid in ke_ids_created:
                 try:
+                    # Read (no lock held beyond this block)
+                    c = _gc(readonly=True)
                     row = c.execute(
                         'SELECT cached_question FROM knowledge_entities WHERE id=?',
                         (kid,),
                     ).fetchone()
-                    if row and not row['cached_question']:
-                        q = generate_entity_question(kid, c)
-                        if q:
-                            c.execute(
-                                'UPDATE knowledge_entities SET cached_question=? WHERE id=?',
-                                (json.dumps(q), kid),
-                            )
-                            c.commit()
-                            generated += 1
+                    c.close()
+                    if not row or row['cached_question']:
+                        continue
+
+                    # Slow Claude call — fresh readonly conn, no dirty state
+                    rc = _gc(readonly=True)
+                    try:
+                        q = generate_entity_question(kid, rc)
+                    finally:
+                        rc.close()
+                    if not q:
+                        continue
+
+                    # Fast write — fresh conn, single UPDATE, commit, close
+                    wc = _gc()
+                    try:
+                        wc.execute(
+                            'UPDATE knowledge_entities SET cached_question=? WHERE id=?',
+                            (json.dumps(q), kid),
+                        )
+                        wc.commit()
+                    finally:
+                        wc.close()
+                    generated += 1
                 except Exception as e:
                     print(f'[voice-capture-entity] pre-gen failed {kid}: {e}', flush=True)
-            c.close()
             print(
                 f'[voice-capture-entity] Pre-generated {generated}/{len(ke_ids_created)} questions',
                 flush=True,
