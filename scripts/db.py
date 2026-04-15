@@ -21,7 +21,6 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, '/opt/limbic')
 from limbic.amygdala import connect
 
 DB_PATH = Path(os.environ.get('PETRARCA_DB', '/opt/petrarca/data/petrarca.db'))

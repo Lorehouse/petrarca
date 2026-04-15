@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LOG_DIR_NAME = 'logs';
 const LOG_STORAGE_PREFIX = '@petrarca/log_';
-const LOG_SERVER_URL = 'http://alifstian.duckdns.org:8090/log/events';
+const LOG_SERVER_URL = 'http://localhost:8090/log/events';
 const PENDING_LOGS_KEY = '@petrarca/pending_logs';
 
 let sessionId: string | null = null;

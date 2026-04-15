@@ -4,7 +4,7 @@ import { logEvent } from './logger';
 
 const API_BASE = Platform.OS === 'web'
   ? `${window.location.protocol}//${window.location.hostname}:8090`
-  : 'http://alifstian.duckdns.org:8090';
+  : 'http://localhost:8090';
 
 // Fallback to nginx-served JSON if API is unavailable
 const CONTENT_BASE = Platform.OS === 'web'

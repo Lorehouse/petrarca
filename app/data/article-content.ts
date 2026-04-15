@@ -4,7 +4,7 @@ import { logEvent } from './logger';
 
 const API_BASE = Platform.OS === 'web'
   ? `${window.location.protocol}//${window.location.hostname}:8090`
-  : 'http://alifstian.duckdns.org:8090';
+  : 'http://localhost:8090';
 
 const CONTENT_DIR_NAME = 'content';
 const WEB_CACHE_PREFIX = '@petrarca/content_';

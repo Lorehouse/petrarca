@@ -8,7 +8,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-LOG_DIR = Path('/opt/petrarca/data/logs')
+import os
+LOG_DIR = Path(os.environ.get('LOG_DIR', '/opt/petrarca/data/logs'))
 
 
 def log_server_event(event: str, **kwargs):

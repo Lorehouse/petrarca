@@ -86,7 +86,7 @@ INGEST_TOKEN = os.environ.get('PETRARCA_INGEST_TOKEN', '')
 BOOKS_OUTPUT_DIR = Path(os.environ.get('BOOKS_OUTPUT_DIR', '/opt/petrarca/data/books'))
 CROSS_MATCH_DIR = Path(os.environ.get('CROSS_MATCH_DIR', '/opt/petrarca/data'))
 SCRIPTS_DIR = Path(__file__).parent
-VENV_PYTHON = '/opt/petrarca/.venv/bin/python3'
+VENV_PYTHON = os.environ.get('VENV_PYTHON', '/opt/petrarca/.venv/bin/python3')
 
 EMAILS_DIR = INGEST_DIR / 'emails'
 
@@ -2799,17 +2799,47 @@ class ResearchHandler(BaseHTTPRequestHandler):
 
     def _parse_multipart_form(self):
         """Parse multipart form data, returning (form, error_response_sent)."""
-        import cgi
+        import io
+        from multipart import parse_form
         content_type = self.headers.get('Content-Type', '')
         if 'multipart/form-data' not in content_type:
             self._send_json_response(400, {'error': 'Expected multipart/form-data'})
             return None, True
-        environ = {
-            'REQUEST_METHOD': 'POST',
-            'CONTENT_TYPE': content_type,
-            'CONTENT_LENGTH': self.headers.get('Content-Length', '0'),
-        }
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ=environ)
+        content_length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(content_length)
+
+        class _Field:
+            def __init__(self, data, filename=None):
+                self.file = io.BytesIO(data)
+                self.filename = filename
+                self.value = data.decode('utf-8', errors='replace') if not filename else None
+
+        class _Form:
+            def __init__(self):
+                self._fields = {}
+            def __contains__(self, key):
+                return key in self._fields
+            def __getitem__(self, key):
+                return self._fields[key]
+            def getvalue(self, key, default=None):
+                item = self._fields.get(key)
+                if item is None:
+                    return default
+                return item.value
+
+        form = _Form()
+
+        def on_field(field):
+            form._fields[field.field_name.decode()] = _Field(field.value)
+
+        def on_file(f):
+            f.file_object.seek(0)
+            data = f.file_object.read()
+            filename = f.file_name.decode() if f.file_name else None
+            form._fields[f.field_name.decode()] = _Field(data, filename)
+
+        headers = dict(self.headers)
+        parse_form(headers, io.BytesIO(body), on_field=on_field, on_file=on_file)
         return form, False
 
     def _save_upload_photo(self, form, field_name: str, prefix: str) -> Path | None:
