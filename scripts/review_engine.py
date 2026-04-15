@@ -4979,30 +4979,31 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         except Exception as e:
             print(f'[voice-capture→ml] failed: {e}', flush=True)
 
-    # --- Fallback: when no nodes matched, create ML cards from extracted facts ---
-    # This ensures voice captures about novel topics (outside all curricula) still
-    # produce reviewable content rather than being silently lost.
-    if not node_assessments and facts:
-        summary = analysis.get('overall_summary', '')
-        topic = summary[:100] if summary else (entity_name or 'voice capture')
-        for f in facts[:5]:
-            fact_text = f.get('fact', '') if isinstance(f, dict) else str(f)
-            if not fact_text or len(fact_text) < 10:
-                continue
-            query = f'From voice capture about {topic}: {fact_text}'
-            try:
-                card_id = create_microlearning_request(
-                    query=query,
-                    source_node_id=primary_node,
-                    source_domain=primary_domain,
-                    source_type='voice_capture',
-                )
-                ml_triggered.append({'id': card_id, 'query': fact_text[:80]})
-                print(f'[voice-capture→ml] novel-fact → {card_id}: {fact_text[:60]}', flush=True)
-            except Exception as e:
-                print(f'[voice-capture→ml] novel-fact failed: {e}', flush=True)
-        if ml_triggered:
-            print(f'[voice-capture] Novel topic: created {len(ml_triggered)} ML cards from extracted facts', flush=True)
+    # --- Fallback: when no nodes matched but the capture has real content,
+    # route to the entity path. The curriculum LLM pass found no real match
+    # (Gemini domain routing / keyword matching produced candidate nodes, but
+    # the analysis LLM correctly rejected them). Entity path runs its own LLM
+    # call with VOICE_CAPTURE_ENTITY_PROMPT to produce properly structured
+    # question/answer facts grouped by entity. See entity-first architecture.
+    if not node_assessments and (facts or entities_mentioned):
+        print(f'[voice-capture] No node assessments despite {len(facts)} facts — '
+              f'routing to entity path', flush=True)
+        entity_result = _process_voice_capture_entity_path(
+            transcript=transcript,
+            entity_id=entity_id,
+            entity_name=entity_name,
+            detected_entity_ids=detected_entity_ids,
+            sync=sync,
+        )
+        # Surface the entity-path outcome in the curriculum-path response
+        # so the client sees entity items were created.
+        result_addendum = {
+            'entity_path_triggered': True,
+            'entity_items_created': entity_result.get('entity_items_created', 0),
+            'entity_items_updated': entity_result.get('entity_items_updated', 0),
+            'knowledge_entities': entity_result.get('knowledge_entities', []),
+        }
+        ml_triggered.extend(entity_result.get('microlearning_triggered', []))
 
     # --- Log transcript ---
     vt_row = _log_voice_transcript(
@@ -5043,6 +5044,11 @@ def process_voice_capture(transcript: str, entity_id: str = None,
         'microlearning_triggered': ml_triggered,
         'overall_summary': analysis.get('overall_summary', ''),
     }
+    # Merge entity-path addendum if the fallback routed there
+    try:
+        result.update(result_addendum)
+    except NameError:
+        pass  # result_addendum only set when entity path was triggered
 
     # Check if multiple nodes from same era were touched with uncertain dates → timeline card
     if len(node_assessments) >= 2 and primary_domain:
