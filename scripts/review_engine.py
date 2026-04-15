@@ -519,7 +519,7 @@ LEARNER'S VOICE CAPTURE (transcribed speech):
 {transcript}
 
 Instructions:
-1. Identify the primary ENTITIES discussed: people (e.g., "Rollo of Normandy"), places (e.g., "Kingdom of Normandy"), events (e.g., "Siege of Paris 885-886"), or specific concepts.
+1. Identify the primary ENTITIES discussed: people, places, events, or specific concepts.
 2. Group facts by entity. For each entity, extract every concrete, testable FACT into a question-answer pair suitable for spaced repetition review:
    - Each fact MUST have a specific question with a definite answer. BAD: "What happened?" GOOD: "In what year did Rollo's Vikings besiege Paris?"
    - "type" classifies the fact: "date" (when), "event" (what happened), "person" (who), "place" (where), "concept" (what/how), "cause" (why), "significance" (why it matters)
@@ -528,13 +528,22 @@ Instructions:
 4. Extract ALL wonderings, speculative statements, "I think...", "I'm not sure if..." — rephrase as clear research questions.
 5. Tag each factual claim with confidence: "certain" (stated as fact), "uncertain" (hedged), "wrong" (stated confidently but incorrect).
 6. List all entities mentioned (even if they don't have associated facts).
-7. Provide an overall_summary (2-3 sentences).
+7. For each entity discussed OR mentioned, classify its type as one of: "person", "place", "event", "battle", "dynasty", "work", "organization", "concept". Include this in "entity_types".
+8. Provide an overall_summary (2-3 sentences).
+
+CANONICAL NAMING — critical for downstream Wikidata resolution:
+- Use canonical Wikidata-style names. Prefer the form most likely to match a Wikidata label.
+- STRIP parenthetical qualifiers. BAD: "Siege of Paris (885-886)"; GOOD: "Siege of Paris". BAD: "Russian Campaign (1708-1709)"; GOOD: "Russian campaign of Charles XII".
+- STRIP honorifics and titles unless they are part of the canonical name. BAD: "Emperor Charles the Fat"; GOOD: "Charles the Fat". BAD: "King Karl XII of Sweden"; GOOD: "Karl XII of Sweden". But KEEP: "Pope Gregory VII" (title is canonical), "Count Odo of Paris" (disambiguation).
+- For rulers with common English variants, prefer the most common English form. BAD: "Carl XII"; GOOD: "Karl XII of Sweden".
+- This naming rule applies to BOTH the keys of entity_facts AND the entries in entities_mentioned AND the keys of entity_types.
 
 Output JSON:
 {{"entity_facts": {{
     "Entity Name 1": [{{"id": "f1", "question": "specific question", "answer": "concise answer", "type": "date|event|person|place|concept|cause|significance", "source_excerpt": "..."}}],
     "Entity Name 2": [{{"id": "f2", "question": "...", "answer": "...", "type": "...", "source_excerpt": "..."}}]
   }},
+  "entity_types": {{"Entity Name 1": "person|place|event|battle|dynasty|work|organization|concept", "Entity Name 2": "..."}},
   "wonderings": ["research question 1", "research question 2"],
   "entities_mentioned": ["entity name 1", "entity name 2"],
   "confidence_tagged": [{{"fact": "specific claim", "confidence": "certain|uncertain|wrong"}}],
@@ -1756,6 +1765,23 @@ def generate_entity_question(ke_id: str, conn) -> dict:
         fact, entity_name, entity_desc,
         conn=None, node_id=None, domain_id=None,
     )
+
+    # Generate sideways follow-up queries (Gemini Flash) so entity cards get
+    # the same "Also explore…" chips as curriculum cards.
+    # See research/session-77-observations.md Gap A.
+    try:
+        fact_ctx = f"{fact.get('question', '')} — {fact.get('answer', '')}"
+        follow_ups = _generate_follow_up_queries(
+            node_title=entity_name,
+            node_description=entity_desc,
+            fact_context=fact_ctx,
+            conn=None, node_id=None, domain_id=None,
+        )
+        if follow_ups:
+            result['follow_up_queries'] = follow_ups
+    except Exception as e:
+        print(f'[entity-q] follow-up gen failed for {entity_name}: {e}', flush=True)
+
     return result
 
 
@@ -4985,6 +5011,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     # the analysis LLM correctly rejected them). Entity path runs its own LLM
     # call with VOICE_CAPTURE_ENTITY_PROMPT to produce properly structured
     # question/answer facts grouped by entity. See entity-first architecture.
+    entity_path_triggered = False
     if not node_assessments and (facts or entities_mentioned):
         print(f'[voice-capture] No node assessments despite {len(facts)} facts — '
               f'routing to entity path', flush=True)
@@ -4995,6 +5022,7 @@ def process_voice_capture(transcript: str, entity_id: str = None,
             detected_entity_ids=detected_entity_ids,
             sync=sync,
         )
+        entity_path_triggered = True
         # Surface the entity-path outcome in the curriculum-path response
         # so the client sees entity items were created.
         result_addendum = {
@@ -5018,7 +5046,11 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     )
 
     # --- Background: resolve entities to Wikidata QIDs ---
-    if entities_mentioned:
+    # Skip when the entity path already fired its own resolution thread,
+    # otherwise every mention is resolved twice (doubling API/LLM cost
+    # and producing racing INSERTs on shared_entities). See
+    # research/session-77-observations.md Bug 1.
+    if entities_mentioned and not entity_path_triggered:
         capture_id = vt_row if isinstance(vt_row, str) else 'unknown'
         # Only pass assessed nodes for linking (not the full candidate list)
         assessed_node_map = {na.get('node_id', ''): node_domain_map.get(na.get('node_id', ''), '')
@@ -5176,6 +5208,7 @@ def _process_voice_capture_entity_path(
         analysis = {}
 
     entity_facts = analysis.get('entity_facts', {}) or {}
+    entity_types = analysis.get('entity_types', {}) or {}
     wonderings = analysis.get('wonderings', []) or []
     entities_mentioned = analysis.get('entities_mentioned', []) or []
     confidence_tagged = analysis.get('confidence_tagged', []) or []
@@ -5234,7 +5267,14 @@ def _process_voice_capture_entity_path(
                 se = known_entities.get(ent_name)
                 linked_entity_id = se.get('entity_id') if se else None
                 linked_qid = se.get('wikidata_qid') if se else None
-                ent_type = (se.get('entity_type') if se else None) or 'entity'
+                # Prefer an already-known type from shared_entities; fall back
+                # to the LLM's classification; last resort is the generic
+                # 'entity' sentinel. See research/session-77-observations.md Gap B.
+                ent_type = (
+                    (se.get('entity_type') if se else None)
+                    or entity_types.get(ent_name)
+                    or 'entity'
+                )
 
                 new_source = {
                     'source': 'voice_capture',
@@ -5378,6 +5418,7 @@ def _process_voice_capture_entity_path(
     # --- Log the transcript ---
     llm_result = {
         'entity_facts': entity_facts,
+        'entity_types': entity_types,
         'wonderings': wonderings,
         'entities_mentioned': entities_mentioned,
         'confidence_tagged': confidence_tagged,
@@ -5385,11 +5426,16 @@ def _process_voice_capture_entity_path(
         'knowledge_entities_created': items_created,
         'knowledge_entities_updated': items_updated,
     }
+    # Prefer the LLM's primary entity over whatever loose name match the
+    # curriculum-path carried in — otherwise the transcript row shows
+    # unrelated curriculum titles (e.g. "1693 Earthquake" for a Karl XII
+    # capture). See research/session-77-observations.md Bug 2.
+    primary_entity_name = next(iter(entity_facts.keys()), None) if entity_facts else None
     _log_voice_transcript(
         source='voice_capture_entity',
         node_id=primary_entity_slug or 'entity',
         domain_id='',
-        node_title=entity_name or (list(entity_facts.keys())[0] if entity_facts else 'voice capture'),
+        node_title=primary_entity_name or entity_name or 'voice capture',
         transcript=transcript,
         audio_bytes=0,
         llm_result=llm_result,
