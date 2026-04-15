@@ -1,5 +1,15 @@
 # Petrarca — Intelligent Read-Later App
 
+## Running locally
+
+```bash
+./start.sh
+```
+
+Then open **http://localhost:8081** in your browser. Press `Ctrl+C` to stop.
+
+> **First time?** Make sure you have a `.env` file in the project root with your `GEMINI_API_KEY`. See setup notes in `memory/project_python313_compat.md`.
+
 A mobile-first read-later app combining incremental reading, user knowledge modeling, and algorithmic article selection. Named after Francesco Petrarca, pioneer of systematic reading methods.
 
 > **This is a personal project shared as-is.** It was built for one power user's reading workflow using Claude Code. It is not a polished open-source product — there are hardcoded server addresses, personal deployment scripts, and opinionated design decisions throughout. It works well, but setting it up requires reading the code and adapting things to your own setup.
