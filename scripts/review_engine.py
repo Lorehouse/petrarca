@@ -5991,9 +5991,30 @@ def _resolve_voice_entities_background(entities_mentioned: list, transcript: str
     anchors = dict(existing_anchors)
     resolutions: list[tuple[dict, object]] = []
 
+    def _coerce_year(v) -> int | None:
+        """Gemini occasionally returns years as strings ("1682") despite the
+        prompt asking for raw integers. Coerce to int; None on anything that
+        doesn't parse. Preserves negative years (BCE)."""
+        if v is None:
+            return None
+        if isinstance(v, int):
+            return v
+        if isinstance(v, float):
+            return int(v)
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return None
+            try:
+                return int(float(v))
+            except ValueError:
+                return None
+        return None
+
     for m in mentions:
         name = m.get("mention", "")
-        s, e = m.get("date_start"), m.get("date_end")
+        s = _coerce_year(m.get("date_start"))
+        e = _coerce_year(m.get("date_end"))
         date_hint = None
         if s is not None or e is not None:
             if s is None: s = e
