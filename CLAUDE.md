@@ -64,7 +64,7 @@ These principles are the intellectual foundation of the project. They override i
 | **Review/retention** | `research/review-system-architecture.md`, `research/reading-companion-process-design.md` |
 | **Structural cards** | `generate_aspect_cards.py`, `generate_sequence_cards.py` (generation), `curriculum_db.py` `_mix_structural_cards()` (stream mixing, activation gating, domain diversity, STRUCTURAL_ONLY flag), `review_engine.py` `record_structural_answer()` (FSRS), `AspectCard.tsx`, `SequenceCard.tsx` (components) |
 | **Microlearning cards** | `review_engine.py` (MICROLEARNING_PROMPT, _run_microlearning_research), `curriculum_db.py` (generate_review_stream ML mixing) |
-| **Curriculum/entities** | `research/curriculum-system-audit.md` (audit + code paths), `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
+| **Curriculum/entities** | `research/entity-first-architecture.md` (PROPOSED: entity-first with curriculum as overlay), `research/curriculum-system-audit.md` (audit + code paths), `research/overlapping-curricula-vision.md`, `research/entity-profiles-design.md` |
 | **Wikidata/entity resolution** | `research/wikidata-deployment-guide.md` (runbook), `scripts/backfill_wikidata.py` (4-pass pipeline), `scripts/merge_entity_dupes.py`, `scripts/reprocess_voice_with_qids.py`. Admin: `/admin/entity-queue` |
 | **Synthesis** | `research/synthesis-pipeline-design.md`, `memory/feedback_synthesis_design.md` |
 | **Books** | `research/book-companion-handoff.md`, `research/book-companion-experiments.md` |

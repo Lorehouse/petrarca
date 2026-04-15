@@ -1223,6 +1223,92 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
             candidates.append((score, item, is_gap_fill))
 
+        # ── Query knowledge_entities (entity-keyed, no curriculum) ───
+        # Entity items come from voice captures about topics outside existing
+        # curricula. They have no knowledge_state — shown directly with a
+        # fixed knowledge_weight. See research/entity-first-architecture.md.
+        try:
+            ke_rows = conn.execute(
+                '''SELECT id, entity_id, entity_name, entity_type, wikidata_qid,
+                          stability_days, due_at, last_reviewed_at, last_score,
+                          review_count, cached_question, created_at
+                   FROM knowledge_entities
+                   WHERE cached_question IS NOT NULL'''
+            ).fetchall()
+        except Exception as e:
+            print(f'[review-stream] knowledge_entities query failed: {e}', flush=True)
+            ke_rows = []
+
+        for r in ke_rows:
+            item = dict(r)
+            review_count = item['review_count'] or 0
+            due_at = item['due_at'] or 0
+            knowledge_weight = 6.0  # Between engaged (8.0) and mentioned (4.0)
+            schedule_reason = 'not_due'
+            overdue_days = 0.0
+
+            if review_count == 0:
+                score = knowledge_weight + 2.0 + random.random()
+                schedule_reason = 'never_reviewed'
+            elif due_at <= now_ms:
+                overdue_days = (now_ms - due_at) / (24 * 3600 * 1000)
+                score = knowledge_weight + min(overdue_days * 0.3, 5.0) + 10.0
+                if item['last_score'] == 'missed':
+                    score += 3.0
+                schedule_reason = 'overdue'
+            elif due_at <= soon:
+                score = knowledge_weight + 1.0
+                schedule_reason = 'due_soon'
+            else:
+                days_until = (due_at - now_ms) / (24 * 3600 * 1000)
+                score = max(0.1, knowledge_weight - days_until * 0.5)
+
+            try:
+                cq_data = json.loads(item.get('cached_question') or '{}')
+            except (json.JSONDecodeError, TypeError):
+                cq_data = {}
+            fact_type = cq_data.get('answer_type', '')
+            fact_type_adj = 0.0
+            if fact_type in ('date', 'event', 'person'):
+                score += 2.0
+                fact_type_adj = 2.0
+            elif fact_type in ('significance', 'connection'):
+                score -= 1.0
+                fact_type_adj = -1.0
+
+            # Pseudo-fields so the existing card builder treats this like
+            # a review item but with entity framing
+            ent_type = (item.get('entity_type') or 'entity').title()
+            item['curriculum_domain'] = 'entity'
+            item['curriculum_node_id'] = item.get('entity_id') or item['id']
+            item['node_title'] = item.get('entity_name') or ''
+            item['node_description'] = ''
+            item['domain_title'] = ent_type
+            item['node_knowledge'] = 'engaged'
+            item['node_confidence'] = 0.5
+            item['node_level'] = 2
+            item['node_date_start'] = None
+            item['triggered_follow_ups'] = '[]'
+            item['sources'] = '[]'
+
+            item['_provenance'] = {
+                'origin': 'entity_capture',
+                'is_gap_fill': False,
+                'stream_score': round(score, 2),
+                'schedule_reason': schedule_reason,
+                'overdue_days': round(overdue_days, 1),
+                'knowledge_weight': knowledge_weight,
+                'fact_type_adj': fact_type_adj,
+                'sources': [],
+                'created_at': item.get('created_at'),
+                'due_at': due_at,
+                'last_reviewed_at': item.get('last_reviewed_at'),
+                'entity_id': item.get('entity_id'),
+                'wikidata_qid': item.get('wikidata_qid'),
+            }
+
+            candidates.append((score, item, False))
+
         # ── Interleave domains for variety ───────────────────────────
         # Group by domain, sort each group by score, then round-robin
         # Cap gap-fill items at 3 per batch to avoid flooding with unexplored topics
@@ -1275,14 +1361,26 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             node_id = item.get('curriculum_node_id')
             domain_id = item.get('curriculum_domain')
             if node_id and domain_id and (domain_id, node_id) not in node_key_facts:
-                try:
-                    kf_row = conn.execute(
-                        'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
-                        (node_id, domain_id)).fetchone()
-                    if kf_row and kf_row['key_facts']:
-                        node_key_facts[(domain_id, node_id)] = json.loads(kf_row['key_facts'])
-                except Exception:
-                    pass
+                if domain_id == 'entity':
+                    # Entity-keyed items store their own key_facts on the
+                    # knowledge_entities row — use those as related_facts.
+                    try:
+                        kf_row = conn.execute(
+                            'SELECT key_facts FROM knowledge_entities WHERE id=?',
+                            (item['id'],)).fetchone()
+                        if kf_row and kf_row['key_facts']:
+                            node_key_facts[(domain_id, node_id)] = json.loads(kf_row['key_facts'])
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        kf_row = conn.execute(
+                            'SELECT key_facts FROM curriculum_nodes WHERE id=? AND domain_id=?',
+                            (node_id, domain_id)).fetchone()
+                        if kf_row and kf_row['key_facts']:
+                            node_key_facts[(domain_id, node_id)] = json.loads(kf_row['key_facts'])
+                    except Exception:
+                        pass
 
         items = []
         for _score, item in selected:
@@ -1423,6 +1521,10 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'quiz_suggestions': quiz_suggestions,
                 'existing_quizzes': existing_quizzes,
                 'provenance': item.get('_provenance', {}),
+                # Entity-keyed items carry their entity identity for optional
+                # client rendering (entity-first architecture, Phase 1).
+                'entity_id': item.get('entity_id', ''),
+                'wikidata_qid': item.get('wikidata_qid', ''),
             }
             items.append(card)
 

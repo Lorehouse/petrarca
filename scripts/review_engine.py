@@ -507,6 +507,40 @@ Output JSON:
 "overall_summary": "2-3 sentence summary of what the learner shared"}}"""
 
 
+VOICE_CAPTURE_ENTITY_PROMPT = """Analyze a voice capture where a learner describes what they know about a topic.
+This is NOT a recall test — the learner is freely sharing knowledge from a podcast, book, conversation, or their own thinking.
+No curriculum structure exists for this topic. Your job is to extract concrete, testable facts organized by the main entities (people, places, events) being discussed.
+
+{context_section}
+
+{entity_info}
+
+LEARNER'S VOICE CAPTURE (transcribed speech):
+{transcript}
+
+Instructions:
+1. Identify the primary ENTITIES discussed: people (e.g., "Rollo of Normandy"), places (e.g., "Kingdom of Normandy"), events (e.g., "Siege of Paris 885-886"), or specific concepts.
+2. Group facts by entity. For each entity, extract every concrete, testable FACT into a question-answer pair suitable for spaced repetition review:
+   - Each fact MUST have a specific question with a definite answer. BAD: "What happened?" GOOD: "In what year did Rollo's Vikings besiege Paris?"
+   - "type" classifies the fact: "date" (when), "event" (what happened), "person" (who), "place" (where), "concept" (what/how), "cause" (why), "significance" (why it matters)
+   - "source_excerpt" is 1-2 sentences quoted from the transcript that support this fact
+3. Be thorough — include dates, names, causal claims, and connections. Aim for 3-8 facts per main entity.
+4. Extract ALL wonderings, speculative statements, "I think...", "I'm not sure if..." — rephrase as clear research questions.
+5. Tag each factual claim with confidence: "certain" (stated as fact), "uncertain" (hedged), "wrong" (stated confidently but incorrect).
+6. List all entities mentioned (even if they don't have associated facts).
+7. Provide an overall_summary (2-3 sentences).
+
+Output JSON:
+{{"entity_facts": {{
+    "Entity Name 1": [{{"id": "f1", "question": "specific question", "answer": "concise answer", "type": "date|event|person|place|concept|cause|significance", "source_excerpt": "..."}}],
+    "Entity Name 2": [{{"id": "f2", "question": "...", "answer": "...", "type": "...", "source_excerpt": "..."}}]
+  }},
+  "wonderings": ["research question 1", "research question 2"],
+  "entities_mentioned": ["entity name 1", "entity name 2"],
+  "confidence_tagged": [{{"fact": "specific claim", "confidence": "certain|uncertain|wrong"}}],
+  "overall_summary": "2-3 sentence summary"}}"""
+
+
 HAMARQUIZEN_PROMPT = """Generate a Hamarquizen-style micro-lesson for reviewing a book topic.
 
 Book: {book_title} by {book_author}
@@ -1437,10 +1471,19 @@ def _get_temporal_cross_references(domain_id: str, node_id: str, conn) -> str:
 
 
 def generate_question(item_id: str, conn) -> dict:
-    # First try knowledge_items (node-centric); fall back to review_items (exploration/voice)
+    # First try knowledge_items (node-centric); fall back to review_items (exploration/voice);
+    # finally knowledge_entities (entity-keyed, no curriculum)
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
     if row is None:
         row = conn.execute('SELECT * FROM review_items WHERE id=?', (item_id,)).fetchone()
+    if row is None:
+        # Entity-keyed items — delegate to the entity question generator
+        try:
+            ke_row = conn.execute('SELECT id FROM knowledge_entities WHERE id=?', (item_id,)).fetchone()
+            if ke_row:
+                return generate_entity_question(item_id, conn)
+        except Exception:
+            pass
     if not row:
         return {}
     item = dict(row)
@@ -1664,6 +1707,58 @@ def _build_quiz_suggestions(node_id: str, domain_id: str, conn) -> list[dict]:
         return []
 
 
+# ── Entity-keyed question generation (Phase 1 of entity-first architecture) ─
+
+def generate_entity_question(ke_id: str, conn) -> dict:
+    """Generate a review question for a knowledge_entities item.
+
+    Uses the same key_facts → _key_fact_to_question() path as curriculum items,
+    substituting entity name/description for node_title/node_description.
+    No curriculum context or cross-curriculum lookups — entity-only.
+    """
+    row = conn.execute('SELECT * FROM knowledge_entities WHERE id=?', (ke_id,)).fetchone()
+    if not row:
+        return {}
+    item = dict(row)
+
+    try:
+        key_facts = json.loads(item.get('key_facts') or '[]')
+    except (json.JSONDecodeError, TypeError):
+        key_facts = []
+    if not key_facts:
+        return {}
+
+    try:
+        question_history = json.loads(item.get('question_history') or '[]')
+    except (json.JSONDecodeError, TypeError):
+        question_history = []
+
+    fact = _pick_key_fact(key_facts, question_history)
+    if not fact:
+        # All facts tested — rotate back to the first one for continued drilling
+        fact = key_facts[0]
+
+    entity_name = item.get('entity_name') or ''
+    entity_desc = ''
+    # Pull description from shared_entities if linked (post Wikidata resolution)
+    if item.get('entity_id'):
+        try:
+            se_row = conn.execute(
+                'SELECT description FROM shared_entities WHERE entity_id=?',
+                (item['entity_id'],)
+            ).fetchone()
+            if se_row and se_row['description']:
+                entity_desc = se_row['description']
+        except Exception:
+            pass
+
+    result = _key_fact_to_question(
+        fact, entity_name, entity_desc,
+        conn=None, node_id=None, domain_id=None,
+    )
+    return result
+
+
 # ── Multi-cue quiz generation ────────────────────────────────────────────────
 
 MULTICUE_PROMPT = """Generate 2-4 retrieval cue questions for each historical fact. These are alternate quiz angles for the SAME fact — like flashcard reversals for dates, battles, people, conquests.
@@ -1830,7 +1925,7 @@ def generate_multicue_quizzes(node_id: str, domain_id: str):
 
 def record_answer(item_id: str, score: str, conn) -> dict:
     # Look up in knowledge_items first; fall back to review_items,
-    # then microlearning_quizzes, then microlearning_cards (legacy)
+    # then microlearning_quizzes, then knowledge_entities, then microlearning_cards
     row = conn.execute('SELECT * FROM knowledge_items WHERE id=?', (item_id,)).fetchone()
     table = 'knowledge_items'
     if row is None:
@@ -1841,6 +1936,13 @@ def record_answer(item_id: str, score: str, conn) -> dict:
             row = conn.execute('SELECT * FROM microlearning_quizzes WHERE id=?', (item_id,)).fetchone()
             if row:
                 table = 'microlearning_quizzes'
+        except Exception:
+            pass
+    if row is None:
+        try:
+            row = conn.execute('SELECT * FROM knowledge_entities WHERE id=?', (item_id,)).fetchone()
+            if row:
+                table = 'knowledge_entities'
         except Exception:
             pass
     if row is None:
@@ -4528,12 +4630,14 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     conn.close()
 
     if not candidate_nodes:
-        print(f'[voice-capture] No candidate nodes found for entity={entity_id}, mode={mode}', flush=True)
-        return {
-            'error': 'no_curriculum_match',
-            'transcript': transcript,
-            'message': 'Could not find relevant curriculum nodes for this capture.',
-        }
+        print(f'[voice-capture] No candidate nodes — routing to entity path', flush=True)
+        return _process_voice_capture_entity_path(
+            transcript=transcript,
+            entity_id=entity_id,
+            entity_name=entity_name,
+            detected_entity_ids=detected_entity_ids,
+            sync=sync,
+        )
 
     # Sort: direct links first, then siblings by overlap, then domain fillers
     priority_order = {'direct': 0, 'sibling': 1, 'routed': 2, 'domain': 3, 'keyword': 4}
@@ -5000,6 +5104,297 @@ def process_voice_capture(transcript: str, entity_id: str = None,
     return result
 
 
+def _process_voice_capture_entity_path(
+    transcript: str,
+    entity_id: str | None,
+    entity_name: str | None,
+    detected_entity_ids: list,
+    sync: bool = False,
+) -> dict:
+    """Process a voice capture via the entity-keyed path (no curriculum required).
+
+    Called from process_voice_capture() when no curriculum nodes match. Creates/
+    updates knowledge_entities rows with facts extracted from the transcript,
+    schedules them via FSRS, triggers ML cards from wonderings, and fires the
+    existing background Wikidata resolution thread.
+
+    See research/entity-first-architecture.md.
+    """
+    from db import get_connection
+
+    # Gather context for known entities (if any were detected by name matching)
+    conn = get_connection(readonly=True)
+    entity_context_lines = []
+    known_entities = {}  # name → shared_entities row
+    for eid in detected_entity_ids[:8]:
+        row = conn.execute(
+            '''SELECT entity_id, name, description, entity_type,
+                      date_start, date_end, wikidata_qid
+               FROM shared_entities WHERE entity_id=?''',
+            (eid,)
+        ).fetchone()
+        if not row:
+            continue
+        known_entities[row['name']] = dict(row)
+        desc = (row['description'] or '')[:150]
+        dates = ''
+        if row['date_start'] is not None:
+            end = row['date_end'] if row['date_end'] is not None else row['date_start']
+            dates = f" ({row['date_start']}–{end})"
+        entity_context_lines.append(
+            f"- {row['name']}{dates} [{row['entity_type'] or 'entity'}]: {desc}"
+        )
+    conn.close()
+
+    if entity_id and entity_name:
+        context_section = f'CONTEXT: The learner is speaking about {entity_name}.'
+    elif entity_name:
+        context_section = f'CONTEXT: The learner appears to be discussing {entity_name}.'
+    else:
+        context_section = 'CONTEXT: The learner is sharing knowledge from a podcast, book, or personal study. No curriculum structure exists yet for this topic.'
+
+    entity_info = (
+        'KNOWN ENTITIES (already in the knowledge base — use these names verbatim if they appear):\n'
+        + '\n'.join(entity_context_lines)
+    ) if entity_context_lines else 'KNOWN ENTITIES: (none yet — this is a new topic)'
+
+    prompt = VOICE_CAPTURE_ENTITY_PROMPT.format(
+        context_section=context_section,
+        entity_info=entity_info,
+        transcript=transcript,
+    )
+
+    analysis = call_claude_json(prompt, timeout=180)
+    if not isinstance(analysis, dict):
+        print(f'[voice-capture-entity] LLM returned non-dict: {repr(str(analysis)[:200])}', flush=True)
+        analysis = {}
+
+    entity_facts = analysis.get('entity_facts', {}) or {}
+    wonderings = analysis.get('wonderings', []) or []
+    entities_mentioned = analysis.get('entities_mentioned', []) or []
+    confidence_tagged = analysis.get('confidence_tagged', []) or []
+    overall_summary = analysis.get('overall_summary', '')
+
+    print(
+        f'[voice-capture-entity] Analysis: {sum(len(v) for v in entity_facts.values())} facts '
+        f'across {len(entity_facts)} entities, {len(wonderings)} wonderings',
+        flush=True,
+    )
+
+    # --- DB writes: create/update knowledge_entities rows ---
+    now_ms = int(time.time() * 1000)
+    vt_id = f'vt_{int(time.time())}_{hash(transcript) % 10000:04d}'
+    items_created = 0
+    items_updated = 0
+    ke_ids_created: list[str] = []
+
+    def _slugify(name: str) -> str:
+        s = re.sub(r'\W+', '_', name.lower()).strip('_')
+        return s or 'entity'
+
+    max_write_attempts = 3
+    for attempt in range(max_write_attempts):
+        try:
+            conn = get_connection()
+            conn.execute('PRAGMA busy_timeout = 60000')
+
+            for ent_name, facts in entity_facts.items():
+                if not ent_name or not facts:
+                    continue
+                ent_name = ent_name.strip()
+                slug = _slugify(ent_name)
+                ke_id = f'ent:{slug}'
+
+                # Normalize incoming facts to the key_facts schema
+                normalized_facts = []
+                for i, f in enumerate(facts):
+                    if not isinstance(f, dict):
+                        continue
+                    q = (f.get('question') or '').strip()
+                    a = (f.get('answer') or '').strip()
+                    if not q or not a:
+                        continue
+                    normalized_facts.append({
+                        'id': f.get('id') or f'vc_{int(time.time())}_{i}',
+                        'question': q,
+                        'answer': a,
+                        'type': f.get('type') or 'event',
+                        'source_excerpt': f.get('source_excerpt') or '',
+                    })
+                if not normalized_facts:
+                    continue
+
+                # Link to shared_entities if already known
+                se = known_entities.get(ent_name)
+                linked_entity_id = se.get('entity_id') if se else None
+                linked_qid = se.get('wikidata_qid') if se else None
+                ent_type = (se.get('entity_type') if se else None) or 'entity'
+
+                new_source = {
+                    'source': 'voice_capture',
+                    'capture_id': vt_id,
+                    'source_text': overall_summary[:400],
+                    'added_at': now_ms,
+                }
+
+                existing = conn.execute(
+                    'SELECT key_facts, sources FROM knowledge_entities WHERE id=?',
+                    (ke_id,)
+                ).fetchone()
+                if existing:
+                    try:
+                        prior_facts = json.loads(existing['key_facts'] or '[]')
+                    except (json.JSONDecodeError, TypeError):
+                        prior_facts = []
+                    try:
+                        prior_sources = json.loads(existing['sources'] or '[]')
+                    except (json.JSONDecodeError, TypeError):
+                        prior_sources = []
+
+                    # Dedup by question text (case-insensitive)
+                    existing_qs = {
+                        (pf.get('question') or '').lower().strip() for pf in prior_facts
+                    }
+                    merged_facts = list(prior_facts)
+                    for nf in normalized_facts:
+                        if nf['question'].lower().strip() not in existing_qs:
+                            merged_facts.append(nf)
+                            existing_qs.add(nf['question'].lower().strip())
+
+                    conn.execute(
+                        '''UPDATE knowledge_entities
+                           SET key_facts=?, sources=?, cached_question=NULL
+                           WHERE id=?''',
+                        (
+                            json.dumps(merged_facts),
+                            json.dumps(prior_sources + [new_source]),
+                            ke_id,
+                        ),
+                    )
+                    items_updated += 1
+                    ke_ids_created.append(ke_id)
+                else:
+                    conn.execute(
+                        '''INSERT INTO knowledge_entities
+                           (id, entity_id, entity_name, entity_type, wikidata_qid,
+                            key_facts, sources, stability_days, due_at, review_count,
+                            created_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 1.0, ?, 0, ?)''',
+                        (
+                            ke_id, linked_entity_id, ent_name, ent_type, linked_qid,
+                            json.dumps(normalized_facts),
+                            json.dumps([new_source]),
+                            now_ms, now_ms,
+                        ),
+                    )
+                    items_created += 1
+                    ke_ids_created.append(ke_id)
+
+            conn.commit()
+            conn.close()
+            break
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e).lower() and attempt < max_write_attempts - 1:
+                wait = 5 * (attempt + 1)
+                print(f'[voice-capture-entity] DB locked, retry in {wait}s', flush=True)
+                time.sleep(wait)
+                continue
+            raise
+
+    # --- Pre-generate cached questions in the background ---
+    if ke_ids_created:
+        def _pregen_entity_questions():
+            from db import get_connection as _gc
+            c = _gc()
+            generated = 0
+            for kid in ke_ids_created:
+                try:
+                    row = c.execute(
+                        'SELECT cached_question FROM knowledge_entities WHERE id=?',
+                        (kid,),
+                    ).fetchone()
+                    if row and not row['cached_question']:
+                        q = generate_entity_question(kid, c)
+                        if q:
+                            c.execute(
+                                'UPDATE knowledge_entities SET cached_question=? WHERE id=?',
+                                (json.dumps(q), kid),
+                            )
+                            c.commit()
+                            generated += 1
+                except Exception as e:
+                    print(f'[voice-capture-entity] pre-gen failed {kid}: {e}', flush=True)
+            c.close()
+            print(
+                f'[voice-capture-entity] Pre-generated {generated}/{len(ke_ids_created)} questions',
+                flush=True,
+            )
+
+        if sync:
+            _pregen_entity_questions()
+        else:
+            threading.Thread(target=_pregen_entity_questions, daemon=True).start()
+
+    # --- Trigger ML cards from wonderings (entity-tagged, no curriculum domain) ---
+    ml_triggered = []
+    primary_entity_slug = ke_ids_created[0].split(':', 1)[1] if ke_ids_created else None
+    for w in wonderings[:5]:
+        try:
+            card_id = create_microlearning_request(
+                query=w,
+                source_node_id=primary_entity_slug,
+                source_domain=None,
+                source_type='voice_wondering',
+            )
+            ml_triggered.append({'id': card_id, 'query': w})
+            print(f'[voice-capture-entity→ml] wondering → {card_id}: {w[:60]}', flush=True)
+        except Exception as e:
+            print(f'[voice-capture-entity→ml] failed: {e}', flush=True)
+
+    # --- Log the transcript ---
+    llm_result = {
+        'entity_facts': entity_facts,
+        'wonderings': wonderings,
+        'entities_mentioned': entities_mentioned,
+        'confidence_tagged': confidence_tagged,
+        'overall_summary': overall_summary,
+        'knowledge_entities_created': items_created,
+        'knowledge_entities_updated': items_updated,
+    }
+    _log_voice_transcript(
+        source='voice_capture_entity',
+        node_id=primary_entity_slug or 'entity',
+        domain_id='',
+        node_title=entity_name or (list(entity_facts.keys())[0] if entity_facts else 'voice capture'),
+        transcript=transcript,
+        audio_bytes=0,
+        llm_result=llm_result,
+        ml_triggered=ml_triggered,
+        vt_id=vt_id,
+    )
+
+    # --- Background Wikidata resolution for mentioned entities ---
+    if entities_mentioned:
+        threading.Thread(
+            target=_resolve_voice_entities_background,
+            args=(entities_mentioned, transcript, vt_id, {}),
+            daemon=True,
+        ).start()
+
+    return {
+        'status': 'completed',
+        'transcript': transcript,
+        'path': 'entity',
+        'entity_items_created': items_created,
+        'entity_items_updated': items_updated,
+        'knowledge_entities': ke_ids_created,
+        'wonderings': wonderings,
+        'entities_mentioned': entities_mentioned,
+        'microlearning_triggered': ml_triggered,
+        'overall_summary': overall_summary,
+    }
+
+
 def _resolve_voice_entities_background(entities_mentioned: list, transcript: str,
                                        capture_id: str, node_domain_map: dict) -> None:
     """Background: resolve entity mentions to Wikidata QIDs and backfill shared_entities.
@@ -5179,6 +5574,25 @@ def _resolve_voice_entities_background(entities_mentioned: list, transcript: str
             continue
         resolved_count += 1
 
+        # Helper: after resolving/creating a shared_entities row, backfill
+        # any matching knowledge_entities row (created by the entity capture
+        # path before Wikidata resolution ran). This links entity items to
+        # their canonical QID + entity_id for cross-capture merging.
+        def _link_ke(resolved_entity_id: str, qid: str, mention_text: str):
+            try:
+                ke_slug = re.sub(r'\W+', '_', mention_text.lower()).strip('_')
+                ke_id_candidate = f'ent:{ke_slug}'
+                # Match by our slug OR by entity_name exact match
+                conn.execute(
+                    """UPDATE knowledge_entities
+                       SET entity_id = COALESCE(entity_id, ?),
+                           wikidata_qid = COALESCE(wikidata_qid, ?)
+                       WHERE id = ? OR entity_name = ?""",
+                    (resolved_entity_id, qid, ke_id_candidate, mention_text),
+                )
+            except Exception as _e:
+                print(f'[voice-entity-resolve] KE link failed for {mention_text}: {_e}', flush=True)
+
         # Check if QID already exists in shared_entities
         existing = conn.execute(
             "SELECT entity_id FROM shared_entities WHERE wikidata_qid = ?",
@@ -5188,6 +5602,7 @@ def _resolve_voice_entities_background(entities_mentioned: list, transcript: str
             # Update audit row with the existing entity_id
             conn.execute("UPDATE entity_resolutions SET entity_id = ? WHERE id = ?",
                          (existing['entity_id'], rid))
+            _link_ke(existing['entity_id'], res.chosen_qid, mention)
             continue
 
         # Check if there's an entity with same name but no QID
@@ -5203,6 +5618,7 @@ def _resolve_voice_entities_background(entities_mentioned: list, transcript: str
             conn.execute("UPDATE entity_resolutions SET entity_id = ? WHERE id = ?",
                          (existing_by_name['entity_id'], rid))
             print(f'[voice-entity-resolve] Assigned {res.chosen_qid} to existing entity {name_slug}', flush=True)
+            _link_ke(existing_by_name['entity_id'], res.chosen_qid, mention)
             continue
 
         # Create new shared_entity
@@ -5228,6 +5644,7 @@ def _resolve_voice_entities_background(entities_mentioned: list, transcript: str
                 "INSERT OR IGNORE INTO entity_curriculum_links (entity_id, domain_id, node_id) VALUES (?, ?, ?)",
                 (name_slug, domain_id, node_id),
             )
+        _link_ke(name_slug, res.chosen_qid, mention)
         created_count += 1
 
     conn.commit()
