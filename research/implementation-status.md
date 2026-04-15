@@ -327,7 +327,7 @@
 
 **Books & Kindle**: `physical_books`, `book_captures`, `book_curriculum_mappings`, `kindle_books`, `available_epubs`
 
-**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `timeline_entries`, `shared_entities` (with `wikidata_qid`), `entity_curriculum_links`
+**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `knowledge_entities` (Session 76: entity-first, parallel to knowledge_items), `timeline_entries`, `shared_entities` (with `wikidata_qid`), `entity_curriculum_links`
 
 **Entity Resolution**: `entity_resolutions` (append-only audit trail — every Wikidata resolution decision with candidates, confidence, reasoning, supersede chain), `entity_external_ids` (1906 VIAF/GND/GeoNames/Pleiades/Getty/MusicBrainz/BnF/LCCN IDs harvested from resolved entities)
 

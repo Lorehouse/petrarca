@@ -1,6 +1,54 @@
 # Knowledge System Implementation Status
 
-**Date**: April 14, 2026 (last updated — session 75: activation gating + voice pipeline)
+**Date**: April 15, 2026 (last updated — session 76: entity-first architecture Phase 1)
+
+## Session 76: Entity-First Architecture Phase 1 + Production Fixes (April 14–15, 2026)
+
+### Production Fixes (deployed first)
+- **`STRUCTURAL_ONLY=True` was live** from Session 75 testing — blocked ALL SR and ML cards from the review stream. Only 6 structural cards were being served to the client. Reverted to `False` in `curriculum_db.py:936`.
+- **Gemini API key not persisted across server restarts** — the systemd unit lacked `EnvironmentFile=/opt/petrarca/.env`. Added it; 178 pending ML cards can now complete.
+
+### The Architectural Question
+User reported: voice captures about topics outside existing curricula (Iran podcast, Rollo/Normans book) produced nothing useful. Traced to the `knowledge_items` table requiring `curriculum_domain NOT NULL` + `curriculum_node_id NOT NULL` — every knowledge tracking flow depends on mapping to a curriculum node first. For genuinely novel topics there is no such node.
+
+Research: re-read `overlapping-curricula-vision.md`, `curriculum-system-audit.md`, `entity-profiles-design.md`. The Session 54 audit already asked "what if no curricula?" and identified curriculum's genuine value (gap analysis, bounded review, progress visualization) vs. its accidental coupling (deduplication, knowledge tracking, voice capture routing).
+
+Wikidata QIDs are strictly better for deduplication than curriculum nodes: `Q155124` is Roger II everywhere, whereas `sicily:roger_ii` and `medieval_europe:roger_ii` are two separate rows today.
+
+Decision: invert the dependency. Entities become the primary knowledge unit; curricula remain as optional overlays for gap analysis and structured review.
+
+### Design Doc
+**`research/entity-first-architecture.md`** (new) — 5-phase migration plan with full dependency audit.
+
+### Phase 1 Shipped
+- **New `knowledge_entities` table** in `db.py` (schema + migration). Same FSRS/cached_question/key_facts shape as `knowledge_items`, keyed by entity slug (`ent:{slug}`).
+- **`VOICE_CAPTURE_ENTITY_PROMPT`** in `review_engine.py` — outputs `entity_facts` grouped by entity name with `{id, question, answer, type, source_excerpt}` format (compatible with `_pick_key_fact()` / `_key_fact_to_question()`).
+- **`_process_voice_capture_entity_path()`** in `review_engine.py` — fires when (a) no candidate curriculum nodes, or (b) curriculum LLM returns `node_assessments=[]`. Creates/updates `knowledge_entities` rows, pre-generates cached_questions, triggers ML cards from wonderings, logs transcript, triggers background Wikidata resolution.
+- **`generate_entity_question()`** reuses `_pick_key_fact()` + `_key_fact_to_question()` — entity_name substitutes for node_title, `shared_entities.description` (if linked) for node_description. No curriculum context needed.
+- **`generate_question()` fallthrough** — if item_id is not in `knowledge_items` or `review_items`, checks `knowledge_entities` and delegates.
+- **`record_answer()` lookup** — added `knowledge_entities` after `microlearning_quizzes`. Existing `curriculum_domain` guards naturally skip knowledge_state updates and dependent rescheduling (entity items have neither).
+- **Review stream integration** in `curriculum_db.py` `generate_review_stream()` — queries `knowledge_entities` with `knowledge_weight=6.0`, sets pseudo-fields (`curriculum_domain='entity'`, `node_title=entity_name`, `domain_title=entity_type.title()`) so entity items render through the existing `ReviewCard` as `type:'review'` with `provenance.origin='entity_capture'`. Entity items' own `key_facts` surface as `related_facts`.
+- **Wikidata backfill** — `_resolve_voice_entities_background()` now calls a `_link_ke()` helper after creating/updating `shared_entities` to update matching `knowledge_entities` rows with `entity_id` and `wikidata_qid`.
+
+### Validation (real captures)
+- **Karl XII of Sweden** (novel, no curriculum): 5 entity items — Karl XII, Battle of Narva, Great Northern War, Russian Campaign, Battle of Poltava. Narva auto-linked to Q155726, Poltava to Q152486. Memory hook: *"Karl XII became king the same year Peter the Great returned from his Great Embassy to Western Europe (1697-98)."*
+- **Viking siege of Paris 885-886**: 6 entity items — siege, Count Odo, Charles the Fat, Abbo of Saint-Germain, Sigfred, Rollo. Memory hook: *"This 885-886 siege came just 73 years after Charlemagne's death in 814."*
+- **Aztec Empire test**: correctly routed to AP World History curriculum (not entity path) — expected behavior, curriculum wins when it exists.
+- **Grading**: `POST /curriculum/review/result` with `ent:karl_xii_of_sweden` / `knew` → `stability_days=8.3` (FSRS Easy rating), due 2026-05-12. Confirmed FSRS scheduling works on entity items.
+
+### Bug Fixes During Testing
+- **Entity path wasn't triggering** because Gemini Flash domain routing always found SOME candidate nodes (even weak ones). Widened entry point to also fire when curriculum LLM analysis returns `node_assessments=[]`. Replaces the old weak ML-card novel-topic fallback.
+- **`database is locked` during pregen** — background thread held an open connection during the slow Claude enrichment call. Refactored per CLAUDE.md write-lock discipline: read → close → slow Claude call → open → write. Each entity gets its own conn per phase.
+
+### Explicitly Not Touched
+- Existing `knowledge_items` curriculum flows continue unchanged
+- `knowledge_states` table unchanged
+- Structural cards remain curriculum-only
+- Voice elicitation remains curriculum-based
+- No client changes — entity items render as `type:'review'` through existing `ReviewCard`
+
+### Commits
+`0f83650` (core), `c975c7d` (entity path fallback widened), `a8b27b6` (write-lock discipline).
 
 ## Session 75: Activation Gating + Voice Pipeline + Auth Fix (April 14, 2026)
 
