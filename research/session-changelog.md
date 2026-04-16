@@ -1,6 +1,38 @@
 # Knowledge System Implementation Status
 
-**Date**: April 16, 2026 (last updated — session 81: stats + collateral exposure + leech detection)
+**Date**: April 16, 2026 (last updated — session 82: transcript reprocessing + card suggestions)
+
+## Session 82: Transcript Reprocessing + Card Suggestions (April 16, 2026)
+
+### Gemini Key Fix for Standalone Scripts
+- Added `python-dotenv` loading at import time in `gemini_llm.py`
+- All scripts that import gemini_llm now auto-load `.env` — no more missing `GEMINI_KEY` when running via SSH
+
+### Voice Transcript Entity Reprocessing
+- `scripts/reprocess_all_transcripts.py` — idempotent script to backfill Wikidata entity resolution on historical voice transcripts
+- 10 voice_capture + voice_capture_entity transcripts: 4 already resolved (from sessions 77-78), 6 needed reprocessing
+- Results: 61 new entity_resolutions (1368→1429), 29 new shared_entities, 87/94 voice resolutions have QIDs
+- Lesson learned: must stop research server before running batch DB writes (SQLite write lock contention)
+
+### Voice-Driven Card Suggestion Detection
+- `scripts/detect_card_suggestions.py` — scans voice transcript entities, resolves to shared_entities (for dates/domains), detects patterns:
+  - **Temporal sequences**: same-domain entities with date gaps <200y, ≥50y span, ≥3 entities
+  - **Contemporaries**: cross-domain entities with ≥10y lifetime overlap
+- `suggested_cards` table (migration in db.py): stores pending suggestions for admin review
+- `GET /admin/suggested-cards` endpoint for reviewing suggestions
+- Initial results: 2 sequence suggestions detected:
+  1. Sicily succession: Roger I → Roger II → Frederick II (1031–1194)
+  2. Norman succession: Rollo → Richard I of Normandy → Gunnora → Æthelred the Unready (860–966)
+
+### Review Stream Validation
+- All 5 structural card types flowing: aspect(3), sequence(1), synchronic(2), cast(2), causal(1)
+- Full stream: 26 review + 10 ML + 6 entity_intro + 4 quiz + 9 structural = 55 items
+- Quick quizzes confirmed present (3,863 in DB across all types)
+
+### Commits
+- `48eca21` — Fix: load .env in gemini_llm.py for standalone script access
+- `ba6e71e` — Add transcript reprocessing script for Wikidata entity backfill
+- `6e242bf` — Voice-driven card suggestion detection + admin endpoint
 
 ## Session 81: Stats Enhancement + Collateral Exposure + Leech Detection (April 16, 2026)
 
