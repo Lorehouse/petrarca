@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 16, 2026 (session 79: synchronic cards + entity consolidation)
+**Last updated**: April 16, 2026 (session 81: stats enhancement + collateral exposure + leech detection)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -15,7 +15,7 @@
 │ 4 tabs: Review | Voice | Stats | More                       │
 │ Review: landing screen, card stream + floating mic FAB      │
 │ Voice: elicitation, capture, sweeps, notes                  │
-│ Stats: due counts, domains, source breakdown                │
+│ Stats: structural progress, knowledge levels, heatmap       │
 │ More: library, explore, projects, system settings            │
 │                                                             │
 │ State: module-level vars in store.ts → AsyncStorage          │
@@ -60,7 +60,7 @@
 |--------|------|---------|------|
 | **Review** | `(tabs)/index.tsx` | Yes (landing) | FSRS-6 review card stream. Status bar (due count, domains, progress). Floating mic FAB for quick voice capture. Rich narrative answers, memory hooks, 6 follow-ups, quiz suggestions, "Same topic" checklist, existing quiz listing. Multi-cue quizzes. Suspend via menu. Entity/date taps navigate to timeline. |
 | **Voice** | `(tabs)/voice.tsx` | Yes | Hub for all voice features: Guided Recall (elicitation), Capture Voice (free-form), Knowledge Sweep, Voice Notes history. |
-| **Stats** | `(tabs)/stats.tsx` | Yes | Key numbers (due today, due this week, total items, domains). Domain/source breakdowns. Link to full web dashboard. |
+| **Stats** | `(tabs)/stats.tsx` | Yes | Rich stats: structural progress bars per domain (reviewed/total), knowledge level stacked bars (anchored/engaged/mentioned/unknown), 8-week activity heatmap, score distribution, card type breakdown pills. `/stats/native` endpoint. Link to full web dashboard. |
 | **More** | `(tabs)/more.tsx` | Yes | Library (physical books, Kindle), Explore (knowledge map, timeline, ancient map), Tools (projects, activity log), System (user guide, feedback). |
 | Feed | `(tabs)/feed.tsx` | Hidden | *Disabled (session 71)*. Was `index.tsx`. ContinueBar + ArticleRow list. |
 | Library | `(tabs)/library.tsx` | Hidden | Accessible from More tab. Physical+Kindle books. |
@@ -140,7 +140,7 @@
 | `db.py` | SQLite schema + sync helpers (`sync_articles`, `sync_knowledge_index`, etc.) |
 | `gemini_llm.py` | `call_llm()`, `call_chat()`, `call_with_search()`, `call_vision()`, `call_llm_tool()`. Default: gemini-3.1-flash-lite-preview. **Primary for interactive/user-facing LLM calls** (follow-up generation, targeted quizzes, article questions) — direct API, ~2-5s latency |
 | `claude_llm.py` | Claude wrapper via `claude -p` subprocess. **Batch/pipeline only** — process spawn adds 5-15s overhead. Used for question generation, microlearning research, curriculum generation (Opus only) |
-| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()`, `record_structural_answer()` (per-position FSRS for aspect+sequence cards), `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice — **handles novel topics outside curricula**: extracts facts/wonderings → ML cards even when no curriculum nodes match), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
+| `review_engine.py` | **FSRS-6 scheduling** (py-fsrs, desired_retention=0.80), `record_answer()` (+ **leech detection**: auto-suspend at 7 consecutive misses), `record_structural_answer()` (per-position FSRS for aspect+sequence+synchronic+cast+causal cards + **collateral exposure**: anchor positions get 30% FSRS credit), `generate_question()` (+ `_build_quiz_suggestions()`), `get_candidates()`, `process_voice_capture()` (knowledge graph ingestion from voice — **handles novel topics outside curricula**: extracts facts/wonderings → ML cards even when no curriculum nodes match), `run_voice_elicitation()` (recall assessment + era sweeps), multi-domain chapter mapping, cross-curriculum context & temporal cross-refs in question gen, **knowledge sweeps**: `run_era_sweep()`, `get_sweep_plan()`, `score_sweep()`, `get_sweep_gaps()`, `get_sweep_history()`, `_era_sweep_candidates()`, **knowledge profile**: `create_transcript_chunks()`, `get_learner_context()`, `get_learner_context_for_entity()`, `generate_domain_summary()` |
 | `reprocess_transcripts.py` | One-off backfill: chunks existing voice_transcripts, embeds, links to nodes/entities, generates domain portraits |
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards + structural card mixing), `_mix_structural_cards()` (aspect + sequence + synchronic, activation-gated by ≥5 KI per domain, domain-diverse via window function, STRUCTURAL_ONLY temp flag), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation (Opus) + graph utilities. Generates JSON + inserts into SQLite. Entity tagging (Gemini Flash) + JSON entity index. NOT for runtime data |
@@ -180,6 +180,10 @@
 | `generate_aspect_cards.py` | Generate aspect cards from key_facts: non-leaking titles + reverse cues via Gemini Flash. **~523 cards across 7 domains** (Sicily, Rome, Greece, Byzantine, Islamic, Music, Architecture). ~2234 positions total |
 | `generate_sequence_cards.py` | Generate sequence cards from key_facts + entity dates: natural chronological sequences via Gemini Flash. **17 sequences, ~88 milestones** across 5 domains (Sicily, Rome, Greece, Byzantine, Islamic) |
 | `generate_synchronic_cards.py` | Generate synchronic cards — cross-domain contemporaries at a single year. Finds well-reviewed anchors, queries shared_entities for contemporaries active at anchor year from other studied domains, generates via Gemini Flash with connection texts. **10 cards, 48 positions** spanning 734 BC – 1194 AD across 7 domains |
+| `generate_cast_cards.py` | Generate cast-of-characters cards from nodes with ≥3 person entities. Tests person identification by specific role in context. **25 cards, 81 positions** across 8 domains |
+| `generate_causal_cards.py` | Generate causal chain cards — 3-5 per historical domain, testing "why did X lead to Y" reasoning. **14 cards, 63 positions** across 5 domains |
+| `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts — date, person, event, place quizzes with varied cue formats |
+| `optimize_fsrs.py` | FSRS-6 parameter optimizer — extracts review history from interaction_log, runs py-fsrs Optimizer. Requires `fsrs[optimizer]` (torch+pandas). Baseline: 0% improvement at 195 events |
 
 ### Experiments & Utilities
 | Script | Role |
@@ -315,6 +319,7 @@
 | GET | `/projects` | List projects |
 | GET | `/stats/dashboard` | Statistics dashboard HTML page |
 | GET | `/stats/dashboard-data` | Dashboard stats JSON (today summary, knowledge per curriculum, review/quiz, books, voice, timeline, knowledge_profile) |
+| GET | `/stats/native` | Native Stats tab JSON — structural progress per domain, knowledge levels, 8-week activity heatmap, score distribution, card type counts, item totals |
 | GET | `/knowledge/profile/{domain_id}` | Domain knowledge portrait (cached, auto-regenerates if >24h stale) |
 | POST | `/knowledge/profile/regenerate/{domain_id}` | Force-regenerate domain portrait |
 | GET | `/knowledge/growth-data` | Growth tracking JSON: transitions, network metrics history, review performance, stability trends, current per-domain metrics |

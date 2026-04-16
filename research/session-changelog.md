@@ -1,6 +1,67 @@
 # Knowledge System Implementation Status
 
-**Date**: April 16, 2026 (last updated — session 79: synchronic cards + entity consolidation)
+**Date**: April 16, 2026 (last updated — session 81: stats + collateral exposure + leech detection)
+
+## Session 81: Stats Enhancement + Collateral Exposure + Leech Detection (April 16, 2026)
+
+### Stats Tab Rebuilt (`stats.tsx`)
+- New `/stats/native` endpoint in `curriculum_db.py` (`get_native_stats()`) — single JSON response with all stats data
+- **Structural progress bars**: per-domain reviewed/total positions (e.g., "Greece 4/315")
+- **Knowledge level stacked bars**: anchored/engaged/mentioned/unknown per domain, legend, node counts
+- **Activity heatmap**: 8-week calendar grid, rubric-colored cells by intensity
+- **Score distribution**: all-time knew/partly/missed stacked bar with percentages
+- **Card type pills**: aspect/cast/causal/sequence/synchronic reviewed/total counts
+- No external chart libraries — pure React Native View percentage-width bars
+
+### FSRS Optimizer (`scripts/optimize_fsrs.py`)
+- Extracts review history from interaction_log → py-fsrs ReviewLog objects
+- Deduplicates events within 60s window per item
+- 195 events across 106 cards, 56 with 2+ reviews
+- Result: 0% improvement — FSRS-6 defaults adequate at this data volume
+- Re-run at 500+ events. Requires `fsrs[optimizer]` extra (torch + pandas)
+
+### Collateral Exposure Tracking (Priority 4 / Experiment E3)
+- `record_structural_answer()` now credits anchor positions (visible but not tested) with 30% of normal FSRS stability gain
+- Implementation: after grading blanked positions, finds all non-graded positions for card, applies Good rating × 0.3 stability factor
+- Logged as `collateral_exposure` events in interaction_log
+- Measurement plan: after 2 weeks, compare retention of collateral-exposed vs unexposed positions
+
+### Leech Detection (Priority 5)
+- After each "missed" answer on items with 5+ reviews, checks interaction_log for 7 consecutive misses
+- Auto-suspends item for 30 days, clears `cached_question` for regeneration on return
+- Logged as `leech_suspended` events
+- Currently no active leeches (all multi-miss items eventually learned)
+
+### Commits
+- `b8ef573` — Enhanced native Stats tab — structural progress, knowledge levels, heatmap
+- `a0f3662` — Collateral exposure tracking + leech detection + FSRS optimizer script
+- `6d6af79` — Experiment log: FSRS optimizer baseline + collateral exposure E3 setup
+
+## Session 80: Quick Quizzes, Cast Cards, Causal Chains, Stream Rhythm (April 16, 2026)
+
+### Quick Quizzes (Phase 3 — `generate_quick_quizzes.py`)
+- 4 quiz types: date (when_year, when_century, order_events), person (who_did, role_of), event (what_happened, where_did), place (where_is, capital_of)
+- Generated from `key_facts` table via Gemini Flash, stored in `microlearning_quizzes` with `quiz_type` column
+- Interleaved into review stream at 1:4 ratio (1 quiz per 4 review cards)
+
+### Cast Cards (Phase 6 — `generate_cast_cards.py`, `CastCard.tsx`)
+- "Cast of characters" cards from nodes with ≥3 person entities
+- Tests: can you name each person's SPECIFIC role in THIS context?
+- `question_variants` per person (multiple retrieval cues)
+- 25 cards, 81 positions across 8 domains
+
+### Causal Chains (Phase 7 — `generate_causal_cards.py`, `CausalChainCard.tsx`)
+- "Why did X lead to Y?" reasoning chains, 3-5 per historical domain
+- Connection text visibility: "both adjacent links visible" check
+- 14 cards, 63 positions across 5 domains
+
+### FSRS Tuning
+- `maximum_interval`: 365 → 3650 (allows multi-year intervals for well-known facts)
+- Voice recency boost: +3.0 for items captured in last 48h (decaying)
+- Response time tracking: `response_ms` logged in interaction_log
+
+### Commits
+- `e4f6346` — Session 80: Quick quizzes, cast cards, causal chains, stream rhythm
 
 ## Session 79: Synchronic Cards + Entity Consolidation (April 16, 2026)
 
