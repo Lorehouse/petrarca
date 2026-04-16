@@ -1,6 +1,31 @@
 # Knowledge System Implementation Status
 
-**Date**: April 16, 2026 (last updated — session 82: transcript reprocessing + card suggestions)
+**Date**: April 16, 2026 (last updated — session 83: trust line + E3 measurement + suggestion pipeline)
+
+## Session 83: Review Quality Polish + Experiment Instrumentation (April 16, 2026)
+
+### Trust Line on Aspect Cards
+- Added "3/4 known · 'What year?' due Thursday" line below card title
+- Computed client-side from existing FSRS position data (`review_count` + `last_score`)
+- Green accent when all positions mastered, hidden on first encounter (0 reviews)
+- Added `review_count` and `last_score` to AspectPosition TypeScript interface (server already sent these)
+- Title marginBottom reduced 12→4px to accommodate the trust line
+
+### E3 Collateral Exposure Measurement
+- `scripts/measure_collateral_exposure.py` — analysis script for the collateral exposure hypothesis
+- Reports: total positions, actively graded, collateral-only (stability>1.0 but review_count=0), untouched
+- Per-card breakdown showing graded vs collateral vs untouched positions
+- Current state: 6 graded positions, 0 collateral-only (all positions on graded cards were actively tested)
+- Script flags insufficient data (N<20) and estimates sessions needed for meaningful comparison
+
+### Card Suggestion Generation Pipeline
+- `scripts/generate_from_suggestions.py` — turns approved `suggested_cards` into real structural cards via Gemini Flash
+- Supports both sequence and synchronic card types
+- Entity-level overlap detection against existing structural cards
+- `POST /admin/suggested-cards/approve` and `POST /admin/suggested-cards/reject` endpoints
+- Generated first card from suggestions: "The Rise of the Norman Kingdom of Sicily" (6 milestones, 1031-1250)
+  - Roger I arrival → Fall of Bari → Roger II birth → Coronation → Frederick II birth → Frederick II death
+- Installed `python3-dotenv` on server (was missing from apt)
 
 ## Session 82: Transcript Reprocessing + Card Suggestions (April 16, 2026)
 
