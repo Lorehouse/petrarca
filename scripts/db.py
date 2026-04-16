@@ -876,6 +876,19 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS idx_ke_qid ON knowledge_entities(wikidata_qid)",
     # Phase 2: cached Wikidata structured properties for enrichment
     "ALTER TABLE knowledge_entities ADD COLUMN wikidata_props_json TEXT",
+    # Voice-driven structural card suggestions
+    """CREATE TABLE IF NOT EXISTS suggested_cards (
+        id TEXT PRIMARY KEY,
+        card_type TEXT NOT NULL,
+        source_transcript_ids TEXT NOT NULL DEFAULT '[]',
+        entities TEXT NOT NULL DEFAULT '[]',
+        domain_ids TEXT NOT NULL DEFAULT '[]',
+        rationale TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_sc_status ON suggested_cards(status)",
+    "CREATE INDEX IF NOT EXISTS idx_sc_type ON suggested_cards(card_type)",
 ]
 
 

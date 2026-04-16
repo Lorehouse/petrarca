@@ -4907,6 +4907,40 @@ JSON array only:"""
     # for user triage.
     # --------------------------------------------------------------------
 
+    def _handle_admin_suggested_cards(self):
+        """GET /admin/suggested-cards — JSON list of voice-detected card suggestions."""
+        from db import get_connection
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        status_filter = params.get('status', ['pending'])[0]
+
+        conn = get_connection(readonly=True)
+        query = "SELECT * FROM suggested_cards"
+        args = []
+        if status_filter != 'all':
+            query += " WHERE status = ?"
+            args.append(status_filter)
+        query += " ORDER BY created_at DESC LIMIT 100"
+
+        rows = conn.execute(query, args).fetchall()
+        conn.close()
+
+        result = []
+        for r in rows:
+            result.append({
+                'id': r['id'],
+                'card_type': r['card_type'],
+                'source_transcript_ids': json.loads(r['source_transcript_ids']) if r['source_transcript_ids'] else [],
+                'entities': json.loads(r['entities']) if r['entities'] else [],
+                'domain_ids': json.loads(r['domain_ids']) if r['domain_ids'] else [],
+                'rationale': r['rationale'],
+                'status': r['status'],
+                'created_at': r['created_at'],
+            })
+
+        return self._send_json_response(200, {'suggestions': result, 'count': len(result)})
+
     def _handle_admin_entity_queue_data(self):
         """GET /admin/entity-queue-data — JSON list of resolutions needing review."""
         from db import get_connection
@@ -7178,6 +7212,8 @@ JSON array only:"""
             return self._handle_admin_entity_queue_data()
         if self.path.startswith('/admin/entity/Q'):
             return self._handle_admin_entity_detail()
+        if self.path.startswith('/admin/suggested-cards'):
+            return self._handle_admin_suggested_cards()
         if self.path.startswith('/curriculum/review/timeline/'):
             domain_id = self.path.split('/curriculum/review/timeline/')[1].split('?')[0]
             return self._send_json_response(200, {'timeline': get_timeline(domain_id)})
