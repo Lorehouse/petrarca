@@ -22,7 +22,8 @@ from gemini_llm import call_llm
 from curriculum_db import get_connection
 
 # Historical domains only — no Classical Reception or Philosophy
-HISTORICAL_DOMAINS = {'sicily', 'rome', 'greece', 'byzantine', 'islamic_golden_age'}
+# Match by substring since domain IDs are long slugs
+HISTORICAL_DOMAIN_KEYWORDS = ['sicily', 'roman_republic', 'greece', 'byzantine', 'islamic']
 
 CHAIN_IDENTIFICATION_PROMPT = """You are identifying natural causal chains for a knowledge retention system.
 
@@ -194,11 +195,12 @@ def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
     ).fetchall()
     domains = [dict(d) for d in domains]
 
-    # Filter to historical domains
+    # Filter to historical domains (match by keyword in domain ID)
     if domain_ids:
         domains = [d for d in domains if d['id'] in domain_ids]
     else:
-        domains = [d for d in domains if d['id'] in HISTORICAL_DOMAINS]
+        domains = [d for d in domains
+                   if any(kw in d['id'] for kw in HISTORICAL_DOMAIN_KEYWORDS)]
 
     # Check which domains already have causal cards
     existing = set(r['domain_id'] for r in conn.execute(
