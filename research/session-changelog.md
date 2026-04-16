@@ -1,6 +1,35 @@
 # Knowledge System Implementation Status
 
-**Date**: April 15, 2026 (last updated — session 78: Phase 2 entity-graph enrichment + resolver bug fixes + stretch UX)
+**Date**: April 16, 2026 (last updated — session 79: synchronic cards + entity consolidation)
+
+## Session 79: Synchronic Cards + Entity Consolidation (April 16, 2026)
+
+### Priority 0: Entity Consolidation
+
+**Entity-type backfill:** All 11 `knowledge_entities` rows updated from legacy `entity_type='entity'` to correct types (6 persons, 5 events). QID-bearing entities verified against Wikidata P31; others inferred from name.
+
+**Phase 2 question regeneration:** Cleared and regenerated `cached_question` on all 11 entity items using Phase 2 enrichment pipeline (Wikidata props + temporal neighbors + voice co-occurrence). Quality improvement validated:
+- Poltava: generic "1709 famine" → graph-grounded "nine years after Narva in 1700"
+- Sigfred: generic "Treaty of Wedmore" → "Rollo (whom you've studied, 860-932)"
+- Karl XII: generic "Glorious Revolution" → "1693 earthquake devastated Sicily" (cross-domain temporal neighbor)
+
+All 6 QID entities now have cached `wikidata_props_json` (Karl XII: 10 property types).
+
+### Priority 1: Synchronic Cards (Phase 5 of structural-review-redesign)
+
+**Generation** (`generate_synchronic_cards.py`): Finds well-reviewed temporal anchors from knowledge_items, queries `shared_entities` for contemporaries from other studied domains active at anchor year, generates via Gemini Flash with connection texts explaining why each contemporary matters. Key features: 10-year proximity dedup, ≥3 cross-domain threshold, Gemini Flash prompt drops purely coincidental contemporaries.
+
+**10 synchronic cards generated** spanning 734 BC – 1194 AD across 7 domains, 48 total positions. Examples:
+- "The World in 321 AD" (Constantine anchor) — Neoplatonism, Koine Greek, Academy, Sicily/Rome
+- "The World in 1194 AD" (Frederick II anchor) — Averroes, Al-Andalus, Scholasticism, Constantinople
+- "The World in 264 BC" (Punic Wars anchor) — Carthage, Syracuse, Hiero II, Stoicism
+
+**SynchronicCard.tsx**: Geographic layout (domain rows vs timeline), 3 blanks per card (never blanks the anchor), binary grading, connection text revealed after all blanks resolved. Badge color: `colors.info` (blue, distinct from aspect gray and sequence gray).
+
+**Stream integration**: `_mix_structural_cards()` extended to query `card_type='synchronic'` (up to 2 per batch). Same activation gate as aspect cards (≥5 KI in anchor domain). Stream verified: 2 synchronic cards appear in typical 40-item batch alongside 3 aspect, 1 sequence, 20 review, etc.
+
+### Commits
+- `fb3b651` — Synchronic cards + entity consolidation (all changes)
 
 ## Session 78: Phase 2 Entity-Graph Enrichment + Resolver Bug Fixes (April 15, 2026)
 
