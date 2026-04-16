@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 16, 2026 (session 81: stats enhancement + collateral exposure + leech detection)
+**Last updated**: April 16, 2026 (session 82: transcript reprocessing + card suggestions)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -49,9 +49,9 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Content Numbers (as of Apr 4, 2026)
+## Content Numbers (as of Apr 16, 2026)
 
-~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 13 curricula (1,119 nodes), 1,672 key_facts (across all domains), 591 shared_entities. New domains: Western Music History (102), European Architecture (82), Western Literature (110), Western Philosophy (106).
+~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 13 curricula (1,119 nodes), 1,672 key_facts (across all domains), 616 shared_entities (568 with Wikidata QIDs, 92.2%). 266 knowledge_items (116 reviewed). 1,429 entity_resolutions (94 voice, 1,301 backfill). 589 structural_cards (523 aspect, 25 cast, 17 sequence, 14 causal, 10 synchronic), 2,428 structural_positions (6 reviewed). 1,240 microlearning_cards. 4,724 microlearning_quizzes (2,224 causal, 1,394 legacy, 427 role, 414 date_reverse, 249 location, 16 order). 2 suggested_cards (pending). 42 voice_transcripts (30 elicitation, 8 capture, 2 entity_capture, 1 explore, 1 insight). 3,123 interaction_log events.
 
 ## App Screens
 
