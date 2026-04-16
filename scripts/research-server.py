@@ -4941,6 +4941,39 @@ JSON array only:"""
 
         return self._send_json_response(200, {'suggestions': result, 'count': len(result)})
 
+    def _handle_admin_suggested_cards_update(self):
+        """POST /admin/suggested-cards/approve or /reject — update suggestion status."""
+        body = self._read_json_body()
+        if body is None:
+            return
+        suggestion_id = body.get('id')
+        if not suggestion_id:
+            return self._send_json_response(400, {'error': 'Missing id'})
+
+        new_status = 'approved' if '/approve' in self.path else 'rejected'
+
+        from db import get_connection
+        conn = get_connection()
+        try:
+            row = conn.execute('SELECT id, status FROM suggested_cards WHERE id = ?',
+                               (suggestion_id,)).fetchone()
+            if not row:
+                return self._send_json_response(404, {'error': f'Suggestion {suggestion_id} not found'})
+
+            conn.execute('UPDATE suggested_cards SET status = ? WHERE id = ?',
+                         (new_status, suggestion_id))
+            conn.commit()
+            print(f'[suggested-cards] {suggestion_id}: {row["status"]} → {new_status}', flush=True)
+            return self._send_json_response(200, {
+                'id': suggestion_id, 'status': new_status,
+                'message': f'Suggestion {new_status}',
+            })
+        except Exception as e:
+            print(f'[suggested-cards] Error: {e}', flush=True)
+            return self._send_json_response(500, {'error': str(e)})
+        finally:
+            conn.close()
+
     def _handle_admin_entity_queue_data(self):
         """GET /admin/entity-queue-data — JSON list of resolutions needing review."""
         from db import get_connection
@@ -6634,6 +6667,8 @@ JSON array only:"""
             return self._handle_review_answer()
         if self.path == '/structural/grade':
             return self._handle_structural_grade()
+        if self.path in ('/admin/suggested-cards/approve', '/admin/suggested-cards/reject'):
+            return self._handle_admin_suggested_cards_update()
         if self.path == '/review/explore':
             return self._handle_review_explore()
         if self.path == '/review/voice-memo':
