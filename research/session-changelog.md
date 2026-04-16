@@ -40,28 +40,35 @@
 ## Session 80: Quick Quizzes, Cast Cards, Causal Chains, Stream Rhythm (April 16, 2026)
 
 ### Quick Quizzes (Phase 3 — `generate_quick_quizzes.py`)
-- 4 quiz types: date (when_year, when_century, order_events), person (who_did, role_of), event (what_happened, where_did), place (where_is, capital_of)
-- Generated from `key_facts` table via Gemini Flash, stored in `microlearning_quizzes` with `quiz_type` column
-- Interleaved into review stream at 1:4 ratio (1 quiz per 4 review cards)
+- 4 quiz types from key_facts: `date_reverse` (414), `order` (15), `role` (323), `causal`/`location` (1,716) — 2,468 new quizzes total, 229 deduped at 0.82 cosine
+- `date_reverse` + `order` generated deterministically (principle #7); `role` + `causal` via Gemini Flash in batches of 15
+- `quiz_type` column added to `microlearning_quizzes`; total active quizzes: 3,858 (was 1,392)
+- Stream interleaving rewritten: structural→quiz→review→review→quiz rhythm ("palate cleanser" pattern). Due quizzes separated from ML low_pool, handled by `_mix_structural_cards()`. Guard against 3+ consecutive quizzes.
+- Response time tracking: `MicrolearningQuizCard` tracks `response_time_ms` from display to grade, passed through `recordReviewResult()` to server `log_interaction()`. Subtle timer indicator fades in after 3s.
 
-### Cast Cards (Phase 6 — `generate_cast_cards.py`, `CastCard.tsx`)
-- "Cast of characters" cards from nodes with ≥3 person entities
-- Tests: can you name each person's SPECIFIC role in THIS context?
-- `question_variants` per person (multiple retrieval cues)
-- 25 cards, 81 positions across 8 domains
+### Cast Cards (Phase 6a — `generate_cast_cards.py`, `CastCard.tsx`)
+- "Cast of characters" cards from nodes with ≥3 person-type entities via `entity_curriculum_links`
+- Tests: can you name each person's SPECIFIC role in THIS context? Event-specific roles, not general biography.
+- Purple badge (#6B4C8A). Anchor persons shown dimmed with role, 2-3 blanks by FSRS urgency.
+- `question_variants` stores role/significance/entity_id per position
+- Activation gate: ≥5 KI in domain + ≥1 reviewed KI for the node
+- 25 cards, 81 positions across 8 domains (3 failed due to Gemini parse errors)
 
-### Causal Chains (Phase 7 — `generate_causal_cards.py`, `CausalChainCard.tsx`)
-- "Why did X lead to Y?" reasoning chains, 3-5 per historical domain
-- Connection text visibility: "both adjacent links visible" check
-- 14 cards, 63 positions across 5 domains
+### Causal Chains (Phase 6b — `generate_causal_cards.py`, `CausalChainCard.tsx`)
+- "Why did X lead to Y?" reasoning chains, 3-5 per historical domain (5 domains: Greece, Rome, Sicily, Byzantine, Islamic)
+- Brown badge (#8B5E3C). Vertical chain with ↓ arrows. Connection text between links shown only when BOTH adjacent links visible.
+- 2 blanks per card (most-due links, first link always anchor)
+- `question_variants` stores event/year_display/connection_to_next per link
+- 14 chains, 63 links (e.g., "From Land Power to Naval Hegemony", "The Destruction of the Republic", "The Arab-Norman Synthesis")
 
-### FSRS Tuning
-- `maximum_interval`: 365 → 3650 (allows multi-year intervals for well-known facts)
-- Voice recency boost: +3.0 for items captured in last 48h (decaying)
-- Response time tracking: `response_ms` logged in interaction_log
+### Quick Wins
+- FSRS `maximum_interval`: 365 → 3650 (well-known items can reach multi-year intervals)
+- Voice recency boost: +3.0 at capture, decays to 0 over 48h (entity item scoring in `curriculum_db.py`)
+- `ResurfacingItem` type extended with `'cast' | 'causal'`
 
 ### Commits
 - `e4f6346` — Session 80: Quick quizzes, cast cards, causal chains, stream rhythm
+- `63bdbbb` — Fix causal card domain filtering — match by keyword not exact ID
 
 ## Session 79: Synchronic Cards + Entity Consolidation (April 16, 2026)
 

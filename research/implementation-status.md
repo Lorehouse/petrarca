@@ -114,6 +114,8 @@
 | `AspectCard` | Structural review: multi-signal per topic. Know All, reveal-then-mark, binary grading, mnemonics. 289 lines. |
 | `SequenceCard` | Structural review: timeline with dot/connector layout, 2 rotating blanks (most-due positions), anchor positions dimmed. |
 | `SynchronicCard` | Structural review: geographic layout (domain rows), 3 blanks, connection text per position. Tests cross-domain awareness at a single year. |
+| `CastCard` | Structural review: cast of characters. Person-focused with event-specific roles. Anchor persons dimmed, 2-3 blanks by FSRS urgency, role + significance after reveal. Purple badge (#6B4C8A). |
+| `CausalChainCard` | Structural review: causal chains with vertical arrows. Connection text shown only when both adjacent links visible. 2 blanks per card, first link always anchor. Brown badge (#8B5E3C). |
 
 ### Client Data Layer
 | Module | Role |
@@ -180,6 +182,9 @@
 | `generate_aspect_cards.py` | Generate aspect cards from key_facts: non-leaking titles + reverse cues via Gemini Flash. **~523 cards across 7 domains** (Sicily, Rome, Greece, Byzantine, Islamic, Music, Architecture). ~2234 positions total |
 | `generate_sequence_cards.py` | Generate sequence cards from key_facts + entity dates: natural chronological sequences via Gemini Flash. **17 sequences, ~88 milestones** across 5 domains (Sicily, Rome, Greece, Byzantine, Islamic) |
 | `generate_synchronic_cards.py` | Generate synchronic cards — cross-domain contemporaries at a single year. Finds well-reviewed anchors, queries shared_entities for contemporaries active at anchor year from other studied domains, generates via Gemini Flash with connection texts. **10 cards, 48 positions** spanning 734 BC – 1194 AD across 7 domains |
+| `generate_cast_cards.py` | Generate cast of characters cards from nodes with ≥3 person-type entities via `entity_curriculum_links`. Gemini Flash generates event-specific roles + significance. **25 cards, 81 positions** across 8 domains |
+| `generate_causal_cards.py` | Generate causal chain cards from significance/connection key_facts. 3-5 chains per historical domain with 4-7 links each. **14 chains, 63 links** across 5 domains (Greece, Rome, Sicily, Byzantine, Islamic) |
+| `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts: `date_reverse` (deterministic), `order` (deterministic pairs), `role` (Gemini Flash), `causal`/`location` (Gemini Flash). Dedup at 0.82 cosine. **2,468 quizzes generated** (414+15+323+1716). Adds `quiz_type` column |
 | `generate_cast_cards.py` | Generate cast-of-characters cards from nodes with ≥3 person entities. Tests person identification by specific role in context. **25 cards, 81 positions** across 8 domains |
 | `generate_causal_cards.py` | Generate causal chain cards — 3-5 per historical domain, testing "why did X lead to Y" reasoning. **14 cards, 63 positions** across 5 domains |
 | `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts — date, person, event, place quizzes with varied cue formats |
