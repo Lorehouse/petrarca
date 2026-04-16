@@ -2532,8 +2532,43 @@ def record_answer(item_id: str, score: str, conn) -> dict:
 
     conn.commit()
 
+    # ── Leech detection: auto-suspend items with 7+ consecutive misses ───
+    leech_suspended = False
+    if score == 'missed' and (item.get('review_count') or 0) >= 5:
+        try:
+            recent = conn.execute("""
+                SELECT score FROM interaction_log
+                WHERE item_id=? AND score IN ('knew', 'partly', 'missed')
+                  AND event IN ('review_answer', 'review_result', 'review_quiz_result')
+                ORDER BY created_at DESC LIMIT 7
+            """, (item_id,)).fetchall()
+            consecutive_misses = 0
+            for r in recent:
+                if r['score'] == 'missed':
+                    consecutive_misses += 1
+                else:
+                    break
+            if consecutive_misses >= 7:
+                # Auto-suspend for 30 days
+                suspend_until = now + 30 * 24 * 60 * 60 * 1000
+                conn.execute(
+                    f'UPDATE {table} SET due_at=?, cached_question=NULL WHERE id=?',
+                    (suspend_until, item_id))
+                conn.commit()
+                leech_suspended = True
+                print(f'[leech] auto-suspended {item_id} ({consecutive_misses} consecutive misses)', flush=True)
+                try:
+                    from server_log import log_interaction
+                    log_interaction('leech_suspended', item_id=item_id,
+                                    item_type=table, consecutive_misses=consecutive_misses)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'[leech] detection error for {item_id}: {e}', flush=True)
+
     # Background re-generation — pre-cache question for next session (not for microlearning)
-    if table != 'microlearning_cards':
+    # For leeches, regeneration happens on unsuspend
+    if table != 'microlearning_cards' and not leech_suspended:
         def _regen():
             try:
                 from db import get_connection as _conn
@@ -2555,7 +2590,10 @@ def record_answer(item_id: str, score: str, conn) -> dict:
         threading.Thread(target=generate_multicue_quizzes,
                          args=(_node_id, _domain_id), daemon=True).start()
 
-    return {'next_due_at': next_due, 'new_stability_days': new_stability}
+    result = {'next_due_at': next_due, 'new_stability_days': new_stability}
+    if leech_suspended:
+        result['leech_suspended'] = True
+    return result
 
 
 # ── Structural card grading ──────────────────────────────────────────────────
@@ -2620,6 +2658,52 @@ def record_structural_answer(card_id: str, results: list, conn) -> dict:
         })
         print(f'[structural] {pos_id}: {score} → stability={new_stability:.1f}d due={new_card.due.strftime("%m-%d")}', flush=True)
 
+    # ── Collateral exposure: credit anchor positions (visible but not tested) ──
+    graded_ids = {r.get('position_id') for r in results if r.get('position_id')}
+    anchor_rows = conn.execute(
+        'SELECT id, fsrs_card_json, stability_days FROM structural_positions '
+        'WHERE card_id=? AND id NOT IN ({})'.format(
+            ','.join('?' for _ in graded_ids)
+        ),
+        (card_id, *graded_ids)
+    ).fetchall() if graded_ids else []
+
+    collateral_count = 0
+    for ar in anchor_rows:
+        anchor_id = ar['id']
+        card_json = ar['fsrs_card_json']
+        if card_json:
+            card_data = json.loads(card_json) if isinstance(card_json, str) else card_json
+            card = FsrsCard.from_dict(card_data)
+        else:
+            card = FsrsCard()
+
+        # Apply Good rating for passive exposure
+        new_card, _ = _fsrs_scheduler.review_card(card, FsrsRating.Good, now_dt)
+        # Scale stability gain to ~30% of a full review
+        old_stability = card.stability or 1.0
+        full_gain = (new_card.stability or 1.0) - old_stability
+        reduced_stability = old_stability + full_gain * 0.3
+        new_card_dict = new_card.to_dict()
+        new_card_dict['stability'] = reduced_stability
+        next_due = int((now_dt.timestamp() + reduced_stability * 86400) * 1000)
+
+        conn.execute("""
+            UPDATE structural_positions
+            SET stability_days=?, due_at=?, fsrs_card_json=?
+            WHERE id=?
+        """, (reduced_stability, next_due, json.dumps(new_card_dict), anchor_id))
+        collateral_count += 1
+
+    if collateral_count > 0:
+        print(f'[structural] {collateral_count} anchor positions got collateral exposure credit', flush=True)
+        try:
+            from server_log import log_interaction
+            log_interaction('collateral_exposure', card_id=card_id,
+                            card_type='structural', count=collateral_count)
+        except Exception:
+            pass
+
     # Update card-level review count
     conn.execute(
         'UPDATE structural_cards SET review_count=review_count+1 WHERE id=?',
@@ -2653,6 +2737,7 @@ def record_structural_answer(card_id: str, results: list, conn) -> dict:
         'positions': position_results,
         'knew': knew,
         'total': len(position_results),
+        'collateral_count': collateral_count,
     }
 
 
