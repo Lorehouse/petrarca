@@ -1,7 +1,7 @@
 # Petrarca: Current System State
 
 **Last rewritten**: April 4, 2026 (session 45)
-**Last updated**: April 15, 2026 (session 77: entity-first Phase 1 observation pass + 4 cleanup fixes)
+**Last updated**: April 15, 2026 (session 78: Phase 2 entity-graph enrichment, resolver Bugs 3+4 fixed in limbic, stretch UX, Gemini date coercion fix)
 **For session-by-session history**: see `research/session-changelog.md`
 
 ## Architecture Overview
@@ -144,7 +144,7 @@
 | `curriculum_db.py` | **Runtime reads/writes** — `load_curriculum()`, `update_knowledge()`, `load_knowledge_states()`, `generate_review_stream()` (with nexus cards + structural card mixing), `_mix_structural_cards()` (aspect + sequence, activation-gated by ≥5 KI per domain, domain-diverse via window function, STRUCTURAL_ONLY temp flag), `get_book_prescan()` |
 | `curriculum.py` | Curriculum generation (Opus) + graph utilities. Generates JSON + inserts into SQLite. Entity tagging (Gemini Flash) + JSON entity index. NOT for runtime data |
 | `bootstrap_entities.py` | Extracts rich entities (descriptions, Wikipedia, coordinates) from curricula via Gemini Flash → `shared_entities` + `entity_curriculum_links` SQLite tables. Run after curriculum generation for voice capture entity matching |
-| `backfill_wikidata.py` | 4-pass Wikidata entity resolution: (1) deterministic scoring, (2) anchor-boosted re-pass, (3) Gemini Flash LLM disambiguation, (4) no-match rescue with alternate queries. Writes `entity_resolutions` audit trail + `entity_external_ids`. 509/570 entities resolved (89.3%) |
+| `backfill_wikidata.py` | 4-pass Wikidata entity resolution: (1) deterministic scoring, (2) anchor-boosted re-pass, (3) Gemini Flash LLM disambiguation, (4) no-match rescue with alternate queries. Writes `entity_resolutions` audit trail + `entity_external_ids`. 528/590 entities resolved (89.5%). Session 78: resolver hardened with regnal-name variants (Karl↔Carl↔Charles etc.) and weak-match downgrade (type<0.5 + date<0.5 → ambiguous) |
 | `merge_entity_dupes.py` | Find-and-merge duplicate entities sharing the same Wikidata QID. Safety classifier: SAFE (suffix-dupe, known-alias, of-place, regnal) vs REVIEW. SQL merge across 5 tables |
 | `reprocess_voice_with_qids.py` | Standalone tool to resolve a voice transcript's entities to Wikidata QIDs. Validates resolver pipeline without touching live code |
 | `migrate_wikidata_schema.py` | Idempotent schema migration: adds `wikidata_qid` column + `entity_resolutions` + `entity_external_ids` tables |
@@ -327,7 +327,7 @@
 
 **Books & Kindle**: `physical_books`, `book_captures`, `book_curriculum_mappings`, `kindle_books`, `available_epubs`
 
-**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `knowledge_entities` (Session 76: entity-first, parallel to knowledge_items), `timeline_entries`, `shared_entities` (with `wikidata_qid`), `entity_curriculum_links`
+**Curriculum & Knowledge**: `curriculum_domains`, `curriculum_nodes`, `curriculum_prerequisites`, `knowledge_states`, `knowledge_items`, `knowledge_entities` (Session 76: entity-first, parallel to knowledge_items; Session 78: `wikidata_props_json` column for cached Wikidata structured properties), `timeline_entries`, `shared_entities` (with `wikidata_qid`), `entity_curriculum_links`
 
 **Entity Resolution**: `entity_resolutions` (append-only audit trail — every Wikidata resolution decision with candidates, confidence, reasoning, supersede chain), `entity_external_ids` (1906 VIAF/GND/GeoNames/Pleiades/Getty/MusicBrainz/BnF/LCCN IDs harvested from resolved entities)
 

@@ -1,6 +1,48 @@
 # Knowledge System Implementation Status
 
-**Date**: April 15, 2026 (last updated — session 77: entity-first Phase 1 observation + 4 fixes)
+**Date**: April 15, 2026 (last updated — session 78: Phase 2 entity-graph enrichment + resolver bug fixes + stretch UX)
+
+## Session 78: Phase 2 Entity-Graph Enrichment + Resolver Bug Fixes (April 15, 2026)
+
+### Wikidata Resolver Hardening (limbic, commit `e7d8498`)
+
+**Bug 3 — Karl XII spelling variants (FIXED):** `wbsearchentities` for "Karl XII of Sweden" returned only paintings because Q52934's English label is "Carl XII of Sweden". Added `REGNAL_NAME_VARIANTS` table (20 classes: Karl↔Carl↔Charles, Friedrich↔Frederick, Wilhelm↔William, Håkon↔Haakon, etc.) with regnal-shape gate (only fires on mentions with Roman numerals or "of <place>"). Resolver retries when 0 candidates returned OR `type_hint='person'` but no candidate is Q5 (human). 9 new tests.
+
+**Bug 4 — Count Odo weak-match downgrade (FIXED):** Single-candidate museum (Q67389525, type=0.30, date=0.00) was silently accepted because `total >= 0.55`. Added `_is_weak_structural_match()`: when `type_score < 0.5 AND date_score < 0.5` AND `type_hint` was supplied, `_decide()` returns `ambiguous` instead of `resolved`. 3 new tests. Documented both failure modes in `research/wikidata-resolution-quality.md` (new doc).
+
+### Phase 2: Entity-Graph Enrichment (commit `08c4551`)
+
+`generate_entity_question()` now builds a three-signal context block for the `_ENRICH_PROMPT`:
+
+1. **Wikidata structured properties** — per-type property sets (P22 father, P39 position, P1366 successor for persons; P710 participants, P276 location for battles; etc.). Cached in new column `knowledge_entities.wikidata_props_json` (90-day TTL). Legacy `entity_type='entity'` rows use union-of-all-props fallback.
+2. **Scoped temporal neighbors** — entities within ±50y that the user has ALSO captured, joined via `knowledge_entities` OR `entity_curriculum_links → knowledge_items`. Never global `shared_entities` — preserves "user's own graph" constraint.
+3. **Voice co-occurrence** — top-N entities most frequently mentioned alongside this one in `voice_transcripts.llm_result.entities_mentioned`. Catches discussed-but-not-yet-anchored entities.
+
+Prompt constraint: enrichment never asserts facts the user didn't capture. Wikidata properties become retrieval prompts ("you captured X reigned Y-Z; who succeeded?"), not assertions. 8 new tests.
+
+### Stretch UX (commit `39c83b2`)
+
+- **Entity badge**: `entity_capture` origin now shows 💬 (unresolved) or 🔷 (Wikidata-linked) in the stream header, distinct from existing 📖/🎙/👤 badges.
+- **About-this-card source excerpts**: "VOICE CAPTURE" section shows `knowledge_entities.sources[].source_text` + capture_id. "WIKIDATA" section shows QID when resolved. `generate_review_stream()` now passes entity-path sources through to provenance instead of empty `[]`.
+- **Entity intro cards**: `_build_entity_capture_intros()` inserts an entity_intro card before the first review of never-graded entity_capture items when `shared_entities` has a description ≥20 chars.
+
+### Gemini Date Coercion Fix (commit `0a3a304`)
+
+Pre-existing latent bug surfaced during backfill: Gemini occasionally returns `date_start`/`date_end` as strings ("1682") in JSON-mode responses. `_resolve_voice_entities_background` passed these through to `DateRange(start=str)`, crashing inside the resolver with `'<' not supported between instances of 'int' and 'str'`. Added `_coerce_year()` helper that defensively parses int/float/str/None.
+
+### Backfill + End-to-End Validation
+
+Deployed via `bash ~/src/petrarca/scripts/deploy.sh` (rsyncs limbic AND git-pulls petrarca). Re-ran resolution on Karl XII and Viking Paris captures:
+- **Karl XII → Q52934** (Carl XII of Sweden) — regnal spelling retry successful. 12/12 mentions resolved.
+- **Count Odo → ambiguous** with reason "weak structural match (type=0.30, date=0.00)" — downgrade fired. Hallucination guard then rejected LLM's Q312674 proposal. Correctly stays unresolved.
+
+Regenerated Battle of Poltava `cached_question` with Phase 2 enrichment. Memory hook changed from generic ("1709 famine, Great Frost") to graph-grounded ("nine years after Karl XII's victory at Narva in 1700 — Poltava reversed their fortunes completely"). References Battle of Narva (scoped temporal neighbor) and Karl XII (voice co-occurrence). North-star validated.
+
+### Commits
+- `e7d8498` (limbic) — Regnal spelling variants + weak-match downgrade (12 new tests)
+- `08c4551` — Phase 2 entity-graph enrichment (8 new tests)
+- `39c83b2` — Stretch UX: badge + source excerpts + entity intro cards
+- `0a3a304` — Gemini date coercion fix
 
 ## Session 77: Entity-First Phase 1 Observation + Cleanup Fixes (April 15, 2026)
 
