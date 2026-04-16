@@ -51,7 +51,7 @@
 
 ## Content Numbers (as of Apr 16, 2026)
 
-~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 13 curricula (1,119 nodes), 1,672 key_facts (across all domains), 616 shared_entities (568 with Wikidata QIDs, 92.2%). 266 knowledge_items (116 reviewed). 1,429 entity_resolutions (94 voice, 1,301 backfill). 589 structural_cards (523 aspect, 25 cast, 17 sequence, 14 causal, 10 synchronic), 2,428 structural_positions (6 reviewed). 1,240 microlearning_cards. 4,724 microlearning_quizzes (2,224 causal, 1,394 legacy, 427 role, 414 date_reverse, 249 location, 16 order). 2 suggested_cards (pending). 42 voice_transcripts (30 elicitation, 8 capture, 2 entity_capture, 1 explore, 1 insight). 3,123 interaction_log events.
+~261 articles, ~4,764 claims, 20 clusters, 27 syntheses, 9,392 article similarity pairs, 13 curricula (1,119 nodes), 1,672 key_facts (across all domains), 616 shared_entities (568 with Wikidata QIDs, 92.2%). 266 knowledge_items (116 reviewed). 1,429 entity_resolutions (94 voice, 1,301 backfill). 590 structural_cards (523 aspect, 25 cast, 18 sequence, 14 causal, 10 synchronic), 2,434 structural_positions (6 reviewed). 1,240 microlearning_cards. 4,724 microlearning_quizzes (2,224 causal, 1,394 legacy, 427 role, 414 date_reverse, 249 location, 16 order). 2 suggested_cards (1 generated, 1 rejected). 42 voice_transcripts (30 elicitation, 8 capture, 2 entity_capture, 1 explore, 1 insight). 3,123 interaction_log events.
 
 ## App Screens
 
@@ -111,8 +111,8 @@
 | `ExplorerCapture` | Voice/text entity note capture |
 | `VoiceUploadToast` | Global toast for background voice upload success/failure |
 | `SynthesisChat` | Inline chat modal for synthesis |
-| `AspectCard` | Structural review: multi-signal per topic. Know All, reveal-then-mark, binary grading, mnemonics. 289 lines. |
-| `SequenceCard` | Structural review: timeline with dot/connector layout, 2 rotating blanks (most-due positions), anchor positions dimmed. |
+| `AspectCard` | Structural review: multi-signal per topic. Trust line ("3/4 known · due Thu"), Know All, reveal-then-mark, binary grading, type-specific mnemonics (temporal_anchor/role_chain/cause_effect/contrast/vivid_detail). |
+| `SequenceCard` | Structural review: timeline with dot/connector layout, 2 rotating blanks, anchor positions dimmed, scale annotations between milestones ("— 46 years — roughly a human lifetime"). |
 | `SynchronicCard` | Structural review: geographic layout (domain rows), 3 blanks, connection text per position. Tests cross-domain awareness at a single year. |
 | `CastCard` | Structural review: cast of characters. Person-focused with event-specific roles. Anchor persons dimmed, 2-3 blanks by FSRS urgency, role + significance after reveal. Purple badge (#6B4C8A). |
 | `CausalChainCard` | Structural review: causal chains with vertical arrows. Connection text shown only when both adjacent links visible. 2 blanks per card, first link always anchor. Brown badge (#8B5E3C). |
@@ -180,14 +180,16 @@
 | `resurfacing_engine.py` | Cross-book resurfacing prompts |
 | `extract_key_facts.py` | Key facts extraction from curriculum nodes |
 | `generate_aspect_cards.py` | Generate aspect cards from key_facts: non-leaking titles + reverse cues via Gemini Flash. **~523 cards across 7 domains** (Sicily, Rome, Greece, Byzantine, Islamic, Music, Architecture). ~2234 positions total |
-| `generate_sequence_cards.py` | Generate sequence cards from key_facts + entity dates: natural chronological sequences via Gemini Flash. **17 sequences, ~88 milestones** across 5 domains (Sicily, Rome, Greece, Byzantine, Islamic) |
+| `generate_sequence_cards.py` | Generate sequence cards from key_facts + entity dates: natural chronological sequences via Gemini Flash. **18 sequences, ~94 milestones** across 5 domains (Sicily, Rome, Greece, Byzantine, Islamic). Scale annotations via `generate_scale_annotations.py` |
 | `generate_synchronic_cards.py` | Generate synchronic cards — cross-domain contemporaries at a single year. Finds well-reviewed anchors, queries shared_entities for contemporaries active at anchor year from other studied domains, generates via Gemini Flash with connection texts. **10 cards, 48 positions** spanning 734 BC – 1194 AD across 7 domains |
 | `generate_cast_cards.py` | Generate cast of characters cards from nodes with ≥3 person-type entities via `entity_curriculum_links`. Gemini Flash generates event-specific roles + significance. **25 cards, 81 positions** across 8 domains |
 | `generate_causal_cards.py` | Generate causal chain cards from significance/connection key_facts. 3-5 chains per historical domain with 4-7 links each. **14 chains, 63 links** across 5 domains (Greece, Rome, Sicily, Byzantine, Islamic) |
-| `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts: `date_reverse` (deterministic), `order` (deterministic pairs), `role` (Gemini Flash), `causal`/`location` (Gemini Flash). Dedup at 0.82 cosine. **2,468 quizzes generated** (414+15+323+1716). Adds `quiz_type` column |
-| `generate_cast_cards.py` | Generate cast-of-characters cards from nodes with ≥3 person entities. Tests person identification by specific role in context. **25 cards, 81 positions** across 8 domains |
-| `generate_causal_cards.py` | Generate causal chain cards — 3-5 per historical domain, testing "why did X lead to Y" reasoning. **14 cards, 63 positions** across 5 domains |
-| `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts — date, person, event, place quizzes with varied cue formats |
+| `generate_quick_quizzes.py` | Generate diverse quiz types from key_facts: `date_reverse` (deterministic), `order` (deterministic pairs), `role` (Gemini Flash), `causal`/`location` (Gemini Flash). Dedup at 0.82 cosine. **4,724 quizzes** |
+| `generate_aspect_mnemonics.py` | Batch Gemini Flash job: type-specific mnemonics for aspect positions keyed by hook_type (temporal_anchor/role_chain/cause_effect/contrast/vivid_detail). ~520 cards |
+| `generate_scale_annotations.py` | Batch Gemini Flash job: historical-anchor gap comparisons between sequence milestones. Uses user's studied domains for personalized references. 18 cards, 76 annotations |
+| `generate_from_suggestions.py` | Generate structural cards from approved `suggested_cards` entries via Gemini Flash. Supports sequence + synchronic types with entity-level overlap detection |
+| `detect_card_suggestions.py` | Scan voice transcript entities for temporal sequences (same-domain, <200y gaps) + contemporaries (cross-domain, overlapping lifetimes) → `suggested_cards` table |
+| `measure_collateral_exposure.py` | E3 experiment analysis: compare knew% for positions with/without prior collateral exposure. Reports sample sizes, flags when N < 20 |
 | `optimize_fsrs.py` | FSRS-6 parameter optimizer — extracts review history from interaction_log, runs py-fsrs Optimizer. Requires `fsrs[optimizer]` (torch+pandas). Baseline: 0% improvement at 195 events |
 
 ### Experiments & Utilities
