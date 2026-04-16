@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View, useWindowDimensions,
@@ -24,6 +24,10 @@ import SequenceCard from '../../components/SequenceCard';
 import type { SequenceCardData } from '../../components/SequenceCard';
 import SynchronicCard from '../../components/SynchronicCard';
 import type { SynchronicCardData } from '../../components/SynchronicCard';
+import CastCard from '../../components/CastCard';
+import type { CastCardData } from '../../components/CastCard';
+import CausalChainCard from '../../components/CausalChainCard';
+import type { CausalChainCardData } from '../../components/CausalChainCard';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -997,7 +1001,7 @@ function MicrolearningQuizCard({
   onDateTap,
 }: {
   item: ResurfacingItem;
-  onResult: (result: string) => void;
+  onResult: (result: string, responseTimeMs?: number) => void;
   onSkip: () => void;
   onSuspendFact?: (factId: string) => void;
   onResearch: (query: string) => void;
@@ -1008,6 +1012,18 @@ function MicrolearningQuizCard({
   const [graded, setGraded] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const displayTimeRef = useRef(Date.now());
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  // Subtle timer: update every second after 3s, stop on reveal
+  useEffect(() => {
+    if (revealed) return;
+    const id = setInterval(() => {
+      const sec = Math.floor((Date.now() - displayTimeRef.current) / 1000);
+      if (sec >= 3) setElapsedSec(sec);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [revealed]);
 
   if (graded) {
     return (
@@ -1017,6 +1033,7 @@ function MicrolearningQuizCard({
     );
   }
 
+  const responseTimeMs = () => Date.now() - displayTimeRef.current;
   const originBadge = getOriginBadge(item);
 
   return (
@@ -1051,7 +1068,14 @@ function MicrolearningQuizCard({
       )}
       <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
 
-      <Text style={cs.question}>{item.question}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <Text style={[cs.question, { flex: 1 }]}>{item.question}</Text>
+        {elapsedSec >= 3 && !revealed && (
+          <Text style={{ color: 'rgba(139,115,85,0.35)', fontSize: 12, fontVariant: ['tabular-nums'], marginLeft: 8, marginTop: 2 }}>
+            {elapsedSec}s
+          </Text>
+        )}
+      </View>
 
       {!revealed ? (
         <View style={cs.actionRow}>
@@ -1091,7 +1115,7 @@ function MicrolearningQuizCard({
               <Pressable
                 key={btn.value}
                 style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
-                onPress={() => { onResult(btn.value); setGraded(true); }}
+                onPress={() => { onResult(btn.value, responseTimeMs()); setGraded(true); }}
               >
                 <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
                   {btn.label}
@@ -1327,11 +1351,11 @@ export default function ReviewScreen() {
 
   const timeOnCard = () => Math.round((Date.now() - cardShownAtRef.current) / 1000);
 
-  const handleResult = async (item: ResurfacingItem, result: string) => {
+  const handleResult = async (item: ResurfacingItem, result: string, responseTimeMs?: number) => {
     const seconds = timeOnCard();
     if (item.question_id) {
       gradedIdsRef.current.add(item.question_id);
-      recordReviewResult(item.question_id, result).catch(e =>
+      recordReviewResult(item.question_id, result, responseTimeMs).catch(e =>
         console.warn('[review] score failed:', e));
       logEvent('review_result', {
         question_id: item.question_id,
@@ -1341,6 +1365,7 @@ export default function ReviewScreen() {
         node_title: item.node_title,
         review_count: item.review_count,
         time_seconds: seconds,
+        response_time_ms: responseTimeMs,
         card_type: item.type,
       });
     }
@@ -1415,13 +1440,14 @@ export default function ReviewScreen() {
     logEvent('review_dismiss_quiz', { quiz_id: quizId });
   };
 
-  const handleQuizResult = (quizId: string, result: string) => {
-    recordReviewResult(quizId, result).catch(e =>
+  const handleQuizResult = (quizId: string, result: string, responseTimeMs?: number) => {
+    recordReviewResult(quizId, result, responseTimeMs).catch(e =>
       console.warn('[review] quiz score failed:', e));
     logEvent('review_quiz_result', {
       quiz_id: quizId,
       result,
       time_seconds: timeOnCard(),
+      response_time_ms: responseTimeMs,
     });
   };
 
@@ -1585,6 +1611,52 @@ export default function ReviewScreen() {
                   });
                 }}
               />
+            ) : currentItem.type === 'cast' ? (
+              <CastCard
+                key={currentItem.card_id || `cast-${currentIndex}`}
+                card={currentItem as unknown as CastCardData}
+                onComplete={(results) => {
+                  logEvent('cast_card_complete', {
+                    card_id: currentItem.card_id,
+                    results: results.map(r => ({ id: r.position_id, score: r.score })),
+                    knew: results.filter(r => r.score === 'knew').length,
+                    total: results.length,
+                  });
+                  if (currentItem.card_id) {
+                    gradeStructuralCard(
+                      currentItem.card_id,
+                      results.map(r => ({ position_id: r.position_id, score: r.score })),
+                    ).catch(e => console.warn('[structural grade]', e));
+                  }
+                  animateTransition(() => {
+                    setCurrentIndex(i => i + 1);
+                    maybeLoadMore();
+                  });
+                }}
+              />
+            ) : currentItem.type === 'causal' ? (
+              <CausalChainCard
+                key={currentItem.card_id || `causal-${currentIndex}`}
+                card={currentItem as unknown as CausalChainCardData}
+                onComplete={(results) => {
+                  logEvent('causal_card_complete', {
+                    card_id: currentItem.card_id,
+                    results: results.map(r => ({ id: r.position_id, score: r.score })),
+                    knew: results.filter(r => r.score === 'knew').length,
+                    total: results.length,
+                  });
+                  if (currentItem.card_id) {
+                    gradeStructuralCard(
+                      currentItem.card_id,
+                      results.map(r => ({ position_id: r.position_id, score: r.score })),
+                    ).catch(e => console.warn('[structural grade]', e));
+                  }
+                  animateTransition(() => {
+                    setCurrentIndex(i => i + 1);
+                    maybeLoadMore();
+                  });
+                }}
+              />
             ) : currentItem.type === 'entity_intro' ? (
               <EntityIntroCard
                 key={`intro-${currentItem.entity_id || currentIndex}`}
@@ -1607,7 +1679,7 @@ export default function ReviewScreen() {
               <MicrolearningQuizCard
                 key={currentItem.question_id || `mlq-${currentIndex}`}
                 item={currentItem}
-                onResult={(result) => handleResult(currentItem, result)}
+                onResult={(result, rtMs) => handleResult(currentItem, result, rtMs)}
                 onSkip={() => handleSkip(currentItem)}
                 onSuspendFact={handleSuspendFact}
                 onResearch={(q) => handleResearch(q, currentItem)}

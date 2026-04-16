@@ -61,7 +61,7 @@ _fsrs_scheduler = _FsrsScheduler(
     learning_steps=(),          # Skip — daily review app, not per-minute
     relearning_steps=(),        # Skip — same reason
     enable_fuzzing=True,
-    maximum_interval=365,
+    maximum_interval=3650,
 )
 
 SCORE_TO_FSRS = {

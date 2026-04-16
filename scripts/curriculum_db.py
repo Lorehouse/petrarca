@@ -984,11 +984,16 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
 
 
 def _mix_structural_cards(items: list, conn, domain_filter: str | None,
-                          now_ms: int) -> list:
-    """Mix structural cards (aspect + sequence + synchronic) into the review stream.
+                          now_ms: int, quick_quizzes: list | None = None) -> list:
+    """Mix structural cards + quick quizzes into the review stream.
 
-    Inserts structural cards at positions 3, 6, 9 (every 3rd card) among the
-    existing review/ML items. Only includes cards that have due positions.
+    Creates session rhythm (E6 hypothesis):
+      structural (30s) → quiz (6s) → review (20s) → review → quiz → structural...
+
+    Rules:
+    - After each structural card: insert 1-2 quick quizzes
+    - Between review/ML items: insert a quiz every 2nd item
+    - Never show 3+ quick quizzes in a row
     """
     due_cutoff = now_ms + 24 * 3600 * 1000
     # Query each card type separately to guarantee mix (3 aspect + 2 sequence + 2 synchronic max)
@@ -1009,6 +1014,8 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
         ('aspect', 10 if STRUCTURAL_ONLY else 3),
         ('sequence', 5 if STRUCTURAL_ONLY else 2),
         ('synchronic', 5 if STRUCTURAL_ONLY else 2),
+        ('cast', 5 if STRUCTURAL_ONLY else 2),
+        ('causal', 5 if STRUCTURAL_ONLY else 1),
     ]:
         gate_clause = f"""
             AND (SELECT COUNT(*) FROM knowledge_items ki
@@ -1020,6 +1027,12 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
                  WHERE sc2.domain_id = sc.domain_id
                  AND sc2.card_type = 'aspect'
                  AND sp2.review_count > 0) >= {SEQUENCE_GATE_THRESHOLD}"""
+        if card_type == 'cast':
+            gate_clause += """
+            AND EXISTS (SELECT 1 FROM knowledge_items ki2
+                        WHERE ki2.curriculum_node_id = sc.node_id
+                        AND ki2.curriculum_domain = sc.domain_id
+                        AND ki2.review_count > 0)"""
         # Domain-diverse selection: pick best card per domain, then take top N.
         # Without this, all cards would come from whichever domain was generated first.
         rows = conn.execute(f'''
@@ -1103,6 +1116,12 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
             elif card_type == 'synchronic':
                 # Pass through domain/label/connection from question_variants
                 pos_data['question_variants'] = p['question_variants']
+            elif card_type == 'cast':
+                # Cast cards store role/significance/entity_id in question_variants
+                pos_data['question_variants'] = p['question_variants']
+            elif card_type == 'causal':
+                # Causal cards store event/year_display/connection_to_next
+                pos_data['question_variants'] = p['question_variants']
             pos_list.append(pos_data)
 
         item = {
@@ -1126,25 +1145,63 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
         elif card_type == 'synchronic':
             item['description'] = card.get('description', '')
             item['date_anchor'] = card.get('date_anchor')
+        elif card_type == 'cast':
+            item['node_id'] = card['node_id']
+            item['description'] = card.get('description', '')
+        elif card_type == 'causal':
+            item['description'] = card.get('description', '')
 
         structural_items.append(item)
 
     if STRUCTURAL_ONLY:
         return structural_items
 
-    # Interleave: insert structural cards every 3rd position
+    qq_pool = list(quick_quizzes or [])
+    qq_idx = 0
+
+    # Build rhythm: structural → quiz → review → review → quiz → ...
     merged = []
     struct_idx = 0
+    consecutive_quizzes = 0  # guard against 3+ quizzes in a row
+
     for i, item in enumerate(items):
         merged.append(item)
-        if (i + 1) % 3 == 0 and struct_idx < len(structural_items):
+        consecutive_quizzes = 0
+        pos = i + 1
+
+        # Every 3rd item: insert structural card
+        if pos % 3 == 0 and struct_idx < len(structural_items):
             merged.append(structural_items[struct_idx])
             struct_idx += 1
+            consecutive_quizzes = 0
 
-    # Append remaining structural cards
+            # After structural card: insert 1-2 quick quizzes (palate cleanser)
+            for _ in range(min(2, len(qq_pool) - qq_idx)):
+                if consecutive_quizzes >= 2:
+                    break
+                merged.append(qq_pool[qq_idx])
+                qq_idx += 1
+                consecutive_quizzes += 1
+
+        # Every 2nd item (not already followed by structural): insert quiz
+        elif pos % 2 == 0 and qq_idx < len(qq_pool) and consecutive_quizzes < 2:
+            merged.append(qq_pool[qq_idx])
+            qq_idx += 1
+            consecutive_quizzes += 1
+
+    # Append remaining structural cards (interleaved with remaining quizzes)
     while struct_idx < len(structural_items):
         merged.append(structural_items[struct_idx])
         struct_idx += 1
+        # 1 quiz after each remaining structural card
+        if qq_idx < len(qq_pool):
+            merged.append(qq_pool[qq_idx])
+            qq_idx += 1
+
+    # Append remaining quizzes at tail (better than clustering, but still last)
+    while qq_idx < len(qq_pool):
+        merged.append(qq_pool[qq_idx])
+        qq_idx += 1
 
     return merged
 
@@ -1326,8 +1383,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             schedule_reason = 'not_due'
             overdue_days = 0.0
 
+            # Recency boost: fresh voice captures surface quickly in next review
+            age_hours = (now_ms - (item.get('created_at') or now_ms)) / 3600000
+            recency_boost = max(0, 3.0 - age_hours / 16)  # +3.0 at capture, decays to 0 over 48h
+            score_adj = recency_boost
+
             if review_count == 0:
-                score = knowledge_weight + 2.0 + random.random()
+                score = knowledge_weight + 2.0 + random.random() + recency_boost
                 schedule_reason = 'never_reviewed'
             elif due_at <= now_ms:
                 overdue_days = (now_ms - due_at) / (24 * 3600 * 1000)
@@ -1387,6 +1449,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'overdue_days': round(overdue_days, 1),
                 'knowledge_weight': knowledge_weight,
                 'fact_type_adj': fact_type_adj,
+                'recency_boost': round(recency_boost, 2),
                 'sources': ke_sources,
                 'created_at': item.get('created_at'),
                 'due_at': due_at,
@@ -1617,6 +1680,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             items.append(card)
 
         # ── Mix in microlearning ─────────────────────────────────────────
+        quick_quiz_pool = []  # filled below; used by _mix_structural_cards
         # Two streams:
         # 1. NEW ML cards (never seen) → full card with all quizzes, front of queue
         # 2. DUE individual quizzes (from previously-seen cards) → interleaved
@@ -1806,12 +1870,12 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
 
             # Merge: SR items first, then interleave ML cards
             # High-priority ML (voice/user): every 3rd SR card
-            # Low-priority ML (follow-up) + due quizzes: every 7th SR card
+            # Low-priority ML (follow-up only): every 7th SR card
+            # Due quizzes (seen_ml) are handled later by _mix_structural_cards
+            # for proper structural→quiz→review rhythm
             merged = []
             hi_idx = 0
             lo_idx = 0
-            sq_idx = 0  # seen_ml (due quizzes)
-            low_pool = low_ml + seen_ml  # combine follow-up new cards with due quizzes
 
             for i, item in enumerate(items):
                 merged.append(item)
@@ -1820,27 +1884,30 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 if pos % 3 == 0 and hi_idx < len(high_ml):
                     merged.append(high_ml[hi_idx])
                     hi_idx += 1
-                # Low-priority ML + due quizzes at 1:7
-                if pos % 7 == 0 and lo_idx < len(low_pool):
-                    merged.append(low_pool[lo_idx])
+                # Low-priority ML at 1:7
+                if pos % 7 == 0 and lo_idx < len(low_ml):
+                    merged.append(low_ml[lo_idx])
                     lo_idx += 1
 
             # Append any remaining ML cards at the tail (not front-loaded)
             while hi_idx < len(high_ml):
                 merged.append(high_ml[hi_idx])
                 hi_idx += 1
-            while lo_idx < len(low_pool):
-                merged.append(low_pool[lo_idx])
+            while lo_idx < len(low_ml):
+                merged.append(low_ml[lo_idx])
                 lo_idx += 1
 
             items = merged
+            # Quick quiz pool: due individual quizzes for structural interleaving
+            quick_quiz_pool = seen_ml
         except Exception as e:
             print(f'[review-stream] microlearning query failed: {e}', flush=True)
             import traceback; traceback.print_exc()
 
-        # ── Mix in structural (aspect) cards ─────────────────────────────
+        # ── Mix in structural (aspect) cards + quick quizzes ────────────
         try:
-            items = _mix_structural_cards(items, conn, domain_filter, now_ms)
+            items = _mix_structural_cards(items, conn, domain_filter, now_ms,
+                                          quick_quizzes=quick_quiz_pool)
         except Exception as e:
             print(f'[review-stream] structural card mixing failed: {e}', flush=True)
             import traceback; traceback.print_exc()

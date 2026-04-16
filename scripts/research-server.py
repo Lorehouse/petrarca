@@ -4028,7 +4028,8 @@ JSON array only:"""
                 log_interaction('review_answer', item_id=question_id, score=mapped_result,
                                 card_type=body.get('card_type'),
                                 new_stability=resp.get('new_stability_days'),
-                                next_due=resp.get('next_due_at'))
+                                next_due=resp.get('next_due_at'),
+                                response_time_ms=body.get('response_time_ms'))
                 self._send_json_response(200, {'status': 'recorded', **resp})
             else:
                 self._send_json_response(404, {'error': f'item {question_id} not found'})
