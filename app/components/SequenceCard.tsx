@@ -67,6 +67,13 @@ function formatYear(year?: number, display?: string): string {
   return `${year} AD`;
 }
 
+function formatGap(yearA?: number, yearB?: number): string | null {
+  if (yearA == null || yearB == null) return null;
+  const gap = Math.abs(yearB - yearA);
+  if (gap < 5) return null;
+  return `${gap} years`;
+}
+
 export default function SequenceCard({ card, onComplete }: Props) {
   const positions = useMemo(
     () => [...card.positions].sort((a, b) => a.position - b.position),
@@ -248,6 +255,15 @@ export default function SequenceCard({ card, onComplete }: Props) {
                 {p.mnemonic && state !== 'blank' && (
                   <Text style={st.hookText}>{p.mnemonic}</Text>
                 )}
+
+                {/* Scale annotation — gap to next milestone */}
+                {!isLast && (() => {
+                  const next = positions[i + 1];
+                  const gap = formatGap(p.year, next?.year);
+                  return gap ? (
+                    <Text style={st.gapLabel}>{'\u2014'} {gap} {'\u2014'}</Text>
+                  ) : null;
+                })()}
               </View>
             </View>
           );
@@ -340,6 +356,7 @@ const st = StyleSheet.create({
 
   // Hook annotation
   hookText: { fontFamily: fonts.readingItalic, fontSize: 11, color: colors.textMuted, marginTop: 2, opacity: 0.8, ...webItalic },
+  gapLabel: { fontFamily: fonts.ui, fontSize: 10, color: colors.textMuted, opacity: 0.5, marginTop: 6, letterSpacing: 0.5 },
 
   // Summary
   summaryRow: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule },
