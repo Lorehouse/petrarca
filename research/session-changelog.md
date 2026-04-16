@@ -27,6 +27,27 @@
   - Roger I arrival → Fall of Bari → Roger II birth → Coronation → Frederick II birth → Frederick II death
 - Installed `python3-dotenv` on server (was missing from apt)
 
+### Type-Specific Aspect Mnemonics (Priority 2)
+- `scripts/generate_aspect_mnemonics.py` — batch Gemini Flash job for type-specific mnemonics
+- 5 mnemonic strategies keyed by hook_type:
+  - TEMPORAL → temporal_anchor: "Same year as X, 50 years after Y"
+  - RELATIONAL → role_chain: "X's general who later became Y"
+  - STRUCTURAL → cause_effect: "Because X happened, Y led to Z"
+  - PARALLEL → contrast: "Unlike X who did A, Y did B"
+  - IDENTITY → vivid_detail: "The one who..., the only Roman to..."
+- Batch run: 520 aspect cards, ~92% success rate (Gemini Flash timeouts on ~8%)
+- Quality verified: mnemonics correctly use type-specific strategies, reference known historical events
+
+### Scale Annotations on Sequence Cards (Priority 3)
+- Client-side gap computation: "— 46 years —" shown between timeline milestones (for gaps >= 5 years)
+- `scripts/generate_scale_annotations.py` — batch Gemini Flash job for rich historical comparisons
+  - Uses user's studied domains for personalized anchors
+  - Stores in `question_variants.scale_to_next` per position
+- 18 sequence cards processed, 76 annotations generated, 0 errors
+- Example: "— 46 years — roughly the same span as Augustus' principate"
+- `curriculum_db.py` passes `scale_to_next` through stream when present
+- `SequenceCard.tsx` prefers LLM annotation over raw gap, falls back gracefully
+
 ## Session 82: Transcript Reprocessing + Card Suggestions (April 16, 2026)
 
 ### Gemini Key Fix for Standalone Scripts
