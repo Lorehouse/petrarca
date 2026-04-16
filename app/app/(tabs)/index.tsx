@@ -22,6 +22,8 @@ import AspectCard from '../../components/AspectCard';
 import type { AspectCardData } from '../../components/AspectCard';
 import SequenceCard from '../../components/SequenceCard';
 import type { SequenceCardData } from '../../components/SequenceCard';
+import SynchronicCard from '../../components/SynchronicCard';
+import type { SynchronicCardData } from '../../components/SynchronicCard';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -1543,6 +1545,29 @@ export default function ReviewScreen() {
                 card={currentItem as unknown as SequenceCardData}
                 onComplete={(results) => {
                   logEvent('sequence_card_complete', {
+                    card_id: currentItem.card_id,
+                    results: results.map(r => ({ id: r.position_id, score: r.score })),
+                    knew: results.filter(r => r.score === 'knew').length,
+                    total: results.length,
+                  });
+                  if (currentItem.card_id) {
+                    gradeStructuralCard(
+                      currentItem.card_id,
+                      results.map(r => ({ position_id: r.position_id, score: r.score })),
+                    ).catch(e => console.warn('[structural grade]', e));
+                  }
+                  animateTransition(() => {
+                    setCurrentIndex(i => i + 1);
+                    maybeLoadMore();
+                  });
+                }}
+              />
+            ) : currentItem.type === 'synchronic' ? (
+              <SynchronicCard
+                key={currentItem.card_id || `sync-${currentIndex}`}
+                card={currentItem as unknown as SynchronicCardData}
+                onComplete={(results) => {
+                  logEvent('synchronic_card_complete', {
                     card_id: currentItem.card_id,
                     results: results.map(r => ({ id: r.position_id, score: r.score })),
                     knew: results.filter(r => r.score === 'knew').length,

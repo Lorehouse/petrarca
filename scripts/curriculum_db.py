@@ -985,18 +985,19 @@ def _annotate_item_entities(item: dict, entity_index: list[dict]) -> dict:
 
 def _mix_structural_cards(items: list, conn, domain_filter: str | None,
                           now_ms: int) -> list:
-    """Mix structural cards (aspect + sequence) into the review stream.
+    """Mix structural cards (aspect + sequence + synchronic) into the review stream.
 
     Inserts structural cards at positions 3, 6, 9 (every 3rd card) among the
     existing review/ML items. Only includes cards that have due positions.
     """
     due_cutoff = now_ms + 24 * 3600 * 1000
-    # Query each card type separately to guarantee mix (3 aspect + 2 sequence max)
+    # Query each card type separately to guarantee mix (3 aspect + 2 sequence + 2 synchronic max)
     domain_clause = "AND sc.domain_id LIKE ?" if domain_filter else ""
     domain_params = [f'%{domain_filter}%'] if domain_filter else []
     # Activation gating: only show structural cards for domains the user has studied.
     # Aspect cards require ≥5 knowledge_items in the domain (from books/voice/elicitation).
     # Sequence cards additionally require ≥3 reviewed aspect positions in the domain.
+    # Synchronic cards require ≥5 KI in the anchor's domain (same as aspect).
     ASPECT_GATE_THRESHOLD = 5
     SEQUENCE_GATE_THRESHOLD = 3
 
@@ -1004,7 +1005,11 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     STRUCTURAL_ONLY = False
 
     card_rows = []
-    for card_type, limit in [('aspect', 10 if STRUCTURAL_ONLY else 3), ('sequence', 5 if STRUCTURAL_ONLY else 2)]:
+    for card_type, limit in [
+        ('aspect', 10 if STRUCTURAL_ONLY else 3),
+        ('sequence', 5 if STRUCTURAL_ONLY else 2),
+        ('synchronic', 5 if STRUCTURAL_ONLY else 2),
+    ]:
         gate_clause = f"""
             AND (SELECT COUNT(*) FROM knowledge_items ki
                  WHERE ki.curriculum_domain = sc.domain_id) >= {ASPECT_GATE_THRESHOLD}"""
@@ -1019,11 +1024,11 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
         # Without this, all cards would come from whichever domain was generated first.
         rows = conn.execute(f'''
             SELECT id, card_type, title, description, domain_id, node_id,
-                   date_start, date_end, review_count, hooks, domain_title
+                   date_start, date_end, date_anchor, review_count, hooks, domain_title
             FROM (
                 SELECT sc.id, sc.card_type, sc.title, sc.description,
                        sc.domain_id, sc.node_id,
-                       sc.date_start, sc.date_end, sc.review_count, sc.hooks,
+                       sc.date_start, sc.date_end, sc.date_anchor, sc.review_count, sc.hooks,
                        cd.title as domain_title,
                        ROW_NUMBER() OVER (
                            PARTITION BY sc.domain_id
@@ -1095,6 +1100,9 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
                 if isinstance(variants, dict):
                     pos_data['year'] = variants.get('year')
                     pos_data['year_display'] = variants.get('year_display', '')
+            elif card_type == 'synchronic':
+                # Pass through domain/label/connection from question_variants
+                pos_data['question_variants'] = p['question_variants']
             pos_list.append(pos_data)
 
         item = {
@@ -1115,6 +1123,9 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
             item['description'] = card.get('description', '')
             item['date_start'] = card.get('date_start')
             item['date_end'] = card.get('date_end')
+        elif card_type == 'synchronic':
+            item['description'] = card.get('description', '')
+            item['date_anchor'] = card.get('date_anchor')
 
         structural_items.append(item)
 
