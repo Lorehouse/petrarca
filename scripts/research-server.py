@@ -6404,6 +6404,17 @@ JSON array only:"""
         finally:
             conn.close()
 
+    def _handle_native_stats(self):
+        """GET /stats/native — statistics for the native Stats tab."""
+        from curriculum_db import get_native_stats
+        from db import get_connection
+        conn = get_connection(readonly=True)
+        try:
+            data = get_native_stats(conn=conn)
+            self._send_json_response(200, data)
+        finally:
+            conn.close()
+
     def _serve_html_file(self, filename: str):
         html_path = Path(__file__).parent / filename
         if not html_path.exists():
@@ -7212,6 +7223,8 @@ JSON array only:"""
             return self._serve_html_file('statistics_dashboard.html')
         if self.path == '/stats/dashboard-data':
             return self._handle_dashboard_stats()
+        if self.path == '/stats/native':
+            return self._handle_native_stats()
         if self.path == '/research/elicitation-analysis':
             return self._serve_html_file('knowledge_elicitation_analysis.html')
         if self.path == '/knowledge/growth':

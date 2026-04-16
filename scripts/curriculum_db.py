@@ -2672,6 +2672,181 @@ def get_dashboard_stats(conn=None) -> dict:
             conn.close()
 
 
+def get_native_stats(conn=None) -> dict:
+    """Build statistics optimised for the native Stats tab.
+
+    Returns structural card progress per domain, knowledge level distribution,
+    activity heatmap (last 8 weeks), review counts by card type, and today's summary.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection(readonly=True)
+    try:
+        now_ms = int(time.time() * 1000)
+        today_start_ms = now_ms - (now_ms % (24 * 60 * 60 * 1000))
+        end_today_ms = today_start_ms + 24 * 60 * 60 * 1000
+
+        # ── Today's summary ────────────────────────────────────────
+        reviewed_today = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE last_reviewed_at >= ?',
+            (today_start_ms,)
+        ).fetchone()[0]
+        reviewed_today += conn.execute(
+            'SELECT COUNT(*) FROM microlearning_cards WHERE last_reviewed_at >= ?',
+            (today_start_ms,)
+        ).fetchone()[0]
+        # Structural positions reviewed today
+        reviewed_today += conn.execute(
+            'SELECT COUNT(*) FROM structural_positions WHERE last_reviewed_at >= ?',
+            (today_start_ms,)
+        ).fetchone()[0]
+
+        due_today = conn.execute(
+            'SELECT COUNT(*) FROM knowledge_items WHERE due_at <= ?',
+            (end_today_ms,)
+        ).fetchone()[0]
+
+        # ── Structural card progress per domain ────────────────────
+        structural_progress = []
+        rows = conn.execute("""
+            SELECT sc.domain_id, cd.title as domain_title,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN sp.review_count > 0 THEN 1 ELSE 0 END) as reviewed
+            FROM structural_positions sp
+            JOIN structural_cards sc ON sc.id = sp.card_id
+            LEFT JOIN curriculum_domains cd ON sc.domain_id = cd.id
+            GROUP BY sc.domain_id
+            ORDER BY reviewed DESC, total DESC
+        """).fetchall()
+        for r in rows:
+            structural_progress.append({
+                'domain_id': r['domain_id'],
+                'domain_title': r['domain_title'] or r['domain_id'],
+                'total': r['total'],
+                'reviewed': r['reviewed'],
+            })
+
+        # Per card-type breakdown (for the card type chart)
+        card_type_counts = {}
+        for r in conn.execute("""
+            SELECT sc.card_type, COUNT(*) as total,
+                   SUM(CASE WHEN sp.review_count > 0 THEN 1 ELSE 0 END) as reviewed
+            FROM structural_positions sp
+            JOIN structural_cards sc ON sc.id = sp.card_id
+            GROUP BY sc.card_type
+        """).fetchall():
+            card_type_counts[r['card_type']] = {
+                'total': r['total'], 'reviewed': r['reviewed'],
+            }
+
+        # ── Knowledge level distribution per domain ────────────────
+        knowledge_levels = []
+        for meta in list_curricula(conn=conn):
+            domain_id = meta['id']
+            dist = {'unknown': 0, 'mentioned': 0, 'engaged': 0, 'anchored': 0}
+            nodes = conn.execute(
+                'SELECT cn.id, COALESCE(ks.knowledge, ?) as knowledge '
+                'FROM curriculum_nodes cn '
+                'LEFT JOIN knowledge_states ks ON cn.id = ks.node_id AND cn.domain_id = ks.domain_id '
+                'WHERE cn.domain_id = ?',
+                ('unknown', domain_id)
+            ).fetchall()
+            for n in nodes:
+                k = n['knowledge'] if n['knowledge'] in dist else 'unknown'
+                dist[k] += 1
+            node_count = len(nodes)
+            if node_count == 0:
+                continue
+            # Only include domains with any non-unknown knowledge
+            if dist['mentioned'] + dist['engaged'] + dist['anchored'] == 0:
+                continue
+            knowledge_levels.append({
+                'domain_id': domain_id,
+                'title': meta.get('title', domain_id),
+                'node_count': node_count,
+                'distribution': dist,
+            })
+        # Sort by total known (non-unknown) descending
+        knowledge_levels.sort(
+            key=lambda d: d['distribution']['anchored'] + d['distribution']['engaged'] + d['distribution']['mentioned'],
+            reverse=True,
+        )
+
+        # ── Activity heatmap (last 56 days / 8 weeks) ─────────────
+        heatmap = {}
+        for r in conn.execute("""
+            SELECT date(created_at) as day, COUNT(*) as cnt
+            FROM interaction_log
+            WHERE created_at >= date('now', '-56 days')
+            GROUP BY date(created_at)
+            ORDER BY day
+        """).fetchall():
+            heatmap[r['day']] = r['cnt']
+
+        # ── Review counts by card type (last 30 days) ─────────────
+        review_by_type = {}
+        for r in conn.execute("""
+            SELECT COALESCE(card_type, 'unknown') as ct, COUNT(*) as cnt
+            FROM interaction_log
+            WHERE event IN ('review_result', 'review_answer', 'structural_grade', 'review_quiz_result')
+              AND created_at >= date('now', '-30 days')
+            GROUP BY card_type
+        """).fetchall():
+            review_by_type[r['ct']] = r['cnt']
+
+        # Also count structural grading events with their card sub-types
+        for r in conn.execute("""
+            SELECT json_extract(extra, '$.card_type') as ct, COUNT(*) as cnt
+            FROM interaction_log
+            WHERE event = 'structural_grade'
+              AND created_at >= date('now', '-30 days')
+              AND extra IS NOT NULL
+            GROUP BY ct
+        """).fetchall():
+            if r['ct']:
+                review_by_type[f"structural_{r['ct']}"] = r['cnt']
+
+        # ── Score distribution (all time) ──────────────────────────
+        scores = {'knew': 0, 'partly': 0, 'missed': 0}
+        for tbl in ('knowledge_items', 'microlearning_cards'):
+            for r in conn.execute(
+                f'SELECT last_score, COUNT(*) as cnt FROM {tbl} '
+                'WHERE last_score IS NOT NULL GROUP BY last_score'
+            ).fetchall():
+                if r['last_score'] in scores:
+                    scores[r['last_score']] += r['cnt']
+
+        # ── Total item counts ──────────────────────────────────────
+        ki_total = conn.execute('SELECT COUNT(*) FROM knowledge_items').fetchone()[0]
+        ml_total = conn.execute(
+            "SELECT COUNT(*) FROM microlearning_cards WHERE status = 'completed'"
+        ).fetchone()[0]
+        quiz_total = conn.execute('SELECT COUNT(*) FROM microlearning_quizzes').fetchone()[0]
+        struct_total = conn.execute('SELECT COUNT(*) FROM structural_positions').fetchone()[0]
+
+        return {
+            'today': {
+                'reviewed': reviewed_today,
+                'due': due_today,
+            },
+            'structural_progress': structural_progress,
+            'card_type_counts': card_type_counts,
+            'knowledge_levels': knowledge_levels,
+            'heatmap': heatmap,
+            'review_by_type': review_by_type,
+            'scores': scores,
+            'totals': {
+                'knowledge_items': ki_total,
+                'microlearning_cards': ml_total,
+                'quizzes': quiz_total,
+                'structural_positions': struct_total,
+            },
+        }
+    finally:
+        if own:
+            conn.close()
+
+
 def get_book_prescan(book_id: str, conn=None) -> dict:
     """Generate a curriculum-based preview for a book before/during reading.
 
