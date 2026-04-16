@@ -28,8 +28,25 @@ All 6 QID entities now have cached `wikidata_props_json` (Karl XII: 10 property 
 
 **Stream integration**: `_mix_structural_cards()` extended to query `card_type='synchronic'` (up to 2 per batch). Same activation gate as aspect cards (≥5 KI in anchor domain). Stream verified: 2 synchronic cards appear in typical 40-item batch alongside 3 aspect, 1 sequence, 20 review, etc.
 
+### Priority 2: Stream Quality Audit
+
+Comprehensive audit of review stream composition. Findings:
+- Stream is healthy: 50% review items, 26% structural (3 aspect + 1 sequence + 2 synchronic), 13% ML, 12% entity intros.
+- 564 ML cards all due/never-reviewed — infinite backlog but rate-limited by interleaving ratios (1:3 wondering, 1:7 follow_up). Not flooding the stream.
+- Structural cards flowing correctly. Sequence cards blocked in 4/5 domains (need ≥3 reviewed aspect positions; only Greece passes).
+- Design doc: `research/unified-scoring-design.md` — entity weight tuning analysis. Recommendation: add voice-capture recency boost (+3.0 decaying over 48h), keep other weights static until entity count grows.
+
+### Priority 3b: Entity Date Backfill
+
+28 persons/events backfilled from Wikidata P569/P570/P585. Date coverage: 456/590 (77%) → **484/590 (82%)**. Notable additions to synchronic card pool: Herodotus (-484 to -425), Mehmed II (1432-1481), Scipio Africanus (-235 to -183), Hippocrates (-460 to -370), Battle of Himera (-480). 87 places remain correctly dateless.
+
+### Priority 3c: E5 Baseline
+
+Pre-synchronic-card cross-domain baseline: 85% of voice transcripts contain cross-domain entity mentions (58.5% cross-domain ratio). However, many are shared geographic entities (Rome, Italy, Sicily) that naturally span curricula. True E5 test: novel cross-domain pairs after synchronic card exposure. Baseline saved in `research/unified-scoring-design.md`.
+
 ### Commits
 - `fb3b651` — Synchronic cards + entity consolidation (all changes)
+- `8793a6e` — Stream quality audit + unified scoring design + E5 baseline
 
 ## Session 78: Phase 2 Entity-Graph Enrichment + Resolver Bug Fixes (April 15, 2026)
 
