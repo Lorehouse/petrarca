@@ -11,6 +11,7 @@ interface SequencePosition {
   mnemonic?: string;
   year?: number;
   year_display?: string;
+  scale_to_next?: string;
   stability_days: number;
   due_at: number;
   review_count: number;
@@ -260,9 +261,11 @@ export default function SequenceCard({ card, onComplete }: Props) {
                 {!isLast && (() => {
                   const next = positions[i + 1];
                   const gap = formatGap(p.year, next?.year);
-                  return gap ? (
-                    <Text style={st.gapLabel}>{'\u2014'} {gap} {'\u2014'}</Text>
-                  ) : null;
+                  if (!gap) return null;
+                  const label = p.scale_to_next
+                    ? `${gap} \u2014 ${p.scale_to_next}`
+                    : gap;
+                  return <Text style={st.gapLabel}>{'\u2014'} {label} {'\u2014'}</Text>;
                 })()}
               </View>
             </View>

@@ -1113,6 +1113,8 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
                 if isinstance(variants, dict):
                     pos_data['year'] = variants.get('year')
                     pos_data['year_display'] = variants.get('year_display', '')
+                    if variants.get('scale_to_next'):
+                        pos_data['scale_to_next'] = variants['scale_to_next']
             elif card_type == 'synchronic':
                 # Pass through domain/label/connection from question_variants
                 pos_data['question_variants'] = p['question_variants']
