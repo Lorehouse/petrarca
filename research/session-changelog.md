@@ -44,6 +44,17 @@ Comprehensive audit of review stream composition. Findings:
 
 Pre-synchronic-card cross-domain baseline: 85% of voice transcripts contain cross-domain entity mentions (58.5% cross-domain ratio). However, many are shared geographic entities (Rome, Italy, Sicily) that naturally span curricula. True E5 test: novel cross-domain pairs after synchronic card exposure. Baseline saved in `research/unified-scoring-design.md`.
 
+### Priority 3a: Ambiguous Resolution Triage
+
+653 ambiguous entity_resolution rows → only 50 unique entities without QIDs (rest are duplicate attempts from different transcripts). Categorized:
+- **Easy wins**: 9 unique entities where top candidate was correct but margin too tight
+- **Wrong top match**: Patton→Patton Oswalt, Marathon→the sport, Salamis→the island. Fixed with manual QIDs.
+- **Concepts/periods**: 32 entities like "Ancient Skepticism", "Phenomenology" that don't map cleanly to Wikidata entities. Left as ambiguous (appropriate).
+
+**14 entities manually resolved** with verified QIDs: Abu Bakr (Q7271), Umar (Q7412), Al-Mansur (Q188832), Council of Nicaea (Q232572), Germany (Q183), Battle of Salamis (Q133201), Battle of Marathon (Q131222), George S. Patton (Q186492), Reconquista (Q16956), Marcellus (Q170363), Sunni Islam (Q483654), Early Christian Church (Q25393), Ummah (Q177053), Antigonid Macedon (Q170377).
+
+QID coverage: 89.5% → **91.9%** (542/590). Date coverage: 82.0% → **82.4%** (486/590).
+
 ### Commits
 - `fb3b651` — Synchronic cards + entity consolidation (all changes)
 - `8793a6e` — Stream quality audit + unified scoring design + E5 baseline
