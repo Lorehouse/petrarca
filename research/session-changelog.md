@@ -1,6 +1,99 @@
 # Knowledge System Implementation Status
 
-**Date**: April 17, 2026 (last updated — session 84: structural card type round-robin)
+**Date**: April 17, 2026 (last updated — session 85: speculative card gate + recency decay + rhythm + alignment)
+
+## Session 85: Speculative Card Gate, Recency Decay, Front-Load, Alignment (April 17, 2026)
+
+### Problem
+User reported: "I still haven't gotten a single timeline card or role card or causal card, and I also haven't gotten asked about the high priority things that I captured in voice capture... instead I get mostly aspect cards, I did get one card asking five questions at once, none of which I knew or had ever encountered before (about Arabic desert, concept of unity etc) or have said that I want to prioritize. And some quiz cards are centered and some are top-aligned."
+
+Diagnosis:
+- User graded only 5–12 cards per session. Round-robin (Session 84) placed structural types at merged positions aspect@5, sequence@10, synchronic@15, cast@19 — user rarely reached past aspect.
+- One aspect card shown was "Social Organization and Governance in Pre-Islamic Arabia, 400–622 AD" testing asabiyya, shaykh selection, blood feuds. User had never read about pre-Islamic Arabia. The `≥5 knowledge_items in domain` gate passed because gap-fill KIs from curriculum expansion count as evidence.
+- Voice-captured entities (Karl XII of Sweden, Viking Siege of Paris, Rollo) from 2 days ago had lost all recency boost — hard cutoff formula `max(0, 3.0 − age_hours/16)` hits zero at 48h.
+- ReviewCard applied `minHeight: windowHeight − 200` + `justifyContent: center` before reveal — every other card type (8 variants) renders top-aligned. Visible inconsistency.
+
+### Fix 1: Per-node evidence gate for structural cards
+
+**Audit**: 74% of aspect cards (386/523) had no real book/voice evidence on their specific node. Entire domains were 100% speculative: Western Music (94 aspect cards, no books), European Architecture (75, no books). Three pre-Islamic Arabia cards each had 1 gap-fill-only KI.
+
+**Root cause**: `_mix_structural_cards()` gated on `COUNT(knowledge_items WHERE curriculum_domain = sc.domain_id) >= 5`. Any KI counted — including auto-created curriculum gap-fills and self-assessment rows — so a domain with one real book and 40 taxonomy-expansion stubs passed the gate for every aspect card.
+
+**Changes**:
+- `scripts/curriculum_db.py` `_mix_structural_cards` query: replaced the domain-count gate with an evidence-based gate. Aspect/cast require ≥1 KI on the exact `(node_id, domain_id)` whose `sources` JSON has a `book_id` or `voice_capture`/`transcript_id` entry. Sequence/synchronic/causal require the same evidence at domain grain. Added `AND COALESCE(sc.hidden, 0) = 0`.
+- `scripts/generate_aspect_cards.py`, `generate_cast_cards.py`: per-node evidence clause so future batches skip nodes without real evidence.
+- `scripts/generate_sequence_cards.py`, `generate_synchronic_cards.py`, `generate_causal_cards.py`: per-domain evidence gate.
+- `scripts/migrate_hide_speculative_structural.py` (new): adds `hidden INTEGER DEFAULT 0` column to `structural_cards`, sets `hidden=1` on rows that fail the new gate. Idempotent; `--dry-run` + `--unhide` flags.
+
+**Migration outcome**: aspect 523→137 visible (−386), cast 25→12 (−13), sequence/synchronic/causal unchanged. Per-domain aspect after: Greece 54, Sicily 36, Rome 24, Byzantine 16, Islamic 7, Music 0, Architecture 0.
+
+### Fix 2: Continuous recency decay
+
+**Formula**: `_recency_boost(created_at_ms, now_ms) = 4.0 / (1.0 + age_days / 7.0)`. Values: 0d→4.00, 7d→2.00, 21d→1.00, 90d→0.29, 365d→0.08. Never reaches zero.
+
+**Changes** (`scripts/curriculum_db.py`):
+- New `_recency_boost()` helper (line 1270).
+- Applied in `knowledge_items` scoring loop (line 1374) — only in `review_count == 0` branch, additive with existing `+ 2.0 + random()`.
+- Applied in `knowledge_entities` scoring loop (line 1478) — replaces the old hard-cutoff formula. Only in `review_count == 0`.
+- Added `recency_boost` field to `_provenance` dict in both loops so the About-this-card modal can surface it.
+
+**Schema note**: Both `knowledge_items.created_at` and `knowledge_entities.created_at` are milliseconds (verified via `PRAGMA table_info`). No normalization needed.
+
+**Live verification** (before→after top 10):
+- Dionysius I (overdue, score 13.22): unchanged
+- Emperor Charles the Fat entity from 2 days ago: pos 6 (was absent from top 10), recency=3.22
+- Battle of Poltava (Karl XII voice capture): pos 6, recency=3.21
+- Greek Warfare (book_chapter, recent): pos 10, recency=1.03
+- Reviewed items (review_count > 0) score unchanged — FSRS path untouched.
+
+### Fix 3: Front-loaded structural rhythm
+
+**Before**: `if pos % 3 == 0:` insert structural — hitting merged positions 4, 7, 10, 13, 16. User rarely reached past the first structural.
+
+**After** (`_mix_structural_cards` at ~line 1213):
+```python
+FRONTLOAD_UNTIL = 10
+FRONTLOAD_INTERVAL = 2
+NORMAL_INTERVAL = 3
+interval = FRONTLOAD_INTERVAL if pos <= FRONTLOAD_UNTIL else NORMAL_INTERVAL
+if pos % interval == 0:
+    merged.append(structural_items[struct_idx])
+```
+
+**Result** (live stream, 2026-04-17): aspect@3, sequence@8, synchronic@11, cast@14, causal@18. All 5 types in first 18 positions regardless of session length.
+
+**Interactions**: `entity_intro` cards interleave at render time so visible spacing is ~3 slots (vs intended 2). Tail-append loop unchanged for when structural bucket drains. Round-robin type order (Session 84) preserved.
+
+### Fix 4: Uniform top-alignment for all cards
+
+**Before** (`app/app/(tabs)/index.tsx` line 574):
+```tsx
+<View style={[cs.card, !revealed && { minHeight: windowHeight - 200, justifyContent: 'center' }]}>
+```
+
+Only `ReviewCard` centered its unanswered state. All 8 other card types (aspect/sequence/synchronic/cast/causal/microlearning/microlearning_quiz/entity_intro) use plain `<View style={cs.card}>`.
+
+**After**: dropped the conditional wrapper, removed the unused `useWindowDimensions` import. One view style replaced (`cs.card` alone).
+
+### Deploy sequence
+1. Three agents in parallel (isolated worktrees): evidence gate + recency decay + front-load rhythm.
+2. Merged all three branches to main. Non-overlapping regions of `curriculum_db.py` (query, scoring loops, rhythm loop) → clean auto-merge.
+3. `deploy.sh petrarca`. Verified MD5 match between local and `/opt/petrarca/scripts/curriculum_db.py`.
+4. Live curl of `/curriculum/review/generate` showed all 4 fixes working together.
+5. Follow-up commit: alignment fix to `index.tsx`, redeployed.
+
+### Commits
+- `332c806` Replace hard-cutoff recency boost with continuous decay
+- `3154d96` Gate structural cards on per-node book/voice evidence
+- `ac47ab4` Front-load structural cards in merged stream rhythm
+- `f248a20` Merge branch 'worktree-agent-aabb8c61'
+- `7fe7b77` Merge branch 'worktree-agent-a3802e6e'
+- `75edc6d` Align all review cards to top consistently
+
+### Open / noted
+- Causal card still appears later than position 15 because round-robin has only 1 causal card in rotation. Generate more causal cards to tighten this.
+- Bedouin/pre-Islamic Arabia cards are hidden, not deleted — `--unhide` flag available if the user ever engages with that content.
+- Migration file `scripts/migrate_hide_speculative_structural.py` was run once on server; re-running is idempotent. If the schema migration ever needs to be re-applied on a fresh DB, run it before deploying new code.
 
 ## Session 84: Structural Card Type Round-Robin (April 17, 2026)
 
