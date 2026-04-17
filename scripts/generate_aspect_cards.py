@@ -201,7 +201,10 @@ def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
         print(f"Domain: {domain_title}")
         print(f"{'='*60}")
 
-        # Get nodes with key_facts
+        # Get nodes with key_facts AND real evidence (≥1 book/voice-backed KI on this node).
+        # Generating aspect cards for nodes the user has never engaged with produces "teach me
+        # something new from the taxonomy" cards — structural cards exist to test content the
+        # user has actually read or talked through, not to introduce unstudied curriculum nodes.
         nodes = conn.execute("""
             SELECT cn.id, cn.title, cn.key_facts, cn.date_start, cn.date_end,
                    cn.description
@@ -209,6 +212,16 @@ def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
             WHERE cn.domain_id = ?
             AND cn.key_facts IS NOT NULL
             AND cn.key_facts != '[]'
+            AND EXISTS (
+                SELECT 1 FROM knowledge_items ki
+                WHERE ki.curriculum_node_id = cn.id
+                  AND ki.curriculum_domain = cn.domain_id
+                  AND (
+                      ki.sources LIKE '%"book_id": "%'
+                      OR ki.sources LIKE '%"source": "voice_capture%'
+                      OR ki.sources LIKE '%"transcript_id":%'
+                  )
+            )
             ORDER BY cn.date_start
         """, (domain_id,)).fetchall()
 

@@ -69,7 +69,12 @@ Return JSON:
 
 
 def find_cast_candidates(conn) -> list[dict]:
-    """Find curriculum nodes with ≥3 person-type entities linked."""
+    """Find curriculum nodes with ≥3 person-type entities linked AND book/voice evidence.
+
+    A cast card tests the user's memory of who-played-what-role in content they read,
+    not a taxonomy lesson. The per-node evidence gate matches the one in
+    ``_mix_structural_cards`` so generation and rendering stay consistent.
+    """
     rows = conn.execute('''
         SELECT cn.id as node_id, cn.title, cn.description,
                cn.date_start, cn.date_end, cn.domain_id,
@@ -83,6 +88,16 @@ def find_cast_candidates(conn) -> list[dict]:
             WHERE se.entity_type = 'person'
             GROUP BY ecl.node_id, ecl.domain_id
             HAVING COUNT(DISTINCT se.entity_id) >= 3
+        )
+        AND EXISTS (
+            SELECT 1 FROM knowledge_items ki
+            WHERE ki.curriculum_node_id = cn.id
+              AND ki.curriculum_domain = cn.domain_id
+              AND (
+                  ki.sources LIKE '%"book_id": "%'
+                  OR ki.sources LIKE '%"source": "voice_capture%'
+                  OR ki.sources LIKE '%"transcript_id":%'
+              )
         )
         ORDER BY cn.domain_id, cn.date_start
     ''').fetchall()
