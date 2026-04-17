@@ -5,6 +5,14 @@ Uses GEMINI_API_KEY or GEMINI_KEY env var for authentication.
 """
 
 import os
+from pathlib import Path
+
+# Load .env so standalone scripts (outside systemd) can access GEMINI_KEY
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / '.env')
+except ImportError:
+    pass
 
 from google import genai
 
