@@ -1222,6 +1222,29 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     return merged
 
 
+def _recency_boost(created_at_ms: int | float | None, now_ms: int) -> float:
+    """Continuous recency decay for unreviewed items (review_count==0).
+
+    Formula: 4.0 / (1.0 + age_days / 7.0) — half-life-like decay with a 7-day
+    characteristic time. Values at key ages:
+        0d  → 4.00   (fresh capture, strongest push)
+        1d  → 3.50
+        3d  → 2.80
+        7d  → 2.00   (boost roughly halved)
+        14d → 1.33
+        21d → 1.00
+        90d → 0.29
+        365d → 0.08
+    Never reaches zero — guarantees a fresher unreviewed item always outranks
+    an older unreviewed item when other scoring components are equal. Applied
+    only before the first review; once FSRS takes over, scheduling handles it.
+    """
+    if not created_at_ms:
+        return 0.0
+    age_days = max(0.0, (now_ms - float(created_at_ms)) / 86400000.0)
+    return 4.0 / (1.0 + age_days / 7.0)
+
+
 def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                            offset: int = 0, conn=None) -> dict:
     """Generate a stream of review cards from knowledge_items.
@@ -1298,10 +1321,13 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             # Track score components for provenance display
             schedule_reason = 'not_due'
             overdue_days = 0.0
+            recency_boost = 0.0
 
             if review_count == 0:
-                # Never reviewed — high priority
-                score = knowledge_weight + 2.0 + random.random()
+                # Never reviewed — high priority, with continuous recency decay
+                # so fresher book-reads / gap-fills outrank older unreviewed items.
+                recency_boost = _recency_boost(item.get('created_at'), now_ms)
+                score = knowledge_weight + 2.0 + random.random() + recency_boost
                 schedule_reason = 'never_reviewed'
             elif due_at <= now_ms:
                 # Overdue — highest priority
@@ -1367,6 +1393,7 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
                 'overdue_days': round(overdue_days, 1),
                 'knowledge_weight': knowledge_weight,
                 'fact_type_adj': fact_type_adj,
+                'recency_boost': round(recency_boost, 2),
                 'sources': sources,
                 'created_at': item.get('created_at'),
                 'due_at': due_at,
@@ -1398,13 +1425,12 @@ def generate_review_stream(domain_filter: str | None = None, limit: int = 20,
             knowledge_weight = 6.0  # Between engaged (8.0) and mentioned (4.0)
             schedule_reason = 'not_due'
             overdue_days = 0.0
-
-            # Recency boost: fresh voice captures surface quickly in next review
-            age_hours = (now_ms - (item.get('created_at') or now_ms)) / 3600000
-            recency_boost = max(0, 3.0 - age_hours / 16)  # +3.0 at capture, decays to 0 over 48h
-            score_adj = recency_boost
+            recency_boost = 0.0
 
             if review_count == 0:
+                # Continuous recency decay: fresh voice captures rank high and
+                # fade over days/weeks rather than cutting off at 48h.
+                recency_boost = _recency_boost(item.get('created_at'), now_ms)
                 score = knowledge_weight + 2.0 + random.random() + recency_boost
                 schedule_reason = 'never_reviewed'
             elif due_at <= now_ms:
