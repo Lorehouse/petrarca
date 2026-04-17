@@ -1,6 +1,20 @@
 # Knowledge System Implementation Status
 
-**Date**: April 16, 2026 (last updated — session 83: trust line + E3 measurement + suggestion pipeline)
+**Date**: April 17, 2026 (last updated — session 84: structural card type round-robin)
+
+## Session 84: Structural Card Type Round-Robin (April 17, 2026)
+
+### Problem
+User reported "I don't see any of the new card types, just singular quiz questions (not the geographical, the timeline, the role based etc)." Investigation revealed the cards were being served — but ordered such that all 3 aspect slots filled before sequence appeared, with synchronic at item 28, cast at 38, causal at 46. Most sessions ended before the rare types appeared.
+
+### Root cause
+`_mix_structural_cards()` in `curriculum_db.py` built `card_rows` by appending each type sequentially: aspect → sequence → synchronic → cast → causal. The merger consumed them in order, so aspect cards always came first.
+
+### Fix
+14-line round-robin pass applied to `structural_items` after the build loop and before `STRUCTURAL_ONLY` short-circuit (curriculum_db.py:1158). First pass through types pulls one of each (aspect, sequence, synchronic, cast, causal); second pass picks up the next of each that has supply; continues until all bins drain.
+
+### Verified live ordering after deploy
+First 5 structural slots: positions 5, 10, 14, 20, 25 — aspect, sequence, synchronic, cast, causal — exactly one of each. Second pass at 29 (aspect), 34 (sequence), 38 (synchronic), 42 (cast), 46 (aspect — causal supply was 1 in this stream).
 
 ## Session 83: Review Quality Polish + Experiment Instrumentation (April 16, 2026)
 
