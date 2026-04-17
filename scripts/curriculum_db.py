@@ -1175,6 +1175,14 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     qq_pool = list(quick_quizzes or [])
     qq_idx = 0
 
+    # Front-load structural cards so all 5 types surface in short sessions.
+    # Insert a structural after every 2nd review item for the first FRONTLOAD_UNTIL
+    # items (5 slots at positions 3,6,9,12,15 — one for each type when paired
+    # with the round-robin ordering above). After that, fall back to every-3rd.
+    FRONTLOAD_UNTIL = 10
+    FRONTLOAD_INTERVAL = 2
+    NORMAL_INTERVAL = 3
+
     # Build rhythm: structural → quiz → review → review → quiz → ...
     merged = []
     struct_idx = 0
@@ -1185,8 +1193,9 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
         consecutive_quizzes = 0
         pos = i + 1
 
-        # Every 3rd item: insert structural card
-        if pos % 3 == 0 and struct_idx < len(structural_items):
+        interval = FRONTLOAD_INTERVAL if pos <= FRONTLOAD_UNTIL else NORMAL_INTERVAL
+        # Insert structural card at the current rhythm tick
+        if pos % interval == 0 and struct_idx < len(structural_items):
             merged.append(structural_items[struct_idx])
             struct_idx += 1
             consecutive_quizzes = 0
@@ -1199,7 +1208,9 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
                 qq_idx += 1
                 consecutive_quizzes += 1
 
-        # Every 2nd item (not already followed by structural): insert quiz
+        # Every 2nd item in the post-frontload region (not already followed by
+        # structural): insert quiz. During frontload the rhythm itself already
+        # hits every 2nd item, so this branch is only relevant after pos>10.
         elif pos % 2 == 0 and qq_idx < len(qq_pool) and consecutive_quizzes < 2:
             merged.append(qq_pool[qq_idx])
             qq_idx += 1
