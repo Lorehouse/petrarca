@@ -999,12 +999,27 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
     # Query each card type separately to guarantee mix (3 aspect + 2 sequence + 2 synchronic max)
     domain_clause = "AND sc.domain_id LIKE ?" if domain_filter else ""
     domain_params = [f'%{domain_filter}%'] if domain_filter else []
-    # Activation gating: only show structural cards for domains the user has studied.
-    # Aspect cards require ≥5 knowledge_items in the domain (from books/voice/elicitation).
-    # Sequence cards additionally require ≥3 reviewed aspect positions in the domain.
-    # Synchronic cards require ≥5 KI in the anchor's domain (same as aspect).
-    ASPECT_GATE_THRESHOLD = 5
-    SEQUENCE_GATE_THRESHOLD = 3
+    # Activation gating: only show structural cards for content the user has actually engaged
+    # with (read a book about, or dumped into voice capture). A curriculum node exists in the
+    # taxonomy does NOT mean the user has studied it. Gap-fill rows (chapter_title contains
+    # "Curriculum context — not yet in a book") and self-assessment-only rows are NOT evidence.
+    #
+    #   aspect + cast  (have node_id) — require ≥1 knowledge_item on the exact
+    #                                   (node_id, domain_id) with book or voice source
+    #   sequence       — require ≥3 reviewed aspect positions in the domain (existing)
+    #                    AND ≥1 domain KI with book or voice source
+    #   synchronic     — require ≥1 domain KI with book or voice source (anchor's domain)
+    #   causal         — require ≥1 domain KI with book or voice source
+    #
+    # "book or voice" expressed as a LIKE on the sources JSON — agrees with
+    # Python-side classification on all 266 KI at time of audit.
+    SEQUENCE_REVIEWED_ASPECT_THRESHOLD = 3
+
+    EVIDENCE_LIKE = """(
+        ki.sources LIKE '%"book_id": "%'
+        OR ki.sources LIKE '%"source": "voice_capture%'
+        OR ki.sources LIKE '%"transcript_id":%'
+    )"""
 
     # TEMP: structural-only mode — show only aspect/sequence cards for focused testing
     STRUCTURAL_ONLY = False
@@ -1017,22 +1032,41 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
         ('cast', 5 if STRUCTURAL_ONLY else 2),
         ('causal', 5 if STRUCTURAL_ONLY else 1),
     ]:
-        gate_clause = f"""
-            AND (SELECT COUNT(*) FROM knowledge_items ki
-                 WHERE ki.curriculum_domain = sc.domain_id) >= {ASPECT_GATE_THRESHOLD}"""
+        # Per-node evidence gate for cards that point at a single node.
+        # Per-domain evidence gate for cards spanning the whole domain.
+        if card_type in ('aspect', 'cast'):
+            gate_clause = f"""
+            AND EXISTS (
+                SELECT 1 FROM knowledge_items ki
+                WHERE ki.curriculum_node_id = sc.node_id
+                  AND ki.curriculum_domain = sc.domain_id
+                  AND {EVIDENCE_LIKE}
+            )"""
+        else:
+            gate_clause = f"""
+            AND EXISTS (
+                SELECT 1 FROM knowledge_items ki
+                WHERE ki.curriculum_domain = sc.domain_id
+                  AND {EVIDENCE_LIKE}
+            )"""
+
         if card_type == 'sequence':
+            # Sequence also requires enough reviewed aspect positions — inherited from Session 75.
             gate_clause += f"""
             AND (SELECT COUNT(*) FROM structural_positions sp2
                  JOIN structural_cards sc2 ON sc2.id = sp2.card_id
                  WHERE sc2.domain_id = sc.domain_id
                  AND sc2.card_type = 'aspect'
-                 AND sp2.review_count > 0) >= {SEQUENCE_GATE_THRESHOLD}"""
+                 AND sp2.review_count > 0) >= {SEQUENCE_REVIEWED_ASPECT_THRESHOLD}"""
         if card_type == 'cast':
             gate_clause += """
             AND EXISTS (SELECT 1 FROM knowledge_items ki2
                         WHERE ki2.curriculum_node_id = sc.node_id
                         AND ki2.curriculum_domain = sc.domain_id
                         AND ki2.review_count > 0)"""
+
+        # Honour the migration `hidden` column so cards already flagged speculative don't surface.
+        gate_clause += " AND COALESCE(sc.hidden, 0) = 0"
         # Domain-diverse selection: pick best card per domain, then take top N.
         # Without this, all cards would come from whichever domain was generated first.
         rows = conn.execute(f'''

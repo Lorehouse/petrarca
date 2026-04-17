@@ -85,7 +85,12 @@ Return JSON:
 
 
 def get_studied_domains(conn) -> dict[str, str]:
-    """Return domain_id → domain_title for domains with ≥ THRESHOLD knowledge items."""
+    """Return domain_id → domain_title for domains the user has genuinely studied.
+
+    "Studied" means ≥ THRESHOLD knowledge_items AND ≥1 of them has book-sourced or
+    voice-capture evidence (not just gap-fill rows). A domain made of only curriculum
+    scaffolding is not a real anchor for cross-domain contemporaries.
+    """
     rows = conn.execute("""
         SELECT ki.curriculum_domain as domain_id, cd.title, COUNT(*) as cnt
         FROM knowledge_items ki
@@ -93,7 +98,21 @@ def get_studied_domains(conn) -> dict[str, str]:
         GROUP BY ki.curriculum_domain
         HAVING cnt >= ?
     """, (STUDIED_DOMAIN_THRESHOLD,)).fetchall()
-    return {r['domain_id']: r['title'] for r in rows}
+    out = {}
+    for r in rows:
+        has_evidence = conn.execute('''
+            SELECT 1 FROM knowledge_items ki
+            WHERE ki.curriculum_domain = ?
+              AND (
+                  ki.sources LIKE '%"book_id": "%'
+                  OR ki.sources LIKE '%"source": "voice_capture%'
+                  OR ki.sources LIKE '%"transcript_id":%'
+              )
+            LIMIT 1
+        ''', (r['domain_id'],)).fetchone()
+        if has_evidence:
+            out[r['domain_id']] = r['title']
+    return out
 
 
 def get_anchor_candidates(conn, studied_domains: dict) -> list[dict]:

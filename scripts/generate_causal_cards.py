@@ -217,6 +217,22 @@ def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
         print(f"\n{'='*60}")
         print(f"Domain: {domain_title}")
 
+        # Skip domains with no book or voice evidence — causal chains must test content
+        # the user has actually read, not a synthesized lesson from the curriculum tree.
+        has_evidence = conn.execute('''
+            SELECT 1 FROM knowledge_items ki
+            WHERE ki.curriculum_domain = ?
+              AND (
+                  ki.sources LIKE '%"book_id": "%'
+                  OR ki.sources LIKE '%"source": "voice_capture%'
+                  OR ki.sources LIKE '%"transcript_id":%'
+              )
+            LIMIT 1
+        ''', (domain_id,)).fetchone()
+        if not has_evidence:
+            print(f"  SKIP: no book or voice evidence in this domain")
+            continue
+
         if domain_id in existing:
             print(f"  SKIP (already has causal cards)")
             continue
