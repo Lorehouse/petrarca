@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
-  StyleSheet, Text, TextInput, View, useWindowDimensions,
+  StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
@@ -519,7 +519,6 @@ function ReviewCard({
   onDateTap: (year: number) => void;
   onResearch: (query: string) => void;
 }) {
-  const { height: windowHeight } = useWindowDimensions();
   const [revealed, setRevealed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -571,7 +570,7 @@ function ReviewCard({
   const anchors = item.anchors || [];
 
   return (
-    <View style={[cs.card, !revealed && { minHeight: windowHeight - 200, justifyContent: 'center' }]}>
+    <View style={cs.card}>
       {/* Header: type badge + origin + domain + menu */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
