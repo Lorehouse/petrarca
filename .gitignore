@@ -59,6 +59,10 @@ app/data/concept_clusters.json
 # Temp files
 stderr.tmp
 
+# Agent/IDE config
+.claude/
+.letta/
+
 # Pipeline test sessions (generated output, not fixtures)
 scripts/pipeline-tests/sessions/
 .env

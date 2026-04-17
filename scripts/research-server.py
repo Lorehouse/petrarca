@@ -3571,8 +3571,8 @@ Return ONLY valid JSON.""",
                 if epub_path and os.path.exists(epub_path):
                     print(f'[kindle/include] Starting EPUB ingestion for {title}', flush=True)
                     from ingest_book_petrarca import main as ingest_main
-                    ingest_main([epub_path, '--output-dir', '/opt/petrarca/data/books',
-                                 '--cross-match-dir', '/opt/petrarca/data'])
+                    ingest_main([epub_path, '--output-dir', os.environ.get('BOOKS_OUTPUT_DIR', '/opt/petrarca/data/books'),
+                                 '--cross-match-dir', os.environ.get('CROSS_MATCH_DIR', '/opt/petrarca/data')])
                     print(f'[kindle/include] EPUB ingestion done: {title}', flush=True)
                 else:
                     # Fall back to research agent
@@ -3781,7 +3781,7 @@ JSON array only:"""
 
     def _handle_kindle_scan_epubs(self):
         """POST /kindle/scan-epubs — scan server EPUB directory and match to kindle_books."""
-        epub_dir = Path('/opt/petrarca/data/epubs')
+        epub_dir = Path(os.environ.get('BOOK_UPLOADS_DIR', '/opt/petrarca/data/book-uploads')).parent / 'epubs'
         if not epub_dir.exists():
             self._send_json_response(200, {'scanned': 0, 'matched': 0, 'unmatched': []})
             return
@@ -5266,7 +5266,7 @@ JSON array only:"""
                 return
 
             # Append the merge to the standard audit log path.
-            db_dir = Path(os.environ.get('PETRARCA_DB_PATH',
+            db_dir = Path(os.environ.get('PETRARCA_DB',
                                          '/opt/petrarca/data/petrarca.db')).parent
             audit_path = db_dir / 'merge_audit.jsonl'
             with audit_path.open('a') as audit_log:
@@ -5890,7 +5890,7 @@ JSON array only:"""
         """
         # Disk space pre-check — audio temp files + cache need ~10MB headroom
         try:
-            st = os.statvfs('/opt/petrarca/data')
+            st = os.statvfs(str(Path(os.environ.get('PETRARCA_DB', '/opt/petrarca/data/petrarca.db')).parent))
             free_mb = (st.f_bavail * st.f_frsize) / (1024 * 1024)
             if free_mb < 50:
                 log_server_event('voice_elicit_disk_full', free_mb=round(free_mb, 1))
@@ -6305,7 +6305,7 @@ JSON array only:"""
             return
 
         # Load article → curriculum node mappings
-        mappings_file = Path('/opt/petrarca/data/curricula') / 'article_curriculum_mappings.json'
+        mappings_file = Path(os.environ.get('CURRICULUM_DIR', '/opt/petrarca/data/curricula')) / 'article_curriculum_mappings.json'
         article_nodes: list[str] = []
         if mappings_file.exists():
             with open(mappings_file) as f:
@@ -7344,8 +7344,8 @@ JSON array only:"""
             history = get_sweep_history(domain_id)
             return self._send_json_response(200, {'sweeps': history, 'domain_id': domain_id})
         if self.path == '/knowledge/sweep/domains':
-            from curriculum_db import list_curricula
-            curricula = list_curricula()
+            from curriculum_db import list_curricula as _list_curricula
+            curricula = _list_curricula()
             # Add last sweep info for each domain
             conn = get_connection(readonly=True)
             try:

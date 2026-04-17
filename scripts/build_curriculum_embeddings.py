@@ -31,7 +31,7 @@ CLAIM_EMBEDDINGS_PATH = DATA_DIR / "claim_embeddings.npz"
 CLAIMS_INDEX_PATH = DATA_DIR / "claims_index.json"
 
 # Curricula live on the server; when running locally, point to local copies
-CURRICULA_DIR = Path("/opt/petrarca/data/curricula")
+CURRICULA_DIR = Path(os.environ.get("CURRICULUM_DIR", "/opt/petrarca/data/curricula"))
 if not CURRICULA_DIR.exists():
     CURRICULA_DIR = Path("/tmp/curricula")  # fallback for local dev
 

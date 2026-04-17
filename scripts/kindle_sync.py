@@ -28,7 +28,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 BOOKDATA_PATH = Path.home() / "Library/Containers/com.amazon.Lassen/Data/Library/Protected/BookData.sqlite"
-SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://alifstian.duckdns.org:8090")
+SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://localhost:8090")
 AUTH_TOKEN = os.environ.get("PETRARCA_TOKEN", "")
 
 

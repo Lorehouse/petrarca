@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 
-SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://alifstian.duckdns.org:8090")
+SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://localhost:8090")
 AUTH_TOKEN = os.environ.get("PETRARCA_TOKEN", "")
 AMAZON_BOOKS_URL = "https://www.amazon.com/hz/mycd/digital-console/contentlist/booksAll/dateDsc/"
 

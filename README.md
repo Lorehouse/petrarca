@@ -8,6 +8,16 @@
 
 Then open **http://localhost:8081** in your browser. Press `Ctrl+C` to stop.
 
+### If servers won't start (port already in use)
+
+```bash
+# Kill both servers
+pkill -f "research-server.py"
+pkill -f "expo start"
+```
+
+Then run `./start.sh` again.
+
 > **First time?** Make sure you have a `.env` file in the project root with your `GEMINI_API_KEY`. See setup notes in `memory/project_python313_compat.md`.
 
 A mobile-first read-later app combining incremental reading, user knowledge modeling, and algorithmic article selection. Named after Francesco Petrarca, pioneer of systematic reading methods.

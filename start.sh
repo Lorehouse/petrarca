@@ -3,6 +3,11 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Kill any existing servers on these ports
+pkill -f "research-server.py" 2>/dev/null || true
+pkill -f "expo start" 2>/dev/null || true
+sleep 1
+
 # Load environment variables
 set -a
 source .env
@@ -23,7 +28,7 @@ echo "  Server: http://localhost:8090"
 echo ""
 echo "Press Ctrl+C to stop both servers."
 
-# On Ctrl+C, kill both servers
-trap "echo 'Stopping...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" INT TERM
+# On Ctrl+C, kill both servers by name (catches subprocesses too)
+trap "echo 'Stopping...'; pkill -f 'research-server.py'; pkill -f 'expo start'; exit 0" INT TERM
 
 wait

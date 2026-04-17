@@ -27,7 +27,7 @@ from urllib.request import Request, urlopen
 
 DB_PATH = Path.home() / "src/petrarca/overcast.db"
 AUTH_PATH = Path.home() / ".config/overcast-to-sqlite/auth.json"
-SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://alifstian.duckdns.org:8090")
+SERVER_URL = os.environ.get("PETRARCA_SERVER", "http://localhost:8090")
 
 # Podcasts to include (empty = all played episodes)
 # Add podcast titles here to filter, or leave empty for everything
