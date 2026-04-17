@@ -1155,6 +1155,20 @@ def _mix_structural_cards(items: list, conn, domain_filter: str | None,
 
         structural_items.append(item)
 
+    # Round-robin by type so rare types (sequence/synchronic/cast/causal) appear
+    # early in the stream. Without this, the build loop emits all aspect cards
+    # first, pushing rarer types past where most sessions end.
+    type_order = ['aspect', 'sequence', 'synchronic', 'cast', 'causal']
+    by_type = {ct: [] for ct in type_order}
+    for it in structural_items:
+        by_type.setdefault(it['type'], []).append(it)
+    interleaved = []
+    while any(by_type[ct] for ct in type_order):
+        for ct in type_order:
+            if by_type[ct]:
+                interleaved.append(by_type[ct].pop(0))
+    structural_items = interleaved
+
     if STRUCTURAL_ONLY:
         return structural_items
 
