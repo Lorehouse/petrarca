@@ -632,7 +632,7 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] FSRS progression model: 8-week simulation with different session compositions
 - [x] Key finding: synchronic cards are a cross-domain reward (never unlock within single domain)
 
-### Phase 2: Aspect Cards (Session 73-74 — done)
+### Phase 2: Aspect Cards (Sessions 73-74, 83 — done)
 - [x] Schema: structural_cards + structural_positions tables created on server
 - [x] Generation prompt: non-leaking titles + reverse cue variants via Gemini Flash
 - [x] Batch generated aspect cards for Sicily (70) + Rome (55) domains — 125 cards, 529 positions
@@ -644,8 +644,8 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] Client wiring: `gradeStructuralCard()` in book-api.ts, fire-and-forget from onComplete
 - [x] Deployed and tested end-to-end (knew → 8.3d stability, missed → 0.2d stability)
 - [x] 4 failed nodes retried and generated (Frederick II, Lucky Luciano, Sicilian Culture, Latin Literature)
-- [ ] Aspect-specific mnemonic generation (different strategy per type)
-- [ ] Trust line: "3/4 known. 'What year?' due Thursday"
+- [x] Aspect-specific mnemonic generation — 5 strategies (temporal_anchor/role_chain/cause_effect/contrast/vivid_detail) keyed by hook_type. Batch via `generate_aspect_mnemonics.py`. 520 cards, 2016 positions.
+- [x] Trust line: "3/4 known · 'What year?' due Thursday" — client-side from FSRS position data
 
 ### Phase 3: Quick Quiz Cards (Session 80 — partially done)
 - [x] Generate quick quiz variants: date_reverse(414), order(16), role(427), causal(2,224), location(249) — 4,724 total via `generate_quick_quizzes.py`
@@ -653,9 +653,8 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] Session rhythm: structural→quiz→review→review→quiz "palate cleanser" pattern
 - [x] Response time tracking with subtle timer indicator
 - [ ] Build dedicated QuickQuizCard component (currently uses MicrolearningQuizCard)
-- [ ] Trust line on aspect cards: "3/4 known. 'What year?' due Thursday"
 
-### Phase 4: Sequence Cards (Session 74 — done)
+### Phase 4: Sequence Cards (Sessions 74, 83 — done)
 - [x] Define sequence boundaries per domain (LLM-assisted via `generate_sequence_cards.py`)
 - [x] Milestone selection from key_facts + entity dates (Gemini identifies natural sequences)
 - [x] 8 sequences generated: 5 Rome + 3 Sicily, 38 milestones total
@@ -664,7 +663,7 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] Cross-domain hooks on sequence milestones (e.g., "Athens building the Parthenon")
 - [x] FSRS scheduling per position via shared `POST /structural/grade` endpoint
 - [x] Integrated into review stream: guaranteed 2 sequence + 3 aspect cards per batch
-- [ ] Scale annotations (temporal proportion, duration comparisons)
+- [x] Scale annotations — client-side gap labels + LLM-generated historical comparisons via `generate_scale_annotations.py`. 18 cards, 76 annotations stored in `question_variants.scale_to_next`
 - [ ] Knowledge-gating: require ≥3 known positions before showing a sequence card
 
 ### Phase 5: Synchronic Cards (Session 79 — done)
@@ -681,24 +680,26 @@ The existing tables remain. New tables are additive. The migration path:
 - [x] Causal chain cards: 14 cards, 63 positions. Why-testing with connection visibility logic.
 - [ ] Transformation cards (before/after) — deferred
 
-### Phase 7: Analytics & Scheduling (Sessions 80-81 — partially done)
+### Phase 7: Analytics & Scheduling (Sessions 80-81, 83 — partially done)
 - [x] Build native Stats screen (React Native, no D3) — progress bars, knowledge levels, heatmap, score distribution
 - [x] Collateral exposure credit (0.3× FSRS weight via `record_structural_answer()`)
 - [x] Leech detection + auto-suspend at 7 consecutive misses (30-day suspension, clear cached_question)
 - [x] Raise maximum_interval to 3650
 - [x] FSRS optimizer script (`optimize_fsrs.py`) — 195 events, 0% improvement (re-run at 500+)
+- [x] E3 collateral exposure measurement script (`measure_collateral_exposure.py`) — needs ≥20 graded positions for comparison
 - [ ] Exposure log table + tracking (beyond collateral)
 - [ ] Implicit review credit (FIRe-inspired encompassing graph)
 - [ ] Dependency tracking between facts
 - [ ] Anchor calibration (verification checks, effectiveness tracking)
 
-### Phase 8: Voice Enhancements (Session 82 — partially done)
+### Phase 8: Voice Enhancements (Sessions 82-83 — partially done)
 - [ ] Priority boost for fresh voice captures
 - [x] Auto-detect sequences in voice transcripts → `detect_card_suggestions.py` (2 suggestions found)
 - [x] Auto-detect contemporaneous mentions → same script (0 found — entities within transcripts tend to be same-domain)
 - [x] Batch reprocess historical transcripts → `reprocess_all_transcripts.py` (6/6 resolved, 29 new entities)
+- [x] Suggestion → card pipeline: `generate_from_suggestions.py` + approve/reject admin endpoints. Generated "The Rise of the Norman Kingdom of Sicily" (6 milestones)
 - [ ] Voice capture from Review tab (floating mic → quick capture)
-- [ ] Auto-generate structural cards from high-confidence suggestions
+- [ ] Auto-generate structural cards from high-confidence suggestions (skip admin approval)
 
 ## Simulation: Coverage & Learning Over Time (user request)
 
