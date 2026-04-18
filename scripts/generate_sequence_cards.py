@@ -231,25 +231,6 @@ def store_sequence_card(seq: dict, domain_id: str, conn) -> str:
     return card_id
 
 
-def _domain_has_real_evidence(domain_id: str, conn) -> bool:
-    """Does this domain have ≥1 knowledge_item whose sources include a book or voice capture?
-
-    Matches ``_mix_structural_cards`` per-domain gate — gap-fill and self-assessment only
-    rows do not count as evidence that the user has engaged with this domain.
-    """
-    row = conn.execute('''
-        SELECT 1 FROM knowledge_items ki
-        WHERE ki.curriculum_domain = ?
-          AND (
-              ki.sources LIKE '%"book_id": "%'
-              OR ki.sources LIKE '%"source": "voice_capture%'
-              OR ki.sources LIKE '%"transcript_id":%'
-          )
-        LIMIT 1
-    ''', (domain_id,)).fetchone()
-    return row is not None
-
-
 def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
     """Generate sequence cards for specified domains."""
     conn = get_connection()
@@ -274,10 +255,6 @@ def batch_generate(domain_ids: list[str] | None = None, dry_run: bool = False):
         print(f"\n{'='*60}")
         print(f"Domain: {domain_title}")
         print(f"{'='*60}")
-
-        if not _domain_has_real_evidence(domain_id, conn):
-            print(f"  SKIP: no book or voice evidence in this domain")
-            continue
 
         # Check for existing sequence cards
         existing = conn.execute(

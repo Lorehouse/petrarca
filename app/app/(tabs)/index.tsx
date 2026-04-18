@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
-  StyleSheet, Text, TextInput, View,
+  StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, fonts, layout } from '../../design/tokens';
@@ -22,12 +22,6 @@ import AspectCard from '../../components/AspectCard';
 import type { AspectCardData } from '../../components/AspectCard';
 import SequenceCard from '../../components/SequenceCard';
 import type { SequenceCardData } from '../../components/SequenceCard';
-import SynchronicCard from '../../components/SynchronicCard';
-import type { SynchronicCardData } from '../../components/SynchronicCard';
-import CastCard from '../../components/CastCard';
-import type { CastCardData } from '../../components/CastCard';
-import CausalChainCard from '../../components/CausalChainCard';
-import type { CausalChainCardData } from '../../components/CausalChainCard';
 
 // ── Annotated Text (tappable entity spans) ──────────────────────────
 
@@ -282,12 +276,6 @@ function getOriginBadge(item: ResurfacingItem): { label: string; icon: string } 
   if (origin === 'voice_wondering') return { label: 'Voice', icon: '\uD83C\uDF99' };
   if (origin === 'follow_up') return { label: 'Follow-up', icon: '\uD83D\uDD0D' };
   if (origin === 'entity_research') return { label: 'Entity', icon: '\uD83D\uDC64' };
-  if (origin === 'entity_capture') {
-    // Distinguish Wikidata-anchored captures with a "linked" marker.
-    // Unresolved captures keep a plain speech-bubble icon.
-    if (p.wikidata_qid) return { label: 'Captured', icon: '\uD83D\uDD37' };  // 🔷 blue diamond — linked
-    return { label: 'Captured', icon: '\uD83D\uDCAC' };  // 💬 speech balloon
-  }
   if (origin === 'user_request') return { label: 'Requested', icon: '\u2726' };
   return null;
 }
@@ -321,7 +309,6 @@ function AboutCardModal({ item, visible, onClose }: {
     voice_wondering: 'Voice elicitation wondering',
     follow_up: 'Follow-up query research',
     entity_research: 'Entity deep-dive research',
-    entity_capture: 'Voice capture (entity-keyed)',
     user_request: 'User-requested research',
     unknown: 'Unknown origin',
   };
@@ -333,12 +320,8 @@ function AboutCardModal({ item, visible, onClose }: {
     not_due: 'Not yet due (filler)',
   };
 
-  // Build source lists: book chapters vs. voice captures live on the same
-  // `sources` array but have distinct shapes (book_id vs. source='voice_capture').
+  // Build source books list
   const bookSources = (p?.sources || []).filter(s => s.book_id);
-  const voiceSources = (p?.sources || []).filter(s =>
-    s.source === 'voice_capture' || s.source === 'voice_elicitation'
-  );
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -375,33 +358,6 @@ function AboutCardModal({ item, visible, onClose }: {
                   )}
                 </View>
               ))}
-            </>}
-
-            {/* Voice captures — appears for entity_capture and related origins */}
-            {voiceSources.length > 0 && <>
-              <Text style={ab.sectionLabel}>VOICE CAPTURE</Text>
-              {voiceSources.map((src, i: number) => (
-                <View key={`v-${i}`} style={ab.sourceRow}>
-                  {src.source_text ? (
-                    <Text style={ab.value}>&ldquo;{src.source_text}&rdquo;</Text>
-                  ) : null}
-                  {src.capture_id && (
-                    <Text style={ab.detail}>Capture: {src.capture_id}</Text>
-                  )}
-                  {src.added_at && (
-                    <Text style={ab.detail}>Captured: {safeDate(src.added_at)}</Text>
-                  )}
-                </View>
-              ))}
-            </>}
-
-            {/* Wikidata identity (entity_capture items) */}
-            {p?.wikidata_qid && <>
-              <Text style={ab.sectionLabel}>WIKIDATA</Text>
-              <Text style={ab.value}>{p.wikidata_qid}</Text>
-              {p?.entity_id && (
-                <Text style={ab.detail}>Entity: {p.entity_id}</Text>
-              )}
             </>}
 
             {/* ML provenance */}
@@ -519,6 +475,7 @@ function ReviewCard({
   onDateTap: (year: number) => void;
   onResearch: (query: string) => void;
 }) {
+  const { height: windowHeight } = useWindowDimensions();
   const [revealed, setRevealed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -570,7 +527,7 @@ function ReviewCard({
   const anchors = item.anchors || [];
 
   return (
-    <View style={cs.card}>
+    <View style={[cs.card, !revealed && { minHeight: windowHeight - 200, justifyContent: 'center' }]}>
       {/* Header: type badge + origin + domain + menu */}
       <View style={cs.headerRow}>
         <View style={cs.typeBadge}>
@@ -1000,7 +957,7 @@ function MicrolearningQuizCard({
   onDateTap,
 }: {
   item: ResurfacingItem;
-  onResult: (result: string, responseTimeMs?: number) => void;
+  onResult: (result: string) => void;
   onSkip: () => void;
   onSuspendFact?: (factId: string) => void;
   onResearch: (query: string) => void;
@@ -1011,18 +968,6 @@ function MicrolearningQuizCard({
   const [graded, setGraded] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const displayTimeRef = useRef(Date.now());
-  const [elapsedSec, setElapsedSec] = useState(0);
-
-  // Subtle timer: update every second after 3s, stop on reveal
-  useEffect(() => {
-    if (revealed) return;
-    const id = setInterval(() => {
-      const sec = Math.floor((Date.now() - displayTimeRef.current) / 1000);
-      if (sec >= 3) setElapsedSec(sec);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [revealed]);
 
   if (graded) {
     return (
@@ -1032,7 +977,6 @@ function MicrolearningQuizCard({
     );
   }
 
-  const responseTimeMs = () => Date.now() - displayTimeRef.current;
   const originBadge = getOriginBadge(item);
 
   return (
@@ -1067,14 +1011,7 @@ function MicrolearningQuizCard({
       )}
       <AboutCardModal item={item} visible={showAbout} onClose={() => setShowAbout(false)} />
 
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <Text style={[cs.question, { flex: 1 }]}>{item.question}</Text>
-        {elapsedSec >= 3 && !revealed && (
-          <Text style={{ color: 'rgba(139,115,85,0.35)', fontSize: 12, fontVariant: ['tabular-nums'], marginLeft: 8, marginTop: 2 }}>
-            {elapsedSec}s
-          </Text>
-        )}
-      </View>
+      <Text style={cs.question}>{item.question}</Text>
 
       {!revealed ? (
         <View style={cs.actionRow}>
@@ -1114,7 +1051,7 @@ function MicrolearningQuizCard({
               <Pressable
                 key={btn.value}
                 style={[cs.gradeButton, btn.style === 'correct' ? cs.gradeCorrect : btn.style === 'partial' ? cs.gradePartial : cs.gradeWrong]}
-                onPress={() => { onResult(btn.value, responseTimeMs()); setGraded(true); }}
+                onPress={() => { onResult(btn.value); setGraded(true); }}
               >
                 <Text style={btn.style === 'correct' ? cs.gradeCorrectText : btn.style === 'partial' ? cs.gradePartialText : cs.gradeWrongText}>
                   {btn.label}
@@ -1350,11 +1287,11 @@ export default function ReviewScreen() {
 
   const timeOnCard = () => Math.round((Date.now() - cardShownAtRef.current) / 1000);
 
-  const handleResult = async (item: ResurfacingItem, result: string, responseTimeMs?: number) => {
+  const handleResult = async (item: ResurfacingItem, result: string) => {
     const seconds = timeOnCard();
     if (item.question_id) {
       gradedIdsRef.current.add(item.question_id);
-      recordReviewResult(item.question_id, result, responseTimeMs).catch(e =>
+      recordReviewResult(item.question_id, result).catch(e =>
         console.warn('[review] score failed:', e));
       logEvent('review_result', {
         question_id: item.question_id,
@@ -1364,7 +1301,6 @@ export default function ReviewScreen() {
         node_title: item.node_title,
         review_count: item.review_count,
         time_seconds: seconds,
-        response_time_ms: responseTimeMs,
         card_type: item.type,
       });
     }
@@ -1439,14 +1375,13 @@ export default function ReviewScreen() {
     logEvent('review_dismiss_quiz', { quiz_id: quizId });
   };
 
-  const handleQuizResult = (quizId: string, result: string, responseTimeMs?: number) => {
-    recordReviewResult(quizId, result, responseTimeMs).catch(e =>
+  const handleQuizResult = (quizId: string, result: string) => {
+    recordReviewResult(quizId, result).catch(e =>
       console.warn('[review] quiz score failed:', e));
     logEvent('review_quiz_result', {
       quiz_id: quizId,
       result,
       time_seconds: timeOnCard(),
-      response_time_ms: responseTimeMs,
     });
   };
 
@@ -1587,75 +1522,6 @@ export default function ReviewScreen() {
                   });
                 }}
               />
-            ) : currentItem.type === 'synchronic' ? (
-              <SynchronicCard
-                key={currentItem.card_id || `sync-${currentIndex}`}
-                card={currentItem as unknown as SynchronicCardData}
-                onComplete={(results) => {
-                  logEvent('synchronic_card_complete', {
-                    card_id: currentItem.card_id,
-                    results: results.map(r => ({ id: r.position_id, score: r.score })),
-                    knew: results.filter(r => r.score === 'knew').length,
-                    total: results.length,
-                  });
-                  if (currentItem.card_id) {
-                    gradeStructuralCard(
-                      currentItem.card_id,
-                      results.map(r => ({ position_id: r.position_id, score: r.score })),
-                    ).catch(e => console.warn('[structural grade]', e));
-                  }
-                  animateTransition(() => {
-                    setCurrentIndex(i => i + 1);
-                    maybeLoadMore();
-                  });
-                }}
-              />
-            ) : currentItem.type === 'cast' ? (
-              <CastCard
-                key={currentItem.card_id || `cast-${currentIndex}`}
-                card={currentItem as unknown as CastCardData}
-                onComplete={(results) => {
-                  logEvent('cast_card_complete', {
-                    card_id: currentItem.card_id,
-                    results: results.map(r => ({ id: r.position_id, score: r.score })),
-                    knew: results.filter(r => r.score === 'knew').length,
-                    total: results.length,
-                  });
-                  if (currentItem.card_id) {
-                    gradeStructuralCard(
-                      currentItem.card_id,
-                      results.map(r => ({ position_id: r.position_id, score: r.score })),
-                    ).catch(e => console.warn('[structural grade]', e));
-                  }
-                  animateTransition(() => {
-                    setCurrentIndex(i => i + 1);
-                    maybeLoadMore();
-                  });
-                }}
-              />
-            ) : currentItem.type === 'causal' ? (
-              <CausalChainCard
-                key={currentItem.card_id || `causal-${currentIndex}`}
-                card={currentItem as unknown as CausalChainCardData}
-                onComplete={(results) => {
-                  logEvent('causal_card_complete', {
-                    card_id: currentItem.card_id,
-                    results: results.map(r => ({ id: r.position_id, score: r.score })),
-                    knew: results.filter(r => r.score === 'knew').length,
-                    total: results.length,
-                  });
-                  if (currentItem.card_id) {
-                    gradeStructuralCard(
-                      currentItem.card_id,
-                      results.map(r => ({ position_id: r.position_id, score: r.score })),
-                    ).catch(e => console.warn('[structural grade]', e));
-                  }
-                  animateTransition(() => {
-                    setCurrentIndex(i => i + 1);
-                    maybeLoadMore();
-                  });
-                }}
-              />
             ) : currentItem.type === 'entity_intro' ? (
               <EntityIntroCard
                 key={`intro-${currentItem.entity_id || currentIndex}`}
@@ -1678,7 +1544,7 @@ export default function ReviewScreen() {
               <MicrolearningQuizCard
                 key={currentItem.question_id || `mlq-${currentIndex}`}
                 item={currentItem}
-                onResult={(result, rtMs) => handleResult(currentItem, result, rtMs)}
+                onResult={(result) => handleResult(currentItem, result)}
                 onSkip={() => handleSkip(currentItem)}
                 onSuspendFact={handleSuspendFact}
                 onResearch={(q) => handleResearch(q, currentItem)}
