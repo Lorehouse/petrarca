@@ -703,3 +703,35 @@ export async function includeKindleBook(key: string): Promise<{
   }
   return resp.json();
 }
+
+// --- Curriculum Mapping API ---
+
+export interface CurriculumMappingResult {
+  book_id: string;
+  book_title: string;
+  curricula_checked: number;
+  curricula_matched: number;
+  total_nodes: number;
+  results: Array<{
+    domain_id: string;
+    domain_title: string;
+    node_count: number;
+    nodes: string[];
+  }>;
+}
+
+export async function mapBookToCurricula(
+  bookId: string,
+): Promise<CurriculumMappingResult> {
+  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/book/map-to-curricula`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ book_id: bookId }),
+    timeout: 60000, // mapping can take time with multiple curricula
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Curriculum mapping failed (${resp.status}): ${text}`);
+  }
+  return resp.json();
+}

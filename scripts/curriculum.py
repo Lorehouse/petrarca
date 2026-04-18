@@ -404,8 +404,8 @@ def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
         curriculum_nodes="\n".join(node_lines),
     )
 
-    raw = call_llm(prompt, model="gemini-2.5-flash", max_tokens=8192,
-                   response_mime_type="application/json")
+    # Use Claude for mapping (Gemini has quota issues)
+    raw = _call_opus(prompt, max_tokens=8192, timeout=300)
     if not raw:
         return None
 
@@ -464,6 +464,45 @@ def map_book_to_curriculum(book_id: str, domain_id: str) -> list[dict] | None:
 
     print(f"Mapped book '{book.get('title')}' → {len(mappings)} curriculum nodes", flush=True)
     return mappings
+
+
+def map_book_to_all_curricula(book_id: str) -> dict:
+    """Map a book against all curricula. Returns summary with match counts.
+    
+    Used when a new book is added to check which curricula it relates to.
+    """
+    all_curricula = list_curricula()
+    if not all_curricula:
+        return {'book_id': book_id, 'curricula_checked': 0, 'results': []}
+    
+    book = _load_book(book_id)
+    if not book:
+        return {'book_id': book_id, 'error': 'Book not found'}
+    
+    results = []
+    total_nodes = 0
+    
+    for curr in all_curricula:
+        domain_id = curr['id']
+        mappings = map_book_to_curriculum(book_id, domain_id)
+        if mappings:
+            node_count = len(mappings)
+            total_nodes += node_count
+            results.append({
+                'domain_id': domain_id,
+                'domain_title': curr.get('title', domain_id),
+                'node_count': node_count,
+                'nodes': [m['node_title'] for m in mappings[:5]],  # preview first 5
+            })
+    
+    return {
+        'book_id': book_id,
+        'book_title': book.get('title', 'Unknown'),
+        'curricula_checked': len(all_curricula),
+        'curricula_matched': len(results),
+        'total_nodes': total_nodes,
+        'results': results,
+    }
 
 
 def get_book_curriculum_context(book_id: str) -> dict:

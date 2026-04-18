@@ -73,7 +73,7 @@ export default function MoreTab() {
         subtitle="How everything works"
         onPress={() => {
           logEvent('more_item_tap', { item: 'user_guide' });
-          const url = Platform.OS === 'web' ? '/guide/' : 'https://alifstian.duckdns.org:8084/guide/';
+          const url = Platform.OS === 'web' ? '/guide/' : 'http://localhost:8081/guide/';
           Linking.openURL(url);
         }}
       />

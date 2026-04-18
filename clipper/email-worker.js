@@ -5,7 +5,7 @@
  * for processing. All smart parsing happens server-side in Python.
  *
  * Environment variables (set in Cloudflare worker settings):
- *   PETRARCA_INGEST_URL   — e.g. "http://alifstian.duckdns.org:8090"
+ *   PETRARCA_INGEST_URL   — e.g. "http://your-server:8090"
  *   PETRARCA_INGEST_TOKEN — shared secret auth token
  */
 

@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: This script deploys to the old Hetzner VPS.
+# For local development, use ./start.sh from the project root.
+#
 # Deploy Petrarca mobile app to Hetzner Expo dev server
 # Syncs source files, restarts Expo, verifies the bundle compiles
 # Usage: ./deploy-mobile.sh

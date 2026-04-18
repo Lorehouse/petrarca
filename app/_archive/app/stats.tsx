@@ -494,7 +494,7 @@ export default function StatsScreen() {
             logEvent('user_guide_opened');
             const guideUrl = Platform.OS === 'web'
               ? '/guide/'
-              : 'https://alifstian.duckdns.org/guide/';
+              : 'http://localhost:8081/guide/';
             Linking.openURL(guideUrl);
           }}
         >

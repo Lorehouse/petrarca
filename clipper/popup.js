@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const DEFAULT_SERVER = "http://alifstian.duckdns.org:8090";
+  const DEFAULT_SERVER = "http://localhost:8090";
   const COUNTDOWN_MS = 10000;
 
   // DOM refs
@@ -33,7 +33,7 @@
   const settingsStatus = document.getElementById("settings-status");
   const openAppBtn = document.getElementById("open-app");
 
-  const APP_URL = "http://alifstian.duckdns.org:8084";
+  const APP_URL = "http://localhost:8081";
 
   let pageData = null;
   let saving = false;

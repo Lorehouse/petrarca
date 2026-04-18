@@ -125,6 +125,7 @@ from curriculum import (
     start_elicitation, continue_elicitation,
     get_curriculum_graph_data, get_entity_index, build_entity_index,
     tag_curriculum_entities,
+    map_book_to_all_curricula,
 )
 from bootstrap_entities import (
     build_extraction_prompt as _entity_extraction_prompt,
@@ -4004,6 +4005,28 @@ JSON array only:"""
         record_skip(capture_id)
         self._send_json_response(200, {'status': 'ok'})
 
+    def _handle_book_map_to_curricula(self):
+        """POST /book/map-to-curricula — Map a book against all curricula.
+        
+        Used when a new book is added to check which curricula it relates to.
+        Returns match counts for notification display.
+        """
+        body = self._read_json_body()
+        if body is None:
+            return
+        book_id = body.get('book_id')
+        if not book_id:
+            self._send_json_response(400, {'error': 'Missing book_id'})
+            return
+        
+        print(f'[book] Mapping book {book_id} to all curricula', flush=True)
+        result = map_book_to_all_curricula(book_id)
+        
+        if 'error' in result:
+            self._send_json_response(404, result)
+        else:
+            self._send_json_response(200, result)
+
     def _handle_resurfacing_status(self):
         """GET /book/resurfacing/status — get resurfacing stats."""
         from resurfacing_engine import get_status
@@ -6510,6 +6533,8 @@ JSON array only:"""
             return self._handle_resurfacing_respond()
         if self.path == '/book/resurfacing/skip':
             return self._handle_resurfacing_skip()
+        if self.path == '/book/map-to-curricula':
+            return self._handle_book_map_to_curricula()
         if self.path == '/curriculum/review/generate':
             return self._handle_curriculum_review_generate()
         if self.path == '/curriculum/review/result':

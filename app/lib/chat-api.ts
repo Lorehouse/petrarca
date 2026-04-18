@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
 
+// Local development: always use localhost
 export const RESEARCH_BASE = Platform.OS === 'web'
   ? `${window.location.protocol}//${window.location.hostname}:8090`
-  : 'http://alifstian.duckdns.org:8090';
+  : 'http://localhost:8090';
 
 /**
  * Fetch with timeout. Rejects if the request takes longer than `ms` milliseconds.

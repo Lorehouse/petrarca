@@ -5,7 +5,7 @@ const QUEUE_KEY = '@petrarca/exploration_queue';
 const FLUSH_THRESHOLD = 5;
 
 // Server URL (same as research server)
-const RESEARCH_SERVER = 'http://alifstian.duckdns.org:8090';
+const RESEARCH_SERVER = 'http://localhost:8090';
 
 interface ExplorationItem {
   conceptId: string;

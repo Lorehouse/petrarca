@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: This script deploys to the old Hetzner VPS.
+# For local development, use ./start.sh from the project root.
+#
 # Deploy Petrarca web app to Hetzner server
 # Usage: ./deploy-web.sh
 set -euo pipefail

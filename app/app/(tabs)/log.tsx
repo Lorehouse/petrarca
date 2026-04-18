@@ -4,9 +4,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { logEvent } from '../../data/logger';
+import { RESEARCH_BASE } from '../../lib/chat-api';
 import { colors, fonts, type, spacing, layout } from '../../design/tokens';
 
-const API_BASE = 'http://alifstian.duckdns.org:8090';
+const API_BASE = RESEARCH_BASE;
 
 type ActivityEvent = {
   id: string;

@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: This script sets up nginx on the old Hetzner VPS.
+# For local development, content is served by research-server.py on port 8090.
+#
 # Setup nginx content server and pipeline cron on Hetzner
 # Run this once on the server to enable content refresh
 

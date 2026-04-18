@@ -3,7 +3,7 @@ import { ResearchResult } from './types';
 import { logEvent } from './logger';
 
 const RESEARCH_RESULTS_KEY = '@petrarca/research_results';
-const RESEARCH_SERVER_URL = 'http://alifstian.duckdns.org:8090';
+const RESEARCH_SERVER_URL = 'http://localhost:8090';
 
 let researchResults: ResearchResult[] = [];
 let loaded = false;

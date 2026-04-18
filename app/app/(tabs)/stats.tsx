@@ -119,7 +119,7 @@ export default function StatsTab() {
         style={styles.dashboardLink}
         onPress={() => {
           logEvent('stats_full_dashboard_tap');
-          Linking.openURL('http://alifstian.duckdns.org:8090/stats/dashboard');
+          Linking.openURL('http://localhost:8090/stats/dashboard');
         }}
       >
         <Text style={styles.dashboardText}>Open Full Dashboard {'\u203A'}</Text>

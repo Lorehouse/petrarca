@@ -138,7 +138,7 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
               onPress={() => {
                 logEvent('drawer_item_tap', { item: 'statistics' });
                 onClose();
-                Linking.openURL('http://alifstian.duckdns.org:8090/stats/dashboard');
+                Linking.openURL('http://localhost:8090/stats/dashboard');
               }}
             />
             <NavItem
@@ -152,7 +152,7 @@ export default function PetrarcaDrawer({ visible, onClose }: PetrarcaDrawerProps
               onPress={() => {
                 logEvent('drawer_item_tap', { item: 'user_guide' });
                 onClose();
-                const url = Platform.OS === 'web' ? '/guide/' : 'https://alifstian.duckdns.org:8084/guide/';
+                const url = Platform.OS === 'web' ? '/guide/' : 'http://localhost:8081/guide/';
                 Linking.openURL(url);
               }}
             />

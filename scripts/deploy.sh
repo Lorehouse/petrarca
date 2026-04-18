@@ -1,4 +1,6 @@
 #!/bin/bash
+# DEPRECATED: This script deploys to the old Hetzner VPS (alifstian.duckdns.org).
+# For local development, use ./start.sh instead.
 set -e
 
 SERVER="alif"

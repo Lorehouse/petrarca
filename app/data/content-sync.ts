@@ -6,10 +6,11 @@ const API_BASE = Platform.OS === 'web'
   ? `${window.location.protocol}//${window.location.hostname}:8090`
   : 'http://localhost:8090';
 
-// Fallback to nginx-served JSON if API is unavailable
+// Fallback to local server-served JSON if API is unavailable
+// Note: For native, content needs to be served by local research server
 const CONTENT_BASE = Platform.OS === 'web'
   ? '/content'
-  : 'https://alifstian.duckdns.org/content';
+  : 'http://localhost:8090/content';
 
 const CONTENT_DIR_NAME = 'content';
 const WEB_CACHE_PREFIX = '@petrarca/cache_';

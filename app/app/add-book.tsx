@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { logEvent } from '../data/logger';
 import { addPhysicalBook, generateBookId, updatePhysicalBook } from '../data/book-store';
-import { identifyBookCover } from '../lib/book-api';
+import { identifyBookCover, mapBookToCurricula } from '../lib/book-api';
 import type { PhysicalBook } from '../data/types';
 import { colors, fonts, type, layout } from '../design/tokens';
 import DoubleRule from '../components/DoubleRule';
@@ -18,6 +18,34 @@ export default function AddBookScreen() {
   const [author, setAuthor] = useState('');
   const [pageCount, setPageCount] = useState('');
   const [error, setError] = useState('');
+
+  // Map book to curricula and show notification if matches found
+  const checkCurriculumMapping = useCallback(async (bookId: string, bookTitle: string) => {
+    try {
+      const result = await mapBookToCurricula(bookId);
+      if (result.curricula_matched > 0 && result.total_nodes > 0) {
+        const topMatch = result.results[0];
+        const message = `"${bookTitle}" matches ${result.total_nodes} node${result.total_nodes !== 1 ? 's' : ''} ` +
+          `in ${result.curricula_matched} curriculum${result.curricula_matched !== 1 ? 'a' : ''}.`;
+        Alert.alert(
+          'Curriculum Match',
+          message,
+          [
+            { text: 'OK', style: 'default' },
+            { 
+              text: 'View', 
+              style: 'default',
+              onPress: () => router.push(`/book-detail?id=${bookId}&tab=curriculum`)
+            }
+          ]
+        );
+        logEvent('book_curriculum_match', { book_id: bookId, nodes: result.total_nodes, curricula: result.curricula_matched });
+      }
+    } catch (e: any) {
+      // Non-critical - don't show error to user
+      logEvent('book_curriculum_mapping_failed', { book_id: bookId, error: e.message });
+    }
+  }, [router]);
 
   const takePhoto = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -83,6 +111,8 @@ export default function AddBookScreen() {
         });
         logEvent('book_add_identified', { book_id: bookId, title: result.title, attempts: attempt + 1 });
         lastError = null;
+        // Check curriculum mapping in background
+        checkCurriculumMapping(bookId, result.title || 'Unknown Book');
         break;
       } catch (e: any) {
         lastError = e;
@@ -96,7 +126,7 @@ export default function AddBookScreen() {
       });
       logEvent('book_add_identify_failed', { book_id: bookId, error: lastError.message });
     }
-  }, [takePhoto, pickFromLibrary, router]);
+  }, [takePhoto, pickFromLibrary, router, checkCurriculumMapping]);
 
   const handleManualSave = useCallback(async () => {
     if (!title.trim()) {
@@ -119,8 +149,10 @@ export default function AddBookScreen() {
     };
     await addPhysicalBook(book);
     logEvent('book_add_manual', { book_id: book.id, title: book.title });
+    // Check curriculum mapping in background
+    checkCurriculumMapping(book.id, book.title);
     router.back();
-  }, [title, author, pageCount, router]);
+  }, [title, author, pageCount, router, checkCurriculumMapping]);
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

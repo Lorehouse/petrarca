@@ -1,7 +1,7 @@
 // Petrarca Clipper — Background Service Worker
 // Handles badge state, message routing, Twitter cookie sync, and Kindle data sync.
 
-const SERVER_DEFAULT = "http://alifstian.duckdns.org:8090";
+const SERVER_DEFAULT = "http://localhost:8090";
 const COOKIE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const KINDLE_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 // const HIGHLIGHT_SYNC_PERIOD_MINUTES = 720; // 12 hours — disabled, was opening kindle website

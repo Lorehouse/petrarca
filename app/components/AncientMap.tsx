@@ -124,7 +124,7 @@ export interface AncientMapRef {
 
 const MAP_HTML_URI = Platform.OS === 'web'
   ? '/map/index.html'
-  : 'http://alifstian.duckdns.org:8084/map/index.html';
+  : 'http://localhost:8081/map/index.html';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 

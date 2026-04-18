@@ -1,9 +1,35 @@
+# Web scraping & parsing
 trafilatura>=2.0.0
-requests>=2.31.0
 lxml>=5.0.0
+pymupdf>=1.24.0
+
+# HTTP & API
+requests>=2.31.0
+
+# LLM providers
 litellm>=1.0.0
 google-genai>=1.0.0
+anthropic>=0.40.0
+
+# Google API (for Gmail/YouTube integrations)
+google-auth-oauthlib>=1.2.0
+google-auth-transport-requests>=0.1.0
+google-api-python-client>=2.120.0
+
+# Spaced repetition
 fsrs>=6.0.0
+
+# Data processing
+numpy>=1.26.0
+scipy>=1.12.0
+
+# Twitter integration
+twikit>=3.0.0
+
+# Utilities
+python-dotenv>=1.0.0
 python-multipart>=0.0.26
-tqdm>=4.0.0
+tqdm>=4.66.0
+
+# Local package
 limbic @ git+https://github.com/houshuang/limbic.git
