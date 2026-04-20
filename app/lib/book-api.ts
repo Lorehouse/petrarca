@@ -136,11 +136,22 @@ export async function uploadBookVoiceNote(
   pageNumber?: number,
 ): Promise<BookVoiceNoteResult> {
   const formData = new FormData();
-  formData.append('audio', {
-    uri: audioUri,
-    type: 'audio/m4a',
-    name: 'note.m4a',
-  } as any);
+  
+  // Handle upload differently on web vs native (same pattern as photo uploads)
+  if (Platform.OS === 'web') {
+    // On web, fetch the blob from the URI and append it
+    const resp = await fetch(audioUri);
+    const blob = await resp.blob();
+    formData.append('audio', blob, 'note.m4a');
+  } else {
+    // On native, use the { uri, type, name } pattern
+    formData.append('audio', {
+      uri: audioUri,
+      type: 'audio/m4a',
+      name: 'note.m4a',
+    } as any);
+  }
+  
   formData.append('book_id', bookId);
   formData.append('book_title', bookTitle);
   if (chapter) formData.append('chapter', chapter);

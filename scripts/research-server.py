@@ -1391,55 +1391,50 @@ def run_explore_batch(request_id: str, concepts: list[dict]):
 
 # --- Voice notes: backend transcription + storage ---
 
+# Cache the Whisper model globally to avoid reloading each call
+_WHISPER_MODEL = None
+
 def transcribe_on_server(audio_path: Path) -> str:
-    """Upload audio to Soniox, transcribe, return text."""
-    import requests as req
-
-    headers = {'Authorization': f'Bearer {SONIOX_API_KEY}'}
-
-    # Upload file
-    with open(audio_path, 'rb') as f:
-        resp = req.post(f'{SONIOX_BASE_URL}/files', headers=headers,
-                        files={'file': ('note.m4a', f, 'audio/m4a')})
-    resp.raise_for_status()
-    file_id = resp.json()['id']
-
-    # Create transcription
-    resp = req.post(f'{SONIOX_BASE_URL}/transcriptions', headers=headers,
-                    json={'model': 'stt-async-v4', 'file_id': file_id,
-                          'language_hints': ['en', 'no', 'sv', 'da', 'it', 'de', 'es', 'fr', 'zh', 'id']})
-    resp.raise_for_status()
-    txn_id = resp.json()['id']
-
-    # Poll
-    for _ in range(90):  # 3 min max
-        time.sleep(2)
-        resp = req.get(f'{SONIOX_BASE_URL}/transcriptions/{txn_id}', headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-        if data['status'] == 'completed':
-            break
-        if data['status'] == 'error':
-            raise RuntimeError(f'Soniox error: {data.get("error_message", "unknown")}')
-
-    # Get transcript
-    resp = req.get(f'{SONIOX_BASE_URL}/transcriptions/{txn_id}/transcript', headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
-    text = ''
-    if data.get('tokens'):
-        text = ''.join(t['text'] for t in data['tokens']).strip()
-    elif data.get('text'):
-        text = data['text'].strip()
-
-    # Cleanup
+    """Transcribe audio locally using faster-whisper (Whisper.cpp backend).
+    
+    First run will download the model (~150MB for 'small'). Subsequent runs
+    use the cached model. Typical transcription: 5-15 seconds for a 30s note.
+    
+    Supported audio formats: m4a, mp3, wav, webm, ogg, etc.
+    """
+    global _WHISPER_MODEL
+    
+    from faster_whisper import WhisperModel
+    
+    # Load model once (cached globally)
+    if _WHISPER_MODEL is None:
+        print('[whisper] Loading model (first call)...', flush=True)
+        _WHISPER_MODEL = WhisperModel('small', device='cpu', compute_type='int8')
+    
+    print(f'[whisper] Transcribing {audio_path}...', flush=True)
+    
     try:
-        req.delete(f'{SONIOX_BASE_URL}/transcriptions/{txn_id}', headers=headers)
-        req.delete(f'{SONIOX_BASE_URL}/files/{file_id}', headers=headers)
-    except Exception:
-        pass
-
-    return text
+        # transcribe returns (generator, info)
+        segments_gen, info = _WHISPER_MODEL.transcribe(
+            str(audio_path), 
+            language='en',
+            beam_size=5,  # more accurate
+        )
+        
+        # Convert generator to list to avoid iterator issues
+        segments = list(segments_gen)
+        
+        # Extract text from segments
+        text = ''.join(segment.text for segment in segments).strip()
+        
+        print(f'[whisper] Done: {len(text)} chars ({info.duration:.1f}s audio)', flush=True)
+        
+        return text
+        
+    except Exception as e:
+        print(f'[whisper] Error during transcription: {e}', flush=True)
+        # Return empty string rather than crashing
+        return ''
 
 
 def extract_note_actions(transcript: str, article_title: str, topics: list[str]) -> list[dict]:
@@ -3011,6 +3006,10 @@ class ResearchHandler(BaseHTTPRequestHandler):
         if 'audio' not in form or not form['audio'].file:
             self._send_json_response(400, {'error': 'Missing audio field'})
             return
+        
+        # Debug: log what we received
+        audio_field = form['audio']
+        print(f'[book/voice-note] audio field: filename={audio_field.filename}, has_file={bool(audio_field.file)}', flush=True)
 
         book_id = form.getvalue('book_id', '')
         book_title = form.getvalue('book_title', '')
@@ -3021,6 +3020,10 @@ class ResearchHandler(BaseHTTPRequestHandler):
         note_id = f'bnote_{int(time.time())}_{book_id[:8]}'
         audio_path = AUDIO_DIR / f'{note_id}.m4a'
         data = form['audio'].file.read()
+        
+        # Debug: log data size and first bytes
+        print(f'[book/voice-note] received {len(data)} bytes, first 20: {data[:20]}', flush=True)
+        
         audio_path.write_bytes(data if isinstance(data, bytes) else data.encode('latin-1'))
 
         print(f'[book/voice-note] Received note {note_id} for {book_title}', flush=True)

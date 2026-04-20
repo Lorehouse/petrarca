@@ -9,7 +9,9 @@ import os
 from google import genai
 
 # Model to use across the pipeline
-DEFAULT_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini-3.1-flash-lite-preview")
+# Available models (as of 2025): gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash
+# Check `client.models.list()` for current list
+DEFAULT_MODEL = os.environ.get("PETRARCA_LLM_MODEL", "gemini-2.5-flash")
 
 # Ensure API key is set
 _api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMINI_KEY")
